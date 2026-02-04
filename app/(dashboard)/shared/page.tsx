@@ -1,0 +1,379 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+
+interface Share {
+  id: string;
+  ownerId: string;
+  fileId: string | null;
+  folderId: string | null;
+  topicId: string | null;
+  libraryItemId: string | null;
+  shareType: string;
+  shareToken: string | null;
+  permission: string;
+  createdAt: string;
+  expiresAt: string | null;
+  resourceName: string;
+  resourceType: string;
+  shareUrl: string | null;
+  ownerName?: string;
+  ownerEmail?: string;
+}
+
+interface Owner {
+  name: string;
+  email: string;
+}
+
+export default function SharedWithMePage() {
+  const [shares, setShares] = useState<Share[]>([]);
+  const [owners, setOwners] = useState<Record<string, Owner>>({});
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
+
+  const fetchShares = async () => {
+    setLoading(true);
+    try {
+      const type = activeTab === 'received' ? 'shared' : 'owned';
+      const res = await fetch(`/api/share?type=${type}`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setShares(data);
+
+        // Fetch owner info for received shares
+        if (activeTab === 'received') {
+          const ownerIds = [...new Set(data.map((s: Share) => s.ownerId))];
+          const ownerInfo: Record<string, Owner> = {};
+          for (const ownerId of ownerIds) {
+            try {
+              const ownerRes = await fetch(`/api/users/${ownerId}`, { credentials: 'include' });
+              if (ownerRes.ok) {
+                const ownerData = await ownerRes.json();
+                ownerInfo[ownerId as string] = { name: ownerData.name, email: ownerData.email };
+              }
+            } catch {
+              // Ignore errors fetching owner info
+            }
+          }
+          setOwners(ownerInfo);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch shares:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchShares();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const handleRevokeShare = async (shareId: string) => {
+    if (!confirm('Revoke this share? The recipient will no longer have access.')) return;
+    try {
+      const res = await fetch(`/api/share?id=${shareId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        setShares(shares.filter(s => s.id !== shareId));
+      }
+    } catch (error) {
+      console.error('Failed to revoke share:', error);
+    }
+  };
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const getResourceIcon = (type: string) => {
+    const icons: Record<string, string> = {
+      file: '📄',
+      folder: '📁',
+      topic: '📂',
+      library: '📚',
+    };
+    return icons[type] || '📄';
+  };
+
+  const getPermissionBadge = (permission: string) => {
+    return permission === 'edit' ? '✏️ Can edit' : '👁️ View only';
+  };
+
+  const isExpired = (expiresAt: string | null) => {
+    if (!expiresAt) return false;
+    return new Date(expiresAt) < new Date();
+  };
+
+  const handleCopyLink = (url: string) => {
+    navigator.clipboard.writeText(url);
+  };
+
+  return (
+    <div className="shared-page">
+      <div className="page-header">
+        <div>
+          <h1>Sharing</h1>
+          <p>Manage content shared with you and by you</p>
+        </div>
+      </div>
+
+      <div className="share-tabs">
+        <button
+          className={`share-tab ${activeTab === 'received' ? 'active' : ''}`}
+          onClick={() => setActiveTab('received')}
+        >
+          📥 Shared with me
+        </button>
+        <button
+          className={`share-tab ${activeTab === 'sent' ? 'active' : ''}`}
+          onClick={() => setActiveTab('sent')}
+        >
+          📤 My shares
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="loading-state">Loading shares...</div>
+      ) : shares.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-icon">{activeTab === 'received' ? '📥' : '📤'}</div>
+          <h3>{activeTab === 'received' ? 'Nothing shared with you yet' : 'You haven\'t shared anything yet'}</h3>
+          <p>
+            {activeTab === 'received'
+              ? 'When someone shares content with you, it will appear here.'
+              : 'Share files, folders, or library items to see them here.'}
+          </p>
+        </div>
+      ) : (
+        <div className="shares-list">
+          {shares.map((share) => (
+            <div key={share.id} className={`share-card ${isExpired(share.expiresAt) ? 'expired' : ''}`}>
+              <div className="share-icon">{getResourceIcon(share.resourceType)}</div>
+              <div className="share-info">
+                <div className="share-name">{share.resourceName}</div>
+                <div className="share-meta">
+                  {activeTab === 'received' && owners[share.ownerId] && (
+                    <span>From: {owners[share.ownerId].name || owners[share.ownerId].email}</span>
+                  )}
+                  <span>{getPermissionBadge(share.permission)}</span>
+                  <span>Shared {formatDate(share.createdAt)}</span>
+                  {share.expiresAt && (
+                    <span className={isExpired(share.expiresAt) ? 'expired-badge' : ''}>
+                      {isExpired(share.expiresAt) ? 'Expired' : `Expires ${formatDate(share.expiresAt)}`}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="share-actions">
+                {share.shareUrl && !isExpired(share.expiresAt) && (
+                  <>
+                    <Link href={share.shareUrl} className="btn secondary" target="_blank">
+                      Open
+                    </Link>
+                    {activeTab === 'sent' && (
+                      <button
+                        className="btn ghost"
+                        onClick={() => handleCopyLink(share.shareUrl!)}
+                      >
+                        📋 Copy Link
+                      </button>
+                    )}
+                  </>
+                )}
+                {activeTab === 'sent' && (
+                  <button
+                    className="btn ghost danger"
+                    onClick={() => handleRevokeShare(share.id)}
+                  >
+                    Revoke
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <style jsx>{`
+        .shared-page {
+          max-width: 900px;
+          margin: 0 auto;
+        }
+
+        .page-header {
+          margin-bottom: var(--space-6);
+        }
+
+        .page-header h1 {
+          font-size: var(--font-2xl);
+          margin-bottom: var(--space-1);
+        }
+
+        .page-header p {
+          color: var(--text-muted);
+        }
+
+        .share-tabs {
+          display: flex;
+          gap: var(--space-2);
+          margin-bottom: var(--space-6);
+          padding: var(--space-1);
+          background: var(--bg-inset);
+          border-radius: var(--radius-md);
+        }
+
+        .share-tab {
+          flex: 1;
+          padding: var(--space-3);
+          border: none;
+          background: transparent;
+          border-radius: var(--radius-sm);
+          font-size: var(--font-meta);
+          font-weight: 500;
+          color: var(--text-muted);
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+
+        .share-tab:hover {
+          color: var(--text-primary);
+        }
+
+        .share-tab.active {
+          background: var(--bg-surface);
+          color: var(--text-primary);
+          box-shadow: var(--shadow-sm);
+        }
+
+        .loading-state {
+          text-align: center;
+          padding: var(--space-8);
+          color: var(--text-muted);
+        }
+
+        .empty-state {
+          text-align: center;
+          padding: var(--space-8);
+          background: var(--bg-surface);
+          border: 1px dashed var(--border-default);
+          border-radius: var(--radius-lg);
+        }
+
+        .empty-icon {
+          font-size: 48px;
+          margin-bottom: var(--space-4);
+        }
+
+        .empty-state h3 {
+          margin-bottom: var(--space-2);
+        }
+
+        .empty-state p {
+          color: var(--text-muted);
+        }
+
+        .shares-list {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3);
+        }
+
+        .share-card {
+          display: flex;
+          align-items: center;
+          gap: var(--space-4);
+          padding: var(--space-4);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+          transition: border-color 0.15s;
+        }
+
+        .share-card:hover {
+          border-color: var(--border-default);
+        }
+
+        .share-card.expired {
+          opacity: 0.6;
+        }
+
+        .share-icon {
+          font-size: 28px;
+          width: 48px;
+          height: 48px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--bg-inset);
+          border-radius: var(--radius-md);
+          flex-shrink: 0;
+        }
+
+        .share-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .share-name {
+          font-weight: 600;
+          margin-bottom: var(--space-1);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .share-meta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--space-3);
+          font-size: var(--font-tiny);
+          color: var(--text-muted);
+        }
+
+        .expired-badge {
+          color: var(--error);
+        }
+
+        .share-actions {
+          display: flex;
+          gap: var(--space-2);
+          flex-shrink: 0;
+        }
+
+        .btn.ghost.danger {
+          color: var(--error);
+        }
+
+        .btn.ghost.danger:hover {
+          background: var(--error-muted);
+        }
+
+        @media (max-width: 600px) {
+          .share-card {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .share-actions {
+            width: 100%;
+            margin-top: var(--space-3);
+          }
+
+          .share-actions .btn {
+            flex: 1;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
