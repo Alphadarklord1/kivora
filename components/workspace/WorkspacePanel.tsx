@@ -7,6 +7,9 @@ import { getGeneratedContent, ToolMode, GeneratedContent } from '@/lib/offline/g
 import { InteractiveQuiz } from './InteractiveQuiz';
 import { WelcomePanel } from './WelcomePanel';
 import { MathSolver } from '@/components/tools/MathSolver';
+import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
+import { MathText } from '@/components/math/MathRenderer';
+import { extractImagesFromPDF } from '@/lib/pdf/image-extract';
 import { useToastHelpers } from '@/components/ui/Toast';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { NoFilesState, EmptyState } from '@/components/ui/EmptyState';
@@ -32,7 +35,7 @@ interface WorkspacePanelProps {
 }
 
 type MainTab = 'files' | 'tools';
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'vision';
 
 const ToolSvgIcons: Record<string, React.ReactNode> = {
   assignment: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
@@ -42,6 +45,7 @@ const ToolSvgIcons: Record<string, React.ReactNode> = {
   pop: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
   notes: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>,
   math: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  vision: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
 };
 
 // Action icons for file operations, tabs, and UI elements
@@ -96,6 +100,7 @@ const toolTabs: { id: ToolTab; label: string; iconKey: string }[] = [
   { id: 'pop', label: 'Pop Quiz', iconKey: 'pop' },
   { id: 'notes', label: 'Notes', iconKey: 'notes' },
   { id: 'math', label: 'Math', iconKey: 'math' },
+  { id: 'vision', label: 'Vision', iconKey: 'vision' },
 ];
 
 export function WorkspacePanel({
@@ -135,6 +140,11 @@ export function WorkspacePanel({
   // Share dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<{ type: 'file'; id: string; name: string } | null>(null);
+
+  // Image-aware generation state
+  const [includeImageAnalysis, setIncludeImageAnalysis] = useState(false);
+  const [imageAnalysisLoading, setImageAnalysisLoading] = useState(false);
+  const [selectedToolFile, setSelectedToolFile] = useState<FileItem | null>(null);
 
   const handleShareFile = (file: FileItem) => {
     setShareTarget({ type: 'file', id: file.id, name: file.name });
@@ -237,6 +247,9 @@ export function WorkspacePanel({
         setFiles(await filesRes.json());
         onRefresh();
         toast.success('File uploaded');
+      } else {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        toast.error('Upload failed', errorData.error || `Server returned ${res.status}`);
       }
     } catch {
       toast.error('Upload failed', 'Please try again');
@@ -285,6 +298,7 @@ export function WorkspacePanel({
 
   const handleUseInTool = async (file: FileItem) => {
     // Extract text and switch to tools tab
+    setSelectedToolFile(file);
     if (file.type === 'upload' && file.localBlobId) {
       try {
         const blobData = await idbStore.get(file.localBlobId);
@@ -418,7 +432,46 @@ export function WorkspacePanel({
     const stepTimer2 = setTimeout(() => setGenerationStep(2), 800);
 
     try {
-      const content = getGeneratedContent(toolTab as ToolMode, inputText);
+      let finalInputText = inputText;
+
+      // If image analysis is enabled and we have a PDF file
+      if (includeImageAnalysis && selectedToolFile?.localBlobId && selectedToolFile.name.toLowerCase().endsWith('.pdf')) {
+        setImageAnalysisLoading(true);
+        try {
+          const blobData = await idbStore.get(selectedToolFile.localBlobId);
+          if (blobData) {
+            const images = await extractImagesFromPDF(blobData.blob, 5);
+            const descriptions: string[] = [];
+
+            for (const img of images) {
+              try {
+                const res = await fetch('/api/vision/analyze', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ imageDataUrl: img.dataUrl, mode: 'describe' }),
+                  credentials: 'include',
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  descriptions.push(`[Image from page ${img.pageNumber}]: ${data.result}`);
+                }
+              } catch {
+                // Skip failed image analyses
+              }
+            }
+
+            if (descriptions.length > 0) {
+              finalInputText = `--- Visual Content from PDF ---\n${descriptions.join('\n\n')}\n\n--- Text Content ---\n${inputText}`;
+            }
+          }
+        } catch {
+          // Continue without image analysis if it fails
+        } finally {
+          setImageAnalysisLoading(false);
+        }
+      }
+
+      const content = getGeneratedContent(toolTab as ToolMode, finalInputText);
       setGeneratedContent(content);
       setOutput(content.displayText);
       setViewMode('output');
@@ -451,6 +504,8 @@ export function WorkspacePanel({
     setGeneratedContent(null);
     setShowInteractiveQuiz(false);
     setViewMode('input');
+    setIncludeImageAnalysis(false);
+    setSelectedToolFile(null);
   };
 
   const handleCopy = (text: string) => {
@@ -750,6 +805,10 @@ export function WorkspacePanel({
               <div className="tool-content">
                 <MathSolver />
               </div>
+            ) : toolTab === 'vision' ? (
+              <div className="tool-content">
+                <VisualAnalyzer />
+              </div>
             ) : (
               <div className="tool-content">
                 {/* Input Mode */}
@@ -779,6 +838,18 @@ export function WorkspacePanel({
                       </div>
                     )}
 
+                    {/* Image analysis toggle for PDFs */}
+                    {selectedToolFile && selectedToolFile.name.toLowerCase().endsWith('.pdf') && selectedToolFile.localBlobId && (
+                      <label className="image-analysis-toggle">
+                        <input
+                          type="checkbox"
+                          checked={includeImageAnalysis}
+                          onChange={(e) => setIncludeImageAnalysis(e.target.checked)}
+                        />
+                        Include image analysis (diagrams, charts)
+                      </label>
+                    )}
+
                     <textarea
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
@@ -792,7 +863,7 @@ export function WorkspacePanel({
                     {generating ? (
                       <div className="generation-status">
                         <div className="generation-spinner" />
-                        <span className="generation-step">{GENERATION_STEPS[generationStep] || GENERATION_STEPS[0]}</span>
+                        <span className="generation-step">{imageAnalysisLoading ? 'Analyzing images...' : (GENERATION_STEPS[generationStep] || GENERATION_STEPS[0])}</span>
                       </div>
                     ) : (
                       <button
@@ -817,7 +888,7 @@ export function WorkspacePanel({
                       <button className="btn secondary" onClick={handleToolReset}><span className="btn-icon">{ActionIcons.refresh}</span> New</button>
                     </div>
 
-                    <div className="output-display">{output}</div>
+                    <div className="output-display"><MathText>{output}</MathText></div>
 
                     <div className="save-actions">
                       <button className="btn secondary" onClick={() => handleCopy(output)}><span className="btn-icon">{ActionIcons.clipboard}</span> Copy</button>
@@ -846,7 +917,7 @@ export function WorkspacePanel({
               <button className="close-btn" onClick={() => setViewingFile(null)}>{ActionIcons.close}</button>
             </div>
             <div className="viewer-content">
-              {extracting ? <p className="extracting">Extracting text...</p> : <pre>{fileContent || 'No content'}</pre>}
+              {extracting ? <p className="extracting">Extracting text...</p> : <div style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word', fontFamily: 'inherit', fontSize: 'var(--font-meta)', lineHeight: 1.6 }}><MathText>{fileContent || 'No content'}</MathText></div>}
             </div>
             <div className="viewer-actions">
               <button className="btn" onClick={() => { handleUseInTool(viewingFile); setViewingFile(null); }}><span className="btn-icon">{ActionIcons.tools}</span> Use in Tool</button>
@@ -1066,6 +1137,20 @@ export function WorkspacePanel({
         }
         .context-active { color: var(--success); }
         .context-hint { color: var(--text-muted); }
+
+        .image-analysis-toggle {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          margin-bottom: var(--space-3);
+          font-size: var(--font-meta);
+          cursor: pointer;
+          padding: var(--space-2) var(--space-3);
+          background: var(--primary-muted);
+          border-radius: var(--radius-md);
+          color: var(--primary);
+        }
+        .image-analysis-toggle input { cursor: pointer; }
 
         .file-selector {
           margin-bottom: var(--space-4);

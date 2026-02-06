@@ -219,6 +219,32 @@ export function VisualAnalyzer() {
     setSelectedImageUrl(null);
   };
 
+  // Direct image upload handler
+  const handleDirectImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file (PNG, JPG, etc.)');
+      return;
+    }
+
+    if (file.size > 4 * 1024 * 1024) {
+      setError('Image is too large. Maximum size is 4MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedImageUrl(reader.result as string);
+      setSelection(null);
+      setError('');
+    };
+    reader.onerror = () => setError('Failed to read image file');
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
   const modeLabels: Record<AnalysisMode, { label: string; icon: string; description: string }> = {
     describe: {
       label: 'Describe',
@@ -669,7 +695,7 @@ export function VisualAnalyzer() {
       )}
 
       {/* Empty state */}
-      {!loading && pages.length === 0 && (
+      {!loading && pages.length === 0 && !selectedImageUrl && (
         <div style={{
           padding: 'var(--space-8)',
           textAlign: 'center',
@@ -677,11 +703,102 @@ export function VisualAnalyzer() {
           background: 'var(--bg-inset)',
           borderRadius: 'var(--radius-md)',
         }}>
-          <div style={{ fontSize: '3em', marginBottom: 'var(--space-2)' }}>🔍</div>
-          <h4 style={{ marginBottom: 'var(--space-2)' }}>Select a PDF to analyze</h4>
-          <p style={{ fontSize: 'var(--font-meta)', maxWidth: '300px', margin: '0 auto' }}>
-            Choose a folder, topic, and PDF file to view and analyze diagrams, charts, and equations.
+          <div style={{ fontSize: '3em', marginBottom: 'var(--space-2)' }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+          <h4 style={{ marginBottom: 'var(--space-2)' }}>Select a PDF or upload an image</h4>
+          <p style={{ fontSize: 'var(--font-meta)', maxWidth: '300px', margin: '0 auto var(--space-4)' }}>
+            Choose a PDF file above, or upload an image directly for analysis.
           </p>
+          <label style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
+            padding: 'var(--space-2) var(--space-4)',
+            background: 'var(--primary)',
+            color: 'white',
+            borderRadius: 'var(--radius-md)',
+            cursor: 'pointer',
+            fontSize: 'var(--font-meta)',
+            fontWeight: 500,
+          }}>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              onChange={handleDirectImageUpload}
+              style={{ display: 'none' }}
+            />
+            Upload Image
+          </label>
+        </div>
+      )}
+
+      {/* Standalone image analysis (when image uploaded without PDF) */}
+      {!loading && pages.length === 0 && selectedImageUrl && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+              <h4 style={{ fontSize: 'var(--font-meta)', margin: 0 }}>Uploaded Image</h4>
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <label style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)',
+                  padding: 'var(--space-1) var(--space-2)', background: 'var(--bg-inset)',
+                  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer', fontSize: 'var(--font-tiny)',
+                }}>
+                  <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={handleDirectImageUpload} style={{ display: 'none' }} />
+                  Change
+                </label>
+                <button className="btn ghost" onClick={clearSelection} style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1)' }}>Clear</button>
+              </div>
+            </div>
+            <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'var(--bg-inset)' }}>
+              <img src={selectedImageUrl} alt="Uploaded" style={{ width: '100%', display: 'block' }} />
+            </div>
+          </div>
+
+          <div>
+            {/* Analysis mode selector */}
+            <div style={{ marginBottom: 'var(--space-4)' }}>
+              <h4 style={{ fontSize: 'var(--font-meta)', marginBottom: 'var(--space-2)' }}>Analysis Mode</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
+                {(Object.keys(modeLabels) as AnalysisMode[]).map((mode) => (
+                  <button key={mode} onClick={() => setAnalysisMode(mode)} className={`btn ${analysisMode === mode ? '' : 'ghost'}`}
+                    style={{ padding: 'var(--space-2)', fontSize: 'var(--font-tiny)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-1)' }}>
+                    <span style={{ fontSize: '1.2em' }}>{modeLabels[mode].icon}</span>
+                    <span>{modeLabels[mode].label}</span>
+                  </button>
+                ))}
+              </div>
+              <p style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)', marginTop: 'var(--space-2)' }}>{modeLabels[analysisMode].description}</p>
+            </div>
+
+            <button className="btn" onClick={analyzeImage} disabled={analyzing} style={{ width: '100%', marginBottom: 'var(--space-4)' }}>
+              {analyzing ? 'Analyzing...' : 'Analyze Image'}
+            </button>
+
+            {/* Results */}
+            {results.length > 0 && (
+              <div>
+                <h4 style={{ fontSize: 'var(--font-meta)', marginBottom: 'var(--space-2)' }}>Analysis Results</h4>
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  {results.map((result, idx) => (
+                    <div key={idx} style={{ padding: 'var(--space-3)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-2)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
+                        <span style={{ padding: '2px 6px', background: 'var(--primary-muted)', color: 'var(--primary)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-tiny)' }}>
+                          {modeLabels[result.mode].icon} {modeLabels[result.mode].label}
+                        </span>
+                        <span style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)' }}>{result.timestamp.toLocaleTimeString()}</span>
+                      </div>
+                      <div style={{ fontSize: 'var(--font-meta)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                        {result.mode === 'solve-math' ? <MathText>{result.content}</MathText> : result.content}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

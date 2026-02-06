@@ -4,9 +4,11 @@ import { useState } from 'react';
 import { getGeneratedContent, ToolMode, GeneratedContent } from '@/lib/offline/generate';
 import { InteractiveQuiz } from '@/components/workspace/InteractiveQuiz';
 import { MathSolver } from '@/components/tools/MathSolver';
+import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
+import { MathText } from '@/components/math/MathRenderer';
 import { useToastHelpers } from '@/components/ui/Toast';
 
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'vision';
 
 const toolTabs: { id: ToolTab; label: string; icon: string; description: string }[] = [
   { id: 'assignment', label: 'Assignment', icon: '📝', description: 'Generate assignment questions and prompts' },
@@ -16,6 +18,7 @@ const toolTabs: { id: ToolTab; label: string; icon: string; description: string 
   { id: 'pop', label: 'Pop Quiz', icon: '⚡', description: 'Quick pop quiz for rapid review' },
   { id: 'notes', label: 'Notes', icon: '📝', description: 'Generate Cornell-style study notes' },
   { id: 'math', label: 'Math', icon: '🧮', description: 'Solve mathematical problems step-by-step' },
+  { id: 'vision', label: 'Vision', icon: '👁', description: 'Analyze diagrams, charts, and images with AI vision' },
 ];
 
 export default function ToolsPage() {
@@ -144,6 +147,8 @@ export default function ToolsPage() {
           {/* Math Solver */}
           {toolTab === 'math' ? (
             <MathSolver />
+          ) : toolTab === 'vision' ? (
+            <VisualAnalyzer />
           ) : (
             <div className="tool-workspace">
               {/* Input Mode */}
@@ -198,7 +203,9 @@ export default function ToolsPage() {
                   </div>
 
                   <div className="output-display">
-                    <pre>{output}</pre>
+                    <div style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word', fontFamily: 'inherit', fontSize: 'var(--font-body)', lineHeight: 1.6 }}>
+                      <MathText>{output}</MathText>
+                    </div>
                   </div>
 
                   <div className="output-actions-bottom">

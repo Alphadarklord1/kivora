@@ -1,20 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
 import { db } from '@/lib/db';
 import { recentFiles, files } from '@/lib/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
-
-async function getUserId(request: NextRequest): Promise<string | null> {
-  try {
-    const token = await getToken({
-      req: request,
-      secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
-    });
-    return (token?.id as string) || (token?.sub as string) || null;
-  } catch {
-    return null;
-  }
-}
+import { getUserId } from '@/lib/auth/get-user-id';
 
 // GET /api/recent - Get recent files for the user
 export async function GET(request: NextRequest) {

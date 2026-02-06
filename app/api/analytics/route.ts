@@ -1,20 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
 import { db } from '@/lib/db';
 import { quizAttempts, studyPlans, files } from '@/lib/db/schema';
-import { eq, desc, sql, and, gte } from 'drizzle-orm';
-
-async function getUserId(request: NextRequest): Promise<string | null> {
-  try {
-    const token = await getToken({
-      req: request,
-      secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
-    });
-    return (token?.id as string) || (token?.sub as string) || null;
-  } catch {
-    return null;
-  }
-}
+import { eq, desc, and, gte } from 'drizzle-orm';
+import { getUserId } from '@/lib/auth/get-user-id';
 
 interface QuizAnswer {
   questionId: string;
