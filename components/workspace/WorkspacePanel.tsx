@@ -44,6 +44,37 @@ const ToolSvgIcons: Record<string, React.ReactNode> = {
   math: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
 };
 
+// Action icons for file operations, tabs, and UI elements
+const ActionIcons = {
+  files: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
+  tools: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>,
+  pin: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>,
+  heart: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
+  heartOutline: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
+  share: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,
+  download: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
+  trash: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+  close: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  clipboard: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>,
+  folder: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
+  target: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+  edit: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  refresh: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>,
+  library: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>,
+  clock: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+  // File type icons (20x20)
+  filePdf: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  fileDoc: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  filePpt: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+  fileGeneric: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+  fileAssignment: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  fileSummarize: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  fileMcq: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
+  fileQuiz: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+  filePop: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+  fileMath: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+};
+
 const SnapshotIcons = {
   files: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>,
   quizzes: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
@@ -480,19 +511,20 @@ export function WorkspacePanel({
     }
   };
 
-  const getFileIcon = (name: string, type: string) => {
+  const getFileIcon = (name: string, type: string): React.ReactNode => {
     if (type !== 'upload') {
-      const icons: Record<string, string> = {
-        assignment: '📝', summarize: '📄', mcq: '✅',
-        quiz: '🧠', pop: '⚡', notes: '📝', math: '🧮',
+      const icons: Record<string, React.ReactNode> = {
+        assignment: ActionIcons.fileAssignment, summarize: ActionIcons.fileSummarize,
+        mcq: ActionIcons.fileMcq, quiz: ActionIcons.fileQuiz, pop: ActionIcons.filePop,
+        notes: ActionIcons.fileAssignment, math: ActionIcons.fileMath,
       };
-      return icons[type] || '📄';
+      return icons[type] || ActionIcons.fileGeneric;
     }
     const ext = name.split('.').pop()?.toLowerCase();
-    if (ext === 'pdf') return '📕';
-    if (['doc', 'docx'].includes(ext || '')) return '📘';
-    if (['ppt', 'pptx'].includes(ext || '')) return '📙';
-    return '📄';
+    if (ext === 'pdf') return ActionIcons.filePdf;
+    if (['doc', 'docx'].includes(ext || '')) return ActionIcons.fileDoc;
+    if (['ppt', 'pptx'].includes(ext || '')) return ActionIcons.filePpt;
+    return ActionIcons.fileGeneric;
   };
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString(undefined, {
@@ -553,13 +585,13 @@ export function WorkspacePanel({
           className={`main-tab ${mainTab === 'files' ? 'active' : ''}`}
           onClick={() => setMainTab('files')}
         >
-          📁 Files
+          <span className="main-tab-icon">{ActionIcons.files}</span> Files
         </button>
         <button
           className={`main-tab ${mainTab === 'tools' ? 'active' : ''}`}
           onClick={() => setMainTab('tools')}
         >
-          🛠️ Tools
+          <span className="main-tab-icon">{ActionIcons.tools}</span> Tools
         </button>
       </div>
 
@@ -592,7 +624,7 @@ export function WorkspacePanel({
               <div className="quick-access">
                 {pinnedFiles.length > 0 && (
                   <div className="quick-section">
-                    <h3>📌 Pinned</h3>
+                    <h3><span className="section-icon">{ActionIcons.pin}</span> Pinned</h3>
                     <div className="file-list">
                       {pinnedFiles.map(file => (
                         <div key={file.id} className="file-item" onClick={() => handleViewFile(file)}>
@@ -602,8 +634,8 @@ export function WorkspacePanel({
                             <span className="file-date">{formatDate(file.createdAt)}</span>
                           </div>
                           <div className="file-actions">
-                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">🛠️</button>
-                            <button className="icon-btn active" onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>📌</button>
+                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">{ActionIcons.tools}</button>
+                            <button className="icon-btn active" onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>{ActionIcons.pin}</button>
                           </div>
                         </div>
                       ))}
@@ -612,7 +644,7 @@ export function WorkspacePanel({
                 )}
                 {likedFiles.length > 0 && (
                   <div className="quick-section">
-                    <h3>❤️ Liked</h3>
+                    <h3><span className="section-icon">{ActionIcons.heart}</span> Liked</h3>
                     <div className="file-list">
                       {likedFiles.map(file => (
                         <div key={file.id} className="file-item" onClick={() => handleViewFile(file)}>
@@ -622,8 +654,8 @@ export function WorkspacePanel({
                             <span className="file-date">{formatDate(file.createdAt)}</span>
                           </div>
                           <div className="file-actions">
-                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">🛠️</button>
-                            <button className="icon-btn active" onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>❤️</button>
+                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">{ActionIcons.tools}</button>
+                            <button className="icon-btn active" onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>{ActionIcons.heart}</button>
                           </div>
                         </div>
                       ))}
@@ -632,7 +664,7 @@ export function WorkspacePanel({
                 )}
                 {recentFiles.length > 0 && (
                   <div className="quick-section">
-                    <h3>🕐 Recent</h3>
+                    <h3><span className="section-icon">{ActionIcons.clock}</span> Recent</h3>
                     <div className="file-list">
                       {recentFiles.map(file => (
                         <div key={file.id} className="file-item" onClick={() => handleViewFile(file)}>
@@ -642,9 +674,9 @@ export function WorkspacePanel({
                             <span className="file-date">{formatDate(file.createdAt)}</span>
                           </div>
                           <div className="file-actions">
-                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">🛠️</button>
-                            <button className={`icon-btn ${file.liked ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>{file.liked ? '❤️' : '🤍'}</button>
-                            <button className={`icon-btn ${file.pinned ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>📌</button>
+                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">{ActionIcons.tools}</button>
+                            <button className={`icon-btn ${file.liked ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>{file.liked ? ActionIcons.heart : ActionIcons.heartOutline}</button>
+                            <button className={`icon-btn ${file.pinned ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>{ActionIcons.pin}</button>
                           </div>
                         </div>
                       ))}
@@ -681,12 +713,12 @@ export function WorkspacePanel({
                           <span className="file-date">{formatDate(file.createdAt)}</span>
                         </div>
                         <div className="file-actions">
-                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleShareFile(file); }} title="Share">🔗</button>
-                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">🛠️</button>
-                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleDownloadFile(file); }} title="Download">⬇️</button>
-                          <button className={`icon-btn ${file.liked ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>{file.liked ? '❤️' : '🤍'}</button>
-                          <button className={`icon-btn ${file.pinned ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>📌</button>
-                          <button className="icon-btn danger" onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.id); }}>🗑️</button>
+                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleShareFile(file); }} title="Share">{ActionIcons.share}</button>
+                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">{ActionIcons.tools}</button>
+                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleDownloadFile(file); }} title="Download">{ActionIcons.download}</button>
+                          <button className={`icon-btn ${file.liked ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>{file.liked ? ActionIcons.heart : ActionIcons.heartOutline}</button>
+                          <button className={`icon-btn ${file.pinned ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>{ActionIcons.pin}</button>
+                          <button className="icon-btn danger" onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.id); }}>{ActionIcons.trash}</button>
                         </div>
                       </div>
                     ))}
@@ -725,7 +757,7 @@ export function WorkspacePanel({
                   <>
                     <div className="context-info">
                       {selectedTopic ? (
-                        <span className="context-active">📁 {selectedFolderName} / {selectedTopicName}</span>
+                        <span className="context-active"><span className="context-icon">{ActionIcons.folder}</span> {selectedFolderName} / {selectedTopicName}</span>
                       ) : (
                         <span className="context-hint">Select a folder to use files, or paste text below</span>
                       )}
@@ -779,18 +811,18 @@ export function WorkspacePanel({
                   <>
                     <div className="output-actions">
                       {generatedContent && generatedContent.questions.length > 0 && (
-                        <button className="btn" onClick={handleStartInteractive}>🎯 Practice</button>
+                        <button className="btn" onClick={handleStartInteractive}><span className="btn-icon">{ActionIcons.target}</span> Practice</button>
                       )}
-                      <button className="btn secondary" onClick={() => setViewMode('input')}>✏️ Edit</button>
-                      <button className="btn secondary" onClick={handleToolReset}>↺ New</button>
+                      <button className="btn secondary" onClick={() => setViewMode('input')}><span className="btn-icon">{ActionIcons.edit}</span> Edit</button>
+                      <button className="btn secondary" onClick={handleToolReset}><span className="btn-icon">{ActionIcons.refresh}</span> New</button>
                     </div>
 
                     <div className="output-display">{output}</div>
 
                     <div className="save-actions">
-                      <button className="btn secondary" onClick={() => handleCopy(output)}>📋 Copy</button>
-                      <button className="btn secondary" onClick={handleSaveToLibrary}>📚 Library</button>
-                      <button className="btn secondary" onClick={handleSaveToFolder} disabled={!selectedTopic}>📁 Folder</button>
+                      <button className="btn secondary" onClick={() => handleCopy(output)}><span className="btn-icon">{ActionIcons.clipboard}</span> Copy</button>
+                      <button className="btn secondary" onClick={handleSaveToLibrary}><span className="btn-icon">{ActionIcons.library}</span> Library</button>
+                      <button className="btn secondary" onClick={handleSaveToFolder} disabled={!selectedTopic}><span className="btn-icon">{ActionIcons.folder}</span> Folder</button>
                     </div>
                   </>
                 )}
@@ -810,18 +842,18 @@ export function WorkspacePanel({
         <div className="file-viewer-overlay" onClick={() => setViewingFile(null)}>
           <div className="file-viewer" onClick={e => e.stopPropagation()}>
             <div className="viewer-header">
-              <h3>{getFileIcon(viewingFile.name, viewingFile.type)} {viewingFile.name}</h3>
-              <button className="close-btn" onClick={() => setViewingFile(null)}>✕</button>
+              <h3><span className="viewer-file-icon">{getFileIcon(viewingFile.name, viewingFile.type)}</span> {viewingFile.name}</h3>
+              <button className="close-btn" onClick={() => setViewingFile(null)}>{ActionIcons.close}</button>
             </div>
             <div className="viewer-content">
               {extracting ? <p className="extracting">Extracting text...</p> : <pre>{fileContent || 'No content'}</pre>}
             </div>
             <div className="viewer-actions">
-              <button className="btn" onClick={() => { handleUseInTool(viewingFile); setViewingFile(null); }}>🛠️ Use in Tool</button>
-              <button className="btn secondary" onClick={() => { handleShareFile(viewingFile); setViewingFile(null); }}>🔗 Share</button>
-              <button className="btn secondary" onClick={() => handleDownloadFile(viewingFile)}>⬇️ Download</button>
-              <button className="btn secondary" onClick={() => handleCopy(fileContent)}>📋 Copy</button>
-              <button className="btn danger" onClick={() => { handleDeleteFile(viewingFile.id); setViewingFile(null); }}>🗑️ Delete</button>
+              <button className="btn" onClick={() => { handleUseInTool(viewingFile); setViewingFile(null); }}><span className="btn-icon">{ActionIcons.tools}</span> Use in Tool</button>
+              <button className="btn secondary" onClick={() => { handleShareFile(viewingFile); setViewingFile(null); }}><span className="btn-icon">{ActionIcons.share}</span> Share</button>
+              <button className="btn secondary" onClick={() => handleDownloadFile(viewingFile)}><span className="btn-icon">{ActionIcons.download}</span> Download</button>
+              <button className="btn secondary" onClick={() => handleCopy(fileContent)}><span className="btn-icon">{ActionIcons.clipboard}</span> Copy</button>
+              <button className="btn danger" onClick={() => { handleDeleteFile(viewingFile.id); setViewingFile(null); }}><span className="btn-icon">{ActionIcons.trash}</span> Delete</button>
             </div>
           </div>
         </div>
@@ -918,7 +950,7 @@ export function WorkspacePanel({
           transition: background 0.15s;
         }
         .file-item:hover { background: var(--bg-elevated); }
-        .file-icon { font-size: 24px; flex-shrink: 0; }
+        .file-icon { font-size: 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; }
         .file-info { flex: 1; min-width: 0; }
         .file-name { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .file-date { font-size: var(--font-tiny); color: var(--text-muted); }
@@ -972,6 +1004,56 @@ export function WorkspacePanel({
           width: 16px;
           height: 16px;
         }
+
+        .main-tab-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 16px;
+          height: 16px;
+          vertical-align: middle;
+          margin-right: 2px;
+        }
+
+        .main-tab { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); }
+
+        .section-icon {
+          display: inline-flex;
+          align-items: center;
+          vertical-align: middle;
+          margin-right: 4px;
+        }
+
+        .quick-section h3 { display: flex; align-items: center; }
+
+        .btn-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 14px;
+          height: 14px;
+          vertical-align: middle;
+          margin-right: 2px;
+        }
+
+        .context-icon {
+          display: inline-flex;
+          align-items: center;
+          vertical-align: middle;
+          margin-right: 4px;
+        }
+
+        .viewer-file-icon {
+          display: inline-flex;
+          align-items: center;
+          vertical-align: middle;
+          margin-right: 4px;
+        }
+
+        .icon-btn { color: var(--text-secondary); }
+        .icon-btn:hover { color: var(--text-primary); }
+        .icon-btn.active { color: var(--primary); }
+        .icon-btn.danger:hover { color: var(--error); }
 
         .tool-content { }
 
