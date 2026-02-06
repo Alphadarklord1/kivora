@@ -7,7 +7,7 @@ import { solveMath, formatMathSolution, extractMathProblems } from '@/lib/math/s
 // TYPES
 // ============================================
 
-export type ToolMode = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'flashcards' | 'essay';
+export type ToolMode = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'flashcards' | 'essay' | 'planner';
 
 export type BloomLevel = 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
 
@@ -1669,6 +1669,7 @@ export function offlineGenerate(mode: ToolMode, text: string): string {
       math: 'Math Solver\n\nSupports:\n- Arithmetic & Algebra\n- Linear & Quadratic Equations\n- Derivatives (d/dx)\n- Integrals\n- Limits\n\nExamples:\n  2x + 5 = 15\n  d/dx(x^3 + 2x)\n  integral x^2 dx',
       flashcards: 'Study Flashcards\n\nPaste content to generate categorized flashcards for efficient memorization and spaced repetition.',
       essay: 'Essay Questions\n\nPaste content to generate essay prompts with grading rubrics and case studies.',
+      planner: 'Study Planner\n\nCreate personalized study schedules based on your exam date, topics, and available study time.',
     };
     return emptyMessages[mode] || 'Please provide content to generate study materials.';
   }

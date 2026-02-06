@@ -7,6 +7,14 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '2mb',
     },
   },
+  // Turbopack configuration for Next.js 16+
+  turbopack: {
+    resolveAlias: {
+      // Stub out Node.js modules for browser-only packages
+      fs: { browser: './lib/stubs/fs.ts' },
+      path: { browser: './lib/stubs/path.ts' },
+    },
+  },
 };
 
 export default nextConfig;

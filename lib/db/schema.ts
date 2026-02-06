@@ -209,3 +209,26 @@ export const quizAttemptsRelations = relations(quizAttempts, ({ one }) => ({
     references: [files.id],
   }),
 }));
+
+// ============ STUDY PLANS ============
+
+export const studyPlans = pgTable('study_plans', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  examDate: timestamp('exam_date').notNull(),
+  dailyMinutes: integer('daily_minutes').notNull().default(60),
+  status: text('status').notNull().default('active'), // 'active' | 'completed' | 'paused'
+  topics: jsonb('topics').notNull(), // Array of {name, difficulty, estimatedHours, completed}
+  schedule: jsonb('schedule').notNull(), // Generated day-by-day schedule
+  progress: integer('progress').notNull().default(0), // 0-100
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const studyPlansRelations = relations(studyPlans, ({ one }) => ({
+  user: one(users, {
+    fields: [studyPlans.userId],
+    references: [users.id],
+  }),
+}));
