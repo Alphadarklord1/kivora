@@ -96,6 +96,13 @@ const SvgIcons = {
       <line x1="21" y1="12" x2="9" y2="12" />
     </svg>
   ),
+  analytics: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  ),
 };
 
 const navItems = [
@@ -104,6 +111,7 @@ const navItems = [
   { href: '/planner', label: 'Planner', iconKey: 'planner' as const },
   { href: '/podcast', label: 'Podcast', iconKey: 'podcast' as const },
   { href: '/library', label: 'Library', iconKey: 'library' as const },
+  { href: '/analytics', label: 'Analytics', iconKey: 'analytics' as const },
   { href: '/shared', label: 'Sharing', iconKey: 'sharing' as const },
 ];
 

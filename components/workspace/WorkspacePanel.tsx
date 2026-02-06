@@ -190,16 +190,16 @@ export function WorkspacePanel({
     fetch('/api/analytics', { credentials: 'include' })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
-        if (data) {
-          setSnapshot({
-            files: data.quizStats?.totalQuestions || 0,
-            quizzes: data.quizStats?.totalAttempts || 0,
-            streak: data.activity?.currentStreak || 0,
-            plans: data.planStats?.activePlans || 0,
-          });
-        }
+        setSnapshot({
+          files: data?.quizStats?.totalQuestions || 0,
+          quizzes: data?.quizStats?.totalAttempts || 0,
+          streak: data?.activity?.currentStreak || 0,
+          plans: data?.planStats?.activePlans || 0,
+        });
       })
-      .catch(() => {});
+      .catch(() => {
+        setSnapshot({ files: 0, quizzes: 0, streak: 0, plans: 0 });
+      });
   }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
