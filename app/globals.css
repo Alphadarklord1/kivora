@@ -100,6 +100,21 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08);
+
+  /* ─────────────────────────────────────
+     CARD SYSTEM
+     ───────────────────────────────────── */
+  --card-bg: var(--bg-surface);
+  --card-border: var(--border-subtle);
+  --card-radius: var(--radius-lg);
+  --card-hover-border: var(--border-default);
+  --card-hover-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+
+  /* ─────────────────────────────────────
+     TRANSITIONS
+     ───────────────────────────────────── */
+  --transition-fast: 0.12s ease;
+  --transition-normal: 0.2s ease;
 }
 
 /* ─────────────────────────────────────
@@ -142,6 +157,11 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+  --card-bg: var(--bg-surface);
+  --card-border: var(--border-subtle);
+  --card-hover-border: var(--border-default);
+  --card-hover-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* ─────────────────────────────────────
@@ -215,7 +235,7 @@ html {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
   font-size: var(--font-body);
   line-height: var(--line-normal);
   color: var(--text-primary);
@@ -663,10 +683,16 @@ textarea {
 
 /* === CARDS === */
 .card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
   padding: var(--space-5);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-normal);
+}
+
+.card:hover {
+  border-color: var(--card-hover-border);
+  box-shadow: var(--card-hover-shadow);
 }
 
 .card h3 {
@@ -1057,6 +1083,100 @@ textarea {
 
 .fade-in {
   animation: fadeIn 0.2s ease;
+}
+
+/* === GENERATION STATUS === */
+.generation-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--primary-muted);
+  border-radius: var(--radius-md);
+  font-size: var(--font-meta);
+  color: var(--primary-text);
+  font-weight: var(--weight-medium);
+}
+
+.generation-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--primary-muted);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.generation-step {
+  animation: fadeIn 0.2s ease;
+}
+
+/* === STUDY SNAPSHOT BAR === */
+.study-snapshot {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
+  overflow-x: auto;
+}
+
+.snapshot-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.snapshot-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.snapshot-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.snapshot-value {
+  font-size: var(--font-section);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.snapshot-label {
+  font-size: var(--font-tiny);
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.snapshot-data {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+@media (max-width: 600px) {
+  .study-snapshot {
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+  }
 }
 
 /* === RESPONSIVE === */

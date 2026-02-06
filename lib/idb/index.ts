@@ -77,3 +77,8 @@ class IDBStore {
 }
 
 export const idbStore = new IDBStore();
+
+export async function getBlob(key: string): Promise<Blob | null> {
+  const payload = await idbStore.get(key);
+  return payload?.blob ?? null;
+}
