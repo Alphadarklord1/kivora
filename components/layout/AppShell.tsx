@@ -19,10 +19,23 @@ interface AppShellProps {
 
 const navItems = [
   { href: '/workspace', label: 'Workspace', icon: '🎒', activeIcon: '🎒' },
+  { href: '/planner', label: 'Planner', icon: '📅', activeIcon: '📅' },
   { href: '/tools', label: 'Tools', icon: '🛠️', activeIcon: '🛠️' },
   { href: '/library', label: 'Library', icon: '📚', activeIcon: '📚' },
+  { href: '/podcast', label: 'Audio', icon: '🎧', activeIcon: '🎧' },
+  { href: '/analytics', label: 'Analytics', icon: '📊', activeIcon: '📊' },
   { href: '/shared', label: 'Sharing', icon: '🔗', activeIcon: '🔗' },
 ];
+
+// Mobile bottom nav shows only the 5 most important items
+const mobileNavItems = navItems.filter(item =>
+  ['/workspace', '/planner', '/tools', '/library', '/podcast'].includes(item.href)
+);
+
+// Extra items go in the mobile user menu
+const mobileMenuExtras = navItems.filter(item =>
+  ['/analytics', '/shared'].includes(item.href)
+);
 
 export function AppShell({ children, user }: AppShellProps) {
   const pathname = usePathname();
@@ -265,6 +278,11 @@ export function AppShell({ children, user }: AppShellProps) {
                     <strong>{user.name || 'User'}</strong>
                     <span>{user.email}</span>
                   </div>
+                  {mobileMenuExtras.map((item) => (
+                    <Link key={item.href} href={item.href} className="mobile-menu-item" onClick={() => setShowUserMenu(false)}>
+                      {item.icon} {item.label}
+                    </Link>
+                  ))}
                   <button
                     className="mobile-menu-item"
                     onClick={() => { handleExportData(); setShowUserMenu(false); }}
@@ -295,7 +313,7 @@ export function AppShell({ children, user }: AppShellProps) {
       {/* Mobile Bottom Navigation */}
       {isMobile && (
         <nav className="mobile-nav">
-          {navItems.map((item) => (
+          {mobileNavItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}

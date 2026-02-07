@@ -9,6 +9,7 @@ import { InteractiveQuiz } from './InteractiveQuiz';
 import { MathSolver } from '@/components/tools/MathSolver';
 import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
 import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
+import { AudioPodcast } from '@/components/tools/AudioPodcast';
 import { useToastHelpers } from '@/components/ui/Toast';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { NoFilesState, EmptyState } from '@/components/ui/EmptyState';
@@ -34,7 +35,7 @@ interface WorkspacePanelProps {
 }
 
 type MainTab = 'files' | 'tools';
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph' | 'visual';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph' | 'visual' | 'audio';
 
 const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'assignment', label: 'Assignment', icon: '📝' },
@@ -46,6 +47,7 @@ const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'math', label: 'Math', icon: '🧮' },
   { id: 'graph', label: 'Graph', icon: '📈' },
   { id: 'visual', label: 'Visual', icon: '🔍' },
+  { id: 'audio', label: 'Audio', icon: '🎧' },
 ];
 
 export function WorkspacePanel({
@@ -666,6 +668,10 @@ export function WorkspacePanel({
             ) : toolTab === 'visual' ? (
               <div className="tool-content">
                 <VisualAnalyzer />
+              </div>
+            ) : toolTab === 'audio' ? (
+              <div className="tool-content">
+                <AudioPodcast />
               </div>
             ) : (
               <div className="tool-content">

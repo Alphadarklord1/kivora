@@ -7,9 +7,10 @@ import { InteractiveQuiz } from '@/components/workspace/InteractiveQuiz';
 import { MathSolver } from '@/components/tools/MathSolver';
 import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
 import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
+import { AudioPodcast } from '@/components/tools/AudioPodcast';
 import { useToastHelpers } from '@/components/ui/Toast';
 
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph' | 'visual';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph' | 'visual' | 'audio';
 
 const toolTabs: { id: ToolTab; label: string; icon: string; description: string }[] = [
   { id: 'assignment', label: 'Assignment', icon: '📝', description: 'Generate assignment questions and prompts' },
@@ -21,6 +22,7 @@ const toolTabs: { id: ToolTab; label: string; icon: string; description: string 
   { id: 'math', label: 'Math', icon: '🧮', description: 'Solve mathematical problems step-by-step' },
   { id: 'graph', label: 'Graph', icon: '📈', description: 'Plot and visualize mathematical functions' },
   { id: 'visual', label: 'Visual', icon: '🔍', description: 'Analyze images, diagrams, and PDFs with AI vision' },
+  { id: 'audio', label: 'Audio', icon: '🎧', description: 'Listen to your study materials as a podcast' },
 ];
 
 interface FolderData {
@@ -235,6 +237,8 @@ export default function ToolsPage() {
             <GraphingCalculator initialExpression={graphExpression || undefined} />
           ) : toolTab === 'visual' ? (
             <VisualAnalyzer />
+          ) : toolTab === 'audio' ? (
+            <AudioPodcast />
           ) : (
             <div className="tool-workspace">
               {/* Input Mode */}
