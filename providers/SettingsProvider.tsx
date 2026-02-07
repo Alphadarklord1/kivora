@@ -69,44 +69,28 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('studypilot_density', s.density);
   }, []);
 
-  // Apply initial settings and fetch from server
+  // Fetch authoritative settings from server (inline script in layout.tsx already applied localStorage values)
   useEffect(() => {
-    // Apply initial settings from localStorage
-    const initialSettings = getInitialSettings();
-
-    // Apply theme
-    if (initialSettings.theme === 'system') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-    } else {
-      document.documentElement.setAttribute('data-theme', initialSettings.theme);
-    }
-    document.documentElement.style.setProperty('--font-scale', initialSettings.fontSize);
-    document.documentElement.setAttribute('data-density', initialSettings.density);
-
-    // Fetch authoritative settings from server
     fetch('/api/settings', { credentials: 'include' })
       .then(res => res.ok ? res.json() : null)
       .then(serverSettings => {
         if (serverSettings) {
+          // Only re-apply to DOM if server settings differ from what's already applied
+          const current = getInitialSettings();
+          const changed = serverSettings.theme !== current.theme ||
+            serverSettings.fontSize !== current.fontSize ||
+            serverSettings.density !== current.density;
+
           setSettings(serverSettings);
-          // Apply server settings
-          if (serverSettings.theme === 'system') {
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-          } else {
-            document.documentElement.setAttribute('data-theme', serverSettings.theme);
+
+          if (changed) {
+            applySettings(serverSettings);
           }
-          document.documentElement.style.setProperty('--font-scale', serverSettings.fontSize);
-          document.documentElement.setAttribute('data-density', serverSettings.density);
-          localStorage.setItem('studypilot_theme', serverSettings.theme);
-          localStorage.setItem('studypilot_fontSize', serverSettings.fontSize);
-          localStorage.setItem('studypilot_density', serverSettings.density);
         }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [applySettings]);
 
   // Listen for system theme changes
   useEffect(() => {

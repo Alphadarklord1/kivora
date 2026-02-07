@@ -41,6 +41,7 @@ export function AppShell({ children, user }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const toast = useToastHelpers();
+  const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -48,13 +49,15 @@ export function AppShell({ children, user }: AppShellProps) {
 
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024);
-      if (window.innerWidth < 1024) {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      if (mobile) {
         setSidebarOpen(false);
       }
     };
 
     checkMobile();
+    setMounted(true);
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
@@ -149,6 +152,17 @@ export function AppShell({ children, user }: AppShellProps) {
     }
     return 'U';
   };
+
+  // Don't render layout chrome until client hydration to prevent sidebar flash
+  if (!mounted) {
+    return (
+      <div className="app-shell">
+        <main className="app-main">
+          <div className="app-content">{children}</div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">

@@ -1,44 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useSettings } from '@/providers/SettingsProvider';
 
 interface SettingsModalProps {
   onClose: () => void;
 }
 
-const getInitialTheme = () => {
-  if (typeof window === 'undefined') return 'light';
-  return localStorage.getItem('studypilot_theme') || 'light';
-};
-
-const getInitialFontSize = () => {
-  if (typeof window === 'undefined') return '1';
-  return localStorage.getItem('studypilot_fontSize') || '1';
-};
-
-const getInitialDensity = () => {
-  if (typeof window === 'undefined') return 'normal';
-  return localStorage.getItem('studypilot_density') || 'normal';
-};
-
 export function SettingsModal({ onClose }: SettingsModalProps) {
-  const [theme, setTheme] = useState(getInitialTheme);
-  const [fontSize, setFontSize] = useState(getInitialFontSize);
-  const [density, setDensity] = useState(getInitialDensity);
-
-  const applySettings = () => {
-    document.documentElement.setAttribute('data-theme', theme);
-    document.documentElement.setAttribute('data-density', density);
-    document.documentElement.style.setProperty('--font-scale', fontSize);
-
-    localStorage.setItem('studypilot_theme', theme);
-    localStorage.setItem('studypilot_fontSize', fontSize);
-    localStorage.setItem('studypilot_density', density);
-  };
-
-  useEffect(() => {
-    applySettings();
-  }, [theme, fontSize, density]);
+  const { settings, updateSettings } = useSettings();
 
   return (
     <div className="settings-modal" onClick={(e) => {
@@ -55,15 +24,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
           <div style={{ marginBottom: '12px' }}>
             <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px' }}>Theme</label>
-            <select value={theme} onChange={(e) => setTheme(e.target.value)}>
+            <select value={settings.theme} onChange={(e) => updateSettings({ theme: e.target.value })}>
               <option value="light">Light</option>
               <option value="dark">Dark</option>
+              <option value="system">System</option>
             </select>
           </div>
 
           <div style={{ marginBottom: '12px' }}>
             <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px' }}>Font Size</label>
-            <select value={fontSize} onChange={(e) => setFontSize(e.target.value)}>
+            <select value={settings.fontSize} onChange={(e) => updateSettings({ fontSize: e.target.value })}>
               <option value="0.875">Small</option>
               <option value="1">Normal</option>
               <option value="1.125">Large</option>
@@ -73,7 +43,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
           <div>
             <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px' }}>Density</label>
-            <select value={density} onChange={(e) => setDensity(e.target.value)}>
+            <select value={settings.density} onChange={(e) => updateSettings({ density: e.target.value })}>
               <option value="compact">Compact</option>
               <option value="normal">Normal</option>
               <option value="comfortable">Comfortable</option>
