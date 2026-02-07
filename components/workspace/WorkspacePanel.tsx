@@ -1,15 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { extractTextFromFile } from '@/lib/pdf/extract';
 import { idbStore } from '@/lib/idb';
 import { getGeneratedContent, ToolMode, GeneratedContent } from '@/lib/offline/generate';
 import { InteractiveQuiz } from './InteractiveQuiz';
-import { WelcomePanel } from './WelcomePanel';
 import { MathSolver } from '@/components/tools/MathSolver';
-import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
-import { MathText } from '@/components/math/MathRenderer';
-import { extractImagesFromPDF } from '@/lib/pdf/image-extract';
+import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
 import { useToastHelpers } from '@/components/ui/Toast';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { NoFilesState, EmptyState } from '@/components/ui/EmptyState';
@@ -35,72 +33,17 @@ interface WorkspacePanelProps {
 }
 
 type MainTab = 'files' | 'tools';
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'vision';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph';
 
-const ToolSvgIcons: Record<string, React.ReactNode> = {
-  assignment: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
-  summarize: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
-  mcq: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
-  quiz: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
-  pop: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
-  notes: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>,
-  math: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
-  vision: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
-};
-
-// Action icons for file operations, tabs, and UI elements
-const ActionIcons = {
-  files: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
-  tools: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>,
-  pin: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>,
-  heart: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
-  heartOutline: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
-  share: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,
-  download: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
-  trash: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
-  close: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
-  clipboard: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>,
-  folder: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
-  target: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
-  edit: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
-  refresh: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>,
-  library: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>,
-  clock: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
-  // File type icons (20x20)
-  filePdf: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
-  fileDoc: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
-  filePpt: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
-  fileGeneric: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
-  fileAssignment: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
-  fileSummarize: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
-  fileMcq: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
-  fileQuiz: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
-  filePop: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
-  fileMath: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
-};
-
-const SnapshotIcons = {
-  files: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>,
-  quizzes: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
-  streak: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
-  plans: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
-};
-
-const GENERATION_STEPS = [
-  'Analyzing content...',
-  'Generating questions...',
-  'Formatting output...',
-];
-
-const toolTabs: { id: ToolTab; label: string; iconKey: string }[] = [
-  { id: 'assignment', label: 'Assignment', iconKey: 'assignment' },
-  { id: 'summarize', label: 'Summarize', iconKey: 'summarize' },
-  { id: 'mcq', label: 'MCQ', iconKey: 'mcq' },
-  { id: 'quiz', label: 'Quiz', iconKey: 'quiz' },
-  { id: 'pop', label: 'Pop Quiz', iconKey: 'pop' },
-  { id: 'notes', label: 'Notes', iconKey: 'notes' },
-  { id: 'math', label: 'Math', iconKey: 'math' },
-  { id: 'vision', label: 'Vision', iconKey: 'vision' },
+const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
+  { id: 'assignment', label: 'Assignment', icon: '📝' },
+  { id: 'summarize', label: 'Summarize', icon: '📄' },
+  { id: 'mcq', label: 'MCQ', icon: '✅' },
+  { id: 'quiz', label: 'Quiz', icon: '🧠' },
+  { id: 'pop', label: 'Pop Quiz', icon: '⚡' },
+  { id: 'notes', label: 'Notes', icon: '📝' },
+  { id: 'math', label: 'Math', icon: '🧮' },
+  { id: 'graph', label: 'Graph', icon: '📈' },
 ];
 
 export function WorkspacePanel({
@@ -130,21 +73,16 @@ export function WorkspacePanel({
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
   const [showInteractiveQuiz, setShowInteractiveQuiz] = useState(false);
   const [viewMode, setViewMode] = useState<'input' | 'output' | 'practice'>('input');
+  const [graphExpression, setGraphExpression] = useState('');
 
-  // Snapshot state
-  const [snapshot, setSnapshot] = useState<{ files: number; quizzes: number; streak: number; plans: number } | null>(null);
-
-  // Generation step state
-  const [generationStep, setGenerationStep] = useState(0);
+  const handleGraphFromMath = (expression: string) => {
+    setGraphExpression(expression);
+    setToolTab('graph');
+  };
 
   // Share dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<{ type: 'file'; id: string; name: string } | null>(null);
-
-  // Image-aware generation state
-  const [includeImageAnalysis, setIncludeImageAnalysis] = useState(false);
-  const [imageAnalysisLoading, setImageAnalysisLoading] = useState(false);
-  const [selectedToolFile, setSelectedToolFile] = useState<FileItem | null>(null);
 
   const handleShareFile = (file: FileItem) => {
     setShareTarget({ type: 'file', id: file.id, name: file.name });
@@ -195,23 +133,6 @@ export function WorkspacePanel({
     fetchQuickAccess();
   }, []);
 
-  // Fetch snapshot data
-  useEffect(() => {
-    fetch('/api/analytics', { credentials: 'include' })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        setSnapshot({
-          files: data?.quizStats?.totalQuestions || 0,
-          quizzes: data?.quizStats?.totalAttempts || 0,
-          streak: data?.activity?.currentStreak || 0,
-          plans: data?.planStats?.activePlans || 0,
-        });
-      })
-      .catch(() => {
-        setSnapshot({ files: 0, quizzes: 0, streak: 0, plans: 0 });
-      });
-  }, []);
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!selectedTopic || !e.target.files?.length) return;
 
@@ -247,9 +168,6 @@ export function WorkspacePanel({
         setFiles(await filesRes.json());
         onRefresh();
         toast.success('File uploaded');
-      } else {
-        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-        toast.error('Upload failed', errorData.error || `Server returned ${res.status}`);
       }
     } catch {
       toast.error('Upload failed', 'Please try again');
@@ -298,7 +216,6 @@ export function WorkspacePanel({
 
   const handleUseInTool = async (file: FileItem) => {
     // Extract text and switch to tools tab
-    setSelectedToolFile(file);
     if (file.type === 'upload' && file.localBlobId) {
       try {
         const blobData = await idbStore.get(file.localBlobId);
@@ -418,60 +335,15 @@ export function WorkspacePanel({
   };
 
   // Tool functions
-  const handleGenerate = async () => {
+  const handleGenerate = () => {
     if (!inputText.trim()) {
       setOutput('Please enter text to process.');
       return;
     }
 
     setGenerating(true);
-    setGenerationStep(0);
-
-    // Simulate step progression for UX feedback
-    const stepTimer1 = setTimeout(() => setGenerationStep(1), 400);
-    const stepTimer2 = setTimeout(() => setGenerationStep(2), 800);
-
     try {
-      let finalInputText = inputText;
-
-      // If image analysis is enabled and we have a PDF file
-      if (includeImageAnalysis && selectedToolFile?.localBlobId && selectedToolFile.name.toLowerCase().endsWith('.pdf')) {
-        setImageAnalysisLoading(true);
-        try {
-          const blobData = await idbStore.get(selectedToolFile.localBlobId);
-          if (blobData) {
-            const images = await extractImagesFromPDF(blobData.blob, 5);
-            const descriptions: string[] = [];
-
-            for (const img of images) {
-              try {
-                const res = await fetch('/api/vision/analyze', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ imageDataUrl: img.dataUrl, mode: 'describe' }),
-                  credentials: 'include',
-                });
-                if (res.ok) {
-                  const data = await res.json();
-                  descriptions.push(`[Image from page ${img.pageNumber}]: ${data.result}`);
-                }
-              } catch {
-                // Skip failed image analyses
-              }
-            }
-
-            if (descriptions.length > 0) {
-              finalInputText = `--- Visual Content from PDF ---\n${descriptions.join('\n\n')}\n\n--- Text Content ---\n${inputText}`;
-            }
-          }
-        } catch {
-          // Continue without image analysis if it fails
-        } finally {
-          setImageAnalysisLoading(false);
-        }
-      }
-
-      const content = getGeneratedContent(toolTab as ToolMode, finalInputText);
+      const content = getGeneratedContent(toolTab as ToolMode, inputText);
       setGeneratedContent(content);
       setOutput(content.displayText);
       setViewMode('output');
@@ -479,10 +351,7 @@ export function WorkspacePanel({
       setOutput('Error generating content.');
       setGeneratedContent(null);
     } finally {
-      clearTimeout(stepTimer1);
-      clearTimeout(stepTimer2);
       setGenerating(false);
-      setGenerationStep(0);
     }
   };
 
@@ -504,8 +373,6 @@ export function WorkspacePanel({
     setGeneratedContent(null);
     setShowInteractiveQuiz(false);
     setViewMode('input');
-    setIncludeImageAnalysis(false);
-    setSelectedToolFile(null);
   };
 
   const handleCopy = (text: string) => {
@@ -566,20 +433,19 @@ export function WorkspacePanel({
     }
   };
 
-  const getFileIcon = (name: string, type: string): React.ReactNode => {
+  const getFileIcon = (name: string, type: string) => {
     if (type !== 'upload') {
-      const icons: Record<string, React.ReactNode> = {
-        assignment: ActionIcons.fileAssignment, summarize: ActionIcons.fileSummarize,
-        mcq: ActionIcons.fileMcq, quiz: ActionIcons.fileQuiz, pop: ActionIcons.filePop,
-        notes: ActionIcons.fileAssignment, math: ActionIcons.fileMath,
+      const icons: Record<string, string> = {
+        assignment: '📝', summarize: '📄', mcq: '✅',
+        quiz: '🧠', pop: '⚡', notes: '📝', math: '🧮',
       };
-      return icons[type] || ActionIcons.fileGeneric;
+      return icons[type] || '📄';
     }
     const ext = name.split('.').pop()?.toLowerCase();
-    if (ext === 'pdf') return ActionIcons.filePdf;
-    if (['doc', 'docx'].includes(ext || '')) return ActionIcons.fileDoc;
-    if (['ppt', 'pptx'].includes(ext || '')) return ActionIcons.filePpt;
-    return ActionIcons.fileGeneric;
+    if (ext === 'pdf') return '📕';
+    if (['doc', 'docx'].includes(ext || '')) return '📘';
+    if (['ppt', 'pptx'].includes(ext || '')) return '📙';
+    return '📄';
   };
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString(undefined, {
@@ -600,53 +466,19 @@ export function WorkspacePanel({
         </div>
       </div>
 
-      {/* Study Snapshot Bar */}
-      {snapshot && (
-        <div className="study-snapshot">
-          <div className="snapshot-item">
-            <div className="snapshot-icon">{SnapshotIcons.files}</div>
-            <div className="snapshot-data">
-              <span className="snapshot-value">{snapshot.files}</span>
-              <span className="snapshot-label">Questions</span>
-            </div>
-          </div>
-          <div className="snapshot-item">
-            <div className="snapshot-icon">{SnapshotIcons.quizzes}</div>
-            <div className="snapshot-data">
-              <span className="snapshot-value">{snapshot.quizzes}</span>
-              <span className="snapshot-label">Quizzes</span>
-            </div>
-          </div>
-          <div className="snapshot-item">
-            <div className="snapshot-icon">{SnapshotIcons.streak}</div>
-            <div className="snapshot-data">
-              <span className="snapshot-value">{snapshot.streak}</span>
-              <span className="snapshot-label">Streak</span>
-            </div>
-          </div>
-          <div className="snapshot-item">
-            <div className="snapshot-icon">{SnapshotIcons.plans}</div>
-            <div className="snapshot-data">
-              <span className="snapshot-value">{snapshot.plans}</span>
-              <span className="snapshot-label">Plans</span>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Main Tabs */}
       <div className="main-tabs">
         <button
           className={`main-tab ${mainTab === 'files' ? 'active' : ''}`}
           onClick={() => setMainTab('files')}
         >
-          <span className="main-tab-icon">{ActionIcons.files}</span> Files
+          📁 Files
         </button>
         <button
           className={`main-tab ${mainTab === 'tools' ? 'active' : ''}`}
           onClick={() => setMainTab('tools')}
         >
-          <span className="main-tab-icon">{ActionIcons.tools}</span> Tools
+          🛠️ Tools
         </button>
       </div>
 
@@ -669,17 +501,12 @@ export function WorkspacePanel({
               </label>
             )}
 
-            {/* Welcome Panel - show when no folder selected and no quick access files */}
-            {!selectedTopic && pinnedFiles.length === 0 && likedFiles.length === 0 && recentFiles.length === 0 && (
-              <WelcomePanel />
-            )}
-
             {/* Pinned, Liked & Recent */}
             {!selectedTopic && (pinnedFiles.length > 0 || likedFiles.length > 0 || recentFiles.length > 0) && (
               <div className="quick-access">
                 {pinnedFiles.length > 0 && (
                   <div className="quick-section">
-                    <h3><span className="section-icon">{ActionIcons.pin}</span> Pinned</h3>
+                    <h3>📌 Pinned</h3>
                     <div className="file-list">
                       {pinnedFiles.map(file => (
                         <div key={file.id} className="file-item" onClick={() => handleViewFile(file)}>
@@ -689,8 +516,8 @@ export function WorkspacePanel({
                             <span className="file-date">{formatDate(file.createdAt)}</span>
                           </div>
                           <div className="file-actions">
-                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">{ActionIcons.tools}</button>
-                            <button className="icon-btn active" onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>{ActionIcons.pin}</button>
+                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">🛠️</button>
+                            <button className="icon-btn active" onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>📌</button>
                           </div>
                         </div>
                       ))}
@@ -699,7 +526,7 @@ export function WorkspacePanel({
                 )}
                 {likedFiles.length > 0 && (
                   <div className="quick-section">
-                    <h3><span className="section-icon">{ActionIcons.heart}</span> Liked</h3>
+                    <h3>❤️ Liked</h3>
                     <div className="file-list">
                       {likedFiles.map(file => (
                         <div key={file.id} className="file-item" onClick={() => handleViewFile(file)}>
@@ -709,8 +536,8 @@ export function WorkspacePanel({
                             <span className="file-date">{formatDate(file.createdAt)}</span>
                           </div>
                           <div className="file-actions">
-                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">{ActionIcons.tools}</button>
-                            <button className="icon-btn active" onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>{ActionIcons.heart}</button>
+                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">🛠️</button>
+                            <button className="icon-btn active" onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>❤️</button>
                           </div>
                         </div>
                       ))}
@@ -719,7 +546,7 @@ export function WorkspacePanel({
                 )}
                 {recentFiles.length > 0 && (
                   <div className="quick-section">
-                    <h3><span className="section-icon">{ActionIcons.clock}</span> Recent</h3>
+                    <h3>🕐 Recent</h3>
                     <div className="file-list">
                       {recentFiles.map(file => (
                         <div key={file.id} className="file-item" onClick={() => handleViewFile(file)}>
@@ -729,9 +556,9 @@ export function WorkspacePanel({
                             <span className="file-date">{formatDate(file.createdAt)}</span>
                           </div>
                           <div className="file-actions">
-                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">{ActionIcons.tools}</button>
-                            <button className={`icon-btn ${file.liked ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>{file.liked ? ActionIcons.heart : ActionIcons.heartOutline}</button>
-                            <button className={`icon-btn ${file.pinned ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>{ActionIcons.pin}</button>
+                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">🛠️</button>
+                            <button className={`icon-btn ${file.liked ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>{file.liked ? '❤️' : '🤍'}</button>
+                            <button className={`icon-btn ${file.pinned ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>📌</button>
                           </div>
                         </div>
                       ))}
@@ -768,12 +595,12 @@ export function WorkspacePanel({
                           <span className="file-date">{formatDate(file.createdAt)}</span>
                         </div>
                         <div className="file-actions">
-                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleShareFile(file); }} title="Share">{ActionIcons.share}</button>
-                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">{ActionIcons.tools}</button>
-                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleDownloadFile(file); }} title="Download">{ActionIcons.download}</button>
-                          <button className={`icon-btn ${file.liked ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>{file.liked ? ActionIcons.heart : ActionIcons.heartOutline}</button>
-                          <button className={`icon-btn ${file.pinned ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>{ActionIcons.pin}</button>
-                          <button className="icon-btn danger" onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.id); }}>{ActionIcons.trash}</button>
+                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleShareFile(file); }} title="Share">🔗</button>
+                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">🛠️</button>
+                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleDownloadFile(file); }} title="Download">⬇️</button>
+                          <button className={`icon-btn ${file.liked ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>{file.liked ? '❤️' : '🤍'}</button>
+                          <button className={`icon-btn ${file.pinned ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>📌</button>
+                          <button className="icon-btn danger" onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.id); }}>🗑️</button>
                         </div>
                       </div>
                     ))}
@@ -795,19 +622,24 @@ export function WorkspacePanel({
                   className={`tool-tab ${toolTab === tab.id ? 'active' : ''}`}
                   onClick={() => { setToolTab(tab.id); handleToolReset(); }}
                 >
-                  <span className="tool-tab-icon">{ToolSvgIcons[tab.iconKey]}</span> {tab.label}
+                  {tab.icon} {tab.label}
                 </button>
               ))}
             </div>
 
-            {/* Standalone Tools */}
+            {/* Quick Library Link */}
+            <div className="library-link-row">
+              <Link href="/library" className="library-quick-link">📚 View Library</Link>
+            </div>
+
+            {/* Math Solver */}
             {toolTab === 'math' ? (
               <div className="tool-content">
-                <MathSolver />
+                <MathSolver onGraphExpression={handleGraphFromMath} />
               </div>
-            ) : toolTab === 'vision' ? (
+            ) : toolTab === 'graph' ? (
               <div className="tool-content">
-                <VisualAnalyzer />
+                <GraphingCalculator initialExpression={graphExpression || undefined} />
               </div>
             ) : (
               <div className="tool-content">
@@ -816,7 +648,7 @@ export function WorkspacePanel({
                   <>
                     <div className="context-info">
                       {selectedTopic ? (
-                        <span className="context-active"><span className="context-icon">{ActionIcons.folder}</span> {selectedFolderName} / {selectedTopicName}</span>
+                        <span className="context-active">📁 {selectedFolderName} / {selectedTopicName}</span>
                       ) : (
                         <span className="context-hint">Select a folder to use files, or paste text below</span>
                       )}
@@ -838,18 +670,6 @@ export function WorkspacePanel({
                       </div>
                     )}
 
-                    {/* Image analysis toggle for PDFs */}
-                    {selectedToolFile && selectedToolFile.name.toLowerCase().endsWith('.pdf') && selectedToolFile.localBlobId && (
-                      <label className="image-analysis-toggle">
-                        <input
-                          type="checkbox"
-                          checked={includeImageAnalysis}
-                          onChange={(e) => setIncludeImageAnalysis(e.target.checked)}
-                        />
-                        Include image analysis (diagrams, charts)
-                      </label>
-                    )}
-
                     <textarea
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
@@ -860,20 +680,13 @@ export function WorkspacePanel({
                       <p className="word-count">{inputText.split(/\s+/).filter(Boolean).length} words</p>
                     )}
 
-                    {generating ? (
-                      <div className="generation-status">
-                        <div className="generation-spinner" />
-                        <span className="generation-step">{imageAnalysisLoading ? 'Analyzing images...' : (GENERATION_STEPS[generationStep] || GENERATION_STEPS[0])}</span>
-                      </div>
-                    ) : (
-                      <button
-                        className="btn generate-btn"
-                        onClick={handleGenerate}
-                        disabled={!inputText.trim()}
-                      >
-                        Generate {toolTabs.find(t => t.id === toolTab)?.label}
-                      </button>
-                    )}
+                    <button
+                      className="btn generate-btn"
+                      onClick={handleGenerate}
+                      disabled={generating || !inputText.trim()}
+                    >
+                      {generating ? 'Generating...' : `Generate ${toolTabs.find(t => t.id === toolTab)?.label}`}
+                    </button>
                   </>
                 )}
 
@@ -882,25 +695,25 @@ export function WorkspacePanel({
                   <>
                     <div className="output-actions">
                       {generatedContent && generatedContent.questions.length > 0 && (
-                        <button className="btn" onClick={handleStartInteractive}><span className="btn-icon">{ActionIcons.target}</span> Practice</button>
+                        <button className="btn" onClick={handleStartInteractive}>🎯 Practice</button>
                       )}
-                      <button className="btn secondary" onClick={() => setViewMode('input')}><span className="btn-icon">{ActionIcons.edit}</span> Edit</button>
-                      <button className="btn secondary" onClick={handleToolReset}><span className="btn-icon">{ActionIcons.refresh}</span> New</button>
+                      <button className="btn secondary" onClick={() => setViewMode('input')}>✏️ Edit</button>
+                      <button className="btn secondary" onClick={handleToolReset}>↺ New</button>
                     </div>
 
-                    <div className="output-display"><MathText>{output}</MathText></div>
+                    <div className="output-display">{output}</div>
 
                     <div className="save-actions">
-                      <button className="btn secondary" onClick={() => handleCopy(output)}><span className="btn-icon">{ActionIcons.clipboard}</span> Copy</button>
-                      <button className="btn secondary" onClick={handleSaveToLibrary}><span className="btn-icon">{ActionIcons.library}</span> Library</button>
-                      <button className="btn secondary" onClick={handleSaveToFolder} disabled={!selectedTopic}><span className="btn-icon">{ActionIcons.folder}</span> Folder</button>
+                      <button className="btn secondary" onClick={() => handleCopy(output)}>📋 Copy</button>
+                      <button className="btn secondary" onClick={handleSaveToLibrary}>📚 Library</button>
+                      <button className="btn secondary" onClick={handleSaveToFolder} disabled={!selectedTopic}>📁 Folder</button>
                     </div>
                   </>
                 )}
 
                 {/* Practice Mode */}
                 {viewMode === 'practice' && showInteractiveQuiz && generatedContent && (
-                  <InteractiveQuiz content={generatedContent} fileId={viewingFile?.id} onClose={handleCloseInteractive} />
+                  <InteractiveQuiz content={generatedContent} onClose={handleCloseInteractive} />
                 )}
               </div>
             )}
@@ -913,18 +726,18 @@ export function WorkspacePanel({
         <div className="file-viewer-overlay" onClick={() => setViewingFile(null)}>
           <div className="file-viewer" onClick={e => e.stopPropagation()}>
             <div className="viewer-header">
-              <h3><span className="viewer-file-icon">{getFileIcon(viewingFile.name, viewingFile.type)}</span> {viewingFile.name}</h3>
-              <button className="close-btn" onClick={() => setViewingFile(null)}>{ActionIcons.close}</button>
+              <h3>{getFileIcon(viewingFile.name, viewingFile.type)} {viewingFile.name}</h3>
+              <button className="close-btn" onClick={() => setViewingFile(null)}>✕</button>
             </div>
             <div className="viewer-content">
-              {extracting ? <p className="extracting">Extracting text...</p> : <div style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word', fontFamily: 'inherit', fontSize: 'var(--font-meta)', lineHeight: 1.6 }}><MathText>{fileContent || 'No content'}</MathText></div>}
+              {extracting ? <p className="extracting">Extracting text...</p> : <pre>{fileContent || 'No content'}</pre>}
             </div>
             <div className="viewer-actions">
-              <button className="btn" onClick={() => { handleUseInTool(viewingFile); setViewingFile(null); }}><span className="btn-icon">{ActionIcons.tools}</span> Use in Tool</button>
-              <button className="btn secondary" onClick={() => { handleShareFile(viewingFile); setViewingFile(null); }}><span className="btn-icon">{ActionIcons.share}</span> Share</button>
-              <button className="btn secondary" onClick={() => handleDownloadFile(viewingFile)}><span className="btn-icon">{ActionIcons.download}</span> Download</button>
-              <button className="btn secondary" onClick={() => handleCopy(fileContent)}><span className="btn-icon">{ActionIcons.clipboard}</span> Copy</button>
-              <button className="btn danger" onClick={() => { handleDeleteFile(viewingFile.id); setViewingFile(null); }}><span className="btn-icon">{ActionIcons.trash}</span> Delete</button>
+              <button className="btn" onClick={() => { handleUseInTool(viewingFile); setViewingFile(null); }}>🛠️ Use in Tool</button>
+              <button className="btn secondary" onClick={() => { handleShareFile(viewingFile); setViewingFile(null); }}>🔗 Share</button>
+              <button className="btn secondary" onClick={() => handleDownloadFile(viewingFile)}>⬇️ Download</button>
+              <button className="btn secondary" onClick={() => handleCopy(fileContent)}>📋 Copy</button>
+              <button className="btn danger" onClick={() => { handleDeleteFile(viewingFile.id); setViewingFile(null); }}>🗑️ Delete</button>
             </div>
           </div>
         </div>
@@ -1021,7 +834,7 @@ export function WorkspacePanel({
           transition: background 0.15s;
         }
         .file-item:hover { background: var(--bg-elevated); }
-        .file-icon { font-size: 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; }
+        .file-icon { font-size: 24px; flex-shrink: 0; }
         .file-info { flex: 1; min-width: 0; }
         .file-name { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .file-date { font-size: var(--font-tiny); color: var(--text-muted); }
@@ -1029,7 +842,8 @@ export function WorkspacePanel({
         .file-item:hover .file-actions { opacity: 1; }
 
         .icon-btn {
-          width: 28px; height: 28px;
+          min-width: 36px; min-height: 36px;
+          width: 36px; height: 36px;
           display: flex; align-items: center; justify-content: center;
           border: none; background: transparent;
           border-radius: var(--radius-sm);
@@ -1055,78 +869,37 @@ export function WorkspacePanel({
         }
 
         .tool-tab {
-          display: inline-flex;
-          align-items: center;
-          gap: var(--space-1);
           padding: var(--space-2) var(--space-3);
           border: 1px solid var(--border-subtle);
           background: var(--bg-inset);
           border-radius: var(--radius-full);
           font-size: var(--font-meta);
           cursor: pointer;
-          transition: all var(--transition-fast);
+          transition: all 0.15s;
         }
         .tool-tab:hover { border-color: var(--primary); }
         .tool-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
-        .tool-tab-icon {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 16px;
-          height: 16px;
-        }
-
-        .main-tab-icon {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 16px;
-          height: 16px;
-          vertical-align: middle;
-          margin-right: 2px;
-        }
-
-        .main-tab { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); }
-
-        .section-icon {
-          display: inline-flex;
-          align-items: center;
-          vertical-align: middle;
-          margin-right: 4px;
-        }
-
-        .quick-section h3 { display: flex; align-items: center; }
-
-        .btn-icon {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 14px;
-          height: 14px;
-          vertical-align: middle;
-          margin-right: 2px;
-        }
-
-        .context-icon {
-          display: inline-flex;
-          align-items: center;
-          vertical-align: middle;
-          margin-right: 4px;
-        }
-
-        .viewer-file-icon {
-          display: inline-flex;
-          align-items: center;
-          vertical-align: middle;
-          margin-right: 4px;
-        }
-
-        .icon-btn { color: var(--text-secondary); }
-        .icon-btn:hover { color: var(--text-primary); }
-        .icon-btn.active { color: var(--primary); }
-        .icon-btn.danger:hover { color: var(--error); }
 
         .tool-content { }
+
+        .library-link-row {
+          display: flex;
+          justify-content: flex-end;
+          margin-bottom: var(--space-3);
+        }
+
+        .library-quick-link {
+          font-size: var(--font-meta);
+          color: var(--primary);
+          text-decoration: none;
+          padding: var(--space-1) var(--space-2);
+          border-radius: var(--radius-sm);
+          transition: background 0.15s;
+        }
+
+        .library-quick-link:hover {
+          background: var(--primary-muted);
+        }
 
         .context-info {
           padding: var(--space-3);
@@ -1137,20 +910,6 @@ export function WorkspacePanel({
         }
         .context-active { color: var(--success); }
         .context-hint { color: var(--text-muted); }
-
-        .image-analysis-toggle {
-          display: flex;
-          align-items: center;
-          gap: var(--space-2);
-          margin-bottom: var(--space-3);
-          font-size: var(--font-meta);
-          cursor: pointer;
-          padding: var(--space-2) var(--space-3);
-          background: var(--primary-muted);
-          border-radius: var(--radius-md);
-          color: var(--primary);
-        }
-        .image-analysis-toggle input { cursor: pointer; }
 
         .file-selector {
           margin-bottom: var(--space-4);
@@ -1203,7 +962,7 @@ export function WorkspacePanel({
           white-space: pre-wrap;
           font-size: var(--font-body);
           line-height: 1.6;
-          max-height: 300px;
+          max-height: min(300px, 50vh);
           overflow-y: auto;
           margin-bottom: var(--space-4);
         }
@@ -1224,7 +983,7 @@ export function WorkspacePanel({
           background: var(--bg-surface);
           border-radius: var(--radius-lg);
           width: 100%;
-          max-width: 800px;
+          max-width: min(800px, calc(100vw - 32px));
           max-height: 80vh;
           display: flex;
           flex-direction: column;
@@ -1251,12 +1010,19 @@ export function WorkspacePanel({
         .viewer-content pre { white-space: pre-wrap; word-wrap: break-word; font-family: inherit; font-size: var(--font-meta); line-height: 1.6; margin: 0; }
         .extracting { text-align: center; color: var(--primary); }
 
-        .viewer-actions { display: flex; gap: var(--space-2); padding: var(--space-4); border-top: 1px solid var(--border-subtle); }
+        .viewer-actions { display: flex; gap: var(--space-2); padding: var(--space-4); border-top: 1px solid var(--border-subtle); flex-wrap: wrap; }
+
+        @media (hover: none) {
+          .file-actions { opacity: 1; }
+        }
 
         @media (max-width: 600px) {
           .file-actions { opacity: 1; }
-          .tool-tabs { gap: var(--space-1); }
-          .tool-tab { padding: var(--space-1) var(--space-2); font-size: var(--font-tiny); }
+          .tool-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: var(--space-2); }
+          .tool-tabs::-webkit-scrollbar { display: none; }
+          .tool-tab { flex-shrink: 0; padding: var(--space-2) var(--space-3); font-size: var(--font-meta); }
+          .viewer-actions { gap: var(--space-1); }
+          .viewer-actions .btn { font-size: var(--font-meta); padding: var(--space-2) var(--space-3); }
         }
       `}</style>
     </div>

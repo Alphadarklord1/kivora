@@ -1,14 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { getGeneratedContent, ToolMode, GeneratedContent } from '@/lib/offline/generate';
 import { InteractiveQuiz } from '@/components/workspace/InteractiveQuiz';
 import { MathSolver } from '@/components/tools/MathSolver';
-import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
-import { MathText } from '@/components/math/MathRenderer';
+import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
 import { useToastHelpers } from '@/components/ui/Toast';
 
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'vision';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph';
 
 const toolTabs: { id: ToolTab; label: string; icon: string; description: string }[] = [
   { id: 'assignment', label: 'Assignment', icon: '📝', description: 'Generate assignment questions and prompts' },
@@ -18,11 +18,18 @@ const toolTabs: { id: ToolTab; label: string; icon: string; description: string 
   { id: 'pop', label: 'Pop Quiz', icon: '⚡', description: 'Quick pop quiz for rapid review' },
   { id: 'notes', label: 'Notes', icon: '📝', description: 'Generate Cornell-style study notes' },
   { id: 'math', label: 'Math', icon: '🧮', description: 'Solve mathematical problems step-by-step' },
-  { id: 'vision', label: 'Vision', icon: '👁', description: 'Analyze diagrams, charts, and images with AI vision' },
+  { id: 'graph', label: 'Graph', icon: '📈', description: 'Plot and visualize mathematical functions' },
 ];
+
+interface FolderData {
+  id: string;
+  name: string;
+  topics?: { id: string; name: string }[];
+}
 
 export default function ToolsPage() {
   const toast = useToastHelpers();
+  const searchParams = useSearchParams();
   const [toolTab, setToolTab] = useState<ToolTab>('assignment');
   const [inputText, setInputText] = useState('');
   const [output, setOutput] = useState('');
@@ -30,6 +37,34 @@ export default function ToolsPage() {
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
   const [showInteractiveQuiz, setShowInteractiveQuiz] = useState(false);
   const [viewMode, setViewMode] = useState<'input' | 'output' | 'practice'>('input');
+
+  // Graph expression state (from Math Solver)
+  const [graphExpression, setGraphExpression] = useState('');
+
+  const handleGraphFromMath = (expression: string) => {
+    setGraphExpression(expression);
+    setToolTab('graph');
+  };
+
+  // Save to folder state
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [folders, setFolders] = useState<FolderData[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState('');
+  const [selectedTopicId, setSelectedTopicId] = useState('');
+  const [savingToFolder, setSavingToFolder] = useState(false);
+
+  // Read query params from Library deep-link
+  useEffect(() => {
+    const mode = searchParams.get('mode');
+    const input = searchParams.get('input');
+    if (mode && toolTabs.some(t => t.id === mode)) {
+      setToolTab(mode as ToolTab);
+    }
+    if (input) {
+      setInputText(input);
+      setViewMode('input');
+    }
+  }, [searchParams]);
 
   const handleGenerate = () => {
     if (!inputText.trim()) {
@@ -80,6 +115,53 @@ export default function ToolsPage() {
   const handleCopy = () => {
     navigator.clipboard.writeText(output);
     toast.success('Copied to clipboard');
+  };
+
+  const handleOpenFolderPicker = async () => {
+    try {
+      const res = await fetch('/api/folders', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setFolders(data);
+      }
+    } catch {
+      toast.error('Failed to load folders');
+    }
+    setShowFolderPicker(true);
+  };
+
+  const handleSaveToFolder = async () => {
+    if (!selectedFolderId || !selectedTopicId) {
+      toast.warning('Select folder & topic', 'Please choose where to save');
+      return;
+    }
+    setSavingToFolder(true);
+    try {
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${toolTab} - ${new Date().toLocaleString()}`,
+          type: toolTab,
+          content: output,
+          folderId: selectedFolderId,
+          topicId: selectedTopicId,
+        }),
+        credentials: 'include',
+      });
+      if (res.ok) {
+        toast.success('Saved to folder');
+        setShowFolderPicker(false);
+        setSelectedFolderId('');
+        setSelectedTopicId('');
+      } else {
+        toast.error('Failed to save');
+      }
+    } catch {
+      toast.error('Failed to save');
+    } finally {
+      setSavingToFolder(false);
+    }
   };
 
   const handleSaveToLibrary = async () => {
@@ -146,9 +228,9 @@ export default function ToolsPage() {
 
           {/* Math Solver */}
           {toolTab === 'math' ? (
-            <MathSolver />
-          ) : toolTab === 'vision' ? (
-            <VisualAnalyzer />
+            <MathSolver onGraphExpression={handleGraphFromMath} />
+          ) : toolTab === 'graph' ? (
+            <GraphingCalculator initialExpression={graphExpression || undefined} />
           ) : (
             <div className="tool-workspace">
               {/* Input Mode */}
@@ -203,9 +285,7 @@ export default function ToolsPage() {
                   </div>
 
                   <div className="output-display">
-                    <div style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word', fontFamily: 'inherit', fontSize: 'var(--font-body)', lineHeight: 1.6 }}>
-                      <MathText>{output}</MathText>
-                    </div>
+                    <pre>{output}</pre>
                   </div>
 
                   <div className="output-actions-bottom">
@@ -215,7 +295,55 @@ export default function ToolsPage() {
                     <button className="btn secondary" onClick={handleSaveToLibrary}>
                       📚 Save to Library
                     </button>
+                    <button className="btn secondary" onClick={handleOpenFolderPicker}>
+                      📁 Save to Folder
+                    </button>
                   </div>
+
+                  {/* Folder Picker Modal */}
+                  {showFolderPicker && (
+                    <div className="folder-picker-overlay" onClick={() => setShowFolderPicker(false)}>
+                      <div className="folder-picker" onClick={(e) => e.stopPropagation()}>
+                        <h3>Save to Folder</h3>
+                        <div className="picker-field">
+                          <label>Folder</label>
+                          <select
+                            value={selectedFolderId}
+                            onChange={(e) => { setSelectedFolderId(e.target.value); setSelectedTopicId(''); }}
+                          >
+                            <option value="">-- Select folder --</option>
+                            {folders.map(f => (
+                              <option key={f.id} value={f.id}>{f.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {selectedFolderId && (
+                          <div className="picker-field">
+                            <label>Topic</label>
+                            <select
+                              value={selectedTopicId}
+                              onChange={(e) => setSelectedTopicId(e.target.value)}
+                            >
+                              <option value="">-- Select topic --</option>
+                              {folders.find(f => f.id === selectedFolderId)?.topics?.map(t => (
+                                <option key={t.id} value={t.id}>{t.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        <div className="picker-actions">
+                          <button className="btn secondary" onClick={() => setShowFolderPicker(false)}>Cancel</button>
+                          <button
+                            className="btn"
+                            onClick={handleSaveToFolder}
+                            disabled={!selectedFolderId || !selectedTopicId || savingToFolder}
+                          >
+                            {savingToFolder ? 'Saving...' : 'Save'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -260,7 +388,42 @@ export default function ToolsPage() {
           }
 
           .tools-sidebar {
-            order: 2;
+            order: 0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+          }
+
+          .tool-nav {
+            display: flex;
+            flex-direction: row;
+            overflow-x: auto;
+            flex-wrap: nowrap;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            gap: var(--space-2);
+          }
+
+          .tool-nav::-webkit-scrollbar {
+            display: none;
+          }
+
+          .tool-nav-item {
+            flex-direction: row;
+            align-items: center;
+            text-align: left;
+            flex-shrink: 0;
+            min-width: auto;
+            padding: var(--space-2) var(--space-3);
+          }
+
+          .tool-desc {
+            display: none;
+          }
+
+          .tool-icon {
+            font-size: 18px;
+            margin-top: 0;
           }
         }
 
@@ -492,22 +655,74 @@ export default function ToolsPage() {
           background: var(--bg-hover);
         }
 
+        /* Folder Picker */
+        .folder-picker-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: var(--space-4);
+        }
+
+        .folder-picker {
+          background: var(--bg-surface);
+          border-radius: var(--radius-lg);
+          padding: var(--space-5);
+          width: 100%;
+          max-width: min(400px, calc(100vw - 32px));
+          box-shadow: var(--shadow-lg);
+        }
+
+        .folder-picker h3 {
+          font-size: var(--font-lg);
+          font-weight: 600;
+          margin-bottom: var(--space-4);
+        }
+
+        .picker-field {
+          margin-bottom: var(--space-4);
+        }
+
+        .picker-field label {
+          display: block;
+          font-size: var(--font-meta);
+          font-weight: 500;
+          margin-bottom: var(--space-2);
+          color: var(--text-secondary);
+        }
+
+        .picker-field select {
+          width: 100%;
+          padding: var(--space-3);
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-md);
+          font-size: var(--font-body);
+          background: var(--bg-base);
+        }
+
+        .picker-actions {
+          display: flex;
+          gap: var(--space-2);
+          justify-content: flex-end;
+        }
+
         @media (max-width: 600px) {
-          .tool-nav {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: var(--space-2);
+          .tools-content {
+            padding: var(--space-3);
+            min-height: 400px;
           }
 
-          .tool-nav-item {
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-            padding: var(--space-2);
+          .tool-header-icon {
+            font-size: 28px;
           }
 
-          .tool-desc {
-            display: none;
+          .tool-header {
+            gap: var(--space-3);
+            margin-bottom: var(--space-3);
+            padding-bottom: var(--space-3);
           }
         }
       `}</style>

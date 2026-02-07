@@ -16,10 +16,10 @@ interface ModalProps {
 }
 
 const SIZES = {
-  sm: '400px',
-  md: '500px',
-  lg: '640px',
-  xl: '800px',
+  sm: 'min(400px, calc(100vw - 32px))',
+  md: 'min(500px, calc(100vw - 32px))',
+  lg: 'min(640px, calc(100vw - 32px))',
+  xl: 'min(800px, calc(100vw - 32px))',
   full: '95vw',
 };
 
@@ -88,7 +88,7 @@ export function Modal({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '20px',
+        padding: '16px',
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         backdropFilter: 'blur(4px)',
         animation: 'modalFadeIn 0.2s ease-out',
@@ -266,9 +266,9 @@ export function Button({
   };
 
   const sizeStyles: Record<string, React.CSSProperties> = {
-    sm: { padding: '6px 12px', fontSize: '13px' },
-    md: { padding: '10px 16px', fontSize: '14px' },
-    lg: { padding: '12px 20px', fontSize: '15px' },
+    sm: { padding: '10px 12px', fontSize: '13px', minHeight: '44px' },
+    md: { padding: '12px 16px', fontSize: '14px', minHeight: '44px' },
+    lg: { padding: '14px 20px', fontSize: '15px', minHeight: '44px' },
   };
 
   const variantStyles: Record<string, React.CSSProperties> = {

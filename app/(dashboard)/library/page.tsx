@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { ShareDialog } from '@/components/share';
-import { SkeletonCard } from '@/components/ui/Skeleton';
-import { EmptyState } from '@/components/ui/EmptyState';
 
 interface LibraryItem {
   id: string;
@@ -19,6 +18,7 @@ export default function LibraryPage() {
   const [filter, setFilter] = useState<string>('all');
 
   // Share dialog state
+  const router = useRouter();
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<{ id: string; name: string } | null>(null);
 
@@ -70,6 +70,14 @@ export default function LibraryPage() {
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
+  };
+
+  const handleUseInTool = (item: LibraryItem) => {
+    const params = new URLSearchParams({
+      mode: item.mode,
+      input: item.content,
+    });
+    router.push(`/tools?${params.toString()}`);
   };
 
   const handleExport = () => {
@@ -150,27 +158,13 @@ export default function LibraryPage() {
       </div>
 
       {loading ? (
-        <div className="library-grid">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
-        </div>
+        <div className="library-loading">Loading...</div>
       ) : filteredItems.length === 0 ? (
-        search || filter !== 'all' ? (
-          <EmptyState
-            icon="search"
-            title="No matching items"
-            description={search ? `No results for "${search}"` : 'No items match the selected filter'}
-            size="lg"
-          />
-        ) : (
-          <EmptyState
-            icon="library"
-            title="Library is empty"
-            description="Save content from Tools to build your library"
-            size="lg"
-          />
-        )
+        <div className="library-empty">
+          <div className="empty-icon">📚</div>
+          <h3>{search || filter !== 'all' ? 'No matching items' : 'Library is empty'}</h3>
+          <p>Save content from Tools to build your library</p>
+        </div>
       ) : (
         <div className="library-grid">
           {filteredItems.map((item) => (
@@ -186,6 +180,9 @@ export default function LibraryPage() {
                 {item.content.length > 300 && '...'}
               </div>
               <div className="card-actions">
+                <button className="btn ghost" onClick={() => handleUseInTool(item)}>
+                  🛠️ Use in Tool
+                </button>
                 <button className="btn ghost" onClick={() => handleShare(item)}>
                   🔗 Share
                 </button>
@@ -265,10 +262,21 @@ export default function LibraryPage() {
           border-color: var(--primary);
         }
 
-        .library-loading {
+        .library-loading,
+        .library-empty {
           text-align: center;
-          padding: var(--space-8);
+          padding: var(--space-12);
           color: var(--text-muted);
+        }
+
+        .empty-icon {
+          font-size: 48px;
+          margin-bottom: var(--space-4);
+        }
+
+        .library-empty h3 {
+          color: var(--text-primary);
+          margin-bottom: var(--space-2);
         }
 
         .library-grid {
@@ -278,16 +286,16 @@ export default function LibraryPage() {
         }
 
         .library-card {
-          background: var(--card-bg);
-          border: 1px solid var(--card-border);
-          border-radius: var(--card-radius);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
           overflow: hidden;
-          transition: border-color var(--transition-fast), box-shadow var(--transition-normal);
+          transition: border-color 0.15s, box-shadow 0.15s;
         }
 
         .library-card:hover {
-          border-color: var(--card-hover-border);
-          box-shadow: var(--card-hover-shadow);
+          border-color: var(--border-default);
+          box-shadow: var(--shadow-md);
         }
 
         .card-header {

@@ -16,7 +16,11 @@ interface VerificationResult {
   explanation: string;
 }
 
-export function MathSolver() {
+interface MathSolverProps {
+  onGraphExpression?: (expression: string) => void;
+}
+
+export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
   const [problem, setProblem] = useState('');
   const [solution, setSolution] = useState<MathSolution | null>(null);
   const [verification, setVerification] = useState<VerificationResult | null>(null);
@@ -449,6 +453,22 @@ export function MathSolver() {
             <button className="btn secondary" onClick={() => setSolution(null)}>
               New Problem
             </button>
+            {onGraphExpression && solution.problemType !== 'arithmetic' && (
+              <button
+                className="btn secondary"
+                onClick={() => {
+                  // Extract a plottable expression from the problem
+                  const expr = problem
+                    .replace(/^(find the derivative of|integrate|solve|calculate|d\/dx|d\/dx of)\s*/i, '')
+                    .replace(/\s*dx$/i, '')
+                    .replace(/\s*=\s*0$/i, '')
+                    .trim();
+                  onGraphExpression(expr);
+                }}
+              >
+                📈 Graph this
+              </button>
+            )}
             {solution.isOffline && solution.finalAnswer === 'Use AI mode for detailed solution' && (
               <button
                 className="btn"

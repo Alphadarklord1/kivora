@@ -47,6 +47,13 @@ export default function WorkspacePage() {
           height: calc(100dvh - 120px);
         }
 
+        @media (max-width: 1023px) and (min-width: 768px) {
+          .workspace-layout {
+            grid-template-columns: 260px 1fr;
+            gap: var(--space-3);
+          }
+        }
+
         @media (max-width: 767px) {
           .workspace-layout {
             grid-template-columns: 1fr;
