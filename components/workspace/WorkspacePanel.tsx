@@ -8,6 +8,7 @@ import { getGeneratedContent, ToolMode, GeneratedContent } from '@/lib/offline/g
 import { InteractiveQuiz } from './InteractiveQuiz';
 import { MathSolver } from '@/components/tools/MathSolver';
 import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
+import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
 import { useToastHelpers } from '@/components/ui/Toast';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { NoFilesState, EmptyState } from '@/components/ui/EmptyState';
@@ -33,7 +34,7 @@ interface WorkspacePanelProps {
 }
 
 type MainTab = 'files' | 'tools';
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph' | 'visual';
 
 const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'assignment', label: 'Assignment', icon: '📝' },
@@ -44,6 +45,7 @@ const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'notes', label: 'Notes', icon: '📝' },
   { id: 'math', label: 'Math', icon: '🧮' },
   { id: 'graph', label: 'Graph', icon: '📈' },
+  { id: 'visual', label: 'Visual', icon: '🔍' },
 ];
 
 export function WorkspacePanel({
@@ -65,6 +67,7 @@ export function WorkspacePanel({
   const [viewingFile, setViewingFile] = useState<FileItem | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
   const [extracting, setExtracting] = useState(false);
+  const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
 
   // Tool state
   const [inputText, setInputText] = useState('');
@@ -177,9 +180,12 @@ export function WorkspacePanel({
     }
   };
 
+  const isImageFile = (name: string) => /\.(png|jpg|jpeg|gif|webp)$/i.test(name);
+
   const handleViewFile = async (file: FileItem) => {
     setViewingFile(file);
     setFileContent('');
+    setViewingImageUrl(null);
 
     // Record file access for recent files
     try {
@@ -195,19 +201,35 @@ export function WorkspacePanel({
     }
 
     if (file.type === 'upload' && file.localBlobId) {
-      setExtracting(true);
-      try {
-        const blobData = await idbStore.get(file.localBlobId);
-        if (blobData) {
-          const text = await extractTextFromFile(blobData.blob, blobData.name);
-          setFileContent(text);
-        } else {
-          setFileContent('File not found locally.');
+      // Check if it's an image file - render visually
+      if (isImageFile(file.name)) {
+        try {
+          const blobData = await idbStore.get(file.localBlobId);
+          if (blobData) {
+            const url = URL.createObjectURL(blobData.blob);
+            setViewingImageUrl(url);
+            setFileContent('[Image file] Use the Visual Analyzer tool to analyze this image.');
+          } else {
+            setFileContent('File not found locally.');
+          }
+        } catch {
+          setFileContent('Failed to load image.');
         }
-      } catch {
-        setFileContent('Failed to extract text from file.');
-      } finally {
-        setExtracting(false);
+      } else {
+        setExtracting(true);
+        try {
+          const blobData = await idbStore.get(file.localBlobId);
+          if (blobData) {
+            const text = await extractTextFromFile(blobData.blob, blobData.name);
+            setFileContent(text);
+          } else {
+            setFileContent('File not found locally.');
+          }
+        } catch {
+          setFileContent('Failed to extract text from file.');
+        } finally {
+          setExtracting(false);
+        }
       }
     } else if (file.content) {
       setFileContent(file.content);
@@ -492,7 +514,7 @@ export function WorkspacePanel({
               <label className="upload-btn">
                 <input
                   type="file"
-                  accept=".pdf,.doc,.docx,.ppt,.pptx,.txt"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp"
                   onChange={handleFileUpload}
                   disabled={uploading}
                   style={{ display: 'none' }}
@@ -641,6 +663,10 @@ export function WorkspacePanel({
               <div className="tool-content">
                 <GraphingCalculator initialExpression={graphExpression || undefined} />
               </div>
+            ) : toolTab === 'visual' ? (
+              <div className="tool-content">
+                <VisualAnalyzer />
+              </div>
             ) : (
               <div className="tool-content">
                 {/* Input Mode */}
@@ -723,17 +749,29 @@ export function WorkspacePanel({
 
       {/* File Viewer Modal */}
       {viewingFile && (
-        <div className="file-viewer-overlay" onClick={() => setViewingFile(null)}>
+        <div className="file-viewer-overlay" onClick={() => { if (viewingImageUrl) URL.revokeObjectURL(viewingImageUrl); setViewingImageUrl(null); setViewingFile(null); }}>
           <div className="file-viewer" onClick={e => e.stopPropagation()}>
             <div className="viewer-header">
               <h3>{getFileIcon(viewingFile.name, viewingFile.type)} {viewingFile.name}</h3>
               <button className="close-btn" onClick={() => setViewingFile(null)}>✕</button>
             </div>
             <div className="viewer-content">
-              {extracting ? <p className="extracting">Extracting text...</p> : <pre>{fileContent || 'No content'}</pre>}
+              {extracting ? (
+                <p className="extracting">Extracting text...</p>
+              ) : viewingImageUrl ? (
+                <div style={{ textAlign: 'center', padding: 'var(--space-4)' }}>
+                  <img src={viewingImageUrl} alt={viewingFile.name} style={{ maxWidth: '100%', maxHeight: '60vh', borderRadius: 'var(--radius-md)' }} />
+                </div>
+              ) : (
+                <pre>{fileContent || 'No content'}</pre>
+              )}
             </div>
             <div className="viewer-actions">
-              <button className="btn" onClick={() => { handleUseInTool(viewingFile); setViewingFile(null); }}>🛠️ Use in Tool</button>
+              {isImageFile(viewingFile.name) ? (
+                <button className="btn" onClick={() => { setToolTab('visual'); setMainTab('tools'); if (viewingImageUrl) URL.revokeObjectURL(viewingImageUrl); setViewingImageUrl(null); setViewingFile(null); }}>🔍 Analyze Image</button>
+              ) : (
+                <button className="btn" onClick={() => { handleUseInTool(viewingFile); setViewingFile(null); }}>🛠️ Use in Tool</button>
+              )}
               <button className="btn secondary" onClick={() => { handleShareFile(viewingFile); setViewingFile(null); }}>🔗 Share</button>
               <button className="btn secondary" onClick={() => handleDownloadFile(viewingFile)}>⬇️ Download</button>
               <button className="btn secondary" onClick={() => handleCopy(fileContent)}>📋 Copy</button>

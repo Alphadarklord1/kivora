@@ -54,7 +54,10 @@ export function VisualAnalyzer() {
   // Get filtered topics and files
   const folderTopics = topics.filter((t) => t.folderId === selectedFolderId);
   const topicFiles = files.filter(
-    (f) => f.topicId === selectedTopicId && (f.name.endsWith('.pdf'))
+    (f) => f.topicId === selectedTopicId && (
+      f.name.endsWith('.pdf') || f.name.endsWith('.png') || f.name.endsWith('.jpg') ||
+      f.name.endsWith('.jpeg') || f.name.endsWith('.gif') || f.name.endsWith('.webp')
+    )
   );
 
   // Load PDF when file is selected
@@ -65,7 +68,7 @@ export function VisualAnalyzer() {
       return;
     }
 
-    const loadPDF = async () => {
+    const loadFile = async () => {
       setLoading(true);
       setError('');
       setPages([]);
@@ -84,6 +87,23 @@ export function VisualAnalyzer() {
           throw new Error('Could not load file from local storage');
         }
 
+        const isImage = /\.(png|jpg|jpeg|gif|webp)$/i.test(file.name);
+
+        if (isImage) {
+          // For image files, read as data URL and set directly
+          const reader = new FileReader();
+          reader.onload = () => {
+            setSelectedImageUrl(reader.result as string);
+            setLoading(false);
+          };
+          reader.onerror = () => {
+            setError('Failed to read image file');
+            setLoading(false);
+          };
+          reader.readAsDataURL(blob);
+          return;
+        }
+
         // Render PDF pages
         const renderedPages = await renderAllPDFPages(blob, 1.5, 20);
         setPages(renderedPages);
@@ -93,13 +113,13 @@ export function VisualAnalyzer() {
         const images = await extractImagesFromPDF(blob, 20);
         setExtractedImages(images);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load PDF');
+        setError(err instanceof Error ? err.message : 'Failed to load file');
       } finally {
         setLoading(false);
       }
     };
 
-    loadPDF();
+    loadFile();
   }, [selectedFileId, files]);
 
   // Handle mouse selection on image
@@ -367,7 +387,7 @@ export function VisualAnalyzer() {
             display: 'block',
             marginBottom: 'var(--space-1)',
           }}>
-            PDF File
+            File
           </label>
           <select
             value={selectedFileId}
@@ -375,7 +395,7 @@ export function VisualAnalyzer() {
             disabled={!selectedTopicId}
             style={{ width: '100%' }}
           >
-            <option value="">Select PDF...</option>
+            <option value="">Select file...</option>
             {topicFiles.map((f) => (
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}

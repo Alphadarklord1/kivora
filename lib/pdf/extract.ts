@@ -179,6 +179,12 @@ export async function extractTextFromFile(blob: Blob, filename: string): Promise
       return extractTextFromPptx(blob);
     case 'txt':
       return extractTextFromTxt(blob);
+    case 'png':
+    case 'jpg':
+    case 'jpeg':
+    case 'gif':
+    case 'webp':
+      return '[Image file] Use the Visual Analyzer tool to analyze images, extract text, or solve math from this image.';
     default:
       throw new Error(`Unsupported file type: ${ext}`);
   }

@@ -29,7 +29,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const applySettings = () => {
     document.documentElement.setAttribute('data-theme', theme);
     document.documentElement.setAttribute('data-density', density);
-    document.documentElement.style.setProperty('--user-font-scale', fontSize);
+    document.documentElement.style.setProperty('--font-scale', fontSize);
 
     localStorage.setItem('studypilot_theme', theme);
     localStorage.setItem('studypilot_fontSize', fontSize);
