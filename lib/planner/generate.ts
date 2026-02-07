@@ -7,6 +7,11 @@ export interface StudyTopic {
   completed?: boolean;
 }
 
+export interface StudySession {
+  duration: number; // seconds
+  completedAt: string; // ISO datetime string
+}
+
 export interface ScheduleDay {
   date: string; // ISO date string
   dayNumber: number;
@@ -18,6 +23,8 @@ export interface ScheduleDay {
   totalMinutes: number;
   isRevision: boolean;
   completed?: boolean;
+  notes?: string;
+  sessions?: StudySession[];
 }
 
 export interface GeneratedSchedule {

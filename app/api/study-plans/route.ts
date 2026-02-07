@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { title, examDate, dailyMinutes, topics, schedule } = body;
+  const { title, examDate, dailyMinutes, topics, schedule, folderId } = body;
 
   if (!title || !examDate || !topics || !schedule) {
     return NextResponse.json(
@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
     title,
     examDate: new Date(examDate),
     dailyMinutes: dailyMinutes || 60,
+    folderId: folderId || null,
     topics,
     schedule,
     status: 'active',

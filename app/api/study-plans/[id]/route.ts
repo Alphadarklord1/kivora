@@ -51,6 +51,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   if (body.topics !== undefined) {
     updates.topics = body.topics;
   }
+  if (body.folderId !== undefined) {
+    updates.folderId = body.folderId;
+  }
 
   updates.updatedAt = new Date();
 

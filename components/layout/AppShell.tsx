@@ -7,6 +7,7 @@ import { signOut } from 'next-auth/react';
 import { VaultStatus } from '@/components/security/VaultStatus';
 import { useKeyboardShortcuts, formatShortcut, SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
 import { useToastHelpers } from '@/components/ui/Toast';
+import { StudyTimerFloat } from '@/components/planner/StudyTimerFloat';
 
 interface AppShellProps {
   children: ReactNode;
@@ -1011,6 +1012,7 @@ export function AppShell({ children, user }: AppShellProps) {
           color: var(--text-secondary);
         }
       `}</style>
+      <StudyTimerFloat />
     </div>
   );
 }

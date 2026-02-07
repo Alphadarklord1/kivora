@@ -7,6 +7,7 @@ export interface StudyPlan {
   title: string;
   examDate: string;
   dailyMinutes: number;
+  folderId: string | null;
   status: 'active' | 'completed' | 'paused';
   topics: StudyTopic[];
   schedule: GeneratedSchedule;
@@ -32,6 +33,7 @@ interface CreatePlanData {
   dailyMinutes: number;
   topics: StudyTopic[];
   schedule: GeneratedSchedule;
+  folderId?: string | null;
 }
 
 interface UpdatePlanData {
@@ -39,6 +41,7 @@ interface UpdatePlanData {
   progress?: number;
   schedule?: GeneratedSchedule;
   topics?: StudyTopic[];
+  folderId?: string | null;
 }
 
 export function useStudyPlans(): UseStudyPlansReturn {

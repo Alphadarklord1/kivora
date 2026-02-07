@@ -218,6 +218,7 @@ export const studyPlans = pgTable('study_plans', {
   title: text('title').notNull(),
   examDate: timestamp('exam_date').notNull(),
   dailyMinutes: integer('daily_minutes').notNull().default(60),
+  folderId: uuid('folder_id').references(() => folders.id, { onDelete: 'set null' }),
   status: text('status').notNull().default('active'), // 'active' | 'completed' | 'paused'
   topics: jsonb('topics').notNull(), // Array of {name, difficulty, estimatedHours, completed}
   schedule: jsonb('schedule').notNull(), // Generated day-by-day schedule
@@ -230,5 +231,9 @@ export const studyPlansRelations = relations(studyPlans, ({ one }) => ({
   user: one(users, {
     fields: [studyPlans.userId],
     references: [users.id],
+  }),
+  folder: one(folders, {
+    fields: [studyPlans.folderId],
+    references: [folders.id],
   }),
 }));
