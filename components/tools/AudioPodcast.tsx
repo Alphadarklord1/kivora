@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { extractTextFromFile } from '@/lib/pdf/extract';
 import { idbStore } from '@/lib/idb';
 
@@ -205,7 +205,7 @@ export function AudioPodcast() {
       } else {
         setError('Could not extract text from file');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to extract text from file');
     } finally {
       setExtractingFile(false);
@@ -219,7 +219,7 @@ export function AudioPodcast() {
     setDownloadProgress(0);
 
     try {
-      await piperRef.current.download(voiceId, (progress) => {
+      await piperRef.current.download(voiceId, (progress: { loaded: number; total: number }) => {
         const percent = Math.round((progress.loaded / progress.total) * 100);
         setDownloadProgress(percent);
       });
@@ -339,7 +339,7 @@ export function AudioPodcast() {
 
           await audio.play();
         }
-      } catch (err) {
+      } catch {
         setPiperLoading(false);
         setError('Failed to generate audio. Switching to fallback...');
         setUseFallback(true);
@@ -464,7 +464,7 @@ export function AudioPodcast() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to generate audio file');
     } finally {
       setIsGenerating(false);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { forwardRef, useState } from 'react';
+import React, { forwardRef, useId, useState } from 'react';
 
 interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
   label?: string;
@@ -22,7 +22,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       leftIcon,
       rightIcon,
       fullWidth = true,
-      className,
       style,
       id,
       ...props
@@ -30,7 +29,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     ref
   ) => {
     const [focused, setFocused] = useState(false);
-    const inputId = id || `input-${Math.random().toString(36).substring(2, 9)}`;
+    const generatedId = useId();
+    const inputId = id || generatedId;
 
     const sizeStyles = {
       sm: { padding: '6px 10px', fontSize: '13px' },
@@ -149,7 +149,8 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ label, error, hint, fullWidth = true, style, id, ...props }, ref) => {
     const [focused, setFocused] = useState(false);
-    const textareaId = id || `textarea-${Math.random().toString(36).substring(2, 9)}`;
+    const generatedId = useId();
+    const textareaId = id || generatedId;
 
     return (
       <div style={{ width: fullWidth ? '100%' : 'auto', ...style }}>
@@ -250,7 +251,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     ref
   ) => {
     const [focused, setFocused] = useState(false);
-    const selectId = id || `select-${Math.random().toString(36).substring(2, 9)}`;
+    const generatedId = useId();
+    const selectId = id || generatedId;
 
     const sizeStyles = {
       sm: { padding: '6px 32px 6px 10px', fontSize: '13px' },
@@ -355,8 +357,9 @@ interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>
 }
 
 export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
-  ({ label, error, className, style, id, ...props }, ref) => {
-    const checkboxId = id || `checkbox-${Math.random().toString(36).substring(2, 9)}`;
+  ({ label, error, style, id, ...props }, ref) => {
+    const generatedId = useId();
+    const checkboxId = id || generatedId;
 
     return (
       <div style={style}>

@@ -16,7 +16,6 @@ import {
   decrypt,
   blindIndex,
   generateSecureToken,
-  deriveKey,
   generateSalt,
 } from './encryption';
 

@@ -166,7 +166,7 @@ export function MathRenderer({ math, display = false, className = '' }: MathRend
           trust: true,
           strict: false,
         });
-      } catch (error) {
+      } catch {
         // If KaTeX fails, just show the original text
         if (containerRef.current) {
           containerRef.current.textContent = math;

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { GeneratedSchedule, ScheduleDay, formatScheduleDate, groupByWeek } from '@/lib/planner/generate';
+import { useState } from 'react';
+import { GeneratedSchedule, formatScheduleDate, groupByWeek } from '@/lib/planner/generate';
 import { downloadICSFile, generateGoogleCalendarURL, generateExamGoogleCalendarURL } from '@/lib/planner/calendar';
 import { StudyPlan } from '@/hooks/useStudyPlans';
 import { useFoldersStore } from '@/lib/store/folders';
@@ -49,7 +49,7 @@ export function PlanSchedule({
   const toggleWeek = (w: number) => {
     setExpandedWeeks(prev => {
       const next = new Set(prev);
-      next.has(w) ? next.delete(w) : next.add(w);
+      if (next.has(w)) { next.delete(w); } else { next.add(w); }
       return next;
     });
   };
@@ -192,7 +192,7 @@ export function PlanSchedule({
 
               {isExpanded && (
                 <div className="week-days">
-                  {visibleDays.map((day, dayArrIdx) => {
+                  {visibleDays.map((day, _dayArrIdx) => {
                     const globalIdx = schedule.days.findIndex(d => d.dayNumber === day.dayNumber);
                     const isToday = globalIdx === todayIdx;
 

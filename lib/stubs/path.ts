@@ -27,7 +27,7 @@ export const extname = (p: string) => {
 
 export const sep = '/';
 
-export default {
+const pathStub = {
   join,
   resolve,
   dirname,
@@ -35,3 +35,5 @@ export default {
   extname,
   sep,
 };
+
+export default pathStub;

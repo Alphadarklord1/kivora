@@ -10,18 +10,17 @@ interface BeforeInstallPromptEvent extends Event {
 export function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
+  const [isIOS] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as Window & { MSStream?: unknown }).MSStream;
+  });
+  const [isStandalone] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(display-mode: standalone)').matches
+      || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+  });
 
   useEffect(() => {
-    // Check if already installed (standalone mode)
-    const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches
-      || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-    setIsStandalone(isInStandaloneMode);
-
-    // Check if iOS
-    const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as Window & { MSStream?: unknown }).MSStream;
-    setIsIOS(iOS);
 
     // Check if user has dismissed the prompt before
     const dismissed = localStorage.getItem('pwa-install-dismissed');
@@ -43,7 +42,7 @@ export function InstallPrompt() {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     // For iOS, show manual install instructions after a delay
-    if (iOS && !isInStandaloneMode) {
+    if (isIOS && !isStandalone) {
       const timer = setTimeout(() => {
         setShowPrompt(true);
       }, 3000);
@@ -53,7 +52,7 @@ export function InstallPrompt() {
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
-  }, []);
+  }, [isIOS, isStandalone]);
 
   const handleInstall = async () => {
     if (!deferredPrompt) return;
@@ -96,7 +95,7 @@ export function InstallPrompt() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M16 5l-1.42 1.42-1.59-1.59V16h-2V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11a2 2 0 01-2 2H6a2 2 0 01-2-2V10a2 2 0 012-2h3v2H6v11h12V10h-3V8h3a2 2 0 012 2z"/>
                 </svg>
-              </span> then "Add to Home Screen"
+              </span> then &ldquo;Add to Home Screen&rdquo;
             </span>
           ) : (
             <span>Add to your home screen for quick access</span>

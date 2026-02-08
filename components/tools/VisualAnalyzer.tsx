@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useFoldersStore } from '@/lib/store/folders';
 import { getBlob } from '@/lib/idb';
 import { renderAllPDFPages, cropImageRegion, PDFPageRender, extractImagesFromPDF, ExtractedImage } from '@/lib/pdf/image-extract';
-import { MathRenderer, MathText } from '@/components/math/MathRenderer';
+import { MathText } from '@/components/math/MathRenderer';
 
 type AnalysisMode = 'describe' | 'explain' | 'extract-text' | 'solve-math';
 

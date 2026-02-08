@@ -36,14 +36,6 @@ export function GraphingCalculator({ initialExpression }: GraphingCalculatorProp
   const [showGrid, setShowGrid] = useState(true);
   const functionPlotRef = useRef<typeof import('function-plot').default | null>(null);
 
-  // Load function-plot dynamically (it uses d3 which needs DOM)
-  useEffect(() => {
-    import('function-plot').then((mod) => {
-      functionPlotRef.current = mod.default;
-      renderGraph();
-    });
-  }, []);
-
   const renderGraph = useCallback(() => {
     if (!graphRef.current || !functionPlotRef.current) return;
 
@@ -79,6 +71,14 @@ export function GraphingCalculator({ initialExpression }: GraphingCalculatorProp
       setError(err instanceof Error ? err.message : 'Invalid expression');
     }
   }, [expressions, xDomain, yDomain, showGrid]);
+
+  // Load function-plot dynamically (it uses d3 which needs DOM)
+  useEffect(() => {
+    import('function-plot').then((mod) => {
+      functionPlotRef.current = mod.default;
+      renderGraph();
+    });
+  }, [renderGraph]);
 
   useEffect(() => {
     renderGraph();

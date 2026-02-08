@@ -204,7 +204,7 @@ export function VaultGate({ children, fallback }: VaultGateProps) {
           setError('Incorrect password');
         }
       }
-    } catch (err) {
+    } catch {
       setError('An error occurred');
     } finally {
       setLoading(false);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { shares, files, folders, topics, libraryItems, users } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 // GET /api/share/[token] - Get shared content by token (public endpoint)
 export async function GET(

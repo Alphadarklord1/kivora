@@ -88,7 +88,7 @@ export default function ToolsPage() {
       setOutput(content.displayText);
       setViewMode('output');
       toast.success('Generated successfully');
-    } catch (error) {
+    } catch {
       toast.error('Generation failed', 'An error occurred while generating content');
       setGeneratedContent(null);
     } finally {

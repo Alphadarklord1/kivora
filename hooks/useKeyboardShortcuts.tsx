@@ -38,7 +38,9 @@ export function useKeyboardShortcuts(
 ) {
   const { enabled = true, ignoreInputs = true } = options;
   const shortcutsRef = useRef(shortcuts);
-  shortcutsRef.current = shortcuts;
+  useEffect(() => {
+    shortcutsRef.current = shortcuts;
+  });
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
@@ -59,22 +61,10 @@ export function useKeyboardShortcuts(
       for (const shortcut of shortcutsRef.current) {
         const keyMatches = event.key.toLowerCase() === shortcut.key.toLowerCase();
 
-        // Handle Cmd/Ctrl cross-platform
-        const modifierMatches = (
-          (shortcut.ctrl ? event.ctrlKey : !event.ctrlKey || shortcut.meta) &&
-          (shortcut.meta ? (isMac ? event.metaKey : event.ctrlKey) : (isMac ? !event.metaKey : true)) &&
-          (shortcut.shift ? event.shiftKey : !event.shiftKey) &&
-          (shortcut.alt ? event.altKey : !event.altKey)
-        );
-
         // Simplified check: if meta is specified, treat as Cmd on Mac, Ctrl elsewhere
         const cmdCtrlMatches = shortcut.meta
           ? (isMac ? event.metaKey : event.ctrlKey)
           : (!event.metaKey && !event.ctrlKey);
-
-        const ctrlOnlyMatches = shortcut.ctrl
-          ? event.ctrlKey
-          : true;
 
         const shiftMatches = shortcut.shift ? event.shiftKey : !event.shiftKey;
         const altMatches = shortcut.alt ? event.altKey : !event.altKey;

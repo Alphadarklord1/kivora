@@ -1,7 +1,7 @@
 // Calendar Export Functionality for Study Plans
 // Generates iCalendar (.ics) files compatible with Google Calendar, Apple Calendar, and Outlook
 
-import { GeneratedSchedule, ScheduleDay, formatScheduleDate } from './generate';
+import { GeneratedSchedule } from './generate';
 
 /**
  * Generate a unique identifier for calendar events

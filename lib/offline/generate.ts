@@ -274,7 +274,7 @@ function detectSubjectArea(text: string): SubjectArea {
   const maxScore = Math.max(...Object.values(scores));
   if (maxScore < 3) return 'general';
 
-  const detected = Object.entries(scores).find(([_, score]) => score === maxScore);
+  const detected = Object.entries(scores).find(([, score]) => score === maxScore);
   return (detected?.[0] as SubjectArea) || 'general';
 }
 
@@ -520,7 +520,7 @@ function scoreSentence(sentence: string, allKeywords: Map<string, number>): Scor
   };
 }
 
-function determineLearningLevel(signals: ScoredSentence['signals'], keywords: string[]): {
+function determineLearningLevel(signals: ScoredSentence['signals'], _keywords: string[]): {
   bloomLevel: BloomLevel;
   questionTypes: QuestionType[];
 } {

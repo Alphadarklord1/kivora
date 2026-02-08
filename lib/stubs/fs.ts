@@ -23,7 +23,7 @@ export const mkdirSync = () => {};
 
 export const readdirSync = () => [];
 
-export default {
+const fsStub = {
   readFile,
   readFileSync,
   writeFile,
@@ -32,3 +32,5 @@ export default {
   mkdirSync,
   readdirSync,
 };
+
+export default fsStub;

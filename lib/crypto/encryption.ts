@@ -129,7 +129,7 @@ export async function decrypt(
 
     const decoder = new TextDecoder();
     return decoder.decode(decrypted);
-  } catch (error) {
+  } catch {
     throw new Error('Decryption failed - wrong password or corrupted data');
   }
 }

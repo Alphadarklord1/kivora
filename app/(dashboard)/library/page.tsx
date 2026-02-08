@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShareDialog } from '@/components/share';
 
@@ -27,7 +27,7 @@ export default function LibraryPage() {
     setShareDialogOpen(true);
   };
 
-  const fetchLibrary = async () => {
+  const fetchLibrary = useCallback(async () => {
     try {
       const url = search
         ? `/api/library?search=${encodeURIComponent(search)}`
@@ -42,11 +42,11 @@ export default function LibraryPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search]);
 
   useEffect(() => {
     fetchLibrary();
-  }, [search]);
+  }, [fetchLibrary]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this item?')) return;

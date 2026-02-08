@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { db } from '@/lib/db';
 import {
-  generateSmartContent,
   getGeneratedContent,
   offlineGenerate,
   type ToolMode,

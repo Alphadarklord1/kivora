@@ -87,12 +87,14 @@ export function useStudyTimer() {
   const [seconds, setSeconds] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stateRef = useRef(state);
-  stateRef.current = state;
+  useEffect(() => {
+    stateRef.current = state;
+  });
 
-  // Load from localStorage on mount
+  // Load from localStorage on mount (intentional sync from external store)
   useEffect(() => {
     const loaded = loadState();
-    setState(loaded);
+    setState(loaded); // eslint-disable-line react-hooks/set-state-in-effect
     setSeconds(computeRemaining(loaded));
   }, []);
 

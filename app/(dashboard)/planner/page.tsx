@@ -26,12 +26,12 @@ export default function PlannerPage() {
   const [pendingData, setPendingData] = useState<PendingPlan | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Auto-resume timer view on mount
+  // Auto-resume timer view on mount (intentional sync from external state)
   useEffect(() => {
     if (timer.isActive && timer.currentPlanId && plans.length > 0) {
       const plan = plans.find(p => p.id === timer.currentPlanId);
       if (plan) {
-        setSelectedPlan(plan);
+        setSelectedPlan(plan); // eslint-disable-line react-hooks/set-state-in-effect
         setView('timer');
       }
     }
@@ -39,10 +39,11 @@ export default function PlannerPage() {
 
   // Keep selectedPlan in sync with plans array
   useEffect(() => {
-    if (selectedPlan) {
-      const updated = plans.find(p => p.id === selectedPlan.id);
-      if (updated) setSelectedPlan(updated);
-    }
+    setSelectedPlan(prev => { // eslint-disable-line react-hooks/set-state-in-effect
+      if (!prev) return prev;
+      const updated = plans.find(p => p.id === prev.id);
+      return updated || prev;
+    });
   }, [plans]);
 
   const handleNewPlan = useCallback(() => {

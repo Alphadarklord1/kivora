@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { VaultStatus } from '@/components/security/VaultStatus';
-import { useKeyboardShortcuts, formatShortcut, SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
+import { useKeyboardShortcuts, formatShortcut } from '@/hooks/useKeyboardShortcuts';
 import { useToastHelpers } from '@/components/ui/Toast';
 
 interface AppShellProps {
@@ -57,10 +57,13 @@ export function AppShell({ children, user }: AppShellProps) {
     };
 
     checkMobile();
-    setMounted(true);
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Set mounted after initial render (hydration flag - intentional)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setMounted(true); }, []);
 
   // Keyboard shortcuts
   const handleGoToSettings = useCallback(() => {

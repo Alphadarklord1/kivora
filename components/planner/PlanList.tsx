@@ -15,7 +15,7 @@ interface PlanListProps {
 
 type Filter = 'all' | 'active' | 'completed';
 
-export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPlan, onDeletePlan }: PlanListProps) {
+export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPlan, onDeletePlan: _onDeletePlan }: PlanListProps) {
   const [filter, setFilter] = useState<Filter>('all');
 
   const filtered = filter === 'all' ? plans : plans.filter(p => p.status === filter);

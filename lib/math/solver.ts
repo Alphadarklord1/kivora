@@ -124,7 +124,7 @@ function solveArithmetic(problem: MathProblem): MathSolution {
         answerType: 'numeric',
       };
     }
-  } catch (e) {
+  } catch {
     // Fall through to error
   }
 
@@ -167,15 +167,14 @@ function solveLinearEquation(problem: MathProblem): MathSolution {
   let rightConst = 0;
 
   // Parse left side
-  let match;
-  const tempLeft = left.replace(varRegex, (m, coef) => {
+  const tempLeft = left.replace(varRegex, (_m, coef) => {
     leftCoef += coef === '' || coef === '+' ? 1 : coef === '-' ? -1 : parseFloat(coef);
     return '';
   });
   leftConst = tempLeft ? eval(tempLeft) || 0 : 0;
 
   // Parse right side
-  const tempRight = right.replace(varRegex, (m, coef) => {
+  const tempRight = right.replace(varRegex, (_m, coef) => {
     rightCoef += coef === '' || coef === '+' ? 1 : coef === '-' ? -1 : parseFloat(coef);
     return '';
   });
@@ -240,16 +239,9 @@ function solveQuadratic(problem: MathProblem): MathSolution {
 
   // Try to parse ax² + bx + c = 0
   const variable = problem.variables[0] || 'x';
-  const expr = problem.parsed.replace('=', '-(') + ')';
-
-  // Extract coefficients using regex
-  const squared = new RegExp(`([+-]?\\d*)\\*?${variable}\\*\\*2|([+-]?\\d*)\\*?${variable}\\^2|([+-]?\\d*)${variable}2`, 'i');
-  const linear = new RegExp(`([+-]?\\d*)\\*?${variable}(?![\\*\\^2])`, 'g');
 
   // Coefficients for quadratic equation ax² + bx + c = 0
   // This is simplified - in production you'd want a proper parser
-  const squaredMatch = problem.parsed.match(/(\d*)x\^?2|(\d*)x\*\*2/i);
-  const _a = squaredMatch ? (parseFloat(squaredMatch[1] || squaredMatch[2] || '1') || 1) : 0;
 
   steps.push({
     description: 'Standard form',

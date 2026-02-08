@@ -67,7 +67,7 @@ export function generateStudySchedule(
   const sortedTopics = [...topics].sort((a, b) => b.difficulty - a.difficulty);
 
   // Calculate total estimated hours
-  const totalEstimatedHours = sortedTopics.reduce((sum, t) => sum + t.estimatedHours, 0);
+  const _totalEstimatedHours = sortedTopics.reduce((sum, t) => sum + t.estimatedHours, 0);
 
   // Reserve last 20% of days for revision (minimum 1 day if > 5 days)
   const revisionDays = totalDays > 5 ? Math.max(1, Math.floor(totalDays * 0.2)) : 0;
@@ -75,7 +75,7 @@ export function generateStudySchedule(
 
   // Calculate daily learning capacity in hours
   const dailyHours = dailyMinutes / 60;
-  const totalLearningHours = learningDays * dailyHours;
+  const _totalLearningHours = learningDays * dailyHours;
 
   // Generate schedule
   const days: ScheduleDay[] = [];
@@ -108,7 +108,7 @@ export function generateStudySchedule(
       const allocate = Math.min(remainingMinutes, remaining, dailyMinutes * 0.6); // Max 60% of day per topic
 
       if (allocate > 0) {
-        const phase = topicPhase.get(topic.name) || 'learn';
+        const _phase = topicPhase.get(topic.name) || 'learn';
         const tasks: ('learn' | 'practice' | 'review')[] = [];
 
         // Determine tasks based on how much of the topic is done

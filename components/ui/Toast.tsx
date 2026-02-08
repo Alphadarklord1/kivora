@@ -84,6 +84,11 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
   const [progress, setProgress] = useState(100);
   const duration = toast.duration || 4000;
 
+  const handleDismiss = useCallback(() => {
+    setIsExiting(true);
+    setTimeout(onDismiss, 200);
+  }, [onDismiss]);
+
   useEffect(() => {
     const startTime = Date.now();
     const interval = setInterval(() => {
@@ -98,12 +103,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
     }, 50);
 
     return () => clearInterval(interval);
-  }, [duration]);
-
-  const handleDismiss = useCallback(() => {
-    setIsExiting(true);
-    setTimeout(onDismiss, 200);
-  }, [onDismiss]);
+  }, [duration, handleDismiss]);
 
   const colors = COLORS[toast.type];
 

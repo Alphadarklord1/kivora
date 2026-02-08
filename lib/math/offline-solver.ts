@@ -87,6 +87,7 @@ interface Token {
   value: string;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function tokenize(expr: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;

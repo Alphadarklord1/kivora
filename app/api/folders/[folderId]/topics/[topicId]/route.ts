@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { db } from '@/lib/db';
-import { folders, topics, users } from '@/lib/db/schema';
+import { folders, topics } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 
 interface RouteParams {

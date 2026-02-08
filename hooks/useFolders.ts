@@ -5,7 +5,6 @@ import { useVault } from '@/providers/VaultProvider';
 import {
   encryptFolder,
   decryptFolder,
-  decryptFolders,
   encryptTopic,
   decryptTopics,
   SecureFolder,
