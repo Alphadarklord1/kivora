@@ -27,19 +27,26 @@ interface PiperVoice {
   id: string;
   name: string;
   language: string;
-  quality: string;
+  quality: 'high' | 'medium' | 'low';
   description: string;
 }
 
-// Available Piper voices - curated list of best quality voices
+// Available Piper voices - prefer high quality for more natural sound
 const PIPER_VOICES: PiperVoice[] = [
+  { id: 'en_US-hfc_female-high', name: 'Sara (US)', language: 'en-US', quality: 'high', description: 'Natural female voice (HQ)' },
+  { id: 'en_US-hfc_male-high', name: 'Ryan (US)', language: 'en-US', quality: 'high', description: 'Natural male voice (HQ)' },
+  { id: 'en_US-amy-high', name: 'Amy (US)', language: 'en-US', quality: 'high', description: 'Clear American female (HQ)' },
+  { id: 'en_US-ryan-high', name: 'Ryan (US Alt)', language: 'en-US', quality: 'high', description: 'Smooth American male (HQ)' },
+  { id: 'en_US-lessac-high', name: 'Lessac (US)', language: 'en-US', quality: 'high', description: 'Expressive, studio‑style (HQ)' },
+  { id: 'en_US-libritts_r-high', name: 'LibriTTS (US)', language: 'en-US', quality: 'high', description: 'Multi‑speaker, clear (HQ)' },
+  { id: 'en_GB-alba-high', name: 'Alba (UK)', language: 'en-GB', quality: 'high', description: 'British female (HQ)' },
+  { id: 'en_GB-semaine-high', name: 'Semaine (UK)', language: 'en-GB', quality: 'high', description: 'British accent (HQ)' },
+  // Medium fallbacks
   { id: 'en_US-hfc_female-medium', name: 'Sara (US)', language: 'en-US', quality: 'medium', description: 'Natural female voice' },
   { id: 'en_US-hfc_male-medium', name: 'Ryan (US)', language: 'en-US', quality: 'medium', description: 'Natural male voice' },
-  { id: 'en_US-libritts_r-medium', name: 'LibriTTS (US)', language: 'en-US', quality: 'medium', description: 'Multi-speaker, clear' },
   { id: 'en_US-amy-medium', name: 'Amy (US)', language: 'en-US', quality: 'medium', description: 'Clear American female' },
-  { id: 'en_US-joe-medium', name: 'Joe (US)', language: 'en-US', quality: 'medium', description: 'American male' },
+  { id: 'en_US-libritts_r-medium', name: 'LibriTTS (US)', language: 'en-US', quality: 'medium', description: 'Multi‑speaker, clear' },
   { id: 'en_GB-alba-medium', name: 'Alba (UK)', language: 'en-GB', quality: 'medium', description: 'British female' },
-  { id: 'en_GB-semaine-medium', name: 'Semaine (UK)', language: 'en-GB', quality: 'medium', description: 'British accent' },
 ];
 
 // Fallback Web Speech API voices
@@ -54,7 +61,7 @@ const WEB_SPEECH_PREMIUM = [
 
 export function AudioPodcast() {
   const [text, setText] = useState('');
-  const [selectedVoice, setSelectedVoice] = useState<string>('en_US-hfc_female-medium');
+  const [selectedVoice, setSelectedVoice] = useState<string>('en_US-hfc_female-high');
   const [speed, setSpeed] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -212,22 +219,47 @@ export function AudioPodcast() {
     }
   };
 
+  const buildVoiceCandidates = (voiceId: string) => {
+    const candidates = [voiceId];
+    if (voiceId.endsWith('-high')) {
+      candidates.push(voiceId.replace('-high', '-medium'));
+      candidates.push(voiceId.replace('-high', '-low'));
+    } else if (voiceId.endsWith('-medium')) {
+      candidates.push(voiceId.replace('-medium', '-high'));
+      candidates.push(voiceId.replace('-medium', '-low'));
+    }
+    return Array.from(new Set(candidates));
+  };
+
   const downloadVoice = async (voiceId: string) => {
     if (!piperRef.current) return false;
 
+    const candidates = buildVoiceCandidates(voiceId);
     setDownloadingVoice(voiceId);
     setDownloadProgress(0);
 
     try {
-      await piperRef.current.download(voiceId, (progress: { loaded: number; total: number }) => {
-        const percent = Math.round((progress.loaded / progress.total) * 100);
-        setDownloadProgress(percent);
-      });
+      let downloadedId: string | null = null;
+      for (const candidate of candidates) {
+        try {
+          await piperRef.current.download(candidate, (progress: { loaded: number; total: number }) => {
+            const percent = Math.round((progress.loaded / progress.total) * 100);
+            setDownloadProgress(percent);
+          });
+          downloadedId = candidate;
+          break;
+        } catch {
+          // try next candidate
+        }
+      }
 
       const stored = await piperRef.current.stored();
       setStoredVoices(stored);
       setDownloadingVoice('');
-      return true;
+      if (downloadedId && downloadedId !== voiceId) {
+        setSelectedVoice(downloadedId);
+      }
+      return !!downloadedId;
     } catch (err) {
       console.error('Failed to download voice:', err);
       setDownloadingVoice('');
@@ -538,7 +570,7 @@ export function AudioPodcast() {
       <div className={`info-badge ${useFallback ? 'fallback' : 'neural'}`}>
         {useFallback
           ? 'Using browser voices - quality varies by device'
-          : 'Neural TTS - High quality offline voices (~40MB download per voice)'
+          : 'Neural TTS - High quality offline voices (larger download, cached after first use)'
         }
       </div>
 
@@ -667,6 +699,7 @@ export function AudioPodcast() {
                 </div>
                 <span className="voice-desc">{voice.description}</span>
                 <span className="voice-lang">{voice.language}</span>
+                <span className={`voice-quality ${voice.quality}`}>{voice.quality.toUpperCase()}</span>
               </button>
             ))}
           </div>
@@ -1095,6 +1128,30 @@ export function AudioPodcast() {
         .voice-lang {
           font-size: var(--font-tiny);
           color: var(--text-muted);
+        }
+
+        .voice-quality {
+          margin-top: var(--space-1);
+          font-size: var(--font-tiny);
+          font-weight: 600;
+          padding: 2px 6px;
+          border-radius: var(--radius-full);
+          width: fit-content;
+        }
+
+        .voice-quality.high {
+          background: rgba(16, 185, 129, 0.15);
+          color: #059669;
+        }
+
+        .voice-quality.medium {
+          background: rgba(59, 130, 246, 0.15);
+          color: #2563eb;
+        }
+
+        .voice-quality.low {
+          background: rgba(245, 158, 11, 0.15);
+          color: #b45309;
         }
 
         .voice-select {
