@@ -33,6 +33,17 @@ export interface Activity {
   weeklyActivity: { week: string; quizzes: number; avgScore: number }[];
 }
 
+export interface UsageStats {
+  totalFiles: number;
+  uploadedFiles: number;
+  generatedFiles: number;
+  libraryItems: number;
+  toolUsage: Record<string, number>;
+  periodGenerated: number;
+  periodUploads: number;
+  periodLibraryItems: number;
+}
+
 export interface AnalyticsData {
   period: number;
   quizStats: QuizStats;
@@ -40,6 +51,7 @@ export interface AnalyticsData {
   weakAreas: WeakArea[];
   activity: Activity;
   insights: string[];
+  usage: UsageStats;
 }
 
 interface UseAnalyticsReturn {

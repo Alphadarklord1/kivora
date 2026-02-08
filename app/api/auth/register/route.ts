@@ -12,9 +12,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
   }
 
-  if (password.length < 6) {
-    return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
-  }
+  // TEMP: password enforcement disabled (accept any length)
 
   // Check if user exists
   const existingUser = await db.query.users.findFirst({

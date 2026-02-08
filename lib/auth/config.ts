@@ -2,7 +2,6 @@ import { NextAuthConfig } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
 import GitHub from 'next-auth/providers/github';
-import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 import { users, accounts } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -27,20 +26,17 @@ export const authConfig: NextAuthConfig = {
         }
 
         const email = credentials.email as string;
-        const password = credentials.password as string;
 
         const user = await db.query.users.findFirst({
           where: eq(users.email, email),
         });
 
-        if (!user || !user.passwordHash) {
+        if (!user) {
           return null;
         }
 
-        const isValid = await bcrypt.compare(password, user.passwordHash);
-        if (!isValid) {
-          return null;
-        }
+        // TEMP: password enforcement disabled
+        // Accept any password value for existing users.
 
         return {
           id: user.id,

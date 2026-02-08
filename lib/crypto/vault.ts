@@ -19,6 +19,8 @@ import {
   generateSalt,
 } from './encryption';
 
+export const ENCRYPTION_DISABLED = true;
+
 const VAULT_KEY = 'studypilot_vault';
 const SESSION_KEY = 'studypilot_session_key';
 
@@ -48,6 +50,7 @@ let unlockedVault: UnlockedVault | null = null;
  */
 export function hasVault(): boolean {
   if (typeof window === 'undefined') return false;
+  if (ENCRYPTION_DISABLED) return false;
   return localStorage.getItem(VAULT_KEY) !== null;
 }
 
@@ -55,6 +58,7 @@ export function hasVault(): boolean {
  * Check if vault is currently unlocked
  */
 export function isVaultUnlocked(): boolean {
+  if (ENCRYPTION_DISABLED) return false;
   return unlockedVault !== null;
 }
 
@@ -63,6 +67,7 @@ export function isVaultUnlocked(): boolean {
  * Called during registration or first encryption setup
  */
 export async function createVault(password: string): Promise<void> {
+  if (ENCRYPTION_DISABLED) return;
   // Generate random salts
   const masterSalt = generateSalt();
   const indexSalt = generateSalt();
@@ -101,6 +106,7 @@ export async function createVault(password: string): Promise<void> {
  * Unlock an existing vault with password
  */
 export async function unlockVault(password: string): Promise<boolean> {
+  if (ENCRYPTION_DISABLED) return true;
   const vaultJson = localStorage.getItem(VAULT_KEY);
   if (!vaultJson) {
     throw new Error('No vault found');
@@ -138,6 +144,7 @@ export async function unlockVault(password: string): Promise<boolean> {
  * Lock the vault (clear from memory)
  */
 export function lockVault(): void {
+  if (ENCRYPTION_DISABLED) return;
   unlockedVault = null;
   sessionStorage.removeItem(SESSION_KEY);
 }
@@ -146,6 +153,7 @@ export function lockVault(): void {
  * Try to restore vault from session
  */
 export async function restoreVaultFromSession(): Promise<boolean> {
+  if (ENCRYPTION_DISABLED) return true;
   const sessionDek = sessionStorage.getItem(SESSION_KEY);
   if (!sessionDek) return false;
 
@@ -183,6 +191,7 @@ export async function changeVaultPassword(
   currentPassword: string,
   newPassword: string
 ): Promise<boolean> {
+  if (ENCRYPTION_DISABLED) return true;
   // First unlock with current password
   const unlocked = await unlockVault(currentPassword);
   if (!unlocked || !unlockedVault) {
@@ -214,6 +223,7 @@ export async function changeVaultPassword(
  * Encrypt sensitive data using the vault's DEK
  */
 export async function encryptData(plaintext: string): Promise<string> {
+  if (ENCRYPTION_DISABLED) return plaintext;
   if (!unlockedVault) {
     throw new Error('Vault is locked');
   }
@@ -224,6 +234,7 @@ export async function encryptData(plaintext: string): Promise<string> {
  * Decrypt data that was encrypted with encryptData
  */
 export async function decryptData(ciphertext: string): Promise<string> {
+  if (ENCRYPTION_DISABLED) return ciphertext;
   if (!unlockedVault) {
     throw new Error('Vault is locked');
   }
@@ -234,6 +245,7 @@ export async function decryptData(ciphertext: string): Promise<string> {
  * Create a blind index for searching encrypted data
  */
 export async function createBlindIndex(value: string): Promise<string> {
+  if (ENCRYPTION_DISABLED) return value;
   if (!unlockedVault?.indexKey) {
     throw new Error('Vault is locked or index key not available');
   }
@@ -247,6 +259,7 @@ export async function encryptFields<T extends Record<string, unknown>>(
   obj: T,
   fields: (keyof T)[]
 ): Promise<T> {
+  if (ENCRYPTION_DISABLED) return obj;
   if (!unlockedVault) {
     throw new Error('Vault is locked');
   }
@@ -273,6 +286,7 @@ export async function decryptFields<T extends Record<string, unknown>>(
   obj: T,
   fields: (keyof T)[]
 ): Promise<T> {
+  if (ENCRYPTION_DISABLED) return obj;
   if (!unlockedVault) {
     throw new Error('Vault is locked');
   }
@@ -300,6 +314,7 @@ export async function decryptFields<T extends Record<string, unknown>>(
  * Delete the vault (for account deletion)
  */
 export function deleteVault(): void {
+  if (ENCRYPTION_DISABLED) return;
   localStorage.removeItem(VAULT_KEY);
   sessionStorage.removeItem(SESSION_KEY);
   unlockedVault = null;

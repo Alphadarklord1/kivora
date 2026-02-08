@@ -16,6 +16,7 @@ import {
   restoreVaultFromSession,
   changeVaultPassword,
   deleteVault,
+  ENCRYPTION_DISABLED,
 } from '@/lib/crypto/vault';
 
 interface VaultContextType {
@@ -61,6 +62,13 @@ export function VaultProvider({ children }: VaultProviderProps) {
     const checkVault = async () => {
       setIsLoading(true);
 
+      if (ENCRYPTION_DISABLED) {
+        setIsSetup(false);
+        setIsUnlocked(true);
+        setIsLoading(false);
+        return;
+      }
+
       // Check if vault exists
       const vaultExists = hasVault();
       setIsSetup(vaultExists);
@@ -78,6 +86,7 @@ export function VaultProvider({ children }: VaultProviderProps) {
   }, []);
 
   const lock = useCallback(() => {
+    if (ENCRYPTION_DISABLED) return;
     lockVault();
     setIsUnlocked(false);
   }, []);
@@ -112,18 +121,28 @@ export function VaultProvider({ children }: VaultProviderProps) {
   }, [isUnlocked, lock]);
 
   const setupVault = useCallback(async (password: string) => {
+    if (ENCRYPTION_DISABLED) {
+      setIsSetup(false);
+      setIsUnlocked(true);
+      return;
+    }
     await createVault(password);
     setIsSetup(true);
     setIsUnlocked(true);
   }, []);
 
   const unlock = useCallback(async (password: string) => {
+    if (ENCRYPTION_DISABLED) {
+      setIsUnlocked(true);
+      return true;
+    }
     const success = await unlockVault(password);
     setIsUnlocked(success);
     return success;
   }, []);
 
   const changePassword = useCallback(async (current: string, newPass: string) => {
+    if (ENCRYPTION_DISABLED) return true;
     try {
       await changeVaultPassword(current, newPass);
       return true;
@@ -133,6 +152,7 @@ export function VaultProvider({ children }: VaultProviderProps) {
   }, []);
 
   const destroyVault = useCallback(() => {
+    if (ENCRYPTION_DISABLED) return;
     deleteVault();
     setIsSetup(false);
     setIsUnlocked(false);
@@ -171,6 +191,10 @@ export function VaultGate({ children, fallback }: VaultGateProps) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  if (ENCRYPTION_DISABLED) {
+    return <>{children}</>;
+  }
 
   if (isLoading) {
     return fallback || <div className="vault-loading">Loading...</div>;

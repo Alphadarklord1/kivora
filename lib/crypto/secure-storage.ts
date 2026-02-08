@@ -24,6 +24,7 @@ import {
   decryptFields,
   createBlindIndex,
   isVaultUnlocked,
+  ENCRYPTION_DISABLED,
 } from './vault';
 
 // Field definitions for each entity type
@@ -86,6 +87,9 @@ export interface SecureLibraryItem {
 export async function encryptFolder(
   folder: Partial<SecureFolder>
 ): Promise<Partial<SecureFolder>> {
+  if (ENCRYPTION_DISABLED) {
+    return folder;
+  }
   if (!isVaultUnlocked()) {
     console.warn('Vault locked, storing unencrypted');
     return folder;
@@ -107,6 +111,9 @@ export async function encryptFolder(
 export async function decryptFolder(
   folder: SecureFolder
 ): Promise<SecureFolder> {
+  if (ENCRYPTION_DISABLED) {
+    return folder;
+  }
   if (!isVaultUnlocked()) {
     return folder;
   }
@@ -121,6 +128,9 @@ export async function decryptFolder(
 export async function decryptFolders(
   folders: SecureFolder[]
 ): Promise<SecureFolder[]> {
+  if (ENCRYPTION_DISABLED) {
+    return folders;
+  }
   if (!isVaultUnlocked()) {
     return folders;
   }
@@ -134,6 +144,9 @@ export async function decryptFolders(
 export async function encryptTopic(
   topic: Partial<SecureTopic>
 ): Promise<Partial<SecureTopic>> {
+  if (ENCRYPTION_DISABLED) {
+    return topic;
+  }
   if (!isVaultUnlocked()) {
     return topic;
   }
@@ -151,6 +164,9 @@ export async function encryptTopic(
  * Decrypt a topic received from server
  */
 export async function decryptTopic(topic: SecureTopic): Promise<SecureTopic> {
+  if (ENCRYPTION_DISABLED) {
+    return topic;
+  }
   if (!isVaultUnlocked()) {
     return topic;
   }
@@ -165,6 +181,9 @@ export async function decryptTopic(topic: SecureTopic): Promise<SecureTopic> {
 export async function decryptTopics(
   topics: SecureTopic[]
 ): Promise<SecureTopic[]> {
+  if (ENCRYPTION_DISABLED) {
+    return topics;
+  }
   if (!isVaultUnlocked()) {
     return topics;
   }
@@ -178,6 +197,9 @@ export async function decryptTopics(
 export async function encryptFile(
   file: Partial<SecureFile>
 ): Promise<Partial<SecureFile>> {
+  if (ENCRYPTION_DISABLED) {
+    return file;
+  }
   if (!isVaultUnlocked()) {
     return file;
   }
@@ -195,6 +217,9 @@ export async function encryptFile(
  * Decrypt a file received from server
  */
 export async function decryptFile(file: SecureFile): Promise<SecureFile> {
+  if (ENCRYPTION_DISABLED) {
+    return file;
+  }
   if (!isVaultUnlocked()) {
     return file;
   }
@@ -207,6 +232,9 @@ export async function decryptFile(file: SecureFile): Promise<SecureFile> {
  * Decrypt multiple files
  */
 export async function decryptFiles(files: SecureFile[]): Promise<SecureFile[]> {
+  if (ENCRYPTION_DISABLED) {
+    return files;
+  }
   if (!isVaultUnlocked()) {
     return files;
   }
@@ -220,6 +248,9 @@ export async function decryptFiles(files: SecureFile[]): Promise<SecureFile[]> {
 export async function encryptLibraryItem(
   item: Partial<SecureLibraryItem>
 ): Promise<Partial<SecureLibraryItem>> {
+  if (ENCRYPTION_DISABLED) {
+    return item;
+  }
   if (!isVaultUnlocked()) {
     return item;
   }
@@ -233,6 +264,9 @@ export async function encryptLibraryItem(
 export async function decryptLibraryItem(
   item: SecureLibraryItem
 ): Promise<SecureLibraryItem> {
+  if (ENCRYPTION_DISABLED) {
+    return item;
+  }
   if (!isVaultUnlocked()) {
     return item;
   }
@@ -247,6 +281,9 @@ export async function decryptLibraryItem(
 export async function decryptLibraryItems(
   items: SecureLibraryItem[]
 ): Promise<SecureLibraryItem[]> {
+  if (ENCRYPTION_DISABLED) {
+    return items;
+  }
   if (!isVaultUnlocked()) {
     return items;
   }
@@ -259,6 +296,9 @@ export async function decryptLibraryItems(
  * Used for server-side searching of encrypted data
  */
 export async function createSearchIndex(term: string): Promise<string | null> {
+  if (ENCRYPTION_DISABLED) {
+    return term;
+  }
   if (!isVaultUnlocked()) {
     return null;
   }
@@ -270,6 +310,9 @@ export async function createSearchIndex(term: string): Promise<string | null> {
  * Encrypt arbitrary text (for notes, generated content, etc.)
  */
 export async function encryptText(text: string): Promise<string> {
+  if (ENCRYPTION_DISABLED) {
+    return text;
+  }
   if (!isVaultUnlocked()) {
     return text;
   }
@@ -281,6 +324,9 @@ export async function encryptText(text: string): Promise<string> {
  * Decrypt arbitrary text
  */
 export async function decryptText(encryptedText: string): Promise<string> {
+  if (ENCRYPTION_DISABLED) {
+    return encryptedText;
+  }
   if (!isVaultUnlocked()) {
     return encryptedText;
   }

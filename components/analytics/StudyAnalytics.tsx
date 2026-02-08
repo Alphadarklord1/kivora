@@ -63,7 +63,7 @@ export function StudyAnalytics() {
     return null;
   }
 
-  const { quizStats, planStats, weakAreas, activity, insights } = data;
+  const { quizStats, planStats, weakAreas, activity, insights, usage } = data;
 
   return (
     <div className="study-analytics">
@@ -126,6 +126,41 @@ export function StudyAnalytics() {
           <div className="stat-content">
             <div className="stat-value">{planStats.activePlans}</div>
             <div className="stat-label">Active Plans</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Usage Overview */}
+      <div className="usage-grid">
+        <div className="stat-card">
+          <div className="stat-icon">📁</div>
+          <div className="stat-content">
+            <div className="stat-value">{usage.totalFiles}</div>
+            <div className="stat-label">Total Files</div>
+            <div className="stat-sub">+{usage.periodUploads} uploads this period</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">🧠</div>
+          <div className="stat-content">
+            <div className="stat-value">{usage.generatedFiles}</div>
+            <div className="stat-label">Generated Items</div>
+            <div className="stat-sub">+{usage.periodGenerated} this period</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">📚</div>
+          <div className="stat-content">
+            <div className="stat-value">{usage.libraryItems}</div>
+            <div className="stat-label">Library Items</div>
+            <div className="stat-sub">+{usage.periodLibraryItems} this period</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">🛠️</div>
+          <div className="stat-content">
+            <div className="stat-value">{Object.keys(usage.toolUsage).length}</div>
+            <div className="stat-label">Tools Used</div>
           </div>
         </div>
       </div>
@@ -252,6 +287,28 @@ export function StudyAnalytics() {
 
         {/* Right Column */}
         <div className="analytics-column">
+          <div className="analytics-card">
+            <h3>Tool Usage</h3>
+            <div className="tool-usage">
+              {Object.entries(usage.toolUsage).length === 0 ? (
+                <p className="muted">No tool activity yet.</p>
+              ) : (
+                Object.entries(usage.toolUsage).slice(0, 8).map(([tool, count]) => (
+                  <div key={tool} className="tool-row">
+                    <span className="tool-name">{tool}</span>
+                    <div className="tool-bar">
+                      <div
+                        className="tool-bar-fill"
+                        style={{ width: `${Math.min(100, (count / Math.max(...Object.values(usage.toolUsage))) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="tool-count">{count}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
           {/* Weak Areas */}
           <div className="analytics-card">
             <h3>Areas to Improve</h3>
@@ -431,6 +488,13 @@ export function StudyAnalytics() {
           margin-bottom: var(--space-4);
         }
 
+        .usage-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: var(--space-3);
+          margin-bottom: var(--space-4);
+        }
+
         .stat-card {
           background: var(--bg-surface);
           border: 1px solid var(--border-subtle);
@@ -473,6 +537,12 @@ export function StudyAnalytics() {
           color: var(--text-muted);
         }
 
+        .stat-sub {
+          font-size: var(--font-tiny);
+          color: var(--text-secondary);
+          margin-top: var(--space-1);
+        }
+
         .analytics-columns {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -509,6 +579,47 @@ export function StudyAnalytics() {
           margin: 0 0 var(--space-3) 0;
           font-size: var(--font-body);
           font-weight: 600;
+        }
+
+        .tool-usage {
+          display: grid;
+          gap: var(--space-2);
+        }
+
+        .tool-row {
+          display: grid;
+          grid-template-columns: 90px 1fr 40px;
+          align-items: center;
+          gap: var(--space-2);
+          font-size: var(--font-meta);
+        }
+
+        .tool-name {
+          text-transform: capitalize;
+          color: var(--text-secondary);
+        }
+
+        .tool-bar {
+          height: 8px;
+          background: var(--bg-inset);
+          border-radius: var(--radius-full);
+          overflow: hidden;
+        }
+
+        .tool-bar-fill {
+          height: 100%;
+          background: var(--primary);
+          border-radius: var(--radius-full);
+        }
+
+        .tool-count {
+          font-weight: 600;
+          text-align: right;
+        }
+
+        .muted {
+          color: var(--text-muted);
+          font-size: var(--font-meta);
         }
 
         .performance-summary {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { quizAttempts, studyPlans, files } from '@/lib/db/schema';
+import { quizAttempts, studyPlans, files, libraryItems } from '@/lib/db/schema';
 import { eq, desc, and, gte } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 
@@ -85,6 +85,28 @@ export async function GET(request: NextRequest) {
       });
     } catch (error) {
       console.error('Analytics error: failed to fetch study plans', error);
+    }
+
+    // Fetch files and library items (usage stats)
+    let userFiles: Array<{ type: string; createdAt: Date }> = [];
+    let userLibrary: Array<{ mode: string; createdAt: Date }> = [];
+
+    try {
+      userFiles = await db
+        .select({ type: files.type, createdAt: files.createdAt })
+        .from(files)
+        .where(eq(files.userId, userId));
+    } catch (error) {
+      console.error('Analytics error: failed to fetch files', error);
+    }
+
+    try {
+      userLibrary = await db
+        .select({ mode: libraryItems.mode, createdAt: libraryItems.createdAt })
+        .from(libraryItems)
+        .where(eq(libraryItems.userId, userId));
+    } catch (error) {
+      console.error('Analytics error: failed to fetch library items', error);
     }
 
     // Calculate quiz statistics
@@ -257,6 +279,23 @@ export async function GET(request: NextRequest) {
     }
     weeklyActivity.sort((a, b) => a.week.localeCompare(b.week));
 
+    const toolUsage = new Map<string, number>();
+    for (const attempt of attempts) {
+      toolUsage.set(attempt.mode, (toolUsage.get(attempt.mode) || 0) + 1);
+    }
+    for (const file of userFiles) {
+      if (file.type !== 'upload') {
+        toolUsage.set(file.type, (toolUsage.get(file.type) || 0) + 1);
+      }
+    }
+    for (const libItem of userLibrary) {
+      toolUsage.set(libItem.mode, (toolUsage.get(libItem.mode) || 0) + 1);
+    }
+
+    const periodUploads = userFiles.filter(f => f.type === 'upload' && f.createdAt >= startDate).length;
+    const periodGenerated = userFiles.filter(f => f.type !== 'upload' && f.createdAt >= startDate).length;
+    const periodLibraryItems = userLibrary.filter(l => l.createdAt >= startDate).length;
+
     return NextResponse.json({
       period: periodDays,
       quizStats,
@@ -268,6 +307,16 @@ export async function GET(request: NextRequest) {
         weeklyActivity: weeklyActivity.slice(-4), // Last 4 weeks
       },
       insights: generateInsights(quizStats, planStats, weakAreas, currentStreak),
+      usage: {
+        totalFiles: userFiles.length,
+        uploadedFiles: userFiles.filter(f => f.type === 'upload').length,
+        generatedFiles: userFiles.filter(f => f.type !== 'upload').length,
+        libraryItems: userLibrary.length,
+        toolUsage: Object.fromEntries([...toolUsage.entries()].sort((a, b) => b[1] - a[1])),
+        periodGenerated,
+        periodUploads,
+        periodLibraryItems,
+      },
     });
   } catch (error) {
     console.error('Analytics error:', error);

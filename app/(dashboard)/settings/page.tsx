@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { signIn, signOut, getProviders } from 'next-auth/react';
 import { useVault } from '@/providers/VaultProvider';
+import { ENCRYPTION_DISABLED } from '@/lib/crypto/vault';
 
 type SettingsTab = 'profile' | 'appearance' | 'security' | 'account';
 
@@ -646,41 +647,50 @@ export default function SettingsPage() {
               <div className="security-card encryption-card">
                 <div className="encryption-header">
                   <div className="encryption-status">
-                    <span className="encryption-icon">{vault.isUnlocked ? '🔓' : '🔐'}</span>
+                    <span className="encryption-icon">{ENCRYPTION_DISABLED ? '⏸️' : vault.isUnlocked ? '🔓' : '🔐'}</span>
                     <div>
                       <h3>End-to-End Encryption</h3>
                       <span className={`encryption-badge ${vault.isSetup ? (vault.isUnlocked ? 'active' : 'locked') : 'inactive'}`}>
-                        {!vault.isSetup ? 'Not Set Up' : vault.isUnlocked ? 'Active & Unlocked' : 'Locked'}
+                        {ENCRYPTION_DISABLED ? 'Paused' : !vault.isSetup ? 'Not Set Up' : vault.isUnlocked ? 'Active & Unlocked' : 'Locked'}
                       </span>
                     </div>
                   </div>
-                  {vault.isUnlocked && (
+                  {!ENCRYPTION_DISABLED && vault.isUnlocked && (
                     <button className="btn secondary small" onClick={vault.lock}>
                       Lock Now
                     </button>
                   )}
                 </div>
 
-                <div className="encryption-features">
-                  <div className="feature-item">
-                    <span className="feature-check">✓</span>
-                    <span>AES-256 encryption (military grade)</span>
+                {ENCRYPTION_DISABLED ? (
+                  <div className="encryption-features">
+                    <div className="feature-item warning">
+                      <span className="feature-check">!</span>
+                      <span>Encryption is temporarily disabled. New content is stored in plaintext.</span>
+                    </div>
                   </div>
-                  <div className="feature-item">
-                    <span className="feature-check">✓</span>
-                    <span>Zero-knowledge architecture</span>
+                ) : (
+                  <div className="encryption-features">
+                    <div className="feature-item">
+                      <span className="feature-check">✓</span>
+                      <span>AES-256 encryption (military grade)</span>
+                    </div>
+                    <div className="feature-item">
+                      <span className="feature-check">✓</span>
+                      <span>Zero-knowledge architecture</span>
+                    </div>
+                    <div className="feature-item">
+                      <span className="feature-check">✓</span>
+                      <span>Data encrypted before leaving your device</span>
+                    </div>
+                    <div className="feature-item">
+                      <span className="feature-check">✓</span>
+                      <span>We cannot access your encrypted data</span>
+                    </div>
                   </div>
-                  <div className="feature-item">
-                    <span className="feature-check">✓</span>
-                    <span>Data encrypted before leaving your device</span>
-                  </div>
-                  <div className="feature-item">
-                    <span className="feature-check">✓</span>
-                    <span>We cannot access your encrypted data</span>
-                  </div>
-                </div>
+                )}
 
-                {vault.isSetup && vault.isUnlocked && (
+                {!ENCRYPTION_DISABLED && vault.isSetup && vault.isUnlocked && (
                   <>
                     <div className="encryption-divider"></div>
                     <h4>Change Encryption Password</h4>
@@ -731,7 +741,7 @@ export default function SettingsPage() {
                   </>
                 )}
 
-                {vault.isSetup && (
+                {!ENCRYPTION_DISABLED && vault.isSetup && (
                   <>
                     <div className="encryption-divider danger"></div>
                     <div className="encryption-danger">
@@ -758,6 +768,9 @@ export default function SettingsPage() {
                   {account?.hasPassword
                     ? 'Update your login password (separate from encryption)'
                     : 'Set a password to login with email and password'}
+                </p>
+                <p className="helper-text warning-text">
+                  Password enforcement is temporarily disabled. Any password will work during this period.
                 </p>
 
                 {account?.hasPassword && (
@@ -1411,8 +1424,16 @@ export default function SettingsPage() {
           font-size: var(--font-meta);
         }
 
+        .feature-item.warning {
+          color: var(--warning);
+        }
+
         .feature-check {
           color: var(--success);
+        }
+
+        .feature-item.warning .feature-check {
+          color: var(--warning);
         }
 
         .encryption-divider {
@@ -1446,6 +1467,10 @@ export default function SettingsPage() {
           font-size: var(--font-meta);
           color: var(--text-muted);
           margin-bottom: var(--space-4);
+        }
+
+        .warning-text {
+          color: var(--warning);
         }
 
         .btn.small {

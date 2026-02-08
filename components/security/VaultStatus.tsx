@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useVault } from '@/providers/VaultProvider';
+import { ENCRYPTION_DISABLED } from '@/lib/crypto/vault';
 
 export function VaultStatus() {
   const { isSetup, isUnlocked, lock, isLoading } = useVault();
@@ -11,6 +12,38 @@ export function VaultStatus() {
     return (
       <div className="vault-status loading">
         <span className="vault-icon">...</span>
+      </div>
+    );
+  }
+
+  if (ENCRYPTION_DISABLED) {
+    return (
+      <div className="vault-status">
+        <button className="vault-indicator paused" aria-label="Encryption paused">
+          <span className="vault-icon">⏸️</span>
+          <span className="vault-text">Encryption Paused</span>
+        </button>
+        <style jsx>{`
+          .vault-status {
+            position: relative;
+          }
+          .vault-indicator {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            padding: var(--space-2) var(--space-3);
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-full);
+            cursor: default;
+            font-size: var(--font-meta);
+            color: var(--text-secondary);
+          }
+          .vault-indicator.paused {
+            border-color: var(--warning);
+            color: var(--warning);
+          }
+        `}</style>
       </div>
     );
   }
