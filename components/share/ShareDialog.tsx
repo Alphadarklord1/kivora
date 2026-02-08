@@ -73,7 +73,7 @@ export function ShareDialog({
 
       const data = await res.json();
 
-      if (shareType === 'link' && data.shareUrl) {
+      if (data.shareUrl) {
         setShareUrl(data.shareUrl);
         toast.success('Share link created');
       } else {
@@ -142,7 +142,9 @@ export function ShareDialog({
               </Button>
             </div>
             <p className="share-hint">
-              Anyone with this link can {permission === 'view' ? 'view' : 'edit'} this {resourceType}.
+              {shareType === 'user'
+                ? 'Only invited users can open this link.'
+                : `Anyone with this link can ${permission === 'view' ? 'view' : 'edit'} this ${resourceType}.`}
               {expiresInDays && ` Link expires in ${expiresInDays} days.`}
             </p>
             <div className="share-actions">

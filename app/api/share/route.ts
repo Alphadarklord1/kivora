@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type'); // 'owned' | 'shared' | null (all)
+  const origin = request.nextUrl.origin;
 
   let userShares;
 
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
         resourceName,
         resourceType,
         sharedWithEmail,
-        shareUrl: share.shareToken ? `${process.env.NEXT_PUBLIC_APP_URL || ''}/shared/${share.shareToken}` : null,
+        shareUrl: share.shareToken ? `${origin}/shared/${share.shareToken}` : null,
       };
     })
   );
@@ -184,8 +185,8 @@ export async function POST(request: NextRequest) {
     sharedWithUserId = sharedUser.id;
   }
 
-  // Generate share token for link shares
-  const shareToken = shareType === 'link' ? generateShareToken() : null;
+  // Generate share token for both link and user shares (user shares require auth in the shared view)
+  const shareToken = generateShareToken();
 
   // Calculate expiration
   const expiresAt = expiresInDays
@@ -207,7 +208,7 @@ export async function POST(request: NextRequest) {
   }).returning();
 
   const shareUrl = shareToken
-    ? `${process.env.NEXT_PUBLIC_APP_URL || ''}/shared/${shareToken}`
+    ? `${request.nextUrl.origin}/shared/${shareToken}`
     : null;
 
   return NextResponse.json({

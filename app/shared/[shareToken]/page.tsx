@@ -7,6 +7,7 @@ import Link from 'next/link';
 interface SharedContent {
   share: {
     id: string;
+    shareType?: string;
     permission: string;
     createdAt: string;
     expiresAt: string | null;
@@ -77,7 +78,6 @@ export default function SharedContentPage() {
       summarize: '📋',
       mcq: '✅',
       quiz: '🧠',
-      pop: '⚡',
       notes: '📝',
       math: '🧮',
     };
@@ -178,6 +178,9 @@ export default function SharedContentPage() {
               )}
             </span>
             <span className="share-permission">Permission: {data.share.permission}</span>
+            {data.share.shareType === 'user' && (
+              <span className="share-permission">Invite-only share</span>
+            )}
           </div>
         </div>
 

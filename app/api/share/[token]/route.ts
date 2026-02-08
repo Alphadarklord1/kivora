@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { shares, files, folders, topics, libraryItems, users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { getUserId } from '@/lib/auth/get-user-id';
 
 // GET /api/share/[token] - Get shared content by token (public endpoint)
 export async function GET(
@@ -21,6 +22,16 @@ export async function GET(
 
   if (!share) {
     return NextResponse.json({ error: 'Share not found or link is invalid' }, { status: 404 });
+  }
+
+  if (share.shareType === 'user') {
+    const userId = await getUserId(request);
+    if (!userId) {
+      return NextResponse.json({ error: 'Sign in required to access this share' }, { status: 401 });
+    }
+    if (userId !== share.ownerId && userId !== share.sharedWithUserId) {
+      return NextResponse.json({ error: 'You do not have access to this share' }, { status: 403 });
+    }
   }
 
   // Check if expired
@@ -134,6 +145,7 @@ export async function GET(
   return NextResponse.json({
     share: {
       id: share.id,
+      shareType: share.shareType,
       permission: share.permission,
       createdAt: share.createdAt,
       expiresAt: share.expiresAt,

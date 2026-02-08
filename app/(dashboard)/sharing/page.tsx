@@ -20,6 +20,7 @@ interface Share {
   shareUrl: string | null;
   ownerName?: string;
   ownerEmail?: string;
+  sharedWithEmail?: string | null;
 }
 
 interface Owner {
@@ -32,6 +33,8 @@ export default function SharedWithMePage() {
   const [owners, setOwners] = useState<Record<string, Owner>>({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'file' | 'folder' | 'topic' | 'library'>('all');
 
   const fetchShares = async () => {
     setLoading(true);
@@ -118,12 +121,44 @@ export default function SharedWithMePage() {
     navigator.clipboard.writeText(url);
   };
 
+  const filteredShares = shares.filter((share) => {
+    if (typeFilter !== 'all' && share.resourceType !== typeFilter) return false;
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.trim().toLowerCase();
+    return (
+      share.resourceName.toLowerCase().includes(query) ||
+      (share.sharedWithEmail || '').toLowerCase().includes(query) ||
+      (owners[share.ownerId]?.email || '').toLowerCase().includes(query) ||
+      (owners[share.ownerId]?.name || '').toLowerCase().includes(query)
+    );
+  });
+
   return (
     <div className="shared-page">
       <div className="page-header">
         <div>
           <h1>Sharing</h1>
           <p>Manage content shared with you and by you</p>
+        </div>
+      </div>
+
+      <div className="share-toolbar">
+        <input
+          className="share-search"
+          placeholder="Search by name or email..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <div className="share-filters">
+          {(['all', 'file', 'folder', 'topic', 'library'] as const).map((type) => (
+            <button
+              key={type}
+              className={`filter-pill ${typeFilter === type ? 'active' : ''}`}
+              onClick={() => setTypeFilter(type)}
+            >
+              {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -144,7 +179,7 @@ export default function SharedWithMePage() {
 
       {loading ? (
         <div className="loading-state">Loading shares...</div>
-      ) : shares.length === 0 ? (
+      ) : filteredShares.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">{activeTab === 'received' ? '📥' : '📤'}</div>
           <h3>{activeTab === 'received' ? 'Nothing shared with you yet' : 'You haven\'t shared anything yet'}</h3>
@@ -156,7 +191,7 @@ export default function SharedWithMePage() {
         </div>
       ) : (
         <div className="shares-list">
-          {shares.map((share) => (
+          {filteredShares.map((share) => (
             <div key={share.id} className={`share-card ${isExpired(share.expiresAt) ? 'expired' : ''}`}>
               <div className="share-icon">{getResourceIcon(share.resourceType)}</div>
               <div className="share-info">
@@ -164,6 +199,9 @@ export default function SharedWithMePage() {
                 <div className="share-meta">
                   {activeTab === 'received' && owners[share.ownerId] && (
                     <span>From: {owners[share.ownerId].name || owners[share.ownerId].email}</span>
+                  )}
+                  {activeTab === 'sent' && share.sharedWithEmail && (
+                    <span>To: {share.sharedWithEmail}</span>
                   )}
                   <span>{getPermissionBadge(share.permission)}</span>
                   <span>Shared {formatDate(share.createdAt)}</span>
@@ -180,14 +218,12 @@ export default function SharedWithMePage() {
                     <Link href={share.shareUrl} className="btn secondary" target="_blank">
                       Open
                     </Link>
-                    {activeTab === 'sent' && (
-                      <button
-                        className="btn ghost"
-                        onClick={() => handleCopyLink(share.shareUrl!)}
-                      >
-                        📋 Copy Link
-                      </button>
-                    )}
+                    <button
+                      className="btn ghost"
+                      onClick={() => handleCopyLink(share.shareUrl!)}
+                    >
+                      📋 Copy Link
+                    </button>
                   </>
                 )}
                 {activeTab === 'sent' && (
@@ -230,6 +266,51 @@ export default function SharedWithMePage() {
           padding: var(--space-1);
           background: var(--bg-inset);
           border-radius: var(--radius-md);
+        }
+
+        .share-toolbar {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3);
+          margin-bottom: var(--space-4);
+        }
+
+        .share-search {
+          width: 100%;
+          padding: var(--space-3) var(--space-4);
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-md);
+          background: var(--bg-surface);
+          color: var(--text-primary);
+          font-size: var(--font-meta);
+        }
+
+        .share-search::placeholder {
+          color: var(--text-muted);
+        }
+
+        .share-filters {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--space-2);
+        }
+
+        .filter-pill {
+          padding: var(--space-2) var(--space-3);
+          border-radius: 999px;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+          color: var(--text-muted);
+          font-size: var(--font-tiny);
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+
+        .filter-pill.active,
+        .filter-pill:hover {
+          color: var(--text-primary);
+          border-color: var(--border-default);
+          background: var(--bg-inset);
         }
 
         .share-tab {
