@@ -432,19 +432,21 @@ export function StudyAnalytics() {
         }
 
         .stat-card {
-          background: var(--card-bg);
-          border: 1px solid var(--card-border);
-          border-radius: var(--card-radius);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
           padding: var(--space-4);
           display: flex;
           align-items: center;
           gap: var(--space-3);
-          transition: border-color var(--transition-fast), box-shadow var(--transition-normal);
+          box-shadow: var(--shadow-sm);
+          transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
         }
 
         .stat-card:hover {
-          border-color: var(--card-hover-border);
-          box-shadow: var(--card-hover-shadow);
+          border-color: var(--border-default);
+          box-shadow: var(--shadow-md);
+          transform: translateY(-1px);
         }
 
         .stat-card.primary {
@@ -453,7 +455,7 @@ export function StudyAnalytics() {
         }
 
         .stat-card.primary:hover {
-          box-shadow: var(--card-hover-shadow);
+          box-shadow: var(--shadow-md);
         }
 
         .stat-icon {
@@ -484,17 +486,19 @@ export function StudyAnalytics() {
         }
 
         .analytics-card {
-          background: var(--card-bg);
-          border: 1px solid var(--card-border);
-          border-radius: var(--card-radius);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
           padding: var(--space-4);
           margin-bottom: var(--space-4);
-          transition: border-color var(--transition-fast), box-shadow var(--transition-normal);
+          box-shadow: var(--shadow-sm);
+          transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
         }
 
         .analytics-card:hover {
-          border-color: var(--card-hover-border);
-          box-shadow: var(--card-hover-shadow);
+          border-color: var(--border-default);
+          box-shadow: var(--shadow-md);
+          transform: translateY(-1px);
         }
 
         .analytics-card.full-width {

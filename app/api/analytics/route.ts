@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const period = searchParams.get('period') || '30'; // days
-  const periodDays = parseInt(period);
+  const parsedPeriod = parseInt(period, 10);
+  const periodDays = Number.isFinite(parsedPeriod) && parsedPeriod > 0 ? parsedPeriod : 30;
 
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - periodDays);
@@ -91,11 +92,16 @@ export async function GET(request: NextRequest) {
     }
 
     // Recent scores (last 10)
-    quizStats.recentScores = attempts.slice(0, 10).map(a => ({
-      date: a.createdAt.toISOString().split('T')[0],
-      score: a.score,
-      mode: a.mode,
-    }));
+    quizStats.recentScores = attempts.slice(0, 10).map(a => {
+      const createdAt = new Date(a.createdAt);
+      return {
+        date: Number.isNaN(createdAt.getTime())
+          ? new Date().toISOString().split('T')[0]
+          : createdAt.toISOString().split('T')[0],
+        score: a.score,
+        mode: a.mode,
+      };
+    });
 
     // Score distribution
     for (const attempt of attempts) {
@@ -173,7 +179,9 @@ export async function GET(request: NextRequest) {
     // Activity streaks and trends
     const activityByDate = new Map<string, number>();
     for (const attempt of attempts) {
-      const date = attempt.createdAt.toISOString().split('T')[0];
+      const createdAt = new Date(attempt.createdAt);
+      if (Number.isNaN(createdAt.getTime())) continue;
+      const date = createdAt.toISOString().split('T')[0];
       activityByDate.set(date, (activityByDate.get(date) || 0) + 1);
     }
 
@@ -198,6 +206,7 @@ export async function GET(request: NextRequest) {
 
     for (const attempt of attempts) {
       const date = new Date(attempt.createdAt);
+      if (Number.isNaN(date.getTime())) continue;
       const weekStart = new Date(date);
       weekStart.setDate(date.getDate() - date.getDay());
       const weekKey = weekStart.toISOString().split('T')[0];

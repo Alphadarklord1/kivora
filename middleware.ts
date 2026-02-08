@@ -7,6 +7,7 @@ export const config = {
     '/workspace/:path*',
     '/tools/:path*',
     '/library/:path*',
+    '/analytics/:path*',
     '/settings/:path*',
   ],
 };

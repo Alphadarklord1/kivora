@@ -152,6 +152,7 @@ export const authConfig: NextAuthConfig = {
       const isOnDashboard = nextUrl.pathname.startsWith('/workspace') ||
         nextUrl.pathname.startsWith('/tools') ||
         nextUrl.pathname.startsWith('/library') ||
+        nextUrl.pathname.startsWith('/analytics') ||
         nextUrl.pathname.startsWith('/settings');
       const isOnAuth = nextUrl.pathname.startsWith('/login') ||
         nextUrl.pathname.startsWith('/register');
