@@ -445,7 +445,12 @@ export function WorkspacePanel({
       setGeneratedContent(content);
       setOutput(content.displayText);
       addResult(toolTab, toolTabs.find(t => t.id === toolTab)?.label || toolTab, content.displayText, toolSources[toolTab]);
-      setViewMode('output');
+      if (toolTab === 'mcq' || toolTab === 'quiz') {
+        setShowInteractiveQuiz(true);
+        setViewMode('practice');
+      } else {
+        setViewMode('output');
+      }
     } catch {
       setOutput('Error generating content.');
       setGeneratedContent(null);
@@ -984,7 +989,7 @@ export function WorkspacePanel({
                 )}
 
                 {/* Output Mode */}
-                {viewMode === 'output' && output && !showInteractiveQuiz && (
+                {viewMode === 'output' && output && !showInteractiveQuiz && toolTab !== 'mcq' && toolTab !== 'quiz' && (
                   <>
                     <div className="output-actions">
                       {generatedContent && generatedContent.questions.length > 0 && (
