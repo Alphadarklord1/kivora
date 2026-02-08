@@ -982,6 +982,10 @@ export default function SettingsPage() {
           border-bottom: 1px solid var(--border-subtle);
           padding-bottom: var(--space-2);
           overflow-x: auto;
+          background: var(--bg-base);
+          position: sticky;
+          top: 0;
+          z-index: 5;
         }
 
         .settings-tab {
@@ -1556,6 +1560,19 @@ export default function SettingsPage() {
           .encryption-header {
             flex-direction: column;
             gap: var(--space-3);
+          }
+
+          .settings-tabs {
+            padding-top: var(--space-2);
+          }
+
+          .option-buttons {
+            flex-direction: column;
+          }
+
+          .option-btn {
+            width: 100%;
+            justify-content: space-between;
           }
         }
       `}</style>

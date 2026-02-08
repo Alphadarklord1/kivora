@@ -6,6 +6,7 @@
 
 /* === DESIGN TOKENS === */
 :root {
+  color-scheme: light;
   --line-scale: 1;
   /* ─────────────────────────────────────
      SPACING SYSTEM (8px rhythm)
@@ -107,6 +108,7 @@
    DARK THEME
    ───────────────────────────────────── */
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg-base: #09090b;
   --bg-surface: #18181b;
   --bg-elevated: #1f1f23;

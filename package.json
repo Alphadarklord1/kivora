@@ -10,6 +10,7 @@
     "dev": "next dev --turbopack",
     "dev:https": "next dev --turbopack --experimental-https",
     "build": "next build",
+    "export": "next build && next export",
     "start": "next start",
     "lint": "eslint",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
@@ -17,7 +18,11 @@
     "electron:build:mac": "npm run build && electron-builder --mac",
     "electron:build:win": "npm run build && electron-builder --win",
     "electron:build:linux": "npm run build && electron-builder --linux",
-    "electron:build:all": "npm run build && electron-builder -mwl"
+    "electron:build:all": "npm run build && electron-builder -mwl",
+    "mobile:init": "npx cap init",
+    "mobile:sync": "npx cap sync",
+    "mobile:android": "npx cap open android",
+    "mobile:ios": "npx cap open ios"
   },
   "build": {
     "appId": "com.studypilot.app",
@@ -84,6 +89,9 @@
     }
   },
   "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/ios": "^6.0.0",
     "@mintplex-labs/piper-tts-web": "^1.0.4",
     "@neondatabase/serverless": "^1.0.2",
     "@tanstack/react-query": "^5.90.19",
@@ -99,6 +107,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",

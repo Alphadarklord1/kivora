@@ -10,6 +10,7 @@ import { MathSolver } from '@/components/tools/MathSolver';
 import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
 import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
 import { AudioPodcast } from '@/components/tools/AudioPodcast';
+import { MatlabLab } from '@/components/tools/MatlabLab';
 import { useToastHelpers } from '@/components/ui/Toast';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { NoFilesState, EmptyState } from '@/components/ui/EmptyState';
@@ -35,7 +36,7 @@ interface WorkspacePanelProps {
 }
 
 type MainTab = 'files' | 'tools';
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph' | 'visual' | 'audio';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph' | 'visual' | 'audio' | 'matlab';
 
 const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'assignment', label: 'Assignment', icon: '📝' },
@@ -45,6 +46,7 @@ const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'pop', label: 'Pop Quiz', icon: '⚡' },
   { id: 'notes', label: 'Notes', icon: '📝' },
   { id: 'math', label: 'Math', icon: '🧮' },
+  { id: 'matlab', label: 'MATLAB Lab', icon: '📐' },
   { id: 'graph', label: 'Graph', icon: '📈' },
   { id: 'visual', label: 'Visual', icon: '🔍' },
   { id: 'audio', label: 'Audio', icon: '🎧' },
@@ -694,6 +696,10 @@ export function WorkspacePanel({
             {toolTab === 'math' ? (
               <div className="tool-content">
                 <MathSolver onGraphExpression={handleGraphFromMath} />
+              </div>
+            ) : toolTab === 'matlab' ? (
+              <div className="tool-content">
+                <MatlabLab onGraphExpression={handleGraphFromMath} />
               </div>
             ) : toolTab === 'graph' ? (
               <div className="tool-content">

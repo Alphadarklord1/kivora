@@ -28,6 +28,15 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState('');
   const [useAI, setUseAI] = useState(false);
+  const [matlabMode, setMatlabMode] = useState(true);
+
+  const normalizeMatlabSyntax = (input: string) => {
+    let out = input;
+    out = out.replace(/\.\*/g, '*').replace(/\.\//g, '/').replace(/\.\^/g, '^');
+    out = out.replace(/\bpi\b/gi, 'pi');
+    out = out.replace(/(\d)\s+(\d)/g, '$1*$2');
+    return out;
+  };
 
   const handleSolve = async () => {
     if (!problem.trim()) {
@@ -41,12 +50,20 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
     setVerification(null);
 
     try {
+      const normalized = matlabMode ? normalizeMatlabSyntax(problem.trim()) : problem.trim();
+
+      if (/\[.*\]/.test(normalized)) {
+        setError('Matrix inputs are best handled in MATLAB Lab. Switch to the MATLAB Lab tool.');
+        setSolving(false);
+        return;
+      }
+
       if (useAI) {
         // Use AI API
         const res = await fetch('/api/math/solve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ problem: problem.trim() }),
+          body: JSON.stringify({ problem: normalized }),
         });
 
         if (!res.ok) {
@@ -58,7 +75,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
         setSolution({ ...data, isOffline: false });
       } else {
         // Use offline solver
-        const result = solveOffline(problem.trim());
+        const result = solveOffline(normalized);
         setSolution(result);
       }
     } catch (err) {
@@ -214,6 +231,28 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
             </button>
           </div>
 
+          <div style={{
+            display: 'flex',
+            gap: 'var(--space-2)',
+            marginBottom: 'var(--space-4)',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: 'var(--space-2) var(--space-3)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-surface)',
+            fontSize: 'var(--font-meta)'
+          }}>
+            <span>MATLAB Syntax Mode</span>
+            <button
+              className={`btn ${matlabMode ? '' : 'ghost'}`}
+              onClick={() => setMatlabMode(prev => !prev)}
+              style={{ fontSize: 'var(--font-tiny)' }}
+            >
+              {matlabMode ? 'Enabled' : 'Disabled'}
+            </button>
+          </div>
+
           {useAI && (
             <div style={{
               padding: 'var(--space-3)',
@@ -283,7 +322,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               color: 'var(--text-muted)',
               marginTop: 'var(--space-2)'
             }}>
-              Use ^ for exponents (x^2), * for multiplication, sqrt() for square roots
+              Supports MATLAB style: `.^`, `.*`, `./` and standard math (`x^2`, `sqrt()`).
             </p>
           </div>
 
