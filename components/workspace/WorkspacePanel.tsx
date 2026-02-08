@@ -14,7 +14,7 @@ import { MatlabLab } from '@/components/tools/MatlabLab';
 import { FocusMode } from '@/components/tools/FocusMode';
 import { ExamSimulator, ExamPrepData } from '@/components/tools/ExamSimulator';
 import { FlashcardSRS } from '@/components/tools/FlashcardSRS';
-import { KnowledgeMap } from '@/components/tools/KnowledgeMap';
+import { StudyAnalytics } from '@/components/analytics/StudyAnalytics';
 import { useToastHelpers } from '@/components/ui/Toast';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { NoFilesState, EmptyState } from '@/components/ui/EmptyState';
@@ -54,7 +54,7 @@ const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'focus', label: 'Focus', icon: '⏱️' },
   { id: 'exam', label: 'Exam Prep', icon: '🎯' },
   { id: 'srs', label: 'SRS', icon: '🧩' },
-  { id: 'map', label: 'Map', icon: '🧠' },
+  { id: 'map', label: 'Analytics', icon: '📊' },
   { id: 'graph', label: 'Graph', icon: '📈' },
   { id: 'visual', label: 'Visual', icon: '🔍' },
   { id: 'audio', label: 'Audio', icon: '🎧' },
@@ -1007,7 +1007,7 @@ export function WorkspacePanel({
               </div>
             ) : toolTab === 'map' ? (
               <div className="tool-content">
-                <KnowledgeMap />
+                <StudyAnalytics />
               </div>
             ) : toolTab === 'matlab' ? (
               <div className="tool-content">
