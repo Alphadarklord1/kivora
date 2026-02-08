@@ -96,6 +96,9 @@ export function WorkspacePanel({
   const [showInteractiveQuiz, setShowInteractiveQuiz] = useState(false);
   const [viewMode, setViewMode] = useState<'input' | 'output' | 'practice'>('input');
   const [graphExpression, setGraphExpression] = useState('');
+  const [sharedInput, setSharedInput] = useState('');
+  const [recentOutputs, setRecentOutputs] = useState<Array<{ title: string; content: string }>>([]);
+  const [autoChain, setAutoChain] = useState(true);
 
   const handleGraphFromMath = (expression: string) => {
     setGraphExpression(expression);
@@ -437,6 +440,19 @@ export function WorkspacePanel({
       return;
     }
     const utterance = new SpeechSynthesisUtterance(text.slice(0, 5000));
+    const preferredVoice = localStorage.getItem('studypilot_tts_voice') || '';
+    const preferredRate = Number(localStorage.getItem('studypilot_tts_rate') || 1);
+    const preferredPitch = Number(localStorage.getItem('studypilot_tts_pitch') || 1);
+    const voices = window.speechSynthesis.getVoices();
+    if (preferredVoice) {
+      const match = voices.find(v => v.name === preferredVoice);
+      if (match) utterance.voice = match;
+    } else {
+      const best = voices.find(v => v.lang.startsWith('en') && /female|natural|premium/i.test(v.name)) || voices[0];
+      if (best) utterance.voice = best;
+    }
+    utterance.rate = preferredRate;
+    utterance.pitch = preferredPitch;
     utterance.onend = () => setSpeaking(false);
     utterance.onerror = () => setSpeaking(false);
     window.speechSynthesis.speak(utterance);

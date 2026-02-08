@@ -60,6 +60,10 @@ export default function SettingsPage() {
   const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
   const [unlinkingProvider, setUnlinkingProvider] = useState<string | null>(null);
   const [providers, setProviders] = useState<Record<string, unknown> | null>(null);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [ttsVoice, setTtsVoice] = useState<string>('');
+  const [ttsRate, setTtsRate] = useState<number>(1);
+  const [ttsPitch, setTtsPitch] = useState<number>(1);
 
   useEffect(() => {
     fetchData();
@@ -81,6 +85,22 @@ export default function SettingsPage() {
       window.history.replaceState({}, '', '/settings?tab=account');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const syncVoices = () => {
+      const list = window.speechSynthesis.getVoices();
+      setVoices(list);
+      const storedVoice = localStorage.getItem('studypilot_tts_voice') || '';
+      const storedRate = Number(localStorage.getItem('studypilot_tts_rate') || 1);
+      const storedPitch = Number(localStorage.getItem('studypilot_tts_pitch') || 1);
+      setTtsVoice(storedVoice);
+      setTtsRate(storedRate);
+      setTtsPitch(storedPitch);
+    };
+    syncVoices();
+    window.speechSynthesis.onvoiceschanged = syncVoices;
   }, []);
 
   const fetchData = async () => {
@@ -533,6 +553,59 @@ export default function SettingsPage() {
                       <span>{option.label}</span>
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Audio Voice */}
+              <div className="form-group">
+                <label>Audio Voice</label>
+                <p className="option-description">Choose a clearer voice for Listen</p>
+                <select
+                  value={ttsVoice}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setTtsVoice(value);
+                    localStorage.setItem('studypilot_tts_voice', value);
+                  }}
+                >
+                  <option value="">System Default</option>
+                  {voices.map((voice) => (
+                    <option key={voice.name} value={voice.name}>
+                      {voice.name} ({voice.lang})
+                    </option>
+                  ))}
+                </select>
+                <div className="audio-sliders">
+                  <label>
+                    Rate
+                    <input
+                      type="range"
+                      min="0.7"
+                      max="1.3"
+                      step="0.05"
+                      value={ttsRate}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        setTtsRate(value);
+                        localStorage.setItem('studypilot_tts_rate', String(value));
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Pitch
+                    <input
+                      type="range"
+                      min="0.8"
+                      max="1.2"
+                      step="0.05"
+                      value={ttsPitch}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        setTtsPitch(value);
+                        localStorage.setItem('studypilot_tts_pitch', String(value));
+                      }}
+                    />
+                  </label>
                 </div>
               </div>
 
@@ -1053,6 +1126,28 @@ export default function SettingsPage() {
           display: flex;
           gap: var(--space-2);
           flex-wrap: wrap;
+        }
+
+        select {
+          width: 100%;
+          padding: var(--space-2) var(--space-3);
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+        }
+
+        .audio-sliders {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: var(--space-2);
+          margin-top: var(--space-3);
+        }
+
+        .audio-sliders label {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-1);
+          font-size: var(--font-meta);
         }
 
         .option-btn {
