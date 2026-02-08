@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useFoldersStore } from '@/lib/store/folders';
 import { getBlob } from '@/lib/idb';
 import { renderAllPDFPages, cropImageRegion, PDFPageRender, extractImagesFromPDF, ExtractedImage } from '@/lib/pdf/image-extract';
@@ -22,6 +23,7 @@ interface SelectionRegion {
 }
 
 export function VisualAnalyzer() {
+  const searchParams = useSearchParams();
   // File selection state
   const [selectedFolderId, setSelectedFolderId] = useState<string>('');
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
@@ -50,6 +52,21 @@ export function VisualAnalyzer() {
 
   // Store data
   const { folders, topics, files } = useFoldersStore();
+
+  useEffect(() => {
+    const urlFileId = searchParams.get('fileId');
+    const stored = localStorage.getItem('visual_file_id');
+    const fileId = urlFileId || stored;
+    if (!fileId) return;
+
+    const file = files.find(f => f.id === fileId);
+    if (file) {
+      setSelectedFolderId(file.folderId);
+      setSelectedTopicId(file.topicId || '');
+      setSelectedFileId(file.id);
+      localStorage.removeItem('visual_file_id');
+    }
+  }, [searchParams, files]);
 
   // Get filtered topics and files
   const folderTopics = topics.filter((t) => t.folderId === selectedFolderId);

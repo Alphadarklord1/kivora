@@ -83,6 +83,7 @@ export function WorkspacePanel({
   const [fileContent, setFileContent] = useState<string>('');
   const [extracting, setExtracting] = useState(false);
   const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
+  const [speaking, setSpeaking] = useState(false);
 
   const totalQuickFiles = pinnedFiles.length + likedFiles.length + recentFiles.length;
   const selectedFileCount = selectedTopic ? files.length : totalQuickFiles;
@@ -199,6 +200,8 @@ export function WorkspacePanel({
   };
 
   const isImageFile = (name: string) => /\.(png|jpg|jpeg|gif|webp)$/i.test(name);
+  const isVisualSupported = (file: FileItem) =>
+    file.type === 'upload' && (/\.(pdf)$/i.test(file.name) || isImageFile(file.name));
 
   const handleViewFile = async (file: FileItem) => {
     setViewingFile(file);
@@ -273,6 +276,12 @@ export function WorkspacePanel({
       setMainTab('tools');
       setViewMode('input');
     }
+  };
+
+  const handleVisualAnalyze = (file: FileItem) => {
+    localStorage.setItem('visual_file_id', file.id);
+    setMainTab('tools');
+    setToolTab('visual');
   };
 
   const handleDeleteFile = async (fileId: string) => {
@@ -418,6 +427,20 @@ export function WorkspacePanel({
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success('Copied to clipboard');
+  };
+
+  const handleSpeak = (text: string) => {
+    if (!text) return;
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(text.slice(0, 5000));
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+    setSpeaking(true);
   };
 
   const handleSaveToLibrary = async () => {
@@ -669,6 +692,9 @@ export function WorkspacePanel({
                         <div className="file-actions">
                           <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleShareFile(file); }} title="Share">🔗</button>
                           <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">🛠️</button>
+                          {isVisualSupported(file) && (
+                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleVisualAnalyze(file); }} title="Visual Analyze">🔍</button>
+                          )}
                           <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleDownloadFile(file); }} title="Download">⬇️</button>
                           <button className={`icon-btn ${file.liked ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>{file.liked ? '❤️' : '🤍'}</button>
                           <button className={`icon-btn ${file.pinned ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>📌</button>
@@ -809,6 +835,9 @@ export function WorkspacePanel({
 
                     <div className="save-actions">
                       <button className="btn secondary" onClick={() => handleCopy(output)}>📋 Copy</button>
+                      <button className="btn secondary" onClick={() => handleSpeak(output)}>
+                        {speaking ? '🔇 Stop' : '🔊 Listen'}
+                      </button>
                       <button className="btn secondary" onClick={handleSaveToLibrary}>📚 Library</button>
                       <button className="btn secondary" onClick={handleSaveToFolder} disabled={!selectedTopic}>📁 Folder</button>
                     </div>
@@ -847,6 +876,8 @@ export function WorkspacePanel({
             <div className="viewer-actions">
               {isImageFile(viewingFile.name) ? (
                 <button className="btn" onClick={() => { setToolTab('visual'); setMainTab('tools'); if (viewingImageUrl) URL.revokeObjectURL(viewingImageUrl); setViewingImageUrl(null); setViewingFile(null); }}>🔍 Analyze Image</button>
+              ) : isVisualSupported(viewingFile) ? (
+                <button className="btn" onClick={() => { handleVisualAnalyze(viewingFile); setViewingFile(null); }}>🔍 Analyze Visually</button>
               ) : (
                 <button className="btn" onClick={() => { handleUseInTool(viewingFile); setViewingFile(null); }}>🛠️ Use in Tool</button>
               )}
