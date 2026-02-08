@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { ServiceWorkerRegistration, InstallPrompt } from "@/components/pwa";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
 // Inline script to prevent flash of unstyled content
@@ -89,6 +90,7 @@ export default function RootLayout({
         {children}
         <ServiceWorkerRegistration />
         <InstallPrompt />
+        <SpeedInsights />
       </body>
     </html>
   );
