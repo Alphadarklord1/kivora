@@ -108,6 +108,7 @@ export function WorkspacePanel({
   const [autoChain, setAutoChain] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
   const [examPrep, setExamPrep] = useState<ExamPrepData | null>(null);
+  const [lastInjected, setLastInjected] = useState<{ text: string; source: ToolSource } | null>(null);
 
   useEffect(() => {
     const storedCompact = typeof window !== 'undefined' ? localStorage.getItem('studypilot_compact_mode') : null;
@@ -120,6 +121,14 @@ export function WorkspacePanel({
     if (typeof window === 'undefined') return;
     localStorage.setItem('studypilot_compact_mode', String(compactMode));
   }, [compactMode]);
+
+  useEffect(() => {
+    if (!lastInjected) return;
+    if (!toolInputs[toolTab]) {
+      setToolInputs(prev => ({ ...prev, [toolTab]: lastInjected.text }));
+      setToolSources(prev => ({ ...prev, [toolTab]: lastInjected.source }));
+    }
+  }, [toolTab, lastInjected, toolInputs]);
 
   const handleGraphFromMath = (expression: string) => {
     setGraphExpression(expression);
@@ -294,8 +303,13 @@ export function WorkspacePanel({
         const blobData = await idbStore.get(file.localBlobId);
         if (blobData) {
           const text = await extractTextFromFile(blobData.blob, blobData.name);
+          if (!text.trim()) {
+            toast.warning('No text extracted', 'This file may be image-based. Try Visual Analyze.');
+          }
+          const source = { type: 'file' as const, fileId: file.id, fileName: file.name };
           setToolInputs(prev => ({ ...prev, [toolTab]: text }));
-          setToolSources(prev => ({ ...prev, [toolTab]: { type: 'file', fileId: file.id, fileName: file.name } }));
+          setToolSources(prev => ({ ...prev, [toolTab]: source }));
+          setLastInjected({ text, source });
           setMainTab('tools');
           setViewMode('input');
         }
@@ -303,8 +317,10 @@ export function WorkspacePanel({
         toast.error('Failed to extract text', 'Could not read the file content');
       }
     } else if (file.content) {
+      const source = { type: 'file' as const, fileId: file.id, fileName: file.name };
       setToolInputs(prev => ({ ...prev, [toolTab]: file.content || '' }));
-      setToolSources(prev => ({ ...prev, [toolTab]: { type: 'file', fileId: file.id, fileName: file.name } }));
+      setToolSources(prev => ({ ...prev, [toolTab]: source }));
+      setLastInjected({ text: file.content || '', source });
       setMainTab('tools');
       setViewMode('input');
     }
