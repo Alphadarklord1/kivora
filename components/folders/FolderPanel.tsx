@@ -196,8 +196,11 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
   return (
     <aside className="panel">
       <div className="panel-header">
-        <h2>Study Folders</h2>
-        <p className="sub">Organize your study materials</p>
+        <div>
+          <h2>Study Folders</h2>
+          <p className="sub">Organize your study materials</p>
+        </div>
+        <span className="panel-badge">{folders.length} folders</span>
       </div>
 
       <div className="panel-body">
@@ -335,18 +338,24 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
 
       <style jsx>{`
         .panel {
-          background: var(--bg-surface);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
+          position: relative;
+          background: linear-gradient(160deg, rgba(15, 23, 42, 0.02), rgba(37, 99, 235, 0.05));
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          border-radius: 20px;
           display: flex;
           flex-direction: column;
           height: 100%;
           overflow: hidden;
+          box-shadow: var(--shadow-sm);
         }
 
         .panel-header {
           padding: var(--space-4);
           border-bottom: 1px solid var(--border-subtle);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: var(--space-3);
         }
 
         .panel-header h2 {
@@ -361,10 +370,21 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
           margin: var(--space-1) 0 0;
         }
 
+        .panel-badge {
+          padding: 6px 12px;
+          border-radius: var(--radius-full);
+          background: rgba(37, 99, 235, 0.12);
+          color: var(--primary);
+          font-size: var(--font-meta);
+          font-weight: 600;
+          white-space: nowrap;
+        }
+
         .panel-body {
           flex: 1;
           padding: var(--space-4);
           overflow-y: auto;
+          background: var(--bg-surface);
         }
 
         .add-form {
@@ -379,7 +399,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
           border: 1px solid var(--border-subtle);
           border-radius: var(--radius-md);
           font-size: var(--font-meta);
-          background: var(--bg-base);
+          background: var(--bg-surface);
         }
 
         .add-form input:focus {
@@ -407,13 +427,16 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
           align-items: center;
           gap: var(--space-2);
           padding: var(--space-2) var(--space-3);
-          border-radius: var(--radius-md);
+          border-radius: 12px;
           cursor: pointer;
-          transition: background 0.15s;
+          transition: background 0.15s, border-color 0.15s, transform 0.15s;
+          border: 1px solid transparent;
         }
 
         .folder:hover {
           background: var(--bg-inset);
+          border-color: rgba(37, 99, 235, 0.18);
+          transform: translateX(2px);
         }
 
         .folder.active {
@@ -446,13 +469,16 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
           align-items: center;
           gap: var(--space-2);
           padding: var(--space-2) var(--space-3);
-          border-radius: var(--radius-md);
+          border-radius: 12px;
           cursor: pointer;
-          transition: background 0.15s;
+          transition: background 0.15s, border-color 0.15s, transform 0.15s;
+          border: 1px solid transparent;
         }
 
         .topic:hover {
           background: var(--bg-inset);
+          border-color: rgba(37, 99, 235, 0.12);
+          transform: translateX(2px);
         }
 
         .topic.active {
@@ -482,7 +508,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
           align-items: center;
           justify-content: center;
           border: none;
-          background: transparent;
+          background: var(--bg-base);
           border-radius: var(--radius-sm);
           cursor: pointer;
           font-size: 16px;
@@ -529,7 +555,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
           width: 100%;
           padding: var(--space-2) var(--space-3);
           border: 1px solid var(--border-subtle);
-          background: var(--bg-inset);
+          background: var(--bg-base);
           border-radius: var(--radius-md);
           font-size: var(--font-meta);
           color: var(--text-secondary);

@@ -71,6 +71,9 @@ export function WorkspacePanel({
   const [extracting, setExtracting] = useState(false);
   const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
 
+  const totalQuickFiles = pinnedFiles.length + likedFiles.length + recentFiles.length;
+  const selectedFileCount = selectedTopic ? files.length : totalQuickFiles;
+
   // Tool state
   const [inputText, setInputText] = useState('');
   const [output, setOutput] = useState('');
@@ -488,6 +491,37 @@ export function WorkspacePanel({
             <p className="hint">Select a folder and subfolder</p>
           )}
         </div>
+        <div className="header-actions">
+          {selectedTopic && (
+            <span className="status-pill">Ready to upload</span>
+          )}
+          {!selectedTopic && (
+            <span className="status-pill muted">Quick access view</span>
+          )}
+        </div>
+      </div>
+
+      <div className="stats-row">
+        <div className="stat-card">
+          <div className="stat-label">Files</div>
+          <div className="stat-value">{selectedFileCount}</div>
+          <div className="stat-meta">{selectedTopic ? 'In this subfolder' : 'Quick access total'}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Pinned</div>
+          <div className="stat-value">{pinnedFiles.length}</div>
+          <div className="stat-meta">Fast recalls</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Liked</div>
+          <div className="stat-value">{likedFiles.length}</div>
+          <div className="stat-meta">Favorites</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Recent</div>
+          <div className="stat-value">{recentFiles.length}</div>
+          <div className="stat-meta">Last opened</div>
+        </div>
       </div>
 
       {/* Main Tabs */}
@@ -800,27 +834,103 @@ export function WorkspacePanel({
 
       <style jsx>{`
         .workspace-panel {
-          background: var(--bg-surface);
+          position: relative;
+          background: linear-gradient(135deg, rgba(37, 99, 235, 0.06), rgba(99, 102, 241, 0.04), rgba(15, 23, 42, 0));
           border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
+          border-radius: 20px;
           display: flex;
           flex-direction: column;
           height: 100%;
           min-height: 500px;
+          overflow: hidden;
+        }
+
+        .workspace-panel::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 45%),
+                      radial-gradient(circle at 10% 20%, rgba(148, 163, 184, 0.1), transparent 40%);
+          pointer-events: none;
         }
 
         .panel-header {
+          position: relative;
+          padding: var(--space-4);
+          border-bottom: 1px solid var(--border-subtle);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: var(--space-3);
+        }
+
+        .header-info h2 { font-size: var(--font-lg); font-weight: 700; margin: 0; }
+        .breadcrumb { font-size: var(--font-meta); color: var(--primary); margin: var(--space-1) 0 0; }
+        .hint { font-size: var(--font-meta); color: var(--text-muted); margin: var(--space-1) 0 0; }
+
+        .header-actions {
+          display: flex;
+          gap: var(--space-2);
+        }
+
+        .status-pill {
+          padding: 6px 12px;
+          border-radius: var(--radius-full);
+          background: rgba(37, 99, 235, 0.12);
+          color: var(--primary);
+          font-size: var(--font-meta);
+          font-weight: 600;
+        }
+
+        .status-pill.muted {
+          background: rgba(15, 23, 42, 0.06);
+          color: var(--text-muted);
+        }
+
+        .stats-row {
+          position: relative;
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: var(--space-3);
           padding: var(--space-4);
           border-bottom: 1px solid var(--border-subtle);
         }
 
-        .header-info h2 { font-size: var(--font-lg); font-weight: 600; margin: 0; }
-        .breadcrumb { font-size: var(--font-meta); color: var(--primary); margin: var(--space-1) 0 0; }
-        .hint { font-size: var(--font-meta); color: var(--text-muted); margin: var(--space-1) 0 0; }
+        .stat-card {
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: 16px;
+          padding: var(--space-3);
+          box-shadow: var(--shadow-sm);
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-1);
+          animation: rise-in 0.4s ease;
+        }
+
+        .stat-label {
+          font-size: var(--font-tiny);
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+
+        .stat-value {
+          font-size: var(--font-xl);
+          font-weight: 700;
+        }
+
+        .stat-meta {
+          font-size: var(--font-tiny);
+          color: var(--text-secondary);
+        }
 
         .main-tabs {
           display: flex;
           border-bottom: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+          position: relative;
+          z-index: 1;
         }
 
         .main-tab {
@@ -838,7 +948,7 @@ export function WorkspacePanel({
         .main-tab:hover { background: var(--bg-inset); }
         .main-tab.active {
           color: var(--primary);
-          background: var(--primary-muted);
+          background: linear-gradient(90deg, rgba(37, 99, 235, 0.12), rgba(59, 130, 246, 0.06));
           border-bottom: 2px solid var(--primary);
         }
 
@@ -846,6 +956,7 @@ export function WorkspacePanel({
           flex: 1;
           padding: var(--space-4);
           overflow-y: auto;
+          position: relative;
         }
 
         .upload-btn {
@@ -872,12 +983,17 @@ export function WorkspacePanel({
           align-items: center;
           gap: var(--space-3);
           padding: var(--space-3);
-          background: var(--bg-inset);
-          border-radius: var(--radius-md);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: 14px;
           cursor: pointer;
-          transition: background 0.15s;
+          transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
         }
-        .file-item:hover { background: var(--bg-elevated); }
+        .file-item:hover {
+          transform: translateY(-1px);
+          border-color: rgba(37, 99, 235, 0.2);
+          box-shadow: var(--shadow-sm);
+        }
         .file-icon { font-size: 24px; flex-shrink: 0; }
         .file-info { flex: 1; min-width: 0; }
         .file-name { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -915,7 +1031,7 @@ export function WorkspacePanel({
         .tool-tab {
           padding: var(--space-2) var(--space-3);
           border: 1px solid var(--border-subtle);
-          background: var(--bg-inset);
+          background: var(--bg-surface);
           border-radius: var(--radius-full);
           font-size: var(--font-meta);
           cursor: pointer;
@@ -980,7 +1096,8 @@ export function WorkspacePanel({
           font-size: var(--font-body);
           font-family: inherit;
           resize: vertical;
-          background: var(--bg-base);
+          background: var(--bg-surface);
+          box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.06);
         }
         textarea:focus { outline: none; border-color: var(--primary); }
 
@@ -1001,7 +1118,8 @@ export function WorkspacePanel({
 
         .output-display {
           padding: var(--space-4);
-          background: var(--bg-inset);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
           border-radius: var(--radius-md);
           white-space: pre-wrap;
           font-size: var(--font-body);
@@ -1056,11 +1174,17 @@ export function WorkspacePanel({
 
         .viewer-actions { display: flex; gap: var(--space-2); padding: var(--space-4); border-top: 1px solid var(--border-subtle); flex-wrap: wrap; }
 
+        @keyframes rise-in {
+          from { transform: translateY(6px); opacity: 0.6; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+
         @media (hover: none) {
           .file-actions { opacity: 1; }
         }
 
         @media (max-width: 600px) {
+          .panel-header { flex-direction: column; align-items: flex-start; }
           .file-actions { opacity: 1; }
           .tool-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: var(--space-2); }
           .tool-tabs::-webkit-scrollbar { display: none; }
