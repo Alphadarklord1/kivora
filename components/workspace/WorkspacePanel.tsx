@@ -26,6 +26,8 @@ interface FileItem {
   name: string;
   type: string;
   content: string | null;
+  folderId?: string | null;
+  topicId?: string | null;
   liked: boolean;
   pinned: boolean;
   createdAt: string;
