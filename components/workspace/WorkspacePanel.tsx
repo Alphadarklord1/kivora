@@ -233,8 +233,9 @@ export function WorkspacePanel({
   };
 
   const isImageFile = (name: string) => /\.(png|jpg|jpeg|gif|webp)$/i.test(name);
+  const isOfficeFile = (name: string) => /\.(doc|docx|ppt|pptx)$/i.test(name);
   const isVisualSupported = (file: FileItem) =>
-    file.type === 'upload' && (/\.(pdf)$/i.test(file.name) || isImageFile(file.name));
+    file.type === 'upload' && (/\.(pdf)$/i.test(file.name) || isImageFile(file.name) || isOfficeFile(file.name));
 
   const uploadFiles = useMemo(() => files.filter(f => f.type === 'upload'), [files]);
   const hasQuickAccess = useMemo(
@@ -242,7 +243,73 @@ export function WorkspacePanel({
     [pinnedFiles.length, likedFiles.length, recentFiles.length]
   );
 
+  const openVisualForFile = async (file: FileItem) => {
+    if (isOfficeFile(file.name)) {
+      const converterBase = process.env.NEXT_PUBLIC_CONVERTER_API_BASE_URL || '';
+      if (!converterBase) {
+        toast.error('Converter not configured', 'Set NEXT_PUBLIC_CONVERTER_API_BASE_URL to enable Office conversion.');
+        return;
+      }
+      if (!file.localBlobId) {
+        toast.error('File not available', 'Please re-upload the file.');
+        return;
+      }
+      try {
+        const blobData = await idbStore.get(file.localBlobId);
+        if (!blobData?.blob) {
+          toast.error('File not available', 'Please re-upload the file.');
+          return;
+        }
+
+        const form = new FormData();
+        form.append('file', blobData.blob, blobData.name || file.name);
+        const res = await fetch(`${converterBase.replace(/\/$/, '')}/convert`, {
+          method: 'POST',
+          body: form,
+        });
+        if (!res.ok) {
+          toast.error('Conversion failed', 'Please try again later.');
+          return;
+        }
+        const pdfBlob = await res.blob();
+        const pdfName = file.name.replace(/\.(doc|docx|ppt|pptx)$/i, '.pdf');
+        const localBlobId = `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        await idbStore.put(localBlobId, {
+          blob: pdfBlob,
+          name: pdfName,
+          type: 'application/pdf',
+          size: pdfBlob.size,
+        });
+        const tempFile = {
+          id: `temp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          name: pdfName,
+          type: 'upload',
+          folderId: file.folderId,
+          topicId: file.topicId,
+          localBlobId,
+          createdAt: new Date().toISOString(),
+        };
+        localStorage.setItem('visual_temp_file', JSON.stringify(tempFile));
+        setMainTab('tools');
+        setToolTab('visual');
+        return;
+      } catch {
+        toast.error('Conversion failed', 'Please try again later.');
+        return;
+      }
+    }
+
+    localStorage.setItem('visual_file_id', file.id);
+    setMainTab('tools');
+    setToolTab('visual');
+  };
+
   const handleViewFile = async (file: FileItem) => {
+    if (isVisualSupported(file)) {
+      await openVisualForFile(file);
+      return;
+    }
+
     setViewingFile(file);
     setFileContent('');
     setViewingImageUrl(null);
@@ -326,10 +393,8 @@ export function WorkspacePanel({
     }
   };
 
-  const handleVisualAnalyze = (file: FileItem) => {
-    localStorage.setItem('visual_file_id', file.id);
-    setMainTab('tools');
-    setToolTab('visual');
+  const handleVisualAnalyze = async (file: FileItem) => {
+    await openVisualForFile(file);
   };
 
   const handleDeleteFile = async (fileId: string) => {

@@ -28,6 +28,15 @@ export function VisualAnalyzer() {
   const [selectedFolderId, setSelectedFolderId] = useState<string>('');
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
   const [selectedFileId, setSelectedFileId] = useState<string>('');
+  const [tempFile, setTempFile] = useState<{
+    id: string;
+    name: string;
+    type: string;
+    folderId: string;
+    topicId: string;
+    localBlobId: string | null;
+    createdAt: string;
+  } | null>(null);
 
   // PDF rendering state
   const [pages, setPages] = useState<PDFPageRender[]>([]);
@@ -56,6 +65,19 @@ export function VisualAnalyzer() {
   useEffect(() => {
     const urlFileId = searchParams.get('fileId');
     const stored = localStorage.getItem('visual_file_id');
+    const temp = localStorage.getItem('visual_temp_file');
+    if (temp) {
+      try {
+        const parsed = JSON.parse(temp);
+        if (parsed?.id && parsed?.localBlobId) {
+          setTempFile(parsed);
+          setSelectedFolderId(parsed.folderId || '');
+          setSelectedTopicId(parsed.topicId || '');
+          setSelectedFileId(parsed.id);
+        }
+      } catch {}
+      localStorage.removeItem('visual_temp_file');
+    }
     const fileId = urlFileId || stored;
     if (!fileId) return;
 
@@ -68,9 +90,13 @@ export function VisualAnalyzer() {
     }
   }, [searchParams, files]);
 
+  const allFiles = tempFile && !files.some(f => f.id === tempFile.id)
+    ? [tempFile, ...files]
+    : files;
+
   // Get filtered topics and files
   const folderTopics = topics.filter((t) => t.folderId === selectedFolderId);
-  const topicFiles = files.filter(
+  const topicFiles = allFiles.filter(
     (f) => f.topicId === selectedTopicId && (
       f.name.endsWith('.pdf') || f.name.endsWith('.png') || f.name.endsWith('.jpg') ||
       f.name.endsWith('.jpeg') || f.name.endsWith('.gif') || f.name.endsWith('.webp')
@@ -94,7 +120,7 @@ export function VisualAnalyzer() {
       setSelectedImageUrl(null);
 
       try {
-        const file = files.find((f) => f.id === selectedFileId);
+        const file = allFiles.find((f) => f.id === selectedFileId);
         if (!file?.localBlobId) {
           throw new Error('File not found in local storage');
         }
@@ -137,7 +163,7 @@ export function VisualAnalyzer() {
     };
 
     loadFile();
-  }, [selectedFileId, files]);
+  }, [selectedFileId, allFiles]);
 
   // Handle mouse selection on image
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
