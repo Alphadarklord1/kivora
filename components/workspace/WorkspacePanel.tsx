@@ -60,6 +60,16 @@ const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'audio', label: 'Audio', icon: '🎧' },
 ];
 
+const initialToolInputs = Object.fromEntries(
+  toolTabs.map(tab => [tab.id, ''])
+) as Record<ToolTab, string>;
+
+type ToolSource = { type: 'manual' } | { type: 'file'; fileId: string; fileName: string };
+
+const initialToolSources = Object.fromEntries(
+  toolTabs.map(tab => [tab.id, { type: 'manual' }])
+) as Record<ToolTab, ToolSource>;
+
 export function WorkspacePanel({
   selectedFolder,
   selectedTopic,
@@ -92,8 +102,9 @@ export function WorkspacePanel({
   const [showInteractiveQuiz, setShowInteractiveQuiz] = useState(false);
   const [viewMode, setViewMode] = useState<'input' | 'output' | 'practice'>('input');
   const [graphExpression, setGraphExpression] = useState('');
-  const [sharedInput, setSharedInput] = useState('');
-  const [recentOutputs, setRecentOutputs] = useState<Array<{ title: string; content: string }>>([]);
+  const [toolInputs, setToolInputs] = useState<Record<ToolTab, string>>(() => initialToolInputs);
+  const [toolSources, setToolSources] = useState<Record<ToolTab, ToolSource>>(() => initialToolSources);
+  const [recentOutputs, setRecentOutputs] = useState<Array<{ title: string; content: string; tool: ToolTab; source?: ToolSource }>>([]);
   const [autoChain, setAutoChain] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
   const [examPrep, setExamPrep] = useState<ExamPrepData | null>(null);
@@ -283,7 +294,8 @@ export function WorkspacePanel({
         const blobData = await idbStore.get(file.localBlobId);
         if (blobData) {
           const text = await extractTextFromFile(blobData.blob, blobData.name);
-          setSharedInput(text);
+          setToolInputs(prev => ({ ...prev, [toolTab]: text }));
+          setToolSources(prev => ({ ...prev, [toolTab]: { type: 'file', fileId: file.id, fileName: file.name } }));
           setMainTab('tools');
           setViewMode('input');
         }
@@ -291,7 +303,8 @@ export function WorkspacePanel({
         toast.error('Failed to extract text', 'Could not read the file content');
       }
     } else if (file.content) {
-      setSharedInput(file.content);
+      setToolInputs(prev => ({ ...prev, [toolTab]: file.content || '' }));
+      setToolSources(prev => ({ ...prev, [toolTab]: { type: 'file', fileId: file.id, fileName: file.name } }));
       setMainTab('tools');
       setViewMode('input');
     }
@@ -404,17 +417,18 @@ export function WorkspacePanel({
 
   // Tool functions
   const handleGenerate = () => {
-    if (!sharedInput.trim()) {
+    const input = toolInputs[toolTab] || '';
+    if (!input.trim()) {
       setOutput('Please enter text to process.');
       return;
     }
 
     setGenerating(true);
     try {
-      const content = getGeneratedContent(toolTab as ToolMode, sharedInput);
+      const content = getGeneratedContent(toolTab as ToolMode, input);
       setGeneratedContent(content);
       setOutput(content.displayText);
-      addResult(toolTab, content.displayText);
+      addResult(toolTab, toolTabs.find(t => t.id === toolTab)?.label || toolTab, content.displayText, toolSources[toolTab]);
       setViewMode('output');
     } catch {
       setOutput('Error generating content.');
@@ -443,8 +457,8 @@ export function WorkspacePanel({
     setViewMode('input');
   };
 
-  const addResult = (title: string, content: string) => {
-    setRecentOutputs(prev => [{ title, content }, ...prev].slice(0, 5));
+  const addResult = (tool: ToolTab, title: string, content: string, source?: ToolSource) => {
+    setRecentOutputs(prev => [{ title, content, tool, source }, ...prev].slice(0, 5));
   };
 
   const handleCopy = (text: string) => {
@@ -482,11 +496,21 @@ export function WorkspacePanel({
   const handleSaveToLibrary = async () => {
     if (!output) return;
 
+    const toolLabel = toolTabs.find(t => t.id === toolTab)?.label || toolTab;
+    const source = toolSources[toolTab];
     try {
       const res = await fetch('/api/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: toolTab, content: output }),
+        body: JSON.stringify({
+          mode: toolTab,
+          content: output,
+          metadata: {
+            title: `${toolLabel} • ${new Date().toLocaleString()}`,
+            sourceTool: toolTab,
+            ...(source?.type === 'file' ? { sourceFileId: source.fileId, sourceFileName: source.fileName } : {}),
+          },
+        }),
         credentials: 'include',
       });
       if (res.ok) {
@@ -550,6 +574,34 @@ export function WorkspacePanel({
   const formatDate = (d: string) => new Date(d).toLocaleDateString(undefined, {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
+
+  const handleSaveResultToLibrary = async (result: { title: string; content: string; tool: ToolTab; source?: ToolSource }) => {
+    try {
+      const res = await fetch('/api/library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          mode: result.tool,
+          content: result.content,
+          metadata: {
+            title: `${result.title} • ${new Date().toLocaleString()}`,
+            sourceTool: result.tool,
+            ...(result.source?.type === 'file'
+              ? { sourceFileId: result.source.fileId, sourceFileName: result.source.fileName }
+              : {}),
+          },
+        }),
+      });
+      if (res.ok) {
+        toast.success('Saved to library');
+      } else {
+        toast.error('Failed to save', 'Could not save to library');
+      }
+    } catch {
+      toast.error('Failed to save', 'Please try again');
+    }
+  };
 
   return (
     <div className={`workspace-panel ${compactMode ? 'compact' : ''}`}>
@@ -768,46 +820,63 @@ export function WorkspacePanel({
             ))}
           </div>
 
-          {/* Shared Input + Results Hub */}
-          <div className="shared-hub">
-            <div className="shared-input">
-              <h4>Shared Input</h4>
-              <p>Use one source for all tools.</p>
-              <textarea
-                value={sharedInput}
-                onChange={(e) => setSharedInput(e.target.value)}
-                placeholder="Paste your study material once, then switch tools."
-                rows={4}
-              />
-              {sharedInput && (
-                <p className="word-count">{sharedInput.split(/\s+/).filter(Boolean).length} words</p>
-              )}
+          {/* Results Hub */}
+          <div className="results-hub">
+            <div className="results-header">
+              <h4>Results Hub</h4>
+              <label className="toggle">
+                <input type="checkbox" checked={autoChain} onChange={() => setAutoChain(prev => !prev)} />
+                Auto-chain Exam Prep → Exam → SRS
+              </label>
             </div>
-            <div className="shared-results">
-              <div className="results-header">
-                <h4>Results Hub</h4>
-                <label className="toggle">
-                  <input type="checkbox" checked={autoChain} onChange={() => setAutoChain(prev => !prev)} />
-                  Auto-chain Exam Prep → Exam → SRS
-                </label>
-              </div>
-              {recentOutputs.length === 0 ? (
-                <p className="muted">Generated results will appear here.</p>
-              ) : (
-                recentOutputs.map((r, i) => (
-                  <div key={i} className="result-item">
-                    <strong>{r.title}</strong>
+            {recentOutputs.length === 0 ? (
+              <p className="muted">Generated results will appear here.</p>
+            ) : (
+              recentOutputs.map((r, i) => (
+                <div key={i} className="result-item">
+                  <strong>{r.title}</strong>
+                  <div className="result-actions">
                     <button className="btn ghost small" onClick={() => handleCopy(r.content)}>Copy</button>
+                    <button className="btn ghost small" onClick={() => handleSaveResultToLibrary(r)}>Save</button>
                   </div>
-                ))
-              )}
-            </div>
+                </div>
+              ))
+            )}
           </div>
 
             {/* Quick Library Link */}
             <div className="library-link-row">
               <Link href="/library" className="library-quick-link">📚 View Library</Link>
             </div>
+
+            {/* Tool-level Input Helpers */}
+            {(['assignment', 'summarize', 'mcq', 'quiz', 'notes', 'exam', 'srs'] as ToolTab[]).includes(toolTab) && (
+              <div className="tool-input-row">
+                {selectedTopic && uploadFiles.length > 0 && (
+                  <div className="file-selector inline">
+                    <label>Use file in tool:</label>
+                    <select onChange={(e) => {
+                      const file = files.find(f => f.id === e.target.value);
+                      if (file) handleUseInTool(file);
+                    }} defaultValue="">
+                      <option value="">-- Select a file --</option>
+                      {uploadFiles.map(f => (
+                        <option key={f.id} value={f.id}>{f.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <button
+                  className="btn ghost small"
+                  onClick={() => {
+                    setToolInputs(prev => ({ ...prev, [toolTab]: '' }));
+                    setToolSources(prev => ({ ...prev, [toolTab]: { type: 'manual' } }));
+                  }}
+                >
+                  Clear input
+                </button>
+              </div>
+            )}
 
             {/* Math Solver */}
             {toolTab === 'math' ? (
@@ -821,23 +890,31 @@ export function WorkspacePanel({
             ) : toolTab === 'exam' ? (
               <div className="tool-content">
                 <ExamSimulator
-                  sharedInput={sharedInput}
+                  inputText={toolInputs.exam}
+                  onInputChange={(value) => {
+                    setToolInputs(prev => ({ ...prev, exam: value }));
+                    setToolSources(prev => ({ ...prev, exam: { type: 'manual' } }));
+                  }}
                   autoChain={autoChain}
                   prepData={examPrep}
                   onPrepGenerated={(prep) => {
                     setExamPrep(prep);
                   }}
-                  onResult={addResult}
+                  onResult={(title, content) => addResult('exam', title, content, toolSources.exam)}
                   onSrsSeed={(prep) => setExamPrep(prep)}
                 />
               </div>
             ) : toolTab === 'srs' ? (
               <div className="tool-content">
                 <FlashcardSRS
-                  sharedInput={sharedInput}
+                  inputText={toolInputs.srs}
+                  onInputChange={(value) => {
+                    setToolInputs(prev => ({ ...prev, srs: value }));
+                    setToolSources(prev => ({ ...prev, srs: { type: 'manual' } }));
+                  }}
                   prepData={examPrep}
                   autoGenerate={autoChain}
-                  onResult={addResult}
+                  onResult={(title, content) => addResult('srs', title, content, toolSources.srs)}
                 />
               </div>
             ) : toolTab === 'map' ? (
@@ -869,31 +946,28 @@ export function WorkspacePanel({
                       {selectedTopic ? (
                         <span className="context-active">📁 {selectedFolderName} / {selectedTopicName}</span>
                       ) : (
-                        <span className="context-hint">Select a folder to use files, or use the shared input above</span>
+                        <span className="context-hint">Select a folder to use files, or paste text below</span>
                       )}
                     </div>
 
-                    {/* File selector */}
-                    {selectedTopic && uploadFiles.length > 0 && (
-                      <div className="file-selector">
-                        <label>Use content from file:</label>
-                        <select onChange={(e) => {
-                          const file = files.find(f => f.id === e.target.value);
-                          if (file) handleUseInTool(file);
-                        }} defaultValue="">
-                          <option value="">-- Select a file --</option>
-                          {uploadFiles.map(f => (
-                            <option key={f.id} value={f.id}>{f.name}</option>
-                          ))}
-                        </select>
-                      </div>
+                    <textarea
+                      value={toolInputs[toolTab] || ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setToolInputs(prev => ({ ...prev, [toolTab]: value }));
+                        setToolSources(prev => ({ ...prev, [toolTab]: { type: 'manual' } }));
+                      }}
+                      placeholder="Paste your study material here..."
+                      rows={8}
+                    />
+                    {toolInputs[toolTab] && (
+                      <p className="word-count">{toolInputs[toolTab].split(/\s+/).filter(Boolean).length} words</p>
                     )}
-
-          <button
-            className="btn generate-btn"
-            onClick={handleGenerate}
-            disabled={generating || !sharedInput.trim()}
-          >
+                    <button
+                      className="btn generate-btn"
+                      onClick={handleGenerate}
+                      disabled={generating || !(toolInputs[toolTab] || '').trim()}
+                    >
                       {generating ? 'Generating...' : `Generate ${toolTabs.find(t => t.id === toolTab)?.label}`}
                     </button>
                   </>
@@ -1199,34 +1273,22 @@ export function WorkspacePanel({
           margin-bottom: var(--space-4);
         }
 
-        .shared-hub {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-          gap: var(--space-3);
-          margin-bottom: var(--space-4);
-        }
-
-        .shared-input, .shared-results {
+        .results-hub {
           background: var(--bg-surface);
           border: 1px solid var(--border-subtle);
           border-radius: var(--radius-lg);
           padding: var(--space-3);
           box-shadow: var(--shadow-sm);
+          margin-bottom: var(--space-4);
         }
 
-        .shared-input h4, .shared-results h4 {
+        .results-hub h4 {
           margin: 0 0 var(--space-2);
           font-size: var(--font-body);
           font-weight: 600;
         }
 
-        .shared-input p {
-          margin: 0 0 var(--space-2);
-          color: var(--text-muted);
-          font-size: var(--font-meta);
-        }
-
-        .shared-results .muted {
+        .results-hub .muted {
           color: var(--text-muted);
           font-size: var(--font-meta);
         }
@@ -1255,6 +1317,12 @@ export function WorkspacePanel({
           border-radius: var(--radius-md);
           background: var(--bg-inset);
           margin-bottom: var(--space-2);
+          gap: var(--space-2);
+        }
+
+        .result-actions {
+          display: flex;
+          gap: var(--space-1);
         }
 
         .btn.ghost.small {
@@ -1320,6 +1388,31 @@ export function WorkspacePanel({
           border: 1px solid var(--border-subtle);
           border-radius: var(--radius-md);
           font-size: var(--font-meta);
+        }
+
+        .tool-input-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-2);
+          flex-wrap: wrap;
+          margin-bottom: var(--space-3);
+        }
+
+        .file-selector.inline {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          margin: 0;
+        }
+
+        .file-selector.inline label {
+          margin: 0;
+        }
+
+        .file-selector.inline select {
+          width: auto;
+          min-width: 220px;
         }
 
         textarea {
@@ -1445,13 +1538,7 @@ export function WorkspacePanel({
           font-size: var(--font-tiny);
         }
 
-        .workspace-panel.compact .shared-hub {
-          gap: var(--space-2);
-          margin-bottom: var(--space-3);
-        }
-
-        .workspace-panel.compact .shared-input,
-        .workspace-panel.compact .shared-results {
+        .workspace-panel.compact .results-hub {
           padding: var(--space-2);
         }
 

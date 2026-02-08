@@ -11,7 +11,8 @@ export interface ExamPrepData {
 }
 
 interface ExamSimulatorProps {
-  sharedInput: string;
+  inputText: string;
+  onInputChange: (value: string) => void;
   autoChain?: boolean;
   prepData?: ExamPrepData | null;
   onPrepGenerated?: (prep: ExamPrepData) => void;
@@ -20,7 +21,8 @@ interface ExamSimulatorProps {
 }
 
 export function ExamSimulator({
-  sharedInput,
+  inputText,
+  onInputChange,
   autoChain = false,
   prepData,
   onPrepGenerated,
@@ -57,7 +59,7 @@ export function ExamSimulator({
   const buildExamFromPrep = (prep: ExamPrepData | null) => {
     const bank = prep?.questionBank?.length
       ? prep.questionBank.slice(0, 10)
-      : generateSmartContent('mcq', sharedInput).questions.slice(0, 10);
+      : generateSmartContent('mcq', inputText).questions.slice(0, 10);
     setQuestions(bank);
     setAnswers({});
     setResult(null);
@@ -65,11 +67,11 @@ export function ExamSimulator({
   };
 
   const generateExamPrep = () => {
-    if (!sharedInput.trim()) return;
+    if (!inputText.trim()) return;
     setGeneratingPrep(true);
     try {
-      const summary = generateSmartContent('summarize', sharedInput);
-      const questions = generateSmartContent('mcq', sharedInput);
+      const summary = generateSmartContent('summarize', inputText);
+      const questions = generateSmartContent('mcq', inputText);
       const prep: ExamPrepData = {
         summary: summary.displayText,
         keyTopics: summary.keyTopics,
@@ -128,14 +130,24 @@ export function ExamSimulator({
         <button
           className="btn"
           onClick={generateExamPrep}
-          disabled={!sharedInput.trim() || generatingPrep}
+          disabled={!inputText.trim() || generatingPrep}
         >
           {generatingPrep ? 'Preparing...' : 'Generate Exam Prep'}
         </button>
       </div>
 
-      {!sharedInput.trim() && (
-        <div className="empty">Add shared input above to start exam prep.</div>
+      <div className="input-block">
+        <label>Exam source text</label>
+        <textarea
+          value={inputText}
+          onChange={(e) => onInputChange(e.target.value)}
+          rows={6}
+          placeholder="Paste study material for exam prep..."
+        />
+      </div>
+
+      {!inputText.trim() && (
+        <div className="empty">Paste text above to start exam prep.</div>
       )}
 
       {prepData && (
@@ -212,6 +224,9 @@ export function ExamSimulator({
         .exam-sim { display: grid; gap: var(--space-3); }
         .exam-header { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); }
         p { color: var(--text-muted); font-size: var(--font-meta); margin: 0; }
+        .input-block { display: grid; gap: var(--space-2); }
+        .input-block label { font-size: var(--font-meta); color: var(--text-secondary); }
+        textarea { padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface); }
         .empty { padding: var(--space-3); background: var(--bg-inset); border-radius: var(--radius-md); color: var(--text-muted); }
         .prep-card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 16px; padding: var(--space-3); display: grid; gap: var(--space-3); }
         .prep-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); }

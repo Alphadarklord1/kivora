@@ -5,13 +5,14 @@ import { generateSmartContent, Flashcard, GeneratedQuestion } from '@/lib/offlin
 import type { ExamPrepData } from '@/components/tools/ExamSimulator';
 
 interface FlashcardSRSProps {
-  sharedInput?: string;
+  inputText?: string;
+  onInputChange: (value: string) => void;
   prepData?: ExamPrepData | null;
   autoGenerate?: boolean;
   onResult?: (title: string, content: string) => void;
 }
 
-export function FlashcardSRS({ sharedInput = '', prepData, autoGenerate = false, onResult }: FlashcardSRSProps) {
+export function FlashcardSRS({ inputText = '', onInputChange, prepData, autoGenerate = false, onResult }: FlashcardSRSProps) {
   const [deck, setDeck] = useState<Flashcard[]>([]);
   const [index, setIndex] = useState(0);
   const [showBack, setShowBack] = useState(false);
@@ -31,15 +32,15 @@ export function FlashcardSRS({ sharedInput = '', prepData, autoGenerate = false,
     if (prep.questionBank?.length) {
       return buildDeckFromQuestions(prep.questionBank);
     }
-    if (sharedInput.trim()) {
-      const content = generateSmartContent('flashcards', sharedInput);
+    if (inputText.trim()) {
+      const content = generateSmartContent('flashcards', inputText);
       return content.flashcards || [];
     }
     return [];
   };
 
   const generateDeck = () => {
-    const content = generateSmartContent('flashcards', sharedInput);
+    const content = generateSmartContent('flashcards', inputText);
     const cards = content.flashcards || [];
     setDeck(cards);
     setIndex(0);
@@ -72,7 +73,7 @@ export function FlashcardSRS({ sharedInput = '', prepData, autoGenerate = false,
       setSavedId(null);
       onResult?.('SRS Deck', `Deck ready: ${cards.length} cards`);
     }
-  }, [autoGenerate, prepData, deck.length, sharedInput, onResult]);
+  }, [autoGenerate, prepData, deck.length, inputText, onResult]);
 
   const rate = async (rating: 'again' | 'hard' | 'good' | 'easy') => {
     const next = Math.min(deck.length - 1, index + 1);
@@ -113,9 +114,18 @@ export function FlashcardSRS({ sharedInput = '', prepData, autoGenerate = false,
       <div className="srs">
         <h3>Flashcard SRS</h3>
         <p>Generate spaced‑repetition flashcards from your notes.</p>
+        <div className="input-block">
+          <label>SRS source text</label>
+          <textarea
+            value={inputText}
+            onChange={(e) => onInputChange(e.target.value)}
+            rows={6}
+            placeholder="Paste study material for flashcards..."
+          />
+        </div>
         <div className="actions">
-          <button className="btn" onClick={generateDeck} disabled={!sharedInput.trim()}>
-            Generate from Shared Input
+          <button className="btn" onClick={generateDeck} disabled={!inputText.trim()}>
+            Generate Deck
           </button>
           {prepData && (
             <button className="btn secondary" onClick={generateFromPrep}>
@@ -123,12 +133,15 @@ export function FlashcardSRS({ sharedInput = '', prepData, autoGenerate = false,
             </button>
           )}
         </div>
-        {!sharedInput.trim() && !prepData && (
+        {!inputText.trim() && !prepData && (
           <div className="empty">Add shared input or generate Exam Prep first.</div>
         )}
         <style jsx>{`
           .srs { display: grid; gap: var(--space-3); }
           p { color: var(--text-muted); font-size: var(--font-meta); margin: 0; }
+          .input-block { display: grid; gap: var(--space-2); }
+          .input-block label { font-size: var(--font-meta); color: var(--text-secondary); }
+          textarea { padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface); }
           .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
           .empty { padding: var(--space-3); background: var(--bg-inset); border-radius: var(--radius-md); color: var(--text-muted); }
         `}</style>
