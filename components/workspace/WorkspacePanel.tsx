@@ -11,6 +11,11 @@ import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
 import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
 import { AudioPodcast } from '@/components/tools/AudioPodcast';
 import { MatlabLab } from '@/components/tools/MatlabLab';
+import { FocusMode } from '@/components/tools/FocusMode';
+import { AutoOutline } from '@/components/tools/AutoOutline';
+import { ExamSimulator } from '@/components/tools/ExamSimulator';
+import { FlashcardSRS } from '@/components/tools/FlashcardSRS';
+import { KnowledgeMap } from '@/components/tools/KnowledgeMap';
 import { useToastHelpers } from '@/components/ui/Toast';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { NoFilesState, EmptyState } from '@/components/ui/EmptyState';
@@ -37,7 +42,7 @@ interface WorkspacePanelProps {
 }
 
 type MainTab = 'files' | 'tools';
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph' | 'visual' | 'audio' | 'matlab';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph' | 'visual' | 'audio' | 'matlab' | 'focus' | 'outline' | 'exam' | 'srs' | 'map';
 
 const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'assignment', label: 'Assignment', icon: '📝' },
@@ -48,6 +53,11 @@ const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'notes', label: 'Notes', icon: '📝' },
   { id: 'math', label: 'Math', icon: '🧮' },
   { id: 'matlab', label: 'MATLAB Lab', icon: '📐' },
+  { id: 'focus', label: 'Focus', icon: '⏱️' },
+  { id: 'outline', label: 'Outline', icon: '🗂️' },
+  { id: 'exam', label: 'Exam', icon: '🎯' },
+  { id: 'srs', label: 'SRS', icon: '🧩' },
+  { id: 'map', label: 'Map', icon: '🧠' },
   { id: 'graph', label: 'Graph', icon: '📈' },
   { id: 'visual', label: 'Visual', icon: '🔍' },
   { id: 'audio', label: 'Audio', icon: '🎧' },
@@ -698,6 +708,26 @@ export function WorkspacePanel({
             {toolTab === 'math' ? (
               <div className="tool-content">
                 <MathSolver onGraphExpression={handleGraphFromMath} />
+              </div>
+            ) : toolTab === 'focus' ? (
+              <div className="tool-content">
+                <FocusMode />
+              </div>
+            ) : toolTab === 'outline' ? (
+              <div className="tool-content">
+                <AutoOutline />
+              </div>
+            ) : toolTab === 'exam' ? (
+              <div className="tool-content">
+                <ExamSimulator />
+              </div>
+            ) : toolTab === 'srs' ? (
+              <div className="tool-content">
+                <FlashcardSRS />
+              </div>
+            ) : toolTab === 'map' ? (
+              <div className="tool-content">
+                <KnowledgeMap />
               </div>
             ) : toolTab === 'matlab' ? (
               <div className="tool-content">
