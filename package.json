@@ -10,6 +10,7 @@
     "dev": "next dev --turbopack",
     "dev:https": "next dev --turbopack --experimental-https",
     "build": "next build",
+    "build:stable": "NEXT_USE_TURBOPACK=0 next build",
     "export": "next build && next export",
     "start": "next start",
     "lint": "eslint",
