@@ -19,7 +19,7 @@ import {
   generateSalt,
 } from './encryption';
 
-export const ENCRYPTION_DISABLED = true;
+export const ENCRYPTION_DISABLED = false;
 
 const VAULT_KEY = 'studypilot_vault';
 const SESSION_KEY = 'studypilot_session_key';

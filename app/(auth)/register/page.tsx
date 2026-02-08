@@ -30,7 +30,10 @@ export default function RegisterPage() {
       setError('Email and password are required');
       return;
     }
-    // TEMP: password enforcement disabled
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;

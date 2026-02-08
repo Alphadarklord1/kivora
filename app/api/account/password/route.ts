@@ -31,9 +31,12 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { currentPassword, newPassword } = body;
 
-    // TEMP: password enforcement disabled (accept any length)
-    if (!newPassword) {
-      return NextResponse.json({ error: 'New password is required' }, { status: 400 });
+    // Validate new password
+    if (!newPassword || newPassword.length < 6) {
+      return NextResponse.json(
+        { error: 'New password must be at least 6 characters' },
+        { status: 400 }
+      );
     }
 
     // Get user with password hash
@@ -47,7 +50,23 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // TEMP: password enforcement disabled (skip current password validation)
+    // If user has a password, verify current password
+    if (user[0].passwordHash) {
+      if (!currentPassword) {
+        return NextResponse.json(
+          { error: 'Current password is required' },
+          { status: 400 }
+        );
+      }
+
+      const isValid = await bcrypt.compare(currentPassword, user[0].passwordHash);
+      if (!isValid) {
+        return NextResponse.json(
+          { error: 'Current password is incorrect' },
+          { status: 400 }
+        );
+      }
+    }
 
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
