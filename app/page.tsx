@@ -78,6 +78,7 @@ export default async function LandingPage() {
       {/* Hero Section */}
       <section className="hero">
         <div className="hero-content">
+          <div className="hero-badge">Built for focused learning</div>
           <h1>Study Smarter, Not Harder</h1>
           <p className="hero-subtitle">
             Transform your study materials into interactive quizzes, summaries, and notes.
@@ -100,6 +101,11 @@ export default async function LandingPage() {
             )}
           </div>
           <p className="hero-note">No credit card required. Free forever for students.</p>
+          <div className="hero-trust">
+            <span>🔒 Privacy-first</span>
+            <span>⚡ Offline-ready tools</span>
+            <span>📱 Mobile-friendly</span>
+          </div>
         </div>
         <div className="hero-visual">
           <div className="hero-mockup">
@@ -313,6 +319,19 @@ export default async function LandingPage() {
           margin-bottom: var(--space-3);
         }
 
+        .hero-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--space-2);
+          padding: 6px 14px;
+          border-radius: var(--radius-full);
+          background: rgba(37, 99, 235, 0.12);
+          color: var(--primary);
+          font-size: var(--font-meta);
+          font-weight: 600;
+          margin-bottom: var(--space-3);
+        }
+
         .hero-subtitle {
           font-size: var(--font-lg);
           color: var(--text-secondary);
@@ -355,6 +374,15 @@ export default async function LandingPage() {
         .hero-note {
           font-size: var(--font-meta);
           color: var(--text-muted);
+        }
+
+        .hero-trust {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--space-2);
+          margin-top: var(--space-3);
+          font-size: var(--font-tiny);
+          color: var(--text-secondary);
         }
 
         .hero-visual {
@@ -477,6 +505,12 @@ export default async function LandingPage() {
           border-radius: 18px;
           padding: var(--space-4);
           box-shadow: var(--shadow-sm);
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .feature-card:hover {
+          transform: translateY(-2px);
+          box-shadow: var(--shadow-md);
         }
 
         .feature-icon {
@@ -496,6 +530,11 @@ export default async function LandingPage() {
           border: 1px solid var(--border-subtle);
           border-radius: 16px;
           padding: var(--space-3);
+          transition: transform 0.2s;
+        }
+
+        .tool-card:hover {
+          transform: translateY(-2px);
         }
 
         .how-it-works {
@@ -582,6 +621,16 @@ export default async function LandingPage() {
             align-items: flex-start;
           }
 
+          .nav-links {
+            width: 100%;
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .nav-btn {
+            text-align: center;
+          }
+
           .hero {
             padding-top: var(--space-6);
           }
@@ -589,6 +638,11 @@ export default async function LandingPage() {
           .hero-actions {
             flex-direction: column;
             align-items: stretch;
+          }
+
+          .hero-trust {
+            flex-direction: column;
+            align-items: flex-start;
           }
 
           .mockup-content {

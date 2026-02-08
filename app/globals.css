@@ -217,6 +217,7 @@ html {
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -226,6 +227,15 @@ body {
   color: var(--text-primary);
   background: var(--bg-base);
   min-height: 100vh;
+}
+
+a {
+  color: inherit;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* === LAYOUT === */

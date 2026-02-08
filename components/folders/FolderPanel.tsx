@@ -568,6 +568,21 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
           border-color: var(--border-default);
           color: var(--text-primary);
         }
+
+        @media (max-width: 600px) {
+          .panel {
+            height: auto;
+          }
+
+          .panel-header {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .panel-badge {
+            align-self: flex-start;
+          }
+        }
       `}</style>
 
       {/* Share Dialog */}
