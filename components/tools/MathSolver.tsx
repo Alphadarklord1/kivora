@@ -328,28 +328,45 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
             </label>
             {/* Inline Symbol Bar */}
             <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 'var(--space-2)',
+              padding: 'var(--space-2)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--bg-inset)',
               marginBottom: 'var(--space-2)'
             }}>
-              {SYMBOLS.map((s) => (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 'var(--space-2)'
+              }}>
+                <span style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)' }}>
+                  Quick symbols
+                </span>
                 <button
-                  key={s.label}
-                  className="btn ghost"
-                  onClick={() => insertSymbol(s.value)}
+                  className="btn"
+                  onClick={() => setShowKeyboard(true)}
                   style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1) var(--space-2)' }}
                 >
-                  {s.label}
+                  Open keyboard
                 </button>
-              ))}
-              <button
-                className="btn ghost"
-                onClick={() => setShowKeyboard(true)}
-                style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1) var(--space-2)' }}
-              >
-                ⌨️ More
-              </button>
+              </div>
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 'var(--space-2)'
+              }}>
+                {SYMBOLS.map((s) => (
+                  <button
+                    key={s.label}
+                    className="btn ghost"
+                    onClick={() => insertSymbol(s.value)}
+                    style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1) var(--space-2)' }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <textarea
               value={problem}
