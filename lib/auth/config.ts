@@ -153,7 +153,10 @@ export const authConfig: NextAuthConfig = {
         nextUrl.pathname.startsWith('/tools') ||
         nextUrl.pathname.startsWith('/library') ||
         nextUrl.pathname.startsWith('/analytics') ||
-        nextUrl.pathname.startsWith('/settings');
+        nextUrl.pathname.startsWith('/settings') ||
+        nextUrl.pathname.startsWith('/sharing') ||
+        nextUrl.pathname.startsWith('/planner') ||
+        nextUrl.pathname.startsWith('/podcast');
       const isOnAuth = nextUrl.pathname.startsWith('/login') ||
         nextUrl.pathname.startsWith('/register');
 

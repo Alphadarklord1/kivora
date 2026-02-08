@@ -9,5 +9,8 @@ export const config = {
     '/library/:path*',
     '/analytics/:path*',
     '/settings/:path*',
+    '/sharing/:path*',
+    '/planner/:path*',
+    '/podcast/:path*',
   ],
 };

@@ -24,7 +24,7 @@ const navItems = [
   { href: '/library', label: 'Library', icon: '📚', activeIcon: '📚' },
   { href: '/podcast', label: 'Audio', icon: '🎧', activeIcon: '🎧' },
   { href: '/analytics', label: 'Analytics', icon: '📊', activeIcon: '📊' },
-  { href: '/shared', label: 'Sharing', icon: '🔗', activeIcon: '🔗' },
+  { href: '/sharing', label: 'Sharing', icon: '🔗', activeIcon: '🔗' },
 ];
 
 // Mobile bottom nav shows only the 5 most important items
@@ -34,7 +34,7 @@ const mobileNavItems = navItems.filter(item =>
 
 // Extra items go in the mobile user menu
 const mobileMenuExtras = navItems.filter(item =>
-  ['/analytics', '/shared'].includes(item.href)
+  ['/analytics', '/sharing'].includes(item.href)
 );
 
 export function AppShell({ children, user }: AppShellProps) {
