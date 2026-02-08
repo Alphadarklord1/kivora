@@ -27,6 +27,7 @@ export default function SharedContentPage() {
   const [data, setData] = useState<SharedContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!shareToken) return;
@@ -44,6 +45,11 @@ export default function SharedContentPage() {
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   }, [shareToken]);
+
+  useEffect(() => {
+    if (!data) return;
+    document.title = `${data.contentName} · StudyPilot Share`;
+  }, [data]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString(undefined, {
@@ -77,6 +83,36 @@ export default function SharedContentPage() {
     };
     return icons[type] || '📄';
   };
+
+  const handleCopy = async () => {
+    if (!data) return;
+    let text = '';
+
+    if (data.contentType === 'library') {
+      text = (data.content.content as string) || '';
+    } else if (data.contentType === 'file') {
+      text = (data.content.content as string) || JSON.stringify(data.content, null, 2);
+    } else {
+      text = JSON.stringify(data.content, null, 2);
+    }
+
+    if (!text) {
+      setCopyMessage('Nothing to copy yet.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyMessage('Copied to clipboard.');
+      setTimeout(() => setCopyMessage(null), 2000);
+    } catch {
+      setCopyMessage('Clipboard access failed. Try selecting and copying manually.');
+    }
+  };
+
+  const ownerInitial = data?.owner?.name?.trim()
+    ? data.owner.name.trim().charAt(0).toUpperCase()
+    : 'S';
 
   if (loading) {
     return (
@@ -126,23 +162,24 @@ export default function SharedContentPage() {
         <div className="content-card">
           {/* Shared by info */}
           <div className="shared-by">
-            <div className="owner-avatar">
-              {data.owner.image ? (
-                <img src={data.owner.image} alt={data.owner.name} />
-              ) : (
-                <span>{data.owner.name.charAt(0).toUpperCase()}</span>
-              )}
-            </div>
-            <div className="owner-info">
-              <span className="owner-name">{data.owner.name}</span>
-              <span className="share-meta">
-                Shared on {formatDate(data.share.createdAt)}
-                {data.share.expiresAt && (
-                  <> · Expires {formatDate(data.share.expiresAt)}</>
-                )}
-              </span>
-            </div>
+          <div className="owner-avatar">
+            {data.owner.image ? (
+              <img src={data.owner.image} alt={data.owner.name} />
+            ) : (
+              <span>{ownerInitial}</span>
+            )}
           </div>
+          <div className="owner-info">
+            <span className="owner-name">{data.owner.name}</span>
+            <span className="share-meta">
+              Shared on {formatDate(data.share.createdAt)}
+              {data.share.expiresAt && (
+                <> · Expires {formatDate(data.share.expiresAt)}</>
+              )}
+            </span>
+            <span className="share-permission">Permission: {data.share.permission}</span>
+          </div>
+        </div>
 
           {/* Content header */}
           <div className="content-header">
@@ -156,7 +193,11 @@ export default function SharedContentPage() {
           {/* Content body */}
           <div className="content-body">
             {data.contentType === 'file' && (
-              <FileContent content={data.content} getFileTypeIcon={getFileTypeIcon} />
+              <FileContent
+                content={data.content}
+                getFileTypeIcon={getFileTypeIcon}
+                permission={data.share.permission}
+              />
             )}
             {data.contentType === 'folder' && (
               <FolderContent content={data.content} getFileTypeIcon={getFileTypeIcon} />
@@ -167,21 +208,20 @@ export default function SharedContentPage() {
             {data.contentType === 'library' && (
               <LibraryContent content={data.content} />
             )}
+            {data.contentType !== 'file' &&
+              data.contentType !== 'folder' &&
+              data.contentType !== 'topic' &&
+              data.contentType !== 'library' && (
+                <p className="no-content">Unsupported shared content type.</p>
+              )}
           </div>
 
           {/* Actions */}
           <div className="content-actions">
-            <button
-              className="btn secondary"
-              onClick={() => {
-                const text = data.contentType === 'library'
-                  ? (data.content.content as string)
-                  : JSON.stringify(data.content, null, 2);
-                navigator.clipboard.writeText(text);
-              }}
-            >
+            <button className="btn secondary" onClick={handleCopy} type="button">
               📋 Copy Content
             </button>
+            {copyMessage && <span className="copy-status">{copyMessage}</span>}
             <Link href="/register" className="btn">
               Create Your Own
             </Link>
@@ -205,10 +245,19 @@ export default function SharedContentPage() {
   );
 }
 
-function FileContent({ content, getFileTypeIcon }: { content: Record<string, unknown>; getFileTypeIcon: (type: string) => string }) {
+function FileContent({
+  content,
+  getFileTypeIcon,
+  permission,
+}: {
+  content: Record<string, unknown>;
+  getFileTypeIcon: (type: string) => string;
+  permission: string;
+}) {
   const fileContent = content.content as string | null;
   const fileType = content.type as string;
   const hasBlob = content.hasBlob as boolean | undefined;
+  const isMetadataOnly = permission !== 'view';
 
   return (
     <div className="file-content">
@@ -223,7 +272,13 @@ function FileContent({ content, getFileTypeIcon }: { content: Record<string, unk
       {fileContent ? (
         <pre className="content-preview">{fileContent}</pre>
       ) : (
-        <p className="no-content">No text content available for this file.</p>
+        <p className="no-content">
+          {isMetadataOnly
+            ? 'Text content is hidden for this share permission.'
+            : hasBlob
+              ? 'Text content is unavailable because the attachment is stored locally.'
+              : 'No text content available for this file.'}
+        </p>
       )}
     </div>
   );
@@ -235,7 +290,7 @@ function FolderContent({ content, getFileTypeIcon }: { content: Record<string, u
 
   return (
     <div className="folder-content">
-      {topics && topics.length > 0 && (
+      {topics && topics.length > 0 ? (
         <div className="folder-section">
           <h3>Subfolders ({topics.length})</h3>
           <ul className="item-list">
@@ -247,8 +302,10 @@ function FolderContent({ content, getFileTypeIcon }: { content: Record<string, u
             ))}
           </ul>
         </div>
+      ) : (
+        <p className="no-content">No subfolders in this folder.</p>
       )}
-      {files && files.length > 0 && (
+      {files && files.length > 0 ? (
         <div className="folder-section">
           <h3>Files ({files.length})</h3>
           <ul className="item-list">
@@ -266,6 +323,8 @@ function FolderContent({ content, getFileTypeIcon }: { content: Record<string, u
             ))}
           </ul>
         </div>
+      ) : (
+        <p className="no-content">No files in this folder.</p>
       )}
     </div>
   );
@@ -448,6 +507,11 @@ const styles = `
     color: var(--text-muted);
   }
 
+  .share-permission {
+    font-size: var(--font-tiny);
+    color: var(--text-faint);
+  }
+
   .content-header {
     display: flex;
     align-items: center;
@@ -582,6 +646,13 @@ const styles = `
     gap: var(--space-3);
     padding-top: var(--space-4);
     border-top: 1px solid var(--border-subtle);
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .copy-status {
+    font-size: var(--font-meta);
+    color: var(--text-muted);
   }
 
   .cta-card {
