@@ -388,16 +388,17 @@ export function WorkspacePanel({
 
   // Tool functions
   const handleGenerate = () => {
-    if (!inputText.trim()) {
+    if (!sharedInput.trim()) {
       setOutput('Please enter text to process.');
       return;
     }
 
     setGenerating(true);
     try {
-      const content = getGeneratedContent(toolTab as ToolMode, inputText);
+      const content = getGeneratedContent(toolTab as ToolMode, sharedInput);
       setGeneratedContent(content);
       setOutput(content.displayText);
+      setRecentOutputs(prev => [{ title: toolTab, content: content.displayText }, ...prev].slice(0, 5));
       setViewMode('output');
     } catch {
       setOutput('Error generating content.');
@@ -420,7 +421,7 @@ export function WorkspacePanel({
   };
 
   const handleToolReset = () => {
-    setInputText('');
+    setSharedInput('');
     setOutput('');
     setGeneratedContent(null);
     setShowInteractiveQuiz(false);
@@ -728,18 +729,51 @@ export function WorkspacePanel({
         {/* TOOLS TAB */}
         {mainTab === 'tools' && (
           <>
-            {/* Tool Tabs */}
-            <div className="tool-tabs">
-              {toolTabs.map(tab => (
-                <button
-                  key={tab.id}
-                  className={`tool-tab ${toolTab === tab.id ? 'active' : ''}`}
-                  onClick={() => { setToolTab(tab.id); handleToolReset(); }}
-                >
-                  {tab.icon} {tab.label}
-                </button>
-              ))}
+          {/* Tool Tabs */}
+          <div className="tool-tabs">
+            {toolTabs.map(tab => (
+              <button
+                key={tab.id}
+                className={`tool-tab ${toolTab === tab.id ? 'active' : ''}`}
+                onClick={() => { setToolTab(tab.id); handleToolReset(); }}
+              >
+                {tab.icon} {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Shared Input + Results Hub */}
+          <div className="shared-hub">
+            <div className="shared-input">
+              <h4>Shared Input</h4>
+              <p>Use one source for all tools.</p>
+              <textarea
+                value={sharedInput}
+                onChange={(e) => setSharedInput(e.target.value)}
+                placeholder="Paste your study material once, then switch tools."
+                rows={4}
+              />
             </div>
+            <div className="shared-results">
+              <div className="results-header">
+                <h4>Results Hub</h4>
+                <label className="toggle">
+                  <input type="checkbox" checked={autoChain} onChange={() => setAutoChain(prev => !prev)} />
+                  Auto-chain Outline → Exam → Flashcards
+                </label>
+              </div>
+              {recentOutputs.length === 0 ? (
+                <p className="muted">Generated results will appear here.</p>
+              ) : (
+                recentOutputs.map((r, i) => (
+                  <div key={i} className="result-item">
+                    <strong>{r.title}</strong>
+                    <button className="btn ghost small" onClick={() => handleCopy(r.content)}>Copy</button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
 
             {/* Quick Library Link */}
             <div className="library-link-row">
@@ -816,21 +850,21 @@ export function WorkspacePanel({
                       </div>
                     )}
 
-                    <textarea
-                      value={inputText}
-                      onChange={(e) => setInputText(e.target.value)}
-                      placeholder="Paste your study material here..."
-                      rows={8}
-                    />
-                    {inputText && (
-                      <p className="word-count">{inputText.split(/\s+/).filter(Boolean).length} words</p>
-                    )}
+          <textarea
+            value={sharedInput}
+            onChange={(e) => setSharedInput(e.target.value)}
+            placeholder="Paste your study material here..."
+            rows={8}
+          />
+          {sharedInput && (
+            <p className="word-count">{sharedInput.split(/\s+/).filter(Boolean).length} words</p>
+          )}
 
-                    <button
-                      className="btn generate-btn"
-                      onClick={handleGenerate}
-                      disabled={generating || !inputText.trim()}
-                    >
+          <button
+            className="btn generate-btn"
+            onClick={handleGenerate}
+            disabled={generating || !sharedInput.trim()}
+          >
                       {generating ? 'Generating...' : `Generate ${toolTabs.find(t => t.id === toolTab)?.label}`}
                     </button>
                   </>
@@ -1111,6 +1145,69 @@ export function WorkspacePanel({
           gap: var(--space-2);
           flex-wrap: wrap;
           margin-bottom: var(--space-4);
+        }
+
+        .shared-hub {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+          gap: var(--space-3);
+          margin-bottom: var(--space-4);
+        }
+
+        .shared-input, .shared-results {
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          padding: var(--space-3);
+          box-shadow: var(--shadow-sm);
+        }
+
+        .shared-input h4, .shared-results h4 {
+          margin: 0 0 var(--space-2);
+          font-size: var(--font-body);
+          font-weight: 600;
+        }
+
+        .shared-input p {
+          margin: 0 0 var(--space-2);
+          color: var(--text-muted);
+          font-size: var(--font-meta);
+        }
+
+        .shared-results .muted {
+          color: var(--text-muted);
+          font-size: var(--font-meta);
+        }
+
+        .results-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-2);
+          margin-bottom: var(--space-2);
+        }
+
+        .toggle {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          font-size: var(--font-tiny);
+          color: var(--text-muted);
+        }
+
+        .result-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: var(--space-2);
+          border-radius: var(--radius-md);
+          background: var(--bg-inset);
+          margin-bottom: var(--space-2);
+        }
+
+        .btn.ghost.small {
+          padding: var(--space-1) var(--space-2);
+          font-size: var(--font-tiny);
         }
 
         .tool-tab {
