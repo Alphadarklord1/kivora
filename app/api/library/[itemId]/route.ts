@@ -46,3 +46,29 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
   return NextResponse.json({ success: true });
 }
+
+export async function PUT(request: NextRequest, { params }: RouteParams) {
+  const userId = await getUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { itemId } = await params;
+  const body = await request.json();
+  const { content, metadata } = body;
+
+  const [updated] = await db
+    .update(libraryItems)
+    .set({
+      ...(content !== undefined && { content }),
+      ...(metadata !== undefined && { metadata }),
+    })
+    .where(and(eq(libraryItems.id, itemId), eq(libraryItems.userId, userId)))
+    .returning();
+
+  if (!updated) {
+    return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+  }
+
+  return NextResponse.json(updated);
+}
