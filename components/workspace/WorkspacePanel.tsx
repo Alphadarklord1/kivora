@@ -15,6 +15,7 @@ import { useToastHelpers } from '@/components/ui/Toast';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { NoFilesState, EmptyState } from '@/components/ui/EmptyState';
 import { ShareDialog } from '@/components/share';
+import { FocusTimer } from '@/components/workspace/FocusTimer';
 
 interface FileItem {
   id: string;
@@ -524,6 +525,7 @@ export function WorkspacePanel({
           <div className="stat-value">{recentFiles.length}</div>
           <div className="stat-meta">Last opened</div>
         </div>
+        <FocusTimer />
       </div>
 
       {/* Main Tabs */}

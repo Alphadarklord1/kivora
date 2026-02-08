@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { signIn, signOut } from 'next-auth/react';
+import { signIn, signOut, getProviders } from 'next-auth/react';
 import { useVault } from '@/providers/VaultProvider';
 
 type SettingsTab = 'profile' | 'appearance' | 'security' | 'account';
@@ -59,9 +59,11 @@ export default function SettingsPage() {
   // OAuth linking
   const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
   const [unlinkingProvider, setUnlinkingProvider] = useState<string | null>(null);
+  const [providers, setProviders] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     fetchData();
+    getProviders().then(setProviders).catch(() => setProviders(null));
 
     // Check URL params for OAuth callback
     const params = new URLSearchParams(window.location.search);
@@ -263,6 +265,11 @@ export default function SettingsPage() {
   const handleLinkAccount = async (provider: 'google' | 'github') => {
     setLinkingProvider(provider);
     try {
+      if (!providers?.[provider]) {
+        showMessage('error', `${provider} sign-in is not configured`);
+        setLinkingProvider(null);
+        return;
+      }
       // Redirect to OAuth provider - when they come back, the account will be linked
       await signIn(provider, { callbackUrl: '/settings?tab=account&linked=' + provider });
     } catch {
@@ -793,7 +800,7 @@ export default function SettingsPage() {
                         <button
                           className="btn small google-btn"
                           onClick={() => handleLinkAccount('google')}
-                          disabled={linkingProvider === 'google'}
+                          disabled={linkingProvider === 'google' || !providers?.google}
                         >
                           {linkingProvider === 'google' ? 'Connecting...' : 'Connect'}
                         </button>
@@ -830,7 +837,7 @@ export default function SettingsPage() {
                         <button
                           className="btn small github-btn"
                           onClick={() => handleLinkAccount('github')}
-                          disabled={linkingProvider === 'github'}
+                          disabled={linkingProvider === 'github' || !providers?.github}
                         >
                           {linkingProvider === 'github' ? 'Connecting...' : 'Connect'}
                         </button>
