@@ -109,13 +109,25 @@ export default function SettingsPage() {
   };
 
   const applySettings = (s: UserSettings) => {
-    // Apply theme
-    document.documentElement.setAttribute('data-theme', s.theme);
+    const resolveTheme = (theme: string) => {
+      if (theme === 'system') {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      return theme;
+    };
+
+    // Apply theme (resolve system to actual theme)
+    const resolvedTheme = resolveTheme(s.theme);
+    document.documentElement.setAttribute('data-theme', resolvedTheme);
     localStorage.setItem('studypilot_theme', s.theme);
 
     // Apply font size
     document.documentElement.style.setProperty('--font-scale', s.fontSize);
     localStorage.setItem('studypilot_fontSize', s.fontSize);
+
+    // Apply line height scale
+    document.documentElement.style.setProperty('--line-scale', s.lineHeight);
+    localStorage.setItem('studypilot_lineHeight', s.lineHeight);
 
     // Apply density
     document.documentElement.setAttribute('data-density', s.density);
@@ -489,6 +501,29 @@ export default function SettingsPage() {
                       <span className="density-icon">{option.icon}</span>
                       <span className="density-label">{option.label}</span>
                       <span className="density-desc">{option.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Line Height */}
+              <div className="form-group">
+                <label>Line Height</label>
+                <p className="option-description">Increase or decrease reading comfort</p>
+                <div className="option-buttons">
+                  {[
+                    { value: '0.95', label: 'Tight' },
+                    { value: '1', label: 'Normal' },
+                    { value: '1.1', label: 'Relaxed' },
+                    { value: '1.2', label: 'Extra' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      className={`option-btn ${settings.lineHeight === option.value ? 'active' : ''}`}
+                      onClick={() => handleSaveSettings({ lineHeight: option.value })}
+                      disabled={saving}
+                    >
+                      <span>{option.label}</span>
                     </button>
                   ))}
                 </div>

@@ -8,6 +8,7 @@ export function SettingsInitializer() {
     const theme = localStorage.getItem('studypilot_theme');
     const fontSize = localStorage.getItem('studypilot_fontSize');
     const density = localStorage.getItem('studypilot_density');
+    const lineHeight = localStorage.getItem('studypilot_lineHeight');
 
     // Apply theme
     if (theme) {
@@ -26,6 +27,11 @@ export function SettingsInitializer() {
     // Apply font scale
     if (fontSize) {
       document.documentElement.style.setProperty('--font-scale', fontSize);
+    }
+
+    // Apply line height scale
+    if (lineHeight) {
+      document.documentElement.style.setProperty('--line-scale', lineHeight);
     }
 
     // Apply density

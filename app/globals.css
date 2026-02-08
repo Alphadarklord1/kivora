@@ -6,6 +6,7 @@
 
 /* === DESIGN TOKENS === */
 :root {
+  --line-scale: 1;
   /* ─────────────────────────────────────
      SPACING SYSTEM (8px rhythm)
      ───────────────────────────────────── */
@@ -217,7 +218,7 @@ html {
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
   font-size: var(--font-body);
-  line-height: var(--line-normal);
+  line-height: calc(var(--line-normal) * var(--line-scale));
   color: var(--text-primary);
   background: var(--bg-base);
   min-height: 100vh;

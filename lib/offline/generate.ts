@@ -244,6 +244,33 @@ function shuffleArray<T>(arr: T[]): T[] {
   return a;
 }
 
+function uniqueStrings(items: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of items) {
+    const trimmed = item.trim();
+    const key = trimmed.toLowerCase();
+    if (!trimmed || seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+function clampText(text: string, max = 120): string {
+  if (text.length <= max) return text;
+  return text.slice(0, max).replace(/\s+\S*$/, '') + '...';
+}
+
+function createFalseStatement(sentence: string, target: string, replacement: string): string | null {
+  const escaped = escapeRegExp(target);
+  const pattern = new RegExp(`\\b${escaped}\\b`, 'i');
+  if (!pattern.test(sentence)) return null;
+  const swapped = sentence.replace(pattern, replacement);
+  if (swapped.toLowerCase() === sentence.toLowerCase()) return null;
+  return swapped;
+}
+
 function capitalizeFirst(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -596,7 +623,7 @@ function generateSmartDistractors(
   const sameCategory = allKeywords
     .filter(k => k.word.toLowerCase() !== correct)
     .filter(k => correctInfo ? k.category === correctInfo.category : true)
-    .filter(k => Math.abs(k.word.length - correctAnswer.length) <= 5)
+    .filter(k => Math.abs(k.word.length - correctAnswer.length) <= 6)
     .slice(0, count * 2);
 
   for (const kw of sameCategory) {
@@ -618,21 +645,22 @@ function generateSmartDistractors(
     }
   }
 
-  // Strategy 4: Contextual alternatives
-  if (distractors.length < count) {
-    const contextualFillers = [
-      'None of the above',
-      'All of the above',
-      'Cannot be determined from the text',
-      'Both A and B',
-    ];
-    for (const filler of contextualFillers) {
-      if (distractors.length >= count) break;
-      distractors.push(filler);
-    }
+  const cleaned = uniqueStrings(distractors)
+    .filter(opt => opt.toLowerCase() !== correct)
+    .filter(opt => opt.length >= 2 && opt.length <= 40);
+
+  if (cleaned.length >= count) {
+    return shuffleArray(cleaned).slice(0, count);
   }
 
-  return shuffleArray(distractors).slice(0, count);
+  // Strategy 4: Contextual alternatives (fallback only)
+  const contextualFillers = [
+    'None of the above',
+    'All of the above',
+    'Cannot be determined from the text',
+  ];
+  const withFillers = uniqueStrings([...cleaned, ...contextualFillers]);
+  return shuffleArray(withFillers).slice(0, count);
 }
 
 // ============================================
@@ -646,6 +674,7 @@ function generateConceptMCQs(
 ): GeneratedQuestion[] {
   const questions: GeneratedQuestion[] = [];
   const usedSentences = new Set<string>();
+  const usedStems = new Set<string>();
 
   // Sort by score, prioritize high-value sentences
   const sorted = [...scoredSentences]
@@ -675,13 +704,13 @@ function generateConceptMCQs(
     if (sentence.signals.hasDefinition) {
       // Definition-based MCQ
       const stem = `What is the definition of "${actualWord}"?`;
-      const correctOption = sentence.text;
+      const correctOption = clampText(sentence.text, 160);
       const distractorSentences = scoredSentences
         .filter(s => s.text !== sentence.text && s.keywords.some(k => k !== targetKeyword))
-        .slice(0, 3)
-        .map(s => s.text.slice(0, 100) + (s.text.length > 100 ? '...' : ''));
+        .slice(0, 4)
+        .map(s => clampText(s.text, 140));
 
-      const allOptions = shuffleArray([correctOption, ...distractorSentences].slice(0, 4));
+      const allOptions = uniqueStrings([correctOption, ...distractorSentences]).slice(0, 4);
 
       question = {
         id: generateId(),
@@ -703,9 +732,11 @@ function generateConceptMCQs(
         new RegExp('\\b' + escapeRegExp(actualWord) + '\\b', 'ig'),
         '_____'
       );
+      if (usedStems.has(stem)) continue;
+      usedStems.add(stem);
 
       const distractors = generateSmartDistractors(actualWord, keywords, sentence.text);
-      const allOptions = shuffleArray([actualWord, ...distractors]);
+      const allOptions = uniqueStrings([actualWord, ...distractors]);
 
       question = {
         id: generateId(),
@@ -727,9 +758,11 @@ function generateConceptMCQs(
         new RegExp('\\b' + escapeRegExp(actualWord) + '\\b', 'ig'),
         '_____'
       );
+      if (usedStems.has(stem)) continue;
+      usedStems.add(stem);
 
       const distractors = generateSmartDistractors(actualWord, keywords, sentence.text);
-      const allOptions = shuffleArray([actualWord, ...distractors]);
+      const allOptions = uniqueStrings([actualWord, ...distractors]);
 
       let difficulty: Difficulty = 'intermediate';
       if (sentence.signals.hasImportance) difficulty = 'introductory';
@@ -750,6 +783,8 @@ function generateConceptMCQs(
       };
     }
 
+    if (question.options && question.options.length < 2) continue;
+    if (question.options && !question.options.includes(question.correctAnswer)) continue;
     questions.push(question);
   }
 
@@ -765,6 +800,7 @@ function generateBloomQuestions(
   const questions: GeneratedQuestion[] = [];
   const stems = BLOOM_QUESTION_STEMS[targetLevel];
   const usedKeywords = new Set<string>();
+  const usedPrompts = new Set<string>();
 
   // Filter sentences appropriate for the Bloom level
   const suitableSentences = scoredSentences
@@ -802,10 +838,14 @@ function generateBloomQuestions(
       targetLevel === 'analyze' ? 'compare-contrast' :
       targetLevel === 'evaluate' ? 'essay' : 'case-study';
 
+    const prompt = stem.trim();
+    if (usedPrompts.has(prompt)) continue;
+    usedPrompts.add(prompt);
+
     questions.push({
       id: generateId(),
       type: questionType,
-      question: stem,
+      question: prompt,
       correctAnswer: sentence.text,
       sourceSentence: sentence.text,
       keywords: sentence.keywords,
@@ -1528,25 +1568,55 @@ export function generateSmartContent(mode: ToolMode, text: string): GeneratedCon
       break;
 
     case 'pop':
-      const tfQuestions = scoredSentences
-        .filter(s => s.signals.hasImportance || s.signals.hasDefinition)
-        .slice(0, 3)
-        .map(s => ({
+      const tfSources = scoredSentences
+        .filter(s => s.text.length > 40 && (s.signals.hasImportance || s.signals.hasDefinition))
+        .slice(0, 4);
+
+      const tfQuestions: GeneratedQuestion[] = [];
+      for (const s of tfSources) {
+        if (tfQuestions.length >= 2) break;
+        tfQuestions.push({
           id: generateId(),
-          type: 'true-false' as QuestionType,
+          type: 'true-false',
           question: `True or False: ${s.text}`,
           options: ['True', 'False'],
           correctAnswer: 'True',
           correctIndex: 0,
           sourceSentence: s.text,
           keywords: s.keywords,
-          difficulty: 'introductory' as Difficulty,
-          bloomLevel: 'remember' as BloomLevel,
+          difficulty: 'introductory',
+          bloomLevel: 'remember',
           topic: s.topic,
-        }));
+        });
+      }
+
+      for (const s of tfSources) {
+        if (tfQuestions.length >= 4) break;
+        const target = s.keywords[0];
+        if (!target) continue;
+        const distractors = generateSmartDistractors(target, keywords, s.text, 1);
+        const replacement = distractors[0];
+        if (!replacement) continue;
+        const falseStatement = createFalseStatement(s.text, target, replacement);
+        if (!falseStatement) continue;
+        tfQuestions.push({
+          id: generateId(),
+          type: 'true-false',
+          question: `True or False: ${falseStatement}`,
+          options: ['True', 'False'],
+          correctAnswer: 'False',
+          correctIndex: 1,
+          sourceSentence: s.text,
+          keywords: s.keywords,
+          difficulty: 'intermediate',
+          bloomLevel: 'understand',
+          topic: s.topic,
+          explanation: `The original statement mentions "${target}", not "${replacement}".`,
+        });
+      }
 
       questions = [
-        ...tfQuestions,
+        ...tfQuestions.slice(0, 4),
         ...generateConceptMCQs(scoredSentences, keywords, 2),
       ];
       displayText = formatPopQuizDisplay(questions);
