@@ -10,6 +10,7 @@ export default function WorkspacePage() {
   const [selectedFolderName, setSelectedFolderName] = useState<string>('');
   const [selectedTopicName, setSelectedTopicName] = useState<string>('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [folderCollapsed, setFolderCollapsed] = useState(false);
 
   const handleFolderSelect = useCallback((folderId: string | null, folderName: string, topicId: string | null, topicName: string) => {
     setSelectedFolder(folderId);
@@ -24,12 +25,14 @@ export default function WorkspacePage() {
 
   return (
     <div className="workspace-shell">
-      <div className="workspace-layout">
+      <div className={`workspace-layout ${folderCollapsed ? 'collapsed' : ''}`}>
         <FolderPanel
           onSelect={handleFolderSelect}
           selectedFolder={selectedFolder}
           selectedTopic={selectedTopic}
           refreshKey={refreshKey}
+          collapsed={folderCollapsed}
+          onToggleCollapse={() => setFolderCollapsed(prev => !prev)}
         />
         <WorkspacePanel
           selectedFolder={selectedFolder}
@@ -53,15 +56,22 @@ export default function WorkspacePage() {
 
         .workspace-layout {
           display: grid;
-          grid-template-columns: 300px 1fr;
+          grid-template-columns: 280px 1fr;
           gap: var(--space-4);
           height: 100%;
+        }
+
+        .workspace-layout.collapsed {
+          grid-template-columns: 72px 1fr;
         }
 
         @media (max-width: 1023px) and (min-width: 768px) {
           .workspace-layout {
             grid-template-columns: 260px 1fr;
             gap: var(--space-3);
+          }
+          .workspace-layout.collapsed {
+            grid-template-columns: 72px 1fr;
           }
         }
 

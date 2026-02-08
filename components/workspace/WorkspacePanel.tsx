@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { extractTextFromFile } from '@/lib/pdf/extract';
 import { idbStore } from '@/lib/idb';
@@ -205,6 +205,12 @@ export function WorkspacePanel({
   const isImageFile = (name: string) => /\.(png|jpg|jpeg|gif|webp)$/i.test(name);
   const isVisualSupported = (file: FileItem) =>
     file.type === 'upload' && (/\.(pdf)$/i.test(file.name) || isImageFile(file.name));
+
+  const uploadFiles = useMemo(() => files.filter(f => f.type === 'upload'), [files]);
+  const hasQuickAccess = useMemo(
+    () => pinnedFiles.length > 0 || likedFiles.length > 0 || recentFiles.length > 0,
+    [pinnedFiles.length, likedFiles.length, recentFiles.length]
+  );
 
   const handleViewFile = async (file: FileItem) => {
     setViewingFile(file);
@@ -614,7 +620,7 @@ export function WorkspacePanel({
             )}
 
             {/* Pinned, Liked & Recent */}
-            {!selectedTopic && (pinnedFiles.length > 0 || likedFiles.length > 0 || recentFiles.length > 0) && (
+            {!selectedTopic && hasQuickAccess && (
               <div className="quick-access">
                 {pinnedFiles.length > 0 && (
                   <div className="quick-section">
@@ -835,7 +841,7 @@ export function WorkspacePanel({
                     </div>
 
                     {/* File selector */}
-                    {selectedTopic && files.filter(f => f.type === 'upload').length > 0 && (
+                    {selectedTopic && uploadFiles.length > 0 && (
                       <div className="file-selector">
                         <label>Use content from file:</label>
                         <select onChange={(e) => {
@@ -843,7 +849,7 @@ export function WorkspacePanel({
                           if (file) handleUseInTool(file);
                         }} defaultValue="">
                           <option value="">-- Select a file --</option>
-                          {files.filter(f => f.type === 'upload').map(f => (
+                          {uploadFiles.map(f => (
                             <option key={f.id} value={f.id}>{f.name}</option>
                           ))}
                         </select>

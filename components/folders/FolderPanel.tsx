@@ -23,9 +23,11 @@ interface FolderPanelProps {
   selectedFolder: string | null;
   selectedTopic: string | null;
   refreshKey: number;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKey }: FolderPanelProps) {
+export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKey, collapsed = false, onToggleCollapse }: FolderPanelProps) {
   const toast = useToastHelpers();
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -194,16 +196,20 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
   };
 
   return (
-    <aside className="panel">
+    <aside className={`panel ${collapsed ? 'collapsed' : ''}`}>
       <div className="panel-header">
         <div>
           <h2>Study Folders</h2>
           <p className="sub">Organize your study materials</p>
         </div>
         <span className="panel-badge">{folders.length} folders</span>
+        {collapsed && <span className="panel-icon">📁</span>}
+        <button className="collapse-btn" onClick={onToggleCollapse} aria-label="Toggle folders">
+          {collapsed ? '▶' : '◀'}
+        </button>
       </div>
 
-      <div className="panel-body">
+      {!collapsed && <div className="panel-body">
         {/* Add Folder Form */}
         <form onSubmit={handleAddFolder} className="add-form">
           <input
@@ -334,7 +340,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
             </button>
           </>
         )}
-      </div>
+      </div>}
 
       <style jsx>{`
         .panel {
@@ -347,6 +353,16 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
           height: 100%;
           overflow: hidden;
           box-shadow: var(--shadow-sm);
+        }
+
+        .panel.collapsed {
+          align-items: center;
+          padding-bottom: var(--space-3);
+        }
+
+        .panel.collapsed .panel-header {
+          flex-direction: column;
+          align-items: center;
         }
 
         .panel-header {
@@ -378,6 +394,19 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
           font-size: var(--font-meta);
           font-weight: 600;
           white-space: nowrap;
+        }
+
+        .panel-icon {
+          font-size: 20px;
+        }
+
+        .collapse-btn {
+          width: 28px;
+          height: 28px;
+          border-radius: 8px;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+          cursor: pointer;
         }
 
         .panel-body {
@@ -582,6 +611,12 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
           .panel-badge {
             align-self: flex-start;
           }
+        }
+
+        .panel.collapsed h2,
+        .panel.collapsed .sub,
+        .panel.collapsed .panel-badge {
+          display: none;
         }
       `}</style>
 
