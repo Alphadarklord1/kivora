@@ -28,35 +28,64 @@ export async function GET(request: NextRequest) {
   startDate.setDate(startDate.getDate() - periodDays);
 
   try {
-    // Fetch quiz attempts
-    const attempts = await db
-      .select({
-        id: quizAttempts.id,
-        mode: quizAttempts.mode,
-        totalQuestions: quizAttempts.totalQuestions,
-        correctAnswers: quizAttempts.correctAnswers,
-        score: quizAttempts.score,
-        timeTaken: quizAttempts.timeTaken,
-        answers: quizAttempts.answers,
-        createdAt: quizAttempts.createdAt,
-        fileId: quizAttempts.fileId,
-        fileName: files.name,
-      })
-      .from(quizAttempts)
-      .leftJoin(files, eq(quizAttempts.fileId, files.id))
-      .where(
-        and(
-          eq(quizAttempts.userId, userId),
-          gte(quizAttempts.createdAt, startDate)
-        )
-      )
-      .orderBy(desc(quizAttempts.createdAt));
+    let attempts: Array<{
+      id: string;
+      mode: string;
+      totalQuestions: number;
+      correctAnswers: number;
+      score: number;
+      timeTaken: number | null;
+      answers: unknown;
+      createdAt: Date;
+      fileId: string | null;
+      fileName: string | null;
+    }> = [];
 
-    // Fetch study plans
-    const plans = await db.query.studyPlans.findMany({
-      where: eq(studyPlans.userId, userId),
-      orderBy: [desc(studyPlans.createdAt)],
-    });
+    let plans: Array<{
+      id: string;
+      status: string;
+      progress: number;
+      schedule: unknown;
+      createdAt: Date;
+    }> = [];
+
+    // Fetch quiz attempts (guarded to avoid breaking analytics if table is missing)
+    try {
+      attempts = await db
+        .select({
+          id: quizAttempts.id,
+          mode: quizAttempts.mode,
+          totalQuestions: quizAttempts.totalQuestions,
+          correctAnswers: quizAttempts.correctAnswers,
+          score: quizAttempts.score,
+          timeTaken: quizAttempts.timeTaken,
+          answers: quizAttempts.answers,
+          createdAt: quizAttempts.createdAt,
+          fileId: quizAttempts.fileId,
+          fileName: files.name,
+        })
+        .from(quizAttempts)
+        .leftJoin(files, eq(quizAttempts.fileId, files.id))
+        .where(
+          and(
+            eq(quizAttempts.userId, userId),
+            gte(quizAttempts.createdAt, startDate)
+          )
+        )
+        .orderBy(desc(quizAttempts.createdAt));
+    } catch (error) {
+      console.error('Analytics error: failed to fetch quiz attempts', error);
+    }
+
+    // Fetch study plans (guarded)
+    try {
+      plans = await db.query.studyPlans.findMany({
+        where: eq(studyPlans.userId, userId),
+        orderBy: [desc(studyPlans.createdAt)],
+      });
+    } catch (error) {
+      console.error('Analytics error: failed to fetch study plans', error);
+    }
 
     // Calculate quiz statistics
     const quizStats = {
