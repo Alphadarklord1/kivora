@@ -15,7 +15,7 @@ const features = [
   {
     icon: '📝',
     title: 'Interactive Quizzes',
-    description: 'Test your knowledge with auto-generated MCQs, pop quizzes, and practice tests.',
+    description: 'Test your knowledge with auto-generated MCQs and practice tests.',
   },
   {
     icon: '📚',
@@ -39,7 +39,6 @@ const tools = [
   { icon: '📄', name: 'Summaries', desc: 'Condense lengthy materials' },
   { icon: '✅', name: 'MCQs', desc: 'Multiple choice questions' },
   { icon: '🧠', name: 'Quizzes', desc: 'Comprehensive tests' },
-  { icon: '⚡', name: 'Pop Quiz', desc: 'Quick review sessions' },
   { icon: '📒', name: 'Notes', desc: 'Cornell-style study notes' },
 ];
 

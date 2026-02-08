@@ -10,14 +10,13 @@ import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
 import { AudioPodcast } from '@/components/tools/AudioPodcast';
 import { useToastHelpers } from '@/components/ui/Toast';
 
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph' | 'visual' | 'audio';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'notes' | 'math' | 'graph' | 'visual' | 'audio';
 
 const toolTabs: { id: ToolTab; label: string; icon: string; description: string }[] = [
   { id: 'assignment', label: 'Assignment', icon: '📝', description: 'Generate assignment questions and prompts' },
   { id: 'summarize', label: 'Summarize', icon: '📄', description: 'Create concise summaries of your content' },
   { id: 'mcq', label: 'MCQ', icon: '✅', description: 'Generate multiple choice questions' },
   { id: 'quiz', label: 'Quiz', icon: '🧠', description: 'Create comprehensive quizzes' },
-  { id: 'pop', label: 'Pop Quiz', icon: '⚡', description: 'Quick pop quiz for rapid review' },
   { id: 'notes', label: 'Notes', icon: '📝', description: 'Generate Cornell-style study notes' },
   { id: 'math', label: 'Math', icon: '🧮', description: 'Solve mathematical problems step-by-step' },
   { id: 'graph', label: 'Graph', icon: '📈', description: 'Plot and visualize mathematical functions' },

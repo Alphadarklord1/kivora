@@ -97,9 +97,11 @@ export default function LibraryPage() {
       summarize: 'Summary',
       mcq: 'MCQ',
       quiz: 'Quiz',
-      pop: 'Pop Quiz',
       notes: 'Notes',
       math: 'Math',
+      exam: 'Exam',
+      srs: 'SRS',
+      pop: 'Pop Quiz (legacy)',
     };
     return modes[mode] || mode;
   };
@@ -114,7 +116,7 @@ export default function LibraryPage() {
     });
   };
 
-  const modes = ['all', 'assignment', 'summarize', 'mcq', 'quiz', 'pop', 'notes', 'math'];
+  const modes = ['all', 'assignment', 'summarize', 'mcq', 'quiz', 'notes', 'math', 'exam', 'srs'];
   const filteredItems = filter === 'all'
     ? items
     : items.filter(i => i.mode === filter);

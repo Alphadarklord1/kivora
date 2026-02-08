@@ -3,13 +3,36 @@
 import { useEffect, useMemo, useState } from 'react';
 import { generateSmartContent, GeneratedQuestion } from '@/lib/offline/generate';
 
-export function ExamSimulator() {
-  const [text, setText] = useState('');
+export interface ExamPrepData {
+  summary: string;
+  keyTopics: string[];
+  learningObjectives: string[];
+  questionBank: GeneratedQuestion[];
+}
+
+interface ExamSimulatorProps {
+  sharedInput: string;
+  autoChain?: boolean;
+  prepData?: ExamPrepData | null;
+  onPrepGenerated?: (prep: ExamPrepData) => void;
+  onResult?: (title: string, content: string) => void;
+  onSrsSeed?: (prep: ExamPrepData) => void;
+}
+
+export function ExamSimulator({
+  sharedInput,
+  autoChain = false,
+  prepData,
+  onPrepGenerated,
+  onResult,
+  onSrsSeed,
+}: ExamSimulatorProps) {
   const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [started, setStarted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [result, setResult] = useState<{ score: number; weak: string[] } | null>(null);
+  const [generatingPrep, setGeneratingPrep] = useState(false);
 
   const examMinutes = useMemo(() => Math.max(5, Math.ceil(questions.length * 1.5)), [questions.length]);
 
@@ -25,12 +48,44 @@ export function ExamSimulator() {
     }
   }, [timeLeft, started, questions.length]);
 
-  const buildExam = () => {
-    const content = generateSmartContent('mcq', text);
-    setQuestions(content.questions.slice(0, 10));
+  const formatPrepSummary = (prep: ExamPrepData) => {
+    const objectives = prep.learningObjectives.length ? prep.learningObjectives.join('; ') : 'No objectives generated.';
+    const topics = prep.keyTopics.length ? prep.keyTopics.join(', ') : 'No key topics detected.';
+    return `Objectives: ${objectives}\nKey Topics: ${topics}`;
+  };
+
+  const buildExamFromPrep = (prep: ExamPrepData | null) => {
+    const bank = prep?.questionBank?.length
+      ? prep.questionBank.slice(0, 10)
+      : generateSmartContent('mcq', sharedInput).questions.slice(0, 10);
+    setQuestions(bank);
     setAnswers({});
     setResult(null);
     setStarted(false);
+  };
+
+  const generateExamPrep = () => {
+    if (!sharedInput.trim()) return;
+    setGeneratingPrep(true);
+    try {
+      const summary = generateSmartContent('summarize', sharedInput);
+      const questions = generateSmartContent('mcq', sharedInput);
+      const prep: ExamPrepData = {
+        summary: summary.displayText,
+        keyTopics: summary.keyTopics,
+        learningObjectives: summary.learningObjectives || [],
+        questionBank: questions.questions.slice(0, 12),
+      };
+      onPrepGenerated?.(prep);
+      onResult?.('Exam Prep', formatPrepSummary(prep));
+
+      if (autoChain) {
+        buildExamFromPrep(prep);
+        onSrsSeed?.(prep);
+      }
+    } finally {
+      setGeneratingPrep(false);
+    }
   };
 
   const startExam = () => {
@@ -39,6 +94,7 @@ export function ExamSimulator() {
   };
 
   const finishExam = async () => {
+    if (!questions.length) return;
     const correct = questions.filter(q => answers[q.id] === q.correctIndex).length;
     const score = Math.round((correct / questions.length) * 100);
     const weakTopics = questions
@@ -47,6 +103,8 @@ export function ExamSimulator() {
       .slice(0, 4);
     setResult({ score, weak: weakTopics });
     setStarted(false);
+
+    onResult?.('Exam', `Score: ${score}% • Weak: ${weakTopics.join(', ') || 'None'}`);
 
     await fetch('/api/library', {
       method: 'POST',
@@ -62,15 +120,50 @@ export function ExamSimulator() {
 
   return (
     <div className="exam-sim">
-      <div>
-        <h3>Exam Simulator</h3>
-        <p>Create a timed exam from your notes and get a score report.</p>
+      <div className="exam-header">
+        <div>
+          <h3>Exam Prep + Simulator</h3>
+          <p>Create objectives, generate an exam, and surface weak areas.</p>
+        </div>
+        <button
+          className="btn"
+          onClick={generateExamPrep}
+          disabled={!sharedInput.trim() || generatingPrep}
+        >
+          {generatingPrep ? 'Preparing...' : 'Generate Exam Prep'}
+        </button>
       </div>
-      {!questions.length && (
-        <>
-          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} placeholder="Paste study material..." />
-          <button className="btn" onClick={buildExam} disabled={!text.trim()}>Generate Exam</button>
-        </>
+
+      {!sharedInput.trim() && (
+        <div className="empty">Add shared input above to start exam prep.</div>
+      )}
+
+      {prepData && (
+        <div className="prep-card">
+          <h4>Exam Prep</h4>
+          <div className="prep-grid">
+            <div>
+              <div className="prep-label">Learning Objectives</div>
+              <ul>
+                {(prepData.learningObjectives.length ? prepData.learningObjectives : ['No objectives generated.']).map((item, idx) => (
+                  <li key={idx}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <div className="prep-label">Key Topics</div>
+              <div className="topics">
+                {(prepData.keyTopics.length ? prepData.keyTopics : ['No key topics detected.']).map((topic, idx) => (
+                  <span key={idx} className="chip">{topic}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="prep-actions">
+            <button className="btn secondary" onClick={() => buildExamFromPrep(prepData)}>Generate Exam</button>
+            <button className="btn secondary" onClick={() => onSrsSeed?.(prepData)}>Generate SRS Deck</button>
+          </div>
+        </div>
       )}
 
       {questions.length > 0 && !started && !result && (
@@ -117,8 +210,16 @@ export function ExamSimulator() {
 
       <style jsx>{`
         .exam-sim { display: grid; gap: var(--space-3); }
+        .exam-header { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); }
         p { color: var(--text-muted); font-size: var(--font-meta); margin: 0; }
-        textarea { padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface); }
+        .empty { padding: var(--space-3); background: var(--bg-inset); border-radius: var(--radius-md); color: var(--text-muted); }
+        .prep-card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 16px; padding: var(--space-3); display: grid; gap: var(--space-3); }
+        .prep-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); }
+        .prep-label { font-size: var(--font-tiny); text-transform: uppercase; color: var(--text-muted); margin-bottom: var(--space-2); letter-spacing: 0.05em; }
+        ul { margin: 0; padding-left: 18px; color: var(--text-secondary); }
+        .topics { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+        .chip { padding: 4px 10px; background: var(--bg-inset); border-radius: var(--radius-full); font-size: var(--font-tiny); }
+        .prep-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
         .q-card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: var(--space-3); }
         .options { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
         .timer { font-weight: 600; color: var(--primary); }

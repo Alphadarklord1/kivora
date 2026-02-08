@@ -1,22 +1,78 @@
 'use client';
 
-import { useState } from 'react';
-import { generateSmartContent, Flashcard } from '@/lib/offline/generate';
+import { useEffect, useState } from 'react';
+import { generateSmartContent, Flashcard, GeneratedQuestion } from '@/lib/offline/generate';
+import type { ExamPrepData } from '@/components/tools/ExamSimulator';
 
-export function FlashcardSRS() {
-  const [text, setText] = useState('');
+interface FlashcardSRSProps {
+  sharedInput?: string;
+  prepData?: ExamPrepData | null;
+  autoGenerate?: boolean;
+  onResult?: (title: string, content: string) => void;
+}
+
+export function FlashcardSRS({ sharedInput = '', prepData, autoGenerate = false, onResult }: FlashcardSRSProps) {
   const [deck, setDeck] = useState<Flashcard[]>([]);
   const [index, setIndex] = useState(0);
   const [showBack, setShowBack] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
 
+  const buildDeckFromQuestions = (questions: GeneratedQuestion[]) =>
+    questions.map(q => ({
+      id: q.id,
+      front: q.question,
+      back: q.correctAnswer,
+      category: q.topic || q.keywords?.[0] || 'General',
+      difficulty: q.difficulty,
+      keywords: q.keywords || [],
+    }));
+
+  const buildDeckFromPrep = (prep: ExamPrepData) => {
+    if (prep.questionBank?.length) {
+      return buildDeckFromQuestions(prep.questionBank);
+    }
+    if (sharedInput.trim()) {
+      const content = generateSmartContent('flashcards', sharedInput);
+      return content.flashcards || [];
+    }
+    return [];
+  };
+
   const generateDeck = () => {
-    const content = generateSmartContent('flashcards', text);
-    setDeck(content.flashcards || []);
+    const content = generateSmartContent('flashcards', sharedInput);
+    const cards = content.flashcards || [];
+    setDeck(cards);
     setIndex(0);
     setShowBack(false);
     setSavedId(null);
+    if (cards.length) {
+      onResult?.('SRS Deck', `Deck ready: ${cards.length} cards`);
+    }
   };
+
+  const generateFromPrep = () => {
+    if (!prepData) return;
+    const cards = buildDeckFromPrep(prepData);
+    setDeck(cards);
+    setIndex(0);
+    setShowBack(false);
+    setSavedId(null);
+    if (cards.length) {
+      onResult?.('SRS Deck', `Deck ready: ${cards.length} cards`);
+    }
+  };
+
+  useEffect(() => {
+    if (!autoGenerate || !prepData || deck.length) return;
+    const cards = buildDeckFromPrep(prepData);
+    if (cards.length) {
+      setDeck(cards);
+      setIndex(0);
+      setShowBack(false);
+      setSavedId(null);
+      onResult?.('SRS Deck', `Deck ready: ${cards.length} cards`);
+    }
+  }, [autoGenerate, prepData, deck.length, sharedInput, onResult]);
 
   const rate = async (rating: 'again' | 'hard' | 'good' | 'easy') => {
     const next = Math.min(deck.length - 1, index + 1);
@@ -57,12 +113,24 @@ export function FlashcardSRS() {
       <div className="srs">
         <h3>Flashcard SRS</h3>
         <p>Generate spaced‑repetition flashcards from your notes.</p>
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} placeholder="Paste study text..." />
-        <button className="btn" onClick={generateDeck} disabled={!text.trim()}>Generate Deck</button>
+        <div className="actions">
+          <button className="btn" onClick={generateDeck} disabled={!sharedInput.trim()}>
+            Generate from Shared Input
+          </button>
+          {prepData && (
+            <button className="btn secondary" onClick={generateFromPrep}>
+              Use Exam Prep
+            </button>
+          )}
+        </div>
+        {!sharedInput.trim() && !prepData && (
+          <div className="empty">Add shared input or generate Exam Prep first.</div>
+        )}
         <style jsx>{`
           .srs { display: grid; gap: var(--space-3); }
           p { color: var(--text-muted); font-size: var(--font-meta); margin: 0; }
-          textarea { padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface); }
+          .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+          .empty { padding: var(--space-3); background: var(--bg-inset); border-radius: var(--radius-md); color: var(--text-muted); }
         `}</style>
       </div>
     );

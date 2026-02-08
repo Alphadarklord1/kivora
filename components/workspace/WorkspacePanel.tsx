@@ -12,8 +12,7 @@ import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
 import { AudioPodcast } from '@/components/tools/AudioPodcast';
 import { MatlabLab } from '@/components/tools/MatlabLab';
 import { FocusMode } from '@/components/tools/FocusMode';
-import { AutoOutline } from '@/components/tools/AutoOutline';
-import { ExamSimulator } from '@/components/tools/ExamSimulator';
+import { ExamSimulator, ExamPrepData } from '@/components/tools/ExamSimulator';
 import { FlashcardSRS } from '@/components/tools/FlashcardSRS';
 import { KnowledgeMap } from '@/components/tools/KnowledgeMap';
 import { useToastHelpers } from '@/components/ui/Toast';
@@ -42,20 +41,18 @@ interface WorkspacePanelProps {
 }
 
 type MainTab = 'files' | 'tools';
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'graph' | 'visual' | 'audio' | 'matlab' | 'focus' | 'outline' | 'exam' | 'srs' | 'map';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'notes' | 'math' | 'graph' | 'visual' | 'audio' | 'matlab' | 'focus' | 'exam' | 'srs' | 'map';
 
 const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'assignment', label: 'Assignment', icon: '📝' },
   { id: 'summarize', label: 'Summarize', icon: '📄' },
   { id: 'mcq', label: 'MCQ', icon: '✅' },
   { id: 'quiz', label: 'Quiz', icon: '🧠' },
-  { id: 'pop', label: 'Pop Quiz', icon: '⚡' },
   { id: 'notes', label: 'Notes', icon: '📝' },
   { id: 'math', label: 'Math', icon: '🧮' },
   { id: 'matlab', label: 'MATLAB Lab', icon: '📐' },
   { id: 'focus', label: 'Focus', icon: '⏱️' },
-  { id: 'outline', label: 'Outline', icon: '🗂️' },
-  { id: 'exam', label: 'Exam', icon: '🎯' },
+  { id: 'exam', label: 'Exam Prep', icon: '🎯' },
   { id: 'srs', label: 'SRS', icon: '🧩' },
   { id: 'map', label: 'Map', icon: '🧠' },
   { id: 'graph', label: 'Graph', icon: '📈' },
@@ -89,7 +86,6 @@ export function WorkspacePanel({
   const selectedFileCount = selectedTopic ? files.length : totalQuickFiles;
 
   // Tool state
-  const [inputText, setInputText] = useState('');
   const [output, setOutput] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
@@ -99,6 +95,20 @@ export function WorkspacePanel({
   const [sharedInput, setSharedInput] = useState('');
   const [recentOutputs, setRecentOutputs] = useState<Array<{ title: string; content: string }>>([]);
   const [autoChain, setAutoChain] = useState(true);
+  const [compactMode, setCompactMode] = useState(false);
+  const [examPrep, setExamPrep] = useState<ExamPrepData | null>(null);
+
+  useEffect(() => {
+    const storedCompact = typeof window !== 'undefined' ? localStorage.getItem('studypilot_compact_mode') : null;
+    if (storedCompact) {
+      setCompactMode(storedCompact === 'true');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('studypilot_compact_mode', String(compactMode));
+  }, [compactMode]);
 
   const handleGraphFromMath = (expression: string) => {
     setGraphExpression(expression);
@@ -273,7 +283,7 @@ export function WorkspacePanel({
         const blobData = await idbStore.get(file.localBlobId);
         if (blobData) {
           const text = await extractTextFromFile(blobData.blob, blobData.name);
-          setInputText(text);
+          setSharedInput(text);
           setMainTab('tools');
           setViewMode('input');
         }
@@ -281,7 +291,7 @@ export function WorkspacePanel({
         toast.error('Failed to extract text', 'Could not read the file content');
       }
     } else if (file.content) {
-      setInputText(file.content);
+      setSharedInput(file.content);
       setMainTab('tools');
       setViewMode('input');
     }
@@ -404,7 +414,7 @@ export function WorkspacePanel({
       const content = getGeneratedContent(toolTab as ToolMode, sharedInput);
       setGeneratedContent(content);
       setOutput(content.displayText);
-      setRecentOutputs(prev => [{ title: toolTab, content: content.displayText }, ...prev].slice(0, 5));
+      addResult(toolTab, content.displayText);
       setViewMode('output');
     } catch {
       setOutput('Error generating content.');
@@ -427,11 +437,14 @@ export function WorkspacePanel({
   };
 
   const handleToolReset = () => {
-    setSharedInput('');
     setOutput('');
     setGeneratedContent(null);
     setShowInteractiveQuiz(false);
     setViewMode('input');
+  };
+
+  const addResult = (title: string, content: string) => {
+    setRecentOutputs(prev => [{ title, content }, ...prev].slice(0, 5));
   };
 
   const handleCopy = (text: string) => {
@@ -523,7 +536,7 @@ export function WorkspacePanel({
     if (type !== 'upload') {
       const icons: Record<string, string> = {
         assignment: '📝', summarize: '📄', mcq: '✅',
-        quiz: '🧠', pop: '⚡', notes: '📝', math: '🧮',
+        quiz: '🧠', notes: '📝', math: '🧮',
       };
       return icons[type] || '📄';
     }
@@ -539,7 +552,7 @@ export function WorkspacePanel({
   });
 
   return (
-    <div className="workspace-panel">
+    <div className={`workspace-panel ${compactMode ? 'compact' : ''}`}>
       {/* Header */}
       <div className="panel-header">
         <div className="header-info">
@@ -557,6 +570,13 @@ export function WorkspacePanel({
           {!selectedTopic && (
             <span className="status-pill muted">Quick access view</span>
           )}
+          <button
+            className={`compact-toggle ${compactMode ? 'active' : ''}`}
+            onClick={() => setCompactMode(prev => !prev)}
+            type="button"
+          >
+            {compactMode ? 'Compact On' : 'Compact'}
+          </button>
         </div>
       </div>
 
@@ -759,13 +779,16 @@ export function WorkspacePanel({
                 placeholder="Paste your study material once, then switch tools."
                 rows={4}
               />
+              {sharedInput && (
+                <p className="word-count">{sharedInput.split(/\s+/).filter(Boolean).length} words</p>
+              )}
             </div>
             <div className="shared-results">
               <div className="results-header">
                 <h4>Results Hub</h4>
                 <label className="toggle">
                   <input type="checkbox" checked={autoChain} onChange={() => setAutoChain(prev => !prev)} />
-                  Auto-chain Outline → Exam → Flashcards
+                  Auto-chain Exam Prep → Exam → SRS
                 </label>
               </div>
               {recentOutputs.length === 0 ? (
@@ -795,17 +818,27 @@ export function WorkspacePanel({
               <div className="tool-content">
                 <FocusMode />
               </div>
-            ) : toolTab === 'outline' ? (
-              <div className="tool-content">
-                <AutoOutline />
-              </div>
             ) : toolTab === 'exam' ? (
               <div className="tool-content">
-                <ExamSimulator />
+                <ExamSimulator
+                  sharedInput={sharedInput}
+                  autoChain={autoChain}
+                  prepData={examPrep}
+                  onPrepGenerated={(prep) => {
+                    setExamPrep(prep);
+                  }}
+                  onResult={addResult}
+                  onSrsSeed={(prep) => setExamPrep(prep)}
+                />
               </div>
             ) : toolTab === 'srs' ? (
               <div className="tool-content">
-                <FlashcardSRS />
+                <FlashcardSRS
+                  sharedInput={sharedInput}
+                  prepData={examPrep}
+                  autoGenerate={autoChain}
+                  onResult={addResult}
+                />
               </div>
             ) : toolTab === 'map' ? (
               <div className="tool-content">
@@ -836,7 +869,7 @@ export function WorkspacePanel({
                       {selectedTopic ? (
                         <span className="context-active">📁 {selectedFolderName} / {selectedTopicName}</span>
                       ) : (
-                        <span className="context-hint">Select a folder to use files, or paste text below</span>
+                        <span className="context-hint">Select a folder to use files, or use the shared input above</span>
                       )}
                     </div>
 
@@ -855,16 +888,6 @@ export function WorkspacePanel({
                         </select>
                       </div>
                     )}
-
-          <textarea
-            value={sharedInput}
-            onChange={(e) => setSharedInput(e.target.value)}
-            placeholder="Paste your study material here..."
-            rows={8}
-          />
-          {sharedInput && (
-            <p className="word-count">{sharedInput.split(/\s+/).filter(Boolean).length} words</p>
-          )}
 
           <button
             className="btn generate-btn"
@@ -996,6 +1019,29 @@ export function WorkspacePanel({
         .header-actions {
           display: flex;
           gap: var(--space-2);
+        }
+
+        .compact-toggle {
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+          color: var(--text-secondary);
+          padding: 6px 10px;
+          border-radius: var(--radius-full);
+          font-size: var(--font-tiny);
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+
+        .compact-toggle:hover {
+          border-color: var(--primary);
+          color: var(--primary);
+        }
+
+        .compact-toggle.active {
+          background: var(--primary);
+          color: white;
+          border-color: var(--primary);
         }
 
         .status-pill {
@@ -1365,6 +1411,53 @@ export function WorkspacePanel({
         @keyframes rise-in {
           from { transform: translateY(6px); opacity: 0.6; }
           to { transform: translateY(0); opacity: 1; }
+        }
+
+        .workspace-panel.compact .panel-header {
+          padding: var(--space-3);
+        }
+
+        .workspace-panel.compact .panel-content {
+          padding: var(--space-3);
+        }
+
+        .workspace-panel.compact .stats-row {
+          padding: var(--space-3);
+          gap: var(--space-2);
+        }
+
+        .workspace-panel.compact .stat-card {
+          padding: var(--space-2);
+          border-radius: 12px;
+        }
+
+        .workspace-panel.compact .stat-value {
+          font-size: var(--font-lg);
+        }
+
+        .workspace-panel.compact .tool-tabs {
+          gap: var(--space-1);
+          margin-bottom: var(--space-3);
+        }
+
+        .workspace-panel.compact .tool-tab {
+          padding: var(--space-1) var(--space-2);
+          font-size: var(--font-tiny);
+        }
+
+        .workspace-panel.compact .shared-hub {
+          gap: var(--space-2);
+          margin-bottom: var(--space-3);
+        }
+
+        .workspace-panel.compact .shared-input,
+        .workspace-panel.compact .shared-results {
+          padding: var(--space-2);
+        }
+
+        .workspace-panel.compact textarea {
+          padding: var(--space-2);
+          font-size: var(--font-meta);
         }
 
         @media (hover: none) {
