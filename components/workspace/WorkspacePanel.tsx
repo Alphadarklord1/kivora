@@ -1191,6 +1191,26 @@ export function WorkspacePanel({
 
         @media (max-width: 600px) {
           .panel-header { flex-direction: column; align-items: flex-start; }
+          .stats-row {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            padding: var(--space-3);
+          }
+          .stat-card {
+            padding: var(--space-2);
+          }
+          .stat-value {
+            font-size: var(--font-lg);
+          }
+          .file-item {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+          .file-actions {
+            opacity: 1;
+            width: 100%;
+            flex-wrap: wrap;
+            justify-content: flex-start;
+          }
           .file-actions { opacity: 1; }
           .tool-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: var(--space-2); }
           .tool-tabs::-webkit-scrollbar { display: none; }

@@ -1574,6 +1574,28 @@ export default function SettingsPage() {
             width: 100%;
             justify-content: space-between;
           }
+
+          .settings-tabs {
+            gap: var(--space-1);
+          }
+
+          .settings-tab {
+            padding: var(--space-2);
+          }
+
+          .tab-icon {
+            font-size: var(--font-body);
+          }
+
+          .settings-message {
+            position: sticky;
+            top: 46px;
+            z-index: 6;
+          }
+
+          .modal {
+            width: 95%;
+          }
         }
       `}</style>
     </div>

@@ -8,6 +8,13 @@ interface MatlabLabProps {
 
 type Matrix = number[][];
 
+interface FieldPoint {
+  x: number;
+  y: number;
+  u: number;
+  v: number;
+}
+
 function parseMatrix(input: string): Matrix | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
@@ -92,9 +99,58 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
   const [expression, setExpression] = useState('sin(x) + x^2');
   const [result, setResult] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [fieldU, setFieldU] = useState('y');
+  const [fieldV, setFieldV] = useState('-x');
+  const [gridSize, setGridSize] = useState(9);
+  const [fieldScale, setFieldScale] = useState(0.7);
 
   const parsedA = useMemo(() => parseMatrix(matrixA), [matrixA]);
   const parsedB = useMemo(() => parseMatrix(matrixB), [matrixB]);
+
+  const matrixHeatmap = useMemo(() => {
+    if (!parsedA) return null;
+    const flat = parsedA.flat();
+    const min = Math.min(...flat);
+    const max = Math.max(...flat);
+    const range = max - min || 1;
+    return { matrix: parsedA, min, max, range };
+  }, [parsedA]);
+
+  const normalizeExpression = (expr: string) => {
+    let out = expr.trim();
+    out = out.replace(/\^/g, '**');
+    const funcs = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sqrt', 'log', 'ln', 'exp', 'abs'];
+    for (const fn of funcs) {
+      const re = new RegExp(`\\b${fn}\\b`, 'gi');
+      out = out.replace(re, `Math.${fn === 'ln' ? 'log' : fn}`);
+    }
+    out = out.replace(/\bpi\b/gi, 'Math.PI');
+    out = out.replace(/\be\b/g, 'Math.E');
+    return out;
+  };
+
+  const evalField = (expr: string, x: number, y: number) => {
+    const safe = normalizeExpression(expr);
+    // eslint-disable-next-line no-new-func
+    const fn = new Function('x', 'y', `return ${safe};`);
+    const val = fn(x, y);
+    if (typeof val !== 'number' || Number.isNaN(val) || !Number.isFinite(val)) return 0;
+    return val;
+  };
+
+  const fieldData = useMemo(() => {
+    const size = Math.max(3, Math.min(15, gridSize));
+    const points: FieldPoint[] = [];
+    const half = Math.floor(size / 2);
+    for (let i = -half; i <= half; i++) {
+      for (let j = -half; j <= half; j++) {
+        const u = evalField(fieldU, i, j);
+        const v = evalField(fieldV, i, j);
+        points.push({ x: i, y: j, u, v });
+      }
+    }
+    return { points, size };
+  }, [fieldU, fieldV, gridSize]);
 
   const handleMatrixOp = (op: 'add' | 'sub' | 'mul' | 'transA' | 'detA' | 'invA') => {
     setError('');
@@ -202,6 +258,93 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
           />
           <p className="hint">Supports MATLAB-style `.^`, `.*`, `./` (normalized in Math Solver).</p>
         </section>
+
+        <section className="lab-card wide">
+          <h4>Matrix Plot (Heatmap)</h4>
+          {matrixHeatmap ? (
+            <div className="heatmap">
+              {matrixHeatmap.matrix.map((row, i) => (
+                <div key={i} className="heatmap-row">
+                  {row.map((value, j) => {
+                    const t = (value - matrixHeatmap.min) / matrixHeatmap.range;
+                    const hue = 210 - t * 220;
+                    return (
+                      <div
+                        key={j}
+                        className="heatmap-cell"
+                        style={{ background: `hsl(${hue} 70% 60%)` }}
+                        title={`A(${i + 1},${j + 1}) = ${value}`}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="hint">Enter a valid matrix A to preview a heatmap.</p>
+          )}
+        </section>
+
+        <section className="lab-card wide">
+          <h4>Vector Field</h4>
+          <div className="field-controls">
+            <div>
+              <label>u(x,y)</label>
+              <input value={fieldU} onChange={(e) => setFieldU(e.target.value)} />
+            </div>
+            <div>
+              <label>v(x,y)</label>
+              <input value={fieldV} onChange={(e) => setFieldV(e.target.value)} />
+            </div>
+            <div>
+              <label>Grid</label>
+              <input
+                type="number"
+                min={3}
+                max={15}
+                value={gridSize}
+                onChange={(e) => setGridSize(Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <label>Scale</label>
+              <input
+                type="number"
+                step={0.1}
+                min={0.2}
+                max={2}
+                value={fieldScale}
+                onChange={(e) => setFieldScale(Number(e.target.value))}
+              />
+            </div>
+          </div>
+          <div className="field-canvas">
+            <svg viewBox="-10 -10 20 20" role="img" aria-label="Vector field">
+              <line x1="-9.5" y1="0" x2="9.5" y2="0" stroke="currentColor" strokeOpacity="0.2" />
+              <line x1="0" y1="-9.5" x2="0" y2="9.5" stroke="currentColor" strokeOpacity="0.2" />
+              {fieldData.points.map((p, idx) => {
+                const mag = Math.sqrt(p.u * p.u + p.v * p.v) || 1;
+                const ux = (p.u / mag) * fieldScale;
+                const vy = (p.v / mag) * fieldScale;
+                return (
+                  <g key={idx} transform={`translate(${p.x},${-p.y})`}>
+                    <line
+                      x1={0}
+                      y1={0}
+                      x2={ux}
+                      y2={-vy}
+                      stroke="currentColor"
+                      strokeOpacity="0.6"
+                      strokeWidth="0.08"
+                    />
+                    <circle cx={ux} cy={-vy} r="0.15" fill="currentColor" opacity="0.4" />
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+          <p className="hint">Example: u = y, v = -x (circular field).</p>
+        </section>
       </div>
 
       <style jsx>{`
@@ -269,6 +412,54 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
           margin: 0;
         }
 
+        .heatmap {
+          display: inline-flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: var(--space-2);
+          background: var(--bg-inset);
+          border-radius: var(--radius-md);
+          width: fit-content;
+        }
+
+        .heatmap-row {
+          display: flex;
+          gap: 4px;
+        }
+
+        .heatmap-cell {
+          width: 22px;
+          height: 22px;
+          border-radius: 4px;
+          border: 1px solid rgba(15, 23, 42, 0.08);
+        }
+
+        .field-controls {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: var(--space-2);
+        }
+
+        .field-controls label {
+          font-size: var(--font-tiny);
+          color: var(--text-muted);
+          display: block;
+          margin-bottom: 4px;
+        }
+
+        .field-canvas {
+          margin-top: var(--space-3);
+          background: var(--bg-inset);
+          border-radius: var(--radius-md);
+          padding: var(--space-3);
+        }
+
+        .field-canvas svg {
+          width: 100%;
+          height: 260px;
+          color: var(--text-primary);
+        }
+
         .button-grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -286,6 +477,22 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
           font-size: var(--font-meta);
           padding: var(--space-2);
           border-radius: var(--radius-md);
+        }
+
+        @media (max-width: 600px) {
+          .lab-header {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .heatmap-cell {
+            width: 18px;
+            height: 18px;
+          }
+
+          .field-canvas svg {
+            height: 220px;
+          }
         }
       `}</style>
     </div>
