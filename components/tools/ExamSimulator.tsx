@@ -13,6 +13,7 @@ export interface ExamPrepData {
 interface ExamSimulatorProps {
   inputText: string;
   onInputChange: (value: string) => void;
+  manualInputEnabled?: boolean;
   autoChain?: boolean;
   prepData?: ExamPrepData | null;
   onPrepGenerated?: (prep: ExamPrepData) => void;
@@ -23,6 +24,7 @@ interface ExamSimulatorProps {
 export function ExamSimulator({
   inputText,
   onInputChange,
+  manualInputEnabled = true,
   autoChain = false,
   prepData,
   onPrepGenerated,
@@ -136,18 +138,22 @@ export function ExamSimulator({
         </button>
       </div>
 
-      <div className="input-block">
-        <label>Exam source text</label>
-        <textarea
-          value={inputText}
-          onChange={(e) => onInputChange(e.target.value)}
-          rows={6}
-          placeholder="Paste study material for exam prep..."
-        />
-      </div>
+      {manualInputEnabled && (
+        <div className="input-block">
+          <label>Exam source text</label>
+          <textarea
+            value={inputText}
+            onChange={(e) => onInputChange(e.target.value)}
+            rows={6}
+            placeholder="Paste study material for exam prep..."
+          />
+        </div>
+      )}
 
       {!inputText.trim() && (
-        <div className="empty">Paste text above to start exam prep.</div>
+        <div className="empty">
+          {manualInputEnabled ? 'Paste text above to start exam prep.' : 'Select a file to use as exam source.'}
+        </div>
       )}
 
       {prepData && (

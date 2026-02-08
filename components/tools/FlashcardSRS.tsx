@@ -7,12 +7,13 @@ import type { ExamPrepData } from '@/components/tools/ExamSimulator';
 interface FlashcardSRSProps {
   inputText?: string;
   onInputChange: (value: string) => void;
+  manualInputEnabled?: boolean;
   prepData?: ExamPrepData | null;
   autoGenerate?: boolean;
   onResult?: (title: string, content: string) => void;
 }
 
-export function FlashcardSRS({ inputText = '', onInputChange, prepData, autoGenerate = false, onResult }: FlashcardSRSProps) {
+export function FlashcardSRS({ inputText = '', onInputChange, manualInputEnabled = true, prepData, autoGenerate = false, onResult }: FlashcardSRSProps) {
   const [deck, setDeck] = useState<Flashcard[]>([]);
   const [index, setIndex] = useState(0);
   const [showBack, setShowBack] = useState(false);
@@ -114,15 +115,17 @@ export function FlashcardSRS({ inputText = '', onInputChange, prepData, autoGene
       <div className="srs">
         <h3>Flashcard SRS</h3>
         <p>Generate spaced‑repetition flashcards from your notes.</p>
-        <div className="input-block">
-          <label>SRS source text</label>
-          <textarea
-            value={inputText}
-            onChange={(e) => onInputChange(e.target.value)}
-            rows={6}
-            placeholder="Paste study material for flashcards..."
-          />
-        </div>
+        {manualInputEnabled && (
+          <div className="input-block">
+            <label>SRS source text</label>
+            <textarea
+              value={inputText}
+              onChange={(e) => onInputChange(e.target.value)}
+              rows={6}
+              placeholder="Paste study material for flashcards..."
+            />
+          </div>
+        )}
         <div className="actions">
           <button className="btn" onClick={generateDeck} disabled={!inputText.trim()}>
             Generate Deck
@@ -134,7 +137,9 @@ export function FlashcardSRS({ inputText = '', onInputChange, prepData, autoGene
           )}
         </div>
         {!inputText.trim() && !prepData && (
-          <div className="empty">Add shared input or generate Exam Prep first.</div>
+          <div className="empty">
+            {manualInputEnabled ? 'Add text or generate Exam Prep first.' : 'Select a file or generate Exam Prep first.'}
+          </div>
         )}
         <style jsx>{`
           .srs { display: grid; gap: var(--space-3); }

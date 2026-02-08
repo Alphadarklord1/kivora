@@ -895,6 +895,7 @@ export function WorkspacePanel({
                     setToolInputs(prev => ({ ...prev, exam: value }));
                     setToolSources(prev => ({ ...prev, exam: { type: 'manual' } }));
                   }}
+                  manualInputEnabled={false}
                   autoChain={autoChain}
                   prepData={examPrep}
                   onPrepGenerated={(prep) => {
@@ -912,6 +913,7 @@ export function WorkspacePanel({
                     setToolInputs(prev => ({ ...prev, srs: value }));
                     setToolSources(prev => ({ ...prev, srs: { type: 'manual' } }));
                   }}
+                  manualInputEnabled={false}
                   prepData={examPrep}
                   autoGenerate={autoChain}
                   onResult={(title, content) => addResult('srs', title, content, toolSources.srs)}
@@ -950,18 +952,10 @@ export function WorkspacePanel({
                       )}
                     </div>
 
-                    <textarea
-                      value={toolInputs[toolTab] || ''}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setToolInputs(prev => ({ ...prev, [toolTab]: value }));
-                        setToolSources(prev => ({ ...prev, [toolTab]: { type: 'manual' } }));
-                      }}
-                      placeholder="Paste your study material here..."
-                      rows={8}
-                    />
-                    {toolInputs[toolTab] && (
+                    {toolInputs[toolTab] ? (
                       <p className="word-count">{toolInputs[toolTab].split(/\s+/).filter(Boolean).length} words</p>
+                    ) : (
+                      <p className="muted">Select a file to use in this tool.</p>
                     )}
                     <button
                       className="btn generate-btn"
@@ -1289,6 +1283,11 @@ export function WorkspacePanel({
         }
 
         .results-hub .muted {
+          color: var(--text-muted);
+          font-size: var(--font-meta);
+        }
+
+        .muted {
           color: var(--text-muted);
           font-size: var(--font-meta);
         }
