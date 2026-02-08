@@ -29,6 +29,29 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
   const [error, setError] = useState('');
   const [useAI, setUseAI] = useState(false);
   const [matlabMode, setMatlabMode] = useState(true);
+  const [showKeyboard, setShowKeyboard] = useState(false);
+
+  const insertSymbol = (symbol: string) => {
+    setProblem((prev) => `${prev}${symbol}`);
+  };
+
+  const SYMBOLS = [
+    { label: '∫', value: '∫ ' },
+    { label: 'd/dx', value: 'd/dx ' },
+    { label: '∂/∂x', value: '∂/∂x ' },
+    { label: 'lim', value: 'lim ' },
+    { label: '√', value: 'sqrt()' },
+    { label: 'π', value: 'pi' },
+    { label: '∞', value: 'inf' },
+    { label: '∑', value: 'sum()' },
+    { label: '∏', value: 'prod()' },
+    { label: 'θ', value: 'theta' },
+    { label: 'sin', value: 'sin()' },
+    { label: 'cos', value: 'cos()' },
+    { label: 'tan', value: 'tan()' },
+    { label: 'ln', value: 'ln()' },
+    { label: 'log', value: 'log()' },
+  ];
 
   const normalizeMatlabSyntax = (input: string) => {
     let out = input;
@@ -303,6 +326,31 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
             }}>
               Enter your math problem:
             </label>
+            {/* Inline Symbol Bar */}
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 'var(--space-2)',
+              marginBottom: 'var(--space-2)'
+            }}>
+              {SYMBOLS.map((s) => (
+                <button
+                  key={s.label}
+                  className="btn ghost"
+                  onClick={() => insertSymbol(s.value)}
+                  style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1) var(--space-2)' }}
+                >
+                  {s.label}
+                </button>
+              ))}
+              <button
+                className="btn ghost"
+                onClick={() => setShowKeyboard(true)}
+                style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1) var(--space-2)' }}
+              >
+                ⌨️ More
+              </button>
+            </div>
             <textarea
               value={problem}
               onChange={(e) => setProblem(e.target.value)}
@@ -325,6 +373,57 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               Supports MATLAB style: `.^`, `.*`, `./` and standard math (`x^2`, `sqrt()`).
             </p>
           </div>
+          {showKeyboard && (
+            <div
+              onClick={() => setShowKeyboard(false)}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0, 0, 0, 0.45)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 'var(--space-4)',
+                zIndex: 1000,
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: 'var(--space-4)',
+                  width: 'min(520px, 95vw)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 'var(--space-3)',
+                  }}
+                >
+                  <h4 style={{ margin: 0 }}>Math Keyboard</h4>
+                  <button className="btn ghost" onClick={() => setShowKeyboard(false)}>Close</button>
+                </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))',
+                    gap: 'var(--space-2)',
+                  }}
+                >
+                  {SYMBOLS.map((s) => (
+                    <button key={s.label} className="btn ghost" onClick={() => insertSymbol(s.value)}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Live Preview */}
           {problem && (
