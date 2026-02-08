@@ -95,13 +95,40 @@ export function VisualAnalyzer() {
     : files;
 
   // Get filtered topics and files
+  const isOfficeFile = (name: string) => /\.(doc|docx|ppt|pptx)$/i.test(name);
   const folderTopics = topics.filter((t) => t.folderId === selectedFolderId);
   const topicFiles = allFiles.filter(
     (f) => f.topicId === selectedTopicId && (
       f.name.endsWith('.pdf') || f.name.endsWith('.png') || f.name.endsWith('.jpg') ||
-      f.name.endsWith('.jpeg') || f.name.endsWith('.gif') || f.name.endsWith('.webp')
+      f.name.endsWith('.jpeg') || f.name.endsWith('.gif') || f.name.endsWith('.webp') ||
+      isOfficeFile(f.name)
     )
   );
+
+  const convertOfficeFile = async (file: { name: string; localBlobId: string | null }) => {
+    const converterBase = process.env.NEXT_PUBLIC_CONVERTER_API_BASE_URL || '';
+    if (!converterBase) {
+      throw new Error('Converter not configured');
+    }
+    if (!file.localBlobId) {
+      throw new Error('File not found in local storage');
+    }
+    const blob = await getBlob(file.localBlobId);
+    if (!blob) {
+      throw new Error('Could not load file from local storage');
+    }
+    const form = new FormData();
+    form.append('file', blob, file.name);
+    const res = await fetch(`${converterBase.replace(/\/$/, '')}/convert`, {
+      method: 'POST',
+      body: form,
+    });
+    if (!res.ok) {
+      throw new Error('Conversion failed');
+    }
+    const pdfBlob = await res.blob();
+    return { pdfBlob, pdfName: file.name.replace(/\.(doc|docx|ppt|pptx)$/i, '.pdf') };
+  };
 
   // Load PDF when file is selected
   useEffect(() => {
@@ -125,12 +152,18 @@ export function VisualAnalyzer() {
           throw new Error('File not found in local storage');
         }
 
-        const blob = await getBlob(file.localBlobId);
+        let blob = await getBlob(file.localBlobId);
         if (!blob) {
           throw new Error('Could not load file from local storage');
         }
 
         const isImage = /\.(png|jpg|jpeg|gif|webp)$/i.test(file.name);
+        const isOffice = isOfficeFile(file.name);
+
+        if (isOffice) {
+          const converted = await convertOfficeFile({ name: file.name, localBlobId: file.localBlobId });
+          blob = converted.pdfBlob;
+        }
 
         if (isImage) {
           // For image files, read as data URL and set directly
