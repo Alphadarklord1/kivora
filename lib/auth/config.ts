@@ -133,14 +133,12 @@ export const authConfig: NextAuthConfig = {
       return true;
     },
     async jwt({ token, user }) {
-      console.log('JWT callback - user:', user?.id, 'token.id:', token.id);
       if (user) {
         token.id = user.id;
       }
       return token;
     },
     async session({ session, token }) {
-      console.log('Session callback - token.id:', token.id);
       if (session.user && token.id) {
         session.user.id = token.id as string;
       }
@@ -158,8 +156,6 @@ export const authConfig: NextAuthConfig = {
         nextUrl.pathname.startsWith('/podcast');
       const isOnAuth = nextUrl.pathname.startsWith('/login') ||
         nextUrl.pathname.startsWith('/register');
-
-      console.log('Authorized callback - path:', nextUrl.pathname, 'isLoggedIn:', isLoggedIn, 'userId:', auth?.user?.id);
 
       if (isOnDashboard) {
         if (isLoggedIn) return true;

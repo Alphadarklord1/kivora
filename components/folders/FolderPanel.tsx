@@ -345,9 +345,9 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
       <style jsx>{`
         .panel {
           position: relative;
-          background: linear-gradient(160deg, rgba(15, 23, 42, 0.02), rgba(37, 99, 235, 0.05));
-          border: 1px solid rgba(148, 163, 184, 0.2);
-          border-radius: 20px;
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: 16px;
           display: flex;
           flex-direction: column;
           height: 100%;
@@ -387,11 +387,11 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
         }
 
         .panel-badge {
-          padding: 6px 12px;
+          padding: 4px 10px;
           border-radius: var(--radius-full);
-          background: rgba(37, 99, 235, 0.12);
+          background: color-mix(in srgb, var(--primary-muted) 58%, transparent);
           color: var(--primary);
-          font-size: var(--font-meta);
+          font-size: var(--font-tiny);
           font-weight: 600;
           white-space: nowrap;
         }
@@ -401,19 +401,25 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
         }
 
         .collapse-btn {
-          width: 28px;
-          height: 28px;
-          border-radius: 8px;
+          width: 30px;
+          height: 30px;
+          border-radius: 10px;
           border: 1px solid var(--border-subtle);
-          background: var(--bg-surface);
+          background: var(--bg-base);
           cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .collapse-btn:hover {
+          background: var(--bg-hover);
+          border-color: var(--border-default);
         }
 
         .panel-body {
           flex: 1;
           padding: var(--space-4);
           overflow-y: auto;
-          background: var(--bg-surface);
+          background: var(--bg-base);
         }
 
         .add-form {
@@ -424,9 +430,10 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
 
         .add-form input {
           flex: 1;
-          padding: var(--space-2) var(--space-3);
+          height: 38px;
+          padding: 0 var(--space-3);
           border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-md);
+          border-radius: 10px;
           font-size: var(--font-meta);
           background: var(--bg-surface);
         }
@@ -437,8 +444,10 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
         }
 
         .add-form .btn {
-          padding: var(--space-2) var(--space-3);
-          min-width: 40px;
+          height: 38px;
+          min-width: 38px;
+          padding: 0;
+          border-radius: 10px;
         }
 
         .folder-list {
@@ -455,21 +464,22 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
           display: flex;
           align-items: center;
           gap: var(--space-2);
-          padding: var(--space-2) var(--space-3);
-          border-radius: 12px;
+          padding: 10px 12px;
+          border-radius: 10px;
           cursor: pointer;
-          transition: background 0.15s, border-color 0.15s, transform 0.15s;
-          border: 1px solid transparent;
+          transition: background 0.2s, border-color 0.2s;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
         }
 
         .folder:hover {
-          background: var(--bg-inset);
-          border-color: rgba(37, 99, 235, 0.18);
-          transform: translateX(2px);
+          background: var(--bg-hover);
+          border-color: var(--border-default);
         }
 
         .folder.active {
-          background: var(--primary-muted);
+          background: color-mix(in srgb, var(--primary-muted) 42%, transparent);
+          border-color: color-mix(in srgb, var(--primary) 32%, var(--border-subtle));
           color: var(--primary);
         }
 
@@ -488,30 +498,31 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
         }
 
         .topic-list {
-          margin-left: var(--space-6);
-          padding-left: var(--space-3);
-          border-left: 1px solid var(--border-subtle);
+          margin-left: var(--space-4);
+          padding-left: var(--space-1);
+          display: grid;
+          gap: var(--space-1);
         }
 
         .topic {
           display: flex;
           align-items: center;
           gap: var(--space-2);
-          padding: var(--space-2) var(--space-3);
-          border-radius: 12px;
+          padding: 8px 10px;
+          border-radius: 10px;
           cursor: pointer;
-          transition: background 0.15s, border-color 0.15s, transform 0.15s;
+          transition: background 0.2s, border-color 0.2s;
           border: 1px solid transparent;
         }
 
         .topic:hover {
-          background: var(--bg-inset);
-          border-color: rgba(37, 99, 235, 0.12);
-          transform: translateX(2px);
+          background: var(--bg-hover);
+          border-color: var(--border-subtle);
         }
 
         .topic.active {
-          background: var(--primary-muted);
+          background: color-mix(in srgb, var(--primary-muted) 42%, transparent);
+          border-color: color-mix(in srgb, var(--primary) 28%, var(--border-subtle));
           color: var(--primary);
         }
 
@@ -531,29 +542,25 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
         }
 
         .icon-btn {
-          width: 24px;
-          height: 24px;
+          width: 22px;
+          height: 22px;
           display: flex;
           align-items: center;
           justify-content: center;
           border: none;
-          background: var(--bg-base);
+          background: transparent;
           border-radius: var(--radius-sm);
           cursor: pointer;
-          font-size: 16px;
+          font-size: 13px;
           color: var(--text-muted);
-          opacity: 0;
+          opacity: 0.55;
           transition: all 0.15s;
         }
 
-        .folder:hover .icon-btn,
-        .topic:hover .icon-btn {
-          opacity: 1;
-        }
-
         .icon-btn:hover {
-          background: var(--bg-elevated);
+          background: var(--bg-inset);
           color: var(--text-primary);
+          opacity: 1;
         }
 
         .icon-btn.danger:hover {
@@ -582,14 +589,14 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
 
         .reset-btn {
           width: 100%;
-          padding: var(--space-2) var(--space-3);
+          padding: 10px 12px;
           border: 1px solid var(--border-subtle);
-          background: var(--bg-base);
-          border-radius: var(--radius-md);
+          background: var(--bg-surface);
+          border-radius: 10px;
           font-size: var(--font-meta);
           color: var(--text-secondary);
           cursor: pointer;
-          transition: all 0.15s;
+          transition: all 0.2s;
         }
 
         .reset-btn:hover {

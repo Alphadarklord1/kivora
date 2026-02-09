@@ -111,25 +111,25 @@
    ───────────────────────────────────── */
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg-base: #09090b;
-  --bg-surface: #18181b;
-  --bg-elevated: #1f1f23;
-  --bg-inset: #27272a;
-  --bg-hover: #27272a;
-  --bg-active: #3f3f46;
+  --bg-base: #0b1220;
+  --bg-surface: #111827;
+  --bg-elevated: #1f2937;
+  --bg-inset: #0f172a;
+  --bg-hover: #1e293b;
+  --bg-active: #334155;
 
-  --border-subtle: #27272a;
-  --border-default: #3f3f46;
-  --border-strong: #52525b;
+  --border-subtle: #1f2937;
+  --border-default: #334155;
+  --border-strong: #475569;
 
-  --text-primary: #fafafa;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
-  --text-faint: #52525b;
+  --text-primary: #e5e7eb;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-faint: #64748b;
 
   --primary: #3b82f6;
   --primary-hover: #60a5fa;
-  --primary-muted: #1e3a5f;
+  --primary-muted: #172d4b;
   --primary-text: #93c5fd;
 
   --danger: #ef4444;
@@ -231,8 +231,8 @@ body {
 
 /* ===== Landing Page Styles (moved from app/page.tsx) ===== */
 .landing-page {
-  background: radial-gradient(circle at 10% 10%, rgba(37, 99, 235, 0.12), transparent 45%),
-    radial-gradient(circle at 90% 0%, rgba(99, 102, 241, 0.12), transparent 35%),
+  background: radial-gradient(circle at 12% 8%, rgba(37, 99, 235, 0.06), transparent 38%),
+    radial-gradient(circle at 88% 0%, rgba(59, 130, 246, 0.05), transparent 30%),
     var(--bg-base);
   color: var(--text-primary);
 }

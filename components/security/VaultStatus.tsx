@@ -40,8 +40,8 @@ export function VaultStatus() {
             color: var(--text-secondary);
           }
           .vault-indicator.paused {
-            border-color: var(--warning);
-            color: var(--warning);
+            border-color: var(--border-default);
+            color: var(--text-secondary);
           }
         `}</style>
       </div>
@@ -119,13 +119,13 @@ export function VaultStatus() {
         }
 
         .vault-indicator.unlocked {
-          border-color: var(--success);
-          color: var(--success);
+          border-color: color-mix(in srgb, var(--primary) 45%, var(--border-default));
+          color: var(--primary);
         }
 
         .vault-indicator.locked {
-          border-color: var(--warning);
-          color: var(--warning);
+          border-color: var(--border-default);
+          color: var(--text-secondary);
         }
 
         .vault-icon {
@@ -177,7 +177,7 @@ export function VaultStatus() {
         }
 
         .feature .check {
-          color: var(--success);
+          color: var(--primary);
         }
 
         .vault-status.loading .vault-icon {

@@ -63,6 +63,12 @@ const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'audio', label: 'Audio', icon: '🎧' },
 ];
 
+const toolGroups: Array<{ label: string; tools: ToolTab[] }> = [
+  { label: 'AI Tools', tools: ['assignment', 'summarize', 'mcq', 'quiz', 'notes', 'map', 'graph'] },
+  { label: 'Study Tools', tools: ['focus', 'exam', 'srs'] },
+  { label: 'Subject Tools', tools: ['math', 'matlab', 'visual', 'audio'] },
+];
+
 const initialToolInputs = Object.fromEntries(
   toolTabs.map(tab => [tab.id, ''])
 ) as Record<ToolTab, string>;
@@ -362,6 +368,14 @@ export function WorkspacePanel({
     }
   };
 
+  const applyToolInput = (text: string, source: ToolSource) => {
+    setToolInputs(prev => ({ ...prev, [toolTab]: text }));
+    setToolSources(prev => ({ ...prev, [toolTab]: source }));
+    setLastInjected({ text, source });
+    setMainTab('tools');
+    setViewMode('input');
+  };
+
   const handleUseInTool = async (file: FileItem) => {
     // Extract text and switch to tools tab
     if (file.type === 'upload' && file.localBlobId) {
@@ -371,24 +385,24 @@ export function WorkspacePanel({
           const text = await extractTextFromFile(blobData.blob, blobData.name);
           if (!text.trim()) {
             toast.warning('No text extracted', 'This file may be image-based. Try Visual Analyze.');
+            if (isVisualSupported(file)) {
+              await openVisualForFile(file);
+            }
+            return;
           }
           const source = { type: 'file' as const, fileId: file.id, fileName: file.name };
-          setToolInputs(prev => ({ ...prev, [toolTab]: text }));
-          setToolSources(prev => ({ ...prev, [toolTab]: source }));
-          setLastInjected({ text, source });
-          setMainTab('tools');
-          setViewMode('input');
+          applyToolInput(text, source);
         }
       } catch {
         toast.error('Failed to extract text', 'Could not read the file content');
       }
     } else if (file.content) {
+      if (!file.content.trim()) {
+        toast.warning('No text available', 'This file does not contain text content.');
+        return;
+      }
       const source = { type: 'file' as const, fileId: file.id, fileName: file.name };
-      setToolInputs(prev => ({ ...prev, [toolTab]: file.content || '' }));
-      setToolSources(prev => ({ ...prev, [toolTab]: source }));
-      setLastInjected({ text: file.content || '', source });
-      setMainTab('tools');
-      setViewMode('input');
+      applyToolInput(file.content, source);
     }
   };
 
@@ -728,8 +742,13 @@ export function WorkspacePanel({
             className={`compact-toggle ${compactMode ? 'active' : ''}`}
             onClick={() => setCompactMode(prev => !prev)}
             type="button"
+            aria-pressed={compactMode}
+            aria-label="Toggle compact mode"
           >
-            {compactMode ? 'Compact On' : 'Compact'}
+            <span className="compact-track">
+              <span className="compact-thumb" />
+            </span>
+            <span className="compact-label">Compact</span>
           </button>
         </div>
       </div>
@@ -910,15 +929,26 @@ export function WorkspacePanel({
         {mainTab === 'tools' && (
           <>
           {/* Tool Tabs */}
-          <div className="tool-tabs">
-            {toolTabs.map(tab => (
-              <button
-                key={tab.id}
-                className={`tool-tab ${toolTab === tab.id ? 'active' : ''}`}
-                onClick={() => { setToolTab(tab.id); handleToolReset(); }}
-              >
-                {tab.icon} {tab.label}
-              </button>
+          <div className="tool-groups">
+            {toolGroups.map((group) => (
+              <div key={group.label} className="tool-group">
+                <p className="tool-group-label">{group.label}</p>
+                <div className="tool-tabs">
+                  {group.tools.map((toolId) => {
+                    const tab = toolTabs.find((item) => item.id === toolId);
+                    if (!tab) return null;
+                    return (
+                      <button
+                        key={tab.id}
+                        className={`tool-tab ${toolTab === tab.id ? 'active' : ''}`}
+                        onClick={() => { setToolTab(tab.id); handleToolReset(); }}
+                      >
+                        {tab.icon} {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             ))}
           </div>
 
@@ -1155,23 +1185,14 @@ export function WorkspacePanel({
       <style jsx>{`
         .workspace-panel {
           position: relative;
-          background: linear-gradient(135deg, rgba(37, 99, 235, 0.06), rgba(99, 102, 241, 0.04), rgba(15, 23, 42, 0));
+          background: var(--bg-surface);
           border: 1px solid var(--border-subtle);
-          border-radius: 20px;
+          border-radius: 16px;
           display: flex;
           flex-direction: column;
           height: 100%;
           min-height: 500px;
           overflow: hidden;
-        }
-
-        .workspace-panel::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 45%),
-                      radial-gradient(circle at 10% 20%, rgba(148, 163, 184, 0.1), transparent 40%);
-          pointer-events: none;
         }
 
         .panel-header {
@@ -1182,51 +1203,99 @@ export function WorkspacePanel({
           justify-content: space-between;
           align-items: center;
           gap: var(--space-3);
+          background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 8%, transparent), transparent 75%);
         }
 
-        .header-info h2 { font-size: var(--font-lg); font-weight: 700; margin: 0; }
+        .panel-header::after {
+          content: '';
+          position: absolute;
+          right: -25%;
+          top: -70%;
+          width: 65%;
+          height: 220%;
+          background: radial-gradient(circle, color-mix(in srgb, var(--primary) 14%, transparent), transparent 72%);
+          pointer-events: none;
+          opacity: 0.45;
+        }
+
+        .header-info h2 { font-size: var(--font-2xl); font-weight: 600; margin: 0; letter-spacing: var(--letter-tight); }
         .breadcrumb { font-size: var(--font-meta); color: var(--primary); margin: var(--space-1) 0 0; }
         .hint { font-size: var(--font-meta); color: var(--text-muted); margin: var(--space-1) 0 0; }
 
         .header-actions {
           display: flex;
-          gap: var(--space-2);
+          gap: var(--space-3);
+          align-items: center;
         }
 
         .compact-toggle {
           border: 1px solid var(--border-subtle);
-          background: var(--bg-surface);
+          background: var(--bg-elevated);
           color: var(--text-secondary);
-          padding: 6px 10px;
+          padding: 4px 8px 4px 6px;
           border-radius: var(--radius-full);
           font-size: var(--font-tiny);
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.15s;
+          transition: all 0.2s ease;
+          display: inline-flex;
+          align-items: center;
+          gap: var(--space-2);
         }
 
         .compact-toggle:hover {
-          border-color: var(--primary);
-          color: var(--primary);
+          border-color: var(--border-default);
+          color: var(--text-primary);
         }
 
         .compact-toggle.active {
-          background: var(--primary);
-          color: white;
-          border-color: var(--primary);
+          border-color: color-mix(in srgb, var(--primary) 36%, var(--border-default));
+        }
+
+        .compact-track {
+          width: 34px;
+          height: 20px;
+          border-radius: var(--radius-full);
+          background: var(--bg-active);
+          position: relative;
+          transition: background 0.2s ease;
+        }
+
+        .compact-thumb {
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          background: var(--bg-surface);
+          box-shadow: var(--shadow-sm);
+          transition: transform 0.2s ease;
+        }
+
+        .compact-toggle.active .compact-track {
+          background: color-mix(in srgb, var(--primary) 60%, var(--bg-active));
+        }
+
+        .compact-toggle.active .compact-thumb {
+          transform: translateX(14px);
+        }
+
+        .compact-label {
+          letter-spacing: 0.02em;
         }
 
         .status-pill {
-          padding: 6px 12px;
+          padding: 5px 10px;
           border-radius: var(--radius-full);
-          background: rgba(37, 99, 235, 0.12);
+          background: color-mix(in srgb, var(--primary-muted) 55%, transparent);
           color: var(--primary);
-          font-size: var(--font-meta);
+          font-size: var(--font-tiny);
           font-weight: 600;
         }
 
         .status-pill.muted {
-          background: rgba(15, 23, 42, 0.06);
+          background: var(--bg-elevated);
           color: var(--text-muted);
         }
 
@@ -1234,70 +1303,78 @@ export function WorkspacePanel({
           position: relative;
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-          gap: var(--space-3);
-          padding: var(--space-4);
+          gap: var(--space-4);
+          padding: var(--space-5);
           border-bottom: 1px solid var(--border-subtle);
+          align-items: stretch;
         }
 
         .stat-card {
-          background: var(--bg-surface);
+          background: var(--bg-elevated);
           border: 1px solid var(--border-subtle);
-          border-radius: 16px;
-          padding: var(--space-3);
+          border-radius: 14px;
+          padding: var(--space-4);
           box-shadow: var(--shadow-sm);
           display: flex;
           flex-direction: column;
-          gap: var(--space-1);
-          animation: rise-in 0.4s ease;
+          gap: var(--space-2);
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .stat-card:hover {
+          transform: translateY(-1px);
+          box-shadow: var(--shadow-md);
         }
 
         .stat-label {
           font-size: var(--font-tiny);
-          color: var(--text-muted);
+          color: var(--text-secondary);
           text-transform: uppercase;
           letter-spacing: 0.04em;
+          font-weight: 600;
         }
 
         .stat-value {
-          font-size: var(--font-xl);
+          font-size: 30px;
           font-weight: 700;
+          line-height: 1;
         }
 
         .stat-meta {
           font-size: var(--font-tiny);
-          color: var(--text-secondary);
+          color: var(--text-muted);
         }
 
         .main-tabs {
           display: flex;
           border-bottom: 1px solid var(--border-subtle);
-          background: var(--bg-surface);
+          background: var(--bg-base);
           position: relative;
           z-index: 1;
         }
 
         .main-tab {
           flex: 1;
-          padding: var(--space-3);
+          padding: var(--space-3) var(--space-4);
           border: none;
           background: none;
-          font-size: var(--font-meta);
-          font-weight: 500;
-          color: var(--text-secondary);
+          font-size: var(--font-body);
+          font-weight: 600;
+          color: var(--text-muted);
           cursor: pointer;
-          transition: all 0.15s;
+          transition: color 0.2s ease;
+          border-bottom: 2px solid transparent;
         }
 
-        .main-tab:hover { background: var(--bg-inset); }
+        .main-tab:hover { color: var(--text-primary); }
         .main-tab.active {
           color: var(--primary);
-          background: linear-gradient(90deg, rgba(37, 99, 235, 0.12), rgba(59, 130, 246, 0.06));
           border-bottom: 2px solid var(--primary);
         }
 
         .panel-content {
           flex: 1;
-          padding: var(--space-4);
+          padding: var(--space-5);
           overflow-y: auto;
           position: relative;
         }
@@ -1334,7 +1411,7 @@ export function WorkspacePanel({
         }
         .file-item:hover {
           transform: translateY(-1px);
-          border-color: rgba(37, 99, 235, 0.2);
+          border-color: color-mix(in srgb, var(--primary) 28%, var(--border-subtle));
           box-shadow: var(--shadow-sm);
         }
         .file-icon { font-size: 24px; flex-shrink: 0; }
@@ -1364,25 +1441,44 @@ export function WorkspacePanel({
         .loading { text-align: center; padding: var(--space-6); color: var(--text-muted); }
 
         /* Tool Tabs */
+        .tool-groups {
+          display: grid;
+          gap: var(--space-4);
+          margin-bottom: var(--space-6);
+        }
+
+        .tool-group {
+          display: grid;
+          gap: var(--space-2);
+        }
+
+        .tool-group-label {
+          margin: 0;
+          font-size: var(--font-tiny);
+          color: var(--text-faint);
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          font-weight: 600;
+        }
+
         .tool-tabs {
           display: flex;
           gap: var(--space-2);
           flex-wrap: wrap;
-          margin-bottom: var(--space-4);
         }
 
         .results-hub {
-          background: var(--bg-surface);
+          background: var(--bg-elevated);
           border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
-          padding: var(--space-3);
+          border-radius: 14px;
+          padding: var(--space-4);
           box-shadow: var(--shadow-sm);
-          margin-bottom: var(--space-4);
+          margin-bottom: var(--space-6);
         }
 
         .results-hub h4 {
-          margin: 0 0 var(--space-2);
-          font-size: var(--font-body);
+          margin: 0;
+          font-size: var(--font-section);
           font-weight: 600;
         }
 
@@ -1400,8 +1496,8 @@ export function WorkspacePanel({
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: var(--space-2);
-          margin-bottom: var(--space-2);
+          gap: var(--space-3);
+          margin-bottom: var(--space-3);
         }
 
         .toggle {
@@ -1416,9 +1512,10 @@ export function WorkspacePanel({
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: var(--space-2);
+          padding: var(--space-3);
           border-radius: var(--radius-md);
-          background: var(--bg-inset);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
           margin-bottom: var(--space-2);
           gap: var(--space-2);
         }
@@ -1434,23 +1531,28 @@ export function WorkspacePanel({
         }
 
         .tool-tab {
-          padding: var(--space-2) var(--space-3);
+          padding: 8px 12px;
           border: 1px solid var(--border-subtle);
-          background: var(--bg-surface);
+          background: var(--bg-elevated);
           border-radius: var(--radius-full);
           font-size: var(--font-meta);
+          font-weight: 500;
           cursor: pointer;
-          transition: all 0.15s;
+          transition: all 0.2s ease;
         }
-        .tool-tab:hover { border-color: var(--primary); }
-        .tool-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .tool-tab:hover { border-color: var(--border-default); background: var(--bg-hover); }
+        .tool-tab.active {
+          background: color-mix(in srgb, var(--primary-muted) 50%, transparent);
+          color: var(--primary);
+          border-color: color-mix(in srgb, var(--primary) 28%, var(--border-subtle));
+        }
 
         .tool-content { }
 
         .library-link-row {
           display: flex;
           justify-content: flex-end;
-          margin-bottom: var(--space-3);
+          margin-bottom: var(--space-5);
         }
 
         .library-quick-link {
@@ -1473,7 +1575,7 @@ export function WorkspacePanel({
           margin-bottom: var(--space-4);
           font-size: var(--font-meta);
         }
-        .context-active { color: var(--success); }
+        .context-active { color: var(--primary); }
         .context-hint { color: var(--text-muted); }
 
         .file-selector {
@@ -1517,19 +1619,6 @@ export function WorkspacePanel({
           width: auto;
           min-width: 220px;
         }
-
-        textarea {
-          width: 100%;
-          padding: var(--space-3);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-md);
-          font-size: var(--font-body);
-          font-family: inherit;
-          resize: vertical;
-          background: var(--bg-surface);
-          box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.06);
-        }
-        textarea:focus { outline: none; border-color: var(--primary); }
 
         .word-count { font-size: var(--font-tiny); color: var(--text-muted); margin: var(--space-2) 0 var(--space-4); }
 
@@ -1604,11 +1693,6 @@ export function WorkspacePanel({
 
         .viewer-actions { display: flex; gap: var(--space-2); padding: var(--space-4); border-top: 1px solid var(--border-subtle); flex-wrap: wrap; }
 
-        @keyframes rise-in {
-          from { transform: translateY(6px); opacity: 0.6; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-
         .workspace-panel.compact .panel-header {
           padding: var(--space-3);
         }
@@ -1633,7 +1717,6 @@ export function WorkspacePanel({
 
         .workspace-panel.compact .tool-tabs {
           gap: var(--space-1);
-          margin-bottom: var(--space-3);
         }
 
         .workspace-panel.compact .tool-tab {
@@ -1645,9 +1728,19 @@ export function WorkspacePanel({
           padding: var(--space-2);
         }
 
-        .workspace-panel.compact textarea {
-          padding: var(--space-2);
-          font-size: var(--font-meta);
+        .compact-toggle:focus-visible,
+        .main-tab:focus-visible,
+        .tool-tab:focus-visible,
+        .icon-btn:focus-visible,
+        .btn:focus-visible {
+          outline: 2px solid color-mix(in srgb, var(--primary) 72%, transparent);
+          outline-offset: 2px;
+        }
+
+        .tool-tab:active,
+        .icon-btn:active,
+        .btn:active {
+          transform: scale(0.98);
         }
 
         @media (hover: none) {
@@ -1676,7 +1769,6 @@ export function WorkspacePanel({
             flex-wrap: wrap;
             justify-content: flex-start;
           }
-          .file-actions { opacity: 1; }
           .tool-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: var(--space-2); }
           .tool-tabs::-webkit-scrollbar { display: none; }
           .tool-tab { flex-shrink: 0; padding: var(--space-2) var(--space-3); font-size: var(--font-meta); }

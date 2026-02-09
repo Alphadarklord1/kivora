@@ -17,15 +17,32 @@ interface AppShellProps {
   };
 }
 
-const navItems = [
-  { href: '/workspace', label: 'Workspace', icon: '🎒', activeIcon: '🎒' },
-  { href: '/planner', label: 'Planner', icon: '📅', activeIcon: '📅' },
-  { href: '/tools', label: 'Tools', icon: '🛠️', activeIcon: '🛠️' },
-  { href: '/library', label: 'Library', icon: '📚', activeIcon: '📚' },
-  { href: '/podcast', label: 'Audio', icon: '🎧', activeIcon: '🎧' },
-  { href: '/analytics', label: 'Analytics', icon: '📊', activeIcon: '📊' },
-  { href: '/sharing', label: 'Sharing', icon: '🔗', activeIcon: '🔗' },
+const navGroups = [
+  {
+    label: 'Main',
+    items: [
+      { href: '/workspace', label: 'Workspace', icon: '🎒', activeIcon: '🎒' },
+      { href: '/planner', label: 'Planner', icon: '📅', activeIcon: '📅' },
+      { href: '/library', label: 'Library', icon: '📚', activeIcon: '📚' },
+    ],
+  },
+  {
+    label: 'Tools',
+    items: [
+      { href: '/tools', label: 'Tools', icon: '🛠️', activeIcon: '🛠️' },
+      { href: '/podcast', label: 'Audio', icon: '🎧', activeIcon: '🎧' },
+      { href: '/analytics', label: 'Analytics', icon: '📊', activeIcon: '📊' },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      { href: '/sharing', label: 'Sharing', icon: '🔗', activeIcon: '🔗' },
+    ],
+  },
 ];
+
+const navItems = navGroups.flatMap((group) => group.items);
 
 // Mobile bottom nav shows only the 5 most important items
 const mobileNavItems = navItems.filter(item =>
@@ -189,16 +206,21 @@ export function AppShell({ children, user }: AppShellProps) {
 
           {/* Navigation */}
           <nav className="sidebar-nav">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`nav-item ${isActive(item.href) ? 'active' : ''}`}
-                title={item.label}
-              >
-                <span className="nav-icon">{isActive(item.href) ? item.activeIcon : item.icon}</span>
-                {sidebarOpen && <span className="nav-label">{item.label}</span>}
-              </Link>
+            {navGroups.map((group) => (
+              <div key={group.label} className="nav-group">
+                {sidebarOpen && <div className="nav-group-label">{group.label}</div>}
+                {group.items.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`nav-item ${isActive(item.href) ? 'active' : ''}`}
+                    title={item.label}
+                  >
+                    <span className="nav-icon">{isActive(item.href) ? item.activeIcon : item.icon}</span>
+                    {sidebarOpen && <span className="nav-label">{item.label}</span>}
+                  </Link>
+                ))}
+              </div>
             ))}
           </nav>
 
@@ -206,7 +228,8 @@ export function AppShell({ children, user }: AppShellProps) {
           <div className="sidebar-footer">
             {sidebarOpen && (
               <>
-                <div className="security-status">
+                <div className="footer-label">System</div>
+                <div className="vault-pill">
                   <VaultStatus />
                 </div>
                 <button
@@ -401,7 +424,7 @@ export function AppShell({ children, user }: AppShellProps) {
           border-right: 1px solid var(--border-subtle);
           display: flex;
           flex-direction: column;
-          transition: width 0.2s ease;
+          transition: width 0.2s ease, background 0.2s ease;
           z-index: 100;
         }
 
@@ -434,8 +457,8 @@ export function AppShell({ children, user }: AppShellProps) {
         .sidebar-toggle {
           width: 28px;
           height: 28px;
-          border: none;
-          background: var(--bg-inset);
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-base);
           border-radius: var(--radius-sm);
           cursor: pointer;
           display: flex;
@@ -446,7 +469,7 @@ export function AppShell({ children, user }: AppShellProps) {
         }
 
         .sidebar-toggle:hover {
-          background: var(--bg-elevated);
+          background: var(--bg-hover);
         }
 
         .sidebar-nav {
@@ -454,49 +477,105 @@ export function AppShell({ children, user }: AppShellProps) {
           padding: var(--space-3);
           display: flex;
           flex-direction: column;
+          gap: var(--space-4);
+        }
+
+        .app-sidebar.collapsed .sidebar-nav {
+          gap: var(--space-2);
+          padding: var(--space-2);
+        }
+
+        .nav-group {
+          display: flex;
+          flex-direction: column;
           gap: var(--space-1);
         }
 
+        .nav-group-label {
+          font-size: var(--font-tiny);
+          color: var(--text-faint);
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          font-weight: 600;
+          padding: 0 var(--space-3) var(--space-1);
+        }
+
         .nav-item {
+          position: relative;
           display: flex;
           align-items: center;
-          gap: var(--space-3);
-          padding: var(--space-3);
-          border-radius: var(--radius-md);
+          gap: var(--space-2);
+          padding: 10px 12px;
+          border-radius: 10px;
           text-decoration: none;
           color: var(--text-secondary);
-          transition: all 0.15s ease;
+          transition: all 0.2s ease;
+        }
+
+        .app-sidebar.collapsed .nav-item {
+          justify-content: center;
+          padding: 10px 6px;
+        }
+
+        .nav-item::before {
+          content: '';
+          position: absolute;
+          left: 2px;
+          top: 20%;
+          bottom: 20%;
+          width: 2px;
+          border-radius: var(--radius-full);
+          background: transparent;
         }
 
         .nav-item:hover {
-          background: var(--bg-inset);
+          background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
           color: var(--text-primary);
         }
 
         .nav-item.active {
-          background: var(--primary-muted);
+          background: color-mix(in srgb, var(--primary-muted) 32%, transparent);
           color: var(--primary);
         }
 
+        .nav-item.active::before {
+          background: var(--primary);
+        }
+
         .nav-icon {
-          font-size: 20px;
-          width: 24px;
+          font-size: 16px;
+          width: 20px;
           text-align: center;
         }
 
         .nav-label {
           font-weight: 500;
+          font-size: var(--font-meta);
         }
 
         .sidebar-footer {
           padding: var(--space-3);
           border-top: 1px solid var(--border-subtle);
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-2);
         }
 
-        .security-status {
-          margin-bottom: var(--space-3);
-          padding-bottom: var(--space-3);
-          border-bottom: 1px solid var(--border-subtle);
+        .footer-label {
+          font-size: var(--font-tiny);
+          color: var(--text-faint);
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          font-weight: 600;
+          padding: 0 var(--space-1);
+        }
+
+        .vault-pill {
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-full);
+          padding: 2px 8px;
+          width: fit-content;
+          max-width: 100%;
         }
 
         .download-btn {
@@ -504,22 +583,21 @@ export function AppShell({ children, user }: AppShellProps) {
           align-items: center;
           gap: var(--space-2);
           width: 100%;
-          padding: var(--space-2) var(--space-3);
-          margin-bottom: var(--space-3);
-          background: var(--bg-inset);
+          padding: 10px 12px;
+          background: var(--bg-base);
           border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-md);
+          border-radius: 10px;
           color: var(--text-secondary);
           font-size: var(--font-meta);
-          font-weight: 500;
+          font-weight: 600;
           cursor: pointer;
-          transition: all 0.15s;
+          transition: all 0.2s;
         }
 
         .download-btn:hover {
-          background: var(--bg-elevated);
-          border-color: var(--primary);
-          color: var(--primary);
+          background: var(--bg-hover);
+          border-color: var(--border-default);
+          color: var(--text-primary);
         }
 
         .download-btn-icon {
@@ -528,18 +606,18 @@ export function AppShell({ children, user }: AppShellProps) {
           display: flex;
           align-items: center;
           justify-content: center;
-          margin-bottom: var(--space-2);
-          background: var(--bg-inset);
+          margin-bottom: var(--space-1);
+          background: var(--bg-base);
           border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-md);
-          font-size: 18px;
+          border-radius: 10px;
+          font-size: 16px;
           cursor: pointer;
-          transition: all 0.15s;
+          transition: all 0.2s;
         }
 
         .download-btn-icon:hover {
-          background: var(--bg-elevated);
-          border-color: var(--primary);
+          background: var(--bg-hover);
+          border-color: var(--border-default);
         }
 
         .mobile-header-actions {
@@ -558,7 +636,18 @@ export function AppShell({ children, user }: AppShellProps) {
         }
 
         .user-profile:hover {
-          background: var(--bg-inset);
+          background: var(--bg-hover);
+        }
+
+        .nav-item:focus-visible,
+        .download-btn:focus-visible,
+        .download-btn-icon:focus-visible,
+        .user-profile:focus-visible,
+        .mobile-nav-item:focus-visible,
+        .mobile-menu-item:focus-visible,
+        .user-menu-item:focus-visible {
+          outline: 2px solid color-mix(in srgb, var(--primary) 72%, transparent);
+          outline-offset: 2px;
         }
 
         .user-avatar {
