@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { extractTextFromFile } from '@/lib/pdf/extract';
 import { idbStore } from '@/lib/idb';
 import { getGeneratedContent, ToolMode, GeneratedContent } from '@/lib/offline/generate';
+import { generateAiContent, loadAiPreferences } from '@/lib/ai/client';
 import { InteractiveQuiz } from './InteractiveQuiz';
 import { MathSolver } from '@/components/tools/MathSolver';
 import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
@@ -495,7 +496,24 @@ export function WorkspacePanel({
   };
 
   // Tool functions
-  const handleGenerate = () => {
+  const generateWithFallback = async (mode: ToolMode, text: string) => {
+    const prefs = loadAiPreferences();
+    const ai = await generateAiContent(text, mode, prefs);
+    if (ai && ai.displayText) {
+      if (mode === 'mcq' || mode === 'quiz') {
+        if (!ai.questions?.length || !ai.questions[0]?.options?.length) {
+          return getGeneratedContent(mode, text);
+        }
+      }
+      if (mode === 'flashcards' && !ai.flashcards?.length) {
+        return getGeneratedContent(mode, text);
+      }
+      return ai;
+    }
+    return getGeneratedContent(mode, text);
+  };
+
+  const handleGenerate = async () => {
     const input = toolInputs[toolTab] || '';
     if (!input.trim()) {
       setOutput('Please enter text to process.');
@@ -504,7 +522,7 @@ export function WorkspacePanel({
 
     setGenerating(true);
     try {
-      const content = getGeneratedContent(toolTab as ToolMode, input);
+      const content = await generateWithFallback(toolTab as ToolMode, input);
       setGeneratedContent(content);
       setOutput(content.displayText);
       addResult(toolTab, toolTabs.find(t => t.id === toolTab)?.label || toolTab, content.displayText, toolSources[toolTab]);
@@ -987,6 +1005,7 @@ export function WorkspacePanel({
                   }}
                   onResult={(title, content) => addResult('exam', title, content, toolSources.exam)}
                   onSrsSeed={(prep) => setExamPrep(prep)}
+                  generateContent={generateWithFallback}
                 />
               </div>
             ) : toolTab === 'srs' ? (
@@ -1001,6 +1020,7 @@ export function WorkspacePanel({
                   prepData={examPrep}
                   autoGenerate={autoChain}
                   onResult={(title, content) => addResult('srs', title, content, toolSources.srs)}
+                  generateContent={generateWithFallback}
                 />
               </div>
             ) : toolTab === 'map' ? (

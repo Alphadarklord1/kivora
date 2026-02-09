@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { generateSmartContent, Flashcard, GeneratedQuestion } from '@/lib/offline/generate';
+import { generateSmartContent, Flashcard, GeneratedQuestion, type ToolMode, type GeneratedContent } from '@/lib/offline/generate';
 import type { ExamPrepData } from '@/components/tools/ExamSimulator';
 
 interface FlashcardSRSProps {
@@ -11,9 +11,18 @@ interface FlashcardSRSProps {
   prepData?: ExamPrepData | null;
   autoGenerate?: boolean;
   onResult?: (title: string, content: string) => void;
+  generateContent?: (mode: ToolMode, text: string) => Promise<GeneratedContent>;
 }
 
-export function FlashcardSRS({ inputText = '', onInputChange, manualInputEnabled = true, prepData, autoGenerate = false, onResult }: FlashcardSRSProps) {
+export function FlashcardSRS({
+  inputText = '',
+  onInputChange,
+  manualInputEnabled = true,
+  prepData,
+  autoGenerate = false,
+  onResult,
+  generateContent,
+}: FlashcardSRSProps) {
   const [deck, setDeck] = useState<Flashcard[]>([]);
   const [index, setIndex] = useState(0);
   const [showBack, setShowBack] = useState(false);
@@ -40,8 +49,10 @@ export function FlashcardSRS({ inputText = '', onInputChange, manualInputEnabled
     return [];
   };
 
-  const generateDeck = () => {
-    const content = generateSmartContent('flashcards', inputText);
+  const generateDeck = async () => {
+    const content = generateContent
+      ? await generateContent('flashcards', inputText)
+      : generateSmartContent('flashcards', inputText);
     const cards = content.flashcards || [];
     setDeck(cards);
     setIndex(0);

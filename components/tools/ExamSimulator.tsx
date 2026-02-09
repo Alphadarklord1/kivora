@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { generateSmartContent, GeneratedQuestion } from '@/lib/offline/generate';
+import { generateSmartContent, GeneratedQuestion, type ToolMode, type GeneratedContent } from '@/lib/offline/generate';
 
 export interface ExamPrepData {
   summary: string;
@@ -19,6 +19,7 @@ interface ExamSimulatorProps {
   onPrepGenerated?: (prep: ExamPrepData) => void;
   onResult?: (title: string, content: string) => void;
   onSrsSeed?: (prep: ExamPrepData) => void;
+  generateContent?: (mode: ToolMode, text: string) => Promise<GeneratedContent>;
 }
 
 export function ExamSimulator({
@@ -30,6 +31,7 @@ export function ExamSimulator({
   onPrepGenerated,
   onResult,
   onSrsSeed,
+  generateContent,
 }: ExamSimulatorProps) {
   const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -68,12 +70,17 @@ export function ExamSimulator({
     setStarted(false);
   };
 
-  const generateExamPrep = () => {
+  const generateExamPrep = async () => {
     if (!inputText.trim()) return;
     setGeneratingPrep(true);
     try {
-      const summary = generateSmartContent('summarize', inputText);
-      const questions = generateSmartContent('mcq', inputText);
+      const summary = generateContent
+        ? await generateContent('summarize', inputText)
+        : generateSmartContent('summarize', inputText);
+      const questions = generateContent
+        ? await generateContent('mcq', inputText)
+        : generateSmartContent('mcq', inputText);
+
       const prep: ExamPrepData = {
         summary: summary.displayText,
         keyTopics: summary.keyTopics,

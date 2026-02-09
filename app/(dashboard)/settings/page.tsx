@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { signIn, signOut, getProviders } from 'next-auth/react';
 import { useVault } from '@/providers/VaultProvider';
+import { loadAiPreferences, saveAiPreferences, type AiPreferences } from '@/lib/ai/client';
 
-type SettingsTab = 'profile' | 'appearance' | 'security' | 'account';
+type SettingsTab = 'profile' | 'appearance' | 'security' | 'account' | 'ai';
 
 interface UserAccount {
   id: string;
@@ -64,6 +65,7 @@ export default function SettingsPage() {
   const [ttsVoice, setTtsVoice] = useState<string>('');
   const [ttsRate, setTtsRate] = useState<number>(1);
   const [ttsPitch, setTtsPitch] = useState<number>(1);
+  const [aiPrefs, setAiPrefs] = useState<AiPreferences>(loadAiPreferences());
 
   useEffect(() => {
     fetchData();
@@ -211,6 +213,11 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSaveAi = () => {
+    saveAiPreferences(aiPrefs);
+    showMessage('success', 'AI preferences saved');
+  };
+
   const handleChangePassword = async () => {
     if (newPassword !== confirmPassword) {
       showMessage('error', 'Passwords do not match');
@@ -355,6 +362,7 @@ export default function SettingsPage() {
     { id: 'appearance', label: 'Appearance', icon: '🎨' },
     { id: 'security', label: 'Security', icon: '🔒' },
     { id: 'account', label: 'Account', icon: '⚙️' },
+    { id: 'ai', label: 'AI', icon: '🤖' },
   ];
 
   if (loading) {
@@ -942,6 +950,75 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+
+          {/* AI Tab */}
+          {tab === 'ai' && (
+            <div className="settings-section">
+              <h2>AI Models</h2>
+              <p className="section-description">Choose between hosted and offline models</p>
+
+              <div className="account-card">
+                <h3>Provider</h3>
+                <div className="form-group">
+                  <label htmlFor="aiProvider">AI provider</label>
+                  <select
+                    id="aiProvider"
+                    value={aiPrefs.provider}
+                    onChange={(e) => setAiPrefs(prev => ({ ...prev, provider: e.target.value as AiPreferences['provider'] }))}
+                  >
+                    <option value="auto">Auto (OpenAI → Ollama → Offline)</option>
+                    <option value="openai">OpenAI (Hosted)</option>
+                    <option value="ollama">Ollama (Local)</option>
+                    <option value="offline">Offline only</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="account-card">
+                <h3>OpenAI</h3>
+                <div className="form-group">
+                  <label htmlFor="openaiModel">Model</label>
+                  <input
+                    id="openaiModel"
+                    type="text"
+                    value={aiPrefs.openaiModel}
+                    onChange={(e) => setAiPrefs(prev => ({ ...prev, openaiModel: e.target.value }))}
+                    placeholder="gpt-4o"
+                  />
+                  <p className="help-text">Requires `OPENAI_API_KEY` on the server.</p>
+                </div>
+              </div>
+
+              <div className="account-card">
+                <h3>Ollama (Local)</h3>
+                <div className="form-group">
+                  <label htmlFor="ollamaModel">Model</label>
+                  <input
+                    id="ollamaModel"
+                    type="text"
+                    value={aiPrefs.ollamaModel}
+                    onChange={(e) => setAiPrefs(prev => ({ ...prev, ollamaModel: e.target.value }))}
+                    placeholder="llama3:8b"
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="ollamaBase">Ollama URL</label>
+                  <input
+                    id="ollamaBase"
+                    type="text"
+                    value={aiPrefs.ollamaBaseUrl}
+                    onChange={(e) => setAiPrefs(prev => ({ ...prev, ollamaBaseUrl: e.target.value }))}
+                    placeholder="http://localhost:11434"
+                  />
+                  <p className="help-text">Only localhost is allowed for security.</p>
+                </div>
+              </div>
+
+              <button className="btn" onClick={handleSaveAi}>
+                Save AI Preferences
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1109,6 +1186,12 @@ export default function SettingsPage() {
         .section-description {
           color: var(--text-muted);
           margin-bottom: var(--space-6);
+        }
+
+        .help-text {
+          margin-top: var(--space-2);
+          font-size: var(--font-tiny);
+          color: var(--text-muted);
         }
 
         .form-group {
