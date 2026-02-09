@@ -1,16 +1,10 @@
 // StudyPilot Service Worker
-const CACHE_NAME = 'studypilot-v1';
+const CACHE_NAME = 'studypilot-v2';
 const OFFLINE_URL = '/offline.html';
 
 // Files to cache immediately
 const PRECACHE_URLS = [
   '/',
-  '/workspace',
-  '/tools',
-  '/library',
-  '/settings',
-  '/login',
-  '/register',
   '/offline.html',
 ];
 
@@ -39,7 +33,7 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -47,8 +41,16 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
+  // Skip cross-origin requests
+  if (url.origin !== self.location.origin) return;
+
   // Skip API requests - always go to network
   if (url.pathname.startsWith('/api/')) {
+    return;
+  }
+
+  // Never cache the service worker file itself
+  if (url.pathname === '/sw.js') {
     return;
   }
 
@@ -57,11 +59,35 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Navigation requests should always prefer network to avoid stale UI
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).catch(() => caches.match(OFFLINE_URL))
+    );
+    return;
+  }
+
+  // Cache-first for immutable Next.js static assets
+  if (url.pathname.startsWith('/_next/static/')) {
+    event.respondWith(
+      caches.match(request).then((cachedResponse) => {
+        if (cachedResponse) return cachedResponse;
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone));
+          }
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  // Stale-while-revalidate for other static same-origin assets
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
-      // Return cached response if available
       if (cachedResponse) {
-        // Fetch in background to update cache
         event.waitUntil(
           fetch(request).then((response) => {
             if (response.ok) {
@@ -74,11 +100,9 @@ self.addEventListener('fetch', (event) => {
         return cachedResponse;
       }
 
-      // Otherwise fetch from network
       return fetch(request)
         .then((response) => {
-          // Cache successful responses
-          if (response.ok && url.origin === self.location.origin) {
+          if (response.ok) {
             const responseClone = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(request, responseClone);
@@ -87,10 +111,6 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => {
-          // Return offline page for navigation requests
-          if (request.mode === 'navigate') {
-            return caches.match(OFFLINE_URL);
-          }
           return new Response('Offline', { status: 503 });
         });
     })

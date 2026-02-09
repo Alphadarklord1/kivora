@@ -14,42 +14,73 @@ export function ServiceWorkerRegistration() {
   }, [waitingWorker]);
 
   useEffect(() => {
-    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker
-          .register('/sw.js')
-          .then((registration) => {
-            console.log('SW registered:', registration.scope);
+    if (!('serviceWorker' in navigator) || process.env.NODE_ENV !== 'production') return;
 
-            // Check for updates periodically
-            setInterval(() => {
-              registration.update();
-            }, 60 * 60 * 1000); // Check every hour
+    let intervalId: number | null = null;
+    let registrationRef: ServiceWorkerRegistration | null = null;
 
-            // Check for updates
-            registration.addEventListener('updatefound', () => {
-              const newWorker = registration.installing;
-              if (newWorker) {
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    // New version available
-                    setWaitingWorker(newWorker);
-                    setUpdateAvailable(true);
-                  }
-                });
-              }
-            });
-          })
-          .catch((error) => {
-            console.log('SW registration failed:', error);
+    const handleControllerChange = () => {
+      window.location.reload();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && registrationRef) {
+        registrationRef.update();
+      }
+    };
+
+    const registerWorker = () => {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((registration) => {
+          registrationRef = registration;
+          console.log('SW registered:', registration.scope);
+
+          // Detect updates immediately on load
+          registration.update();
+
+          // If an update is already waiting, surface it
+          if (registration.waiting) {
+            setWaitingWorker(registration.waiting);
+            setUpdateAvailable(true);
+          }
+
+          // Check for updates periodically
+          intervalId = window.setInterval(() => {
+            registration.update();
+          }, 5 * 60 * 1000);
+
+          // Check for updates
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // New version available
+                  setWaitingWorker(newWorker);
+                  setUpdateAvailable(true);
+                }
+              });
+            }
           });
-      });
+        })
+        .catch((error) => {
+          console.log('SW registration failed:', error);
+        });
+    };
 
-      // Handle controller change (when new SW takes over)
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        window.location.reload();
-      });
-    }
+    window.addEventListener('load', registerWorker);
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('load', registerWorker);
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+    };
   }, []);
 
   if (!updateAvailable) {
