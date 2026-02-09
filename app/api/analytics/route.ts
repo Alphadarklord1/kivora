@@ -228,12 +228,15 @@ export async function GET(request: NextRequest) {
     };
 
     // Activity streaks and trends
-    const activityByDate = new Map<string, number>();
+    const activityByDate = new Map<string, { count: number; totalScore: number }>();
     for (const attempt of attempts) {
       const createdAt = new Date(attempt.createdAt);
       if (Number.isNaN(createdAt.getTime())) continue;
       const date = createdAt.toISOString().split('T')[0];
-      activityByDate.set(date, (activityByDate.get(date) || 0) + 1);
+      const day = activityByDate.get(date) || { count: 0, totalScore: 0 };
+      day.count += 1;
+      day.totalScore += attempt.score;
+      activityByDate.set(date, day);
     }
 
     // Calculate current streak
@@ -249,6 +252,20 @@ export async function GET(request: NextRequest) {
       } else if (i > 0) { // Allow today to be missed
         break;
       }
+    }
+
+    // Daily activity series (includes zero-activity days for charts/heatmaps)
+    const dailyActivity: { date: string; quizzes: number; avgScore: number }[] = [];
+    for (let i = periodDays - 1; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      const day = activityByDate.get(dateStr);
+      dailyActivity.push({
+        date: dateStr,
+        quizzes: day?.count || 0,
+        avgScore: day && day.count > 0 ? Math.round(day.totalScore / day.count) : 0,
+      });
     }
 
     // Weekly activity summary
@@ -305,6 +322,7 @@ export async function GET(request: NextRequest) {
         currentStreak,
         totalActiveDays: activityByDate.size,
         weeklyActivity: weeklyActivity.slice(-4), // Last 4 weeks
+        dailyActivity,
       },
       insights: generateInsights(quizStats, planStats, weakAreas, currentStreak),
       usage: {

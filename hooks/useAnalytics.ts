@@ -31,6 +31,7 @@ export interface Activity {
   currentStreak: number;
   totalActiveDays: number;
   weeklyActivity: { week: string; quizzes: number; avgScore: number }[];
+  dailyActivity: { date: string; quizzes: number; avgScore: number }[];
 }
 
 export interface UsageStats {

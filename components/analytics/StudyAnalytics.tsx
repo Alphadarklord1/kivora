@@ -1,40 +1,60 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 
+const PERIOD_OPTIONS = [
+  { value: 7, label: 'Last 7 days' },
+  { value: 30, label: 'Last 30 days' },
+  { value: 90, label: 'Last 90 days' },
+  { value: 365, label: 'Last year' },
+];
+
+type DailyPoint = { date: string; quizzes: number; avgScore: number };
+
 export function StudyAnalytics() {
+  const router = useRouter();
   const { data, loading, error, refresh, setPeriod, period } = useAnalytics(30);
 
   if (loading) {
     return (
       <div className="analytics-skeleton">
+        <div className="skeleton-hero">
+          <SkeletonCard />
+        </div>
         <div className="skeleton-stats">
-          {Array.from({ length: 4 }).map((_, i) => (
+          {Array.from({ length: 5 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
         </div>
-        <div className="skeleton-columns">
+        <div className="skeleton-grid">
+          <SkeletonCard />
+          <SkeletonCard />
           <SkeletonCard />
           <SkeletonCard />
         </div>
         <style jsx>{`
           .analytics-skeleton {
+            display: grid;
+            gap: var(--space-4);
             padding: var(--space-4);
           }
+
           .skeleton-stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
             gap: var(--space-3);
-            margin-bottom: var(--space-4);
           }
-          .skeleton-columns {
+
+          .skeleton-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 2fr 1fr;
             gap: var(--space-4);
           }
-          @media (max-width: 800px) {
-            .skeleton-columns {
+
+          @media (max-width: 980px) {
+            .skeleton-grid {
               grid-template-columns: 1fr;
             }
           }
@@ -53,378 +73,403 @@ export function StudyAnalytics() {
             text-align: center;
             padding: var(--space-8);
             color: var(--error);
+            display: grid;
+            gap: var(--space-3);
+            justify-items: center;
           }
         `}</style>
       </div>
     );
   }
 
-  if (!data) {
-    return null;
-  }
+  if (!data) return null;
 
   const { quizStats, planStats, weakAreas, activity, insights, usage } = data;
 
+  const dailySeries: DailyPoint[] = activity.dailyActivity && activity.dailyActivity.length > 0
+    ? activity.dailyActivity
+    : [];
+
+  const toolUsageEntries = Object.entries(usage.toolUsage);
+  const maxToolCount = Math.max(1, ...toolUsageEntries.map(([, count]) => count));
+  const totalToolHits = Math.max(1, toolUsageEntries.reduce((sum, [, count]) => sum + count, 0));
+  const mostUsedTool = toolUsageEntries[0]?.[0] || 'none';
+
+  const completionRate =
+    planStats.totalStudyDays > 0
+      ? Math.round((planStats.completedDays / planStats.totalStudyDays) * 100)
+      : planStats.totalPlans > 0
+        ? Math.round((planStats.completedPlans / planStats.totalPlans) * 100)
+        : 0;
+
+  const avgStudyMinutes =
+    quizStats.totalAttempts > 0 ? Math.max(0, Math.round(quizStats.totalTimeTaken / quizStats.totalAttempts / 60)) : 0;
+
+  const consistencyScore = Math.min(
+    100,
+    Math.round((activity.totalActiveDays / Math.max(period, 1)) * 65 + (Math.min(activity.currentStreak, 14) / 14) * 35)
+  );
+
+  const chronologicalScores = [...quizStats.recentScores].reverse().map((item) => item.score);
+
+  const trendSeries = dailySeries.length > 0
+    ? dailySeries
+    : quizStats.recentScores
+        .slice()
+        .reverse()
+        .map((item) => ({ date: item.date, quizzes: 1, avgScore: item.score }));
+
+  const trendTail = trendSeries.slice(-Math.min(60, trendSeries.length));
+  const trendLine = buildLinePoints(
+    trendTail.map((point) => point.avgScore),
+    760,
+    220,
+    20,
+    0,
+    100
+  );
+  const maxAttempts = Math.max(1, ...trendTail.map((point) => point.quizzes));
+  const improvement = getImprovement(chronologicalScores);
+
+  const easySignal = Math.round(
+    ((quizStats.scoreDistribution.excellent + quizStats.scoreDistribution.good) / Math.max(quizStats.totalAttempts, 1)) * 100
+  );
+  const mediumSignal = Math.round((quizStats.scoreDistribution.fair / Math.max(quizStats.totalAttempts, 1)) * 100);
+  const hardSignal = Math.round((quizStats.scoreDistribution.needsWork / Math.max(quizStats.totalAttempts, 1)) * 100);
+
+  const heatmapWeeks = buildHeatmapWeeks(dailySeries);
+  const maxHeat = Math.max(1, ...dailySeries.map((d) => d.quizzes));
+
+  const aiInsights = insights.length > 0
+    ? insights
+    : ['No AI insights yet. Complete a few more quizzes to unlock adaptive guidance.'];
+
+  const exportCsv = () => {
+    const rows: string[][] = [
+      ['Metric', 'Value'],
+      ['Average Score', `${quizStats.averageScore}%`],
+      ['Total Quizzes', `${quizStats.totalAttempts}`],
+      ['Current Streak', `${activity.currentStreak}`],
+      ['Tools Used', `${toolUsageEntries.length}`],
+      ['Active Plans', `${planStats.activePlans}`],
+      ['Completion Rate', `${completionRate}%`],
+      ['Consistency Score', `${consistencyScore}%`],
+      ['Average Study Minutes', `${avgStudyMinutes}`],
+      ['Most Used Tool', formatMode(mostUsedTool)],
+      ['---', '---'],
+      ['Weak Area', 'Accuracy'],
+      ...weakAreas.map((item) => [item.topic, `${item.accuracy}%`]),
+    ];
+
+    const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `study-analytics-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportPdf = () => {
+    window.print();
+  };
+
+  const shareSnapshot = async () => {
+    const snapshot = [
+      `Study Analytics (${period}d)`,
+      `Average score: ${quizStats.averageScore}%`,
+      `Total quizzes: ${quizStats.totalAttempts}`,
+      `Current streak: ${activity.currentStreak} day(s)`,
+      `Most used tool: ${formatMode(mostUsedTool)}`,
+      `Consistency score: ${consistencyScore}%`,
+    ].join('\n');
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Study Analytics Snapshot',
+          text: snapshot,
+        });
+        return;
+      } catch {
+        // no-op
+      }
+    }
+
+    await navigator.clipboard.writeText(snapshot);
+  };
+
+  const scrollToWeakAreas = () => {
+    const node = document.getElementById('weak-areas-card');
+    if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <div className="study-analytics">
-      {/* Header */}
-      <div className="analytics-header">
-        <div>
-          <h2>Study Analytics</h2>
-          <p>Track your progress and identify areas for improvement</p>
+      <section className="analytics-header">
+        <div className="header-copy">
+          <h1>Study Analytics</h1>
+          <p>Track outcomes, identify weak spots, and improve consistency with AI guidance.</p>
+          <span className="ai-badge">AI-powered insights</span>
         </div>
-        <div className="period-selector">
-          <select
-            value={period}
-            onChange={(e) => setPeriod(Number(e.target.value))}
-          >
-            <option value={7}>Last 7 days</option>
-            <option value={30}>Last 30 days</option>
-            <option value={90}>Last 90 days</option>
-            <option value={365}>Last year</option>
-          </select>
+        <div className="header-controls">
+          <label className="period">
+            <span>Range</span>
+            <select value={period} onChange={(e) => setPeriod(Number(e.target.value))}>
+              {PERIOD_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <button className="analytics-btn ghost" onClick={exportPdf}>Export PDF</button>
+          <button className="analytics-btn ghost" onClick={exportCsv}>Export CSV</button>
+          <button className="analytics-btn ghost" onClick={shareSnapshot}>Share Snapshot</button>
         </div>
-      </div>
+      </section>
 
-      {/* Insights Banner */}
-      {insights.length > 0 && (
-        <div className="insights-banner">
-          <h3>Insights</h3>
-          <ul>
-            {insights.map((insight, i) => (
-              <li key={i}>{insight}</li>
-            ))}
-          </ul>
+      <section className="ai-hero">
+        <div className="ai-hero-head">
+          <h2>🧠 AI Study Advisor</h2>
+          <span className="accent-pill">Adaptive recommendations</span>
         </div>
-      )}
+        <ul>
+          {aiInsights.slice(0, 3).map((insight, index) => (
+            <li key={index}>{insight}</li>
+          ))}
+        </ul>
+        <div className="hero-actions">
+          <button className="analytics-btn primary" onClick={() => router.push('/planner')}>
+            Generate Plan
+          </button>
+          <button className="analytics-btn ghost" onClick={scrollToWeakAreas}>
+            Review Weak Areas
+          </button>
+        </div>
+      </section>
 
-      {/* Stats Overview */}
-      <div className="stats-grid">
-        <div className="stat-card primary">
-          <div className="stat-icon">📊</div>
-          <div className="stat-content">
-            <div className="stat-value">{quizStats.averageScore}%</div>
-            <div className="stat-label">Average Score</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">✅</div>
-          <div className="stat-content">
-            <div className="stat-value">{quizStats.totalAttempts}</div>
-            <div className="stat-label">Quizzes Taken</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">🔥</div>
-          <div className="stat-content">
-            <div className="stat-value">{activity.currentStreak}</div>
-            <div className="stat-label">Day Streak</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">📅</div>
-          <div className="stat-content">
-            <div className="stat-value">{planStats.activePlans}</div>
-            <div className="stat-label">Active Plans</div>
-          </div>
-        </div>
-      </div>
+      <section className="kpi-row">
+        {[
+          { label: 'Average Score', value: `${quizStats.averageScore}%`, hint: 'Across all attempts', tooltip: 'Average score across selected period' },
+          { label: 'Total Quizzes', value: `${quizStats.totalAttempts}`, hint: 'Attempts completed', tooltip: 'Total quiz attempts in selected period' },
+          { label: 'Study Streak', value: `${activity.currentStreak}`, hint: 'Consecutive days', tooltip: 'Current consecutive active-study days' },
+          { label: 'Tools Used', value: `${toolUsageEntries.length}`, hint: mostUsedTool === 'none' ? 'No usage yet' : `Top: ${formatMode(mostUsedTool)}`, tooltip: 'Distinct tools used this period' },
+          { label: 'Active Study Plan', value: `${planStats.activePlans}`, hint: `${planStats.totalPlans} total plans`, tooltip: 'Plans currently marked active' },
+        ].map((metric) => (
+          <article key={metric.label} className="metric-card" title={metric.tooltip}>
+            <span className="metric-label">{metric.label}</span>
+            <strong className="metric-value">{metric.value}</strong>
+            <span className="metric-hint">{metric.hint}</span>
+          </article>
+        ))}
+      </section>
 
-      {/* Usage Overview */}
-      <div className="usage-grid">
-        <div className="stat-card">
-          <div className="stat-icon">📁</div>
-          <div className="stat-content">
-            <div className="stat-value">{usage.totalFiles}</div>
-            <div className="stat-label">Total Files</div>
-            <div className="stat-sub">+{usage.periodUploads} uploads this period</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">🧠</div>
-          <div className="stat-content">
-            <div className="stat-value">{usage.generatedFiles}</div>
-            <div className="stat-label">Generated Items</div>
-            <div className="stat-sub">+{usage.periodGenerated} this period</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">📚</div>
-          <div className="stat-content">
-            <div className="stat-value">{usage.libraryItems}</div>
-            <div className="stat-label">Library Items</div>
-            <div className="stat-sub">+{usage.periodLibraryItems} this period</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">🛠️</div>
-          <div className="stat-content">
-            <div className="stat-value">{Object.keys(usage.toolUsage).length}</div>
-            <div className="stat-label">Tools Used</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Two Column Layout */}
-      <div className="analytics-columns">
-        {/* Left Column */}
-        <div className="analytics-column">
-          {/* Quiz Performance */}
-          <div className="analytics-card">
-            <h3>Quiz Performance</h3>
-            <div className="performance-summary">
-              <div className="perf-stat">
-                <span className="perf-label">Total Questions</span>
-                <span className="perf-value">{quizStats.totalQuestions}</span>
+      <section className="analytics-grid top">
+        <article className="analytics-card performance">
+          <h3>Quiz Performance</h3>
+          <div className="performance-grid">
+            <div className="score-hero">
+              <div className="score-main">{quizStats.averageScore}%</div>
+              <div className={`trend-chip ${improvement >= 0 ? 'up' : 'down'}`}>
+                {improvement >= 0 ? '↑' : '↓'} {Math.abs(improvement)}%
               </div>
-              <div className="perf-stat">
-                <span className="perf-label">Correct Answers</span>
-                <span className="perf-value success">{quizStats.totalCorrect}</span>
-              </div>
-              <div className="perf-stat">
-                <span className="perf-label">Accuracy Rate</span>
-                <span className="perf-value">
-                  {quizStats.totalQuestions > 0
-                    ? Math.round((quizStats.totalCorrect / quizStats.totalQuestions) * 100)
-                    : 0}%
-                </span>
-              </div>
+              <svg viewBox="0 0 220 70" className="sparkline" role="img" aria-label="Score sparkline trend">
+                <polyline points={buildLinePoints(chronologicalScores.length ? chronologicalScores : [0], 220, 70, 6, 0, 100)} />
+              </svg>
             </div>
-
-            {/* Score Distribution */}
-            <div className="score-distribution">
-              <h4>Score Distribution</h4>
-              <div className="distribution-bars">
-                <div className="dist-item">
-                  <div className="dist-label">90-100%</div>
-                  <div className="dist-bar-container">
-                    <div
-                      className="dist-bar excellent"
-                      style={{
-                        width: `${quizStats.totalAttempts > 0
-                          ? (quizStats.scoreDistribution.excellent / quizStats.totalAttempts) * 100
-                          : 0}%`
-                      }}
-                    />
+            <div className="difficulty-signal">
+              {[
+                { label: 'Easy Signal', value: easySignal, tone: 'good' as const },
+                { label: 'Medium Signal', value: mediumSignal, tone: 'fair' as const },
+                { label: 'Hard Signal', value: hardSignal, tone: 'needs-work' as const },
+              ].map((item) => (
+                <div key={item.label} className="difficulty-row" title={`${item.label}: ${item.value}%`}>
+                  <span className="difficulty-label">{item.label}</span>
+                  <div className="difficulty-track">
+                    <div className={`difficulty-fill ${item.tone}`} style={{ width: `${Math.max(0, Math.min(100, item.value))}%` }} />
                   </div>
-                  <div className="dist-count">{quizStats.scoreDistribution.excellent}</div>
+                  <strong className="difficulty-value">{item.value}%</strong>
                 </div>
-                <div className="dist-item">
-                  <div className="dist-label">70-89%</div>
-                  <div className="dist-bar-container">
-                    <div
-                      className="dist-bar good"
-                      style={{
-                        width: `${quizStats.totalAttempts > 0
-                          ? (quizStats.scoreDistribution.good / quizStats.totalAttempts) * 100
-                          : 0}%`
-                      }}
-                    />
-                  </div>
-                  <div className="dist-count">{quizStats.scoreDistribution.good}</div>
-                </div>
-                <div className="dist-item">
-                  <div className="dist-label">50-69%</div>
-                  <div className="dist-bar-container">
-                    <div
-                      className="dist-bar fair"
-                      style={{
-                        width: `${quizStats.totalAttempts > 0
-                          ? (quizStats.scoreDistribution.fair / quizStats.totalAttempts) * 100
-                          : 0}%`
-                      }}
-                    />
-                  </div>
-                  <div className="dist-count">{quizStats.scoreDistribution.fair}</div>
-                </div>
-                <div className="dist-item">
-                  <div className="dist-label">0-49%</div>
-                  <div className="dist-bar-container">
-                    <div
-                      className="dist-bar needs-work"
-                      style={{
-                        width: `${quizStats.totalAttempts > 0
-                          ? (quizStats.scoreDistribution.needsWork / quizStats.totalAttempts) * 100
-                          : 0}%`
-                      }}
-                    />
-                  </div>
-                  <div className="dist-count">{quizStats.scoreDistribution.needsWork}</div>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
+        </article>
 
-          {/* Performance by Mode */}
-          {Object.keys(quizStats.byMode).length > 0 && (
-            <div className="analytics-card">
-              <h3>Performance by Quiz Type</h3>
-              <div className="mode-list">
-                {Object.entries(quizStats.byMode).map(([mode, stats]) => (
-                  <div key={mode} className="mode-item">
-                    <div className="mode-header">
-                      <span className="mode-name">{formatMode(mode)}</span>
-                      <span className={`mode-score ${getScoreClass(stats.avgScore)}`}>
-                        {stats.avgScore}%
-                      </span>
-                    </div>
-                    <div className="mode-details">
-                      <span>{stats.attempts} attempts</span>
-                      <span>{stats.totalQuestions} questions</span>
-                    </div>
-                    <div className="mode-bar-container">
-                      <div
-                        className={`mode-bar ${getScoreClass(stats.avgScore)}`}
-                        style={{ width: `${stats.avgScore}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right Column */}
-        <div className="analytics-column">
-          <div className="analytics-card">
+        <article className="analytics-card tool-usage-card">
+          <div className="card-head">
             <h3>Tool Usage</h3>
-            <div className="tool-usage">
-              {Object.entries(usage.toolUsage).length === 0 ? (
-                <p className="muted">No tool activity yet.</p>
-              ) : (
-                Object.entries(usage.toolUsage).slice(0, 8).map(([tool, count]) => (
-                  <div key={tool} className="tool-row">
-                    <span className="tool-name">{tool}</span>
+            <span className="mini-badge">Most used: {formatMode(mostUsedTool)}</span>
+          </div>
+          {toolUsageEntries.length === 0 ? (
+            <p className="muted">No tool activity yet.</p>
+          ) : (
+            <div className="tool-usage-list">
+              {toolUsageEntries.slice(0, 7).map(([tool, count]) => {
+                const width = Math.round((count / maxToolCount) * 100);
+                const percent = Math.round((count / totalToolHits) * 100);
+                return (
+                  <div key={tool} className="tool-row" title={`${formatMode(tool)}: ${count} uses`}>
+                    <div className="tool-label">
+                      <span className="tool-icon">{getToolIcon(tool)}</span>
+                      <span>{formatMode(tool)}</span>
+                    </div>
                     <div className="tool-bar">
-                      <div
-                        className="tool-bar-fill"
-                        style={{ width: `${Math.min(100, (count / Math.max(...Object.values(usage.toolUsage))) * 100)}%` }}
-                      />
+                      <div className="tool-bar-fill" style={{ width: `${width}%` }} />
                     </div>
-                    <span className="tool-count">{count}</span>
+                    <span className="tool-percent">{percent}%</span>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Weak Areas */}
-          <div className="analytics-card">
-            <h3>Areas to Improve</h3>
-            {weakAreas.length > 0 ? (
-              <div className="weak-areas-list">
-                {weakAreas.map((area, i) => (
-                  <div key={i} className="weak-area-item">
-                    <div className="weak-area-header">
-                      <span className="weak-topic">{area.topic}</span>
-                      <span className={`weak-accuracy ${getScoreClass(area.accuracy)}`}>
-                        {area.accuracy}%
-                      </span>
-                    </div>
-                    <p className="weak-suggestion">{area.suggestion}</p>
-                    <div className="weak-bar-container">
-                      <div
-                        className={`weak-bar ${getScoreClass(area.accuracy)}`}
-                        style={{ width: `${area.accuracy}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state">
-                <span className="empty-icon">🎉</span>
-                <p>No weak areas identified!</p>
-                <span className="empty-hint">Keep taking quizzes to get personalized recommendations</span>
-              </div>
-            )}
-          </div>
-
-          {/* Study Plans Progress */}
-          <div className="analytics-card">
-            <h3>Study Plans</h3>
-            <div className="plans-summary">
-              <div className="plan-stat">
-                <div className="plan-value">{planStats.totalPlans}</div>
-                <div className="plan-label">Total Plans</div>
-              </div>
-              <div className="plan-stat">
-                <div className="plan-value success">{planStats.completedPlans}</div>
-                <div className="plan-label">Completed</div>
-              </div>
-              <div className="plan-stat">
-                <div className="plan-value primary">{planStats.activePlans}</div>
-                <div className="plan-label">Active</div>
-              </div>
-            </div>
-            {planStats.totalStudyDays > 0 && (
-              <div className="study-days-progress">
-                <div className="progress-header">
-                  <span>Study Days Completed</span>
-                  <span>{planStats.completedDays} / {planStats.totalStudyDays}</span>
-                </div>
-                <div className="progress-bar-container">
-                  <div
-                    className="progress-bar"
-                    style={{
-                      width: `${(planStats.completedDays / planStats.totalStudyDays) * 100}%`
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Weekly Activity */}
-          {activity.weeklyActivity.length > 0 && (
-            <div className="analytics-card">
-              <h3>Weekly Activity</h3>
-              <div className="weekly-chart">
-                {activity.weeklyActivity.map((week, i) => (
-                  <div key={i} className="week-item">
-                    <div className="week-bar-container">
-                      <div
-                        className="week-bar"
-                        style={{
-                          height: `${Math.min(100, week.quizzes * 20)}%`
-                        }}
-                        title={`${week.quizzes} quizzes, ${week.avgScore}% avg`}
-                      />
-                    </div>
-                    <div className="week-label">
-                      {new Date(week.week).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
           )}
-        </div>
-      </div>
+        </article>
+      </section>
 
-      {/* Recent Scores */}
+      <section className="analytics-grid middle">
+        <article className="analytics-card trend-card">
+          <h3>Performance Trend</h3>
+          <div className="trend-chart-wrap">
+            <svg viewBox="0 0 760 220" className="trend-chart" role="img" aria-label="Score and attempts trend">
+              <line x1="20" y1="20" x2="740" y2="20" className="guide-line" />
+              <line x1="20" y1="110" x2="740" y2="110" className="guide-line" />
+              <line x1="20" y1="200" x2="740" y2="200" className="guide-line" />
+              {trendTail.map((point, index) => {
+                const spacing = trendTail.length > 1 ? (720 / (trendTail.length - 1)) : 0;
+                const x = 20 + index * spacing;
+                const barHeight = Math.round((point.quizzes / maxAttempts) * 58);
+                return (
+                  <rect
+                    key={`${point.date}-${index}`}
+                    x={x - 3}
+                    y={200 - barHeight}
+                    width="6"
+                    height={Math.max(2, barHeight)}
+                    className="attempt-bar"
+                  />
+                );
+              })}
+              <polyline points={trendLine} className="score-line" />
+            </svg>
+          </div>
+          <div className="trend-legend">
+            <span><i className="legend score" /> Score trend</span>
+            <span><i className="legend attempts" /> Attempts</span>
+          </div>
+        </article>
+
+        <article id="weak-areas-card" className="analytics-card weak-areas-card">
+          <h3>Areas to Improve</h3>
+          {weakAreas.length > 0 ? (
+            <div className="weak-areas-list">
+              {weakAreas.slice(0, 4).map((area, index) => (
+                <div key={`${area.topic}-${index}`} className="weak-item">
+                  <div className="weak-head">
+                    <strong>{area.topic}</strong>
+                    <span className={`score-pill ${getScoreClass(area.accuracy)}`}>{area.accuracy}%</span>
+                  </div>
+                  <p>{area.suggestion}</p>
+                  <div className="weak-actions">
+                    <button className="analytics-btn ghost small" onClick={() => router.push('/tools')}>
+                      Generate Practice
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">No weak areas identified yet. Keep practicing to get targeted coaching.</p>
+          )}
+        </article>
+      </section>
+
+      <section className="analytics-grid bottom">
+        <article className="analytics-card plan-card">
+          <h3>Study Plan Analytics</h3>
+          <div className="plan-kpis">
+            <div className="plan-kpi">
+              <span>Completion Rate</span>
+              <strong>{completionRate}%</strong>
+            </div>
+            <div className="plan-kpi">
+              <span>Avg Study Time</span>
+              <strong>{avgStudyMinutes} min</strong>
+            </div>
+            <div className="plan-kpi">
+              <span>Consistency Score</span>
+              <strong>{consistencyScore}%</strong>
+            </div>
+          </div>
+          <div className="plan-progress">
+            <div className="progress-head">
+              <span>Completed Days</span>
+              <span>{planStats.completedDays} / {Math.max(planStats.totalStudyDays, 0)}</span>
+            </div>
+            <div className="progress-track">
+              <div className="progress-fill" style={{ width: `${completionRate}%` }} />
+            </div>
+          </div>
+        </article>
+
+        <article className="analytics-card heatmap-card">
+          <h3>Weekly Activity Heatmap</h3>
+          <div className="heatmap-scroll">
+            <div className="heatmap-grid">
+              {heatmapWeeks.map((week, weekIndex) => (
+                <div key={weekIndex} className="heatmap-week">
+                  {week.map((day, dayIndex) => {
+                    if (!day) return <span key={`${weekIndex}-${dayIndex}`} className="heat-cell empty" />;
+                    const intensity = getIntensity(day.quizzes, maxHeat);
+                    return (
+                      <span
+                        key={`${day.date}-${dayIndex}`}
+                        className={`heat-cell i${intensity}`}
+                        title={`${formatFullDate(day.date)} • ${day.quizzes} activity`}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="heatmap-legend">
+            <span>Low</span>
+            <div className="legend-scale">
+              <i className="heat-cell i0" />
+              <i className="heat-cell i1" />
+              <i className="heat-cell i2" />
+              <i className="heat-cell i3" />
+              <i className="heat-cell i4" />
+            </div>
+            <span>High</span>
+          </div>
+        </article>
+      </section>
+
       {quizStats.recentScores.length > 0 && (
-        <div className="analytics-card full-width">
+        <section className="analytics-card recent-card">
           <h3>Recent Quiz Scores</h3>
           <div className="recent-scores">
-            {quizStats.recentScores.map((score, i) => (
-              <div key={i} className="score-item">
-                <div className={`score-badge ${getScoreClass(score.score)}`}>
-                  {score.score}%
+            {quizStats.recentScores.slice(0, 10).map((score, index) => (
+              <div key={`${score.date}-${score.mode}-${index}`} className="recent-item">
+                <div className="ring" style={{ background: `conic-gradient(var(--primary) ${score.score}%, var(--bg-inset) 0)` }}>
+                  <span>{score.score}%</span>
                 </div>
-                <div className="score-details">
-                  <span className="score-mode">{formatMode(score.mode)}</span>
-                  <span className="score-date">{formatDate(score.date)}</span>
+                <div className="recent-meta">
+                  <strong>{formatMode(score.mode)}</strong>
+                  <span>{formatShortDate(score.date)}</span>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       <style jsx>{`
         .study-analytics {
+          display: grid;
+          gap: var(--space-6);
           padding: var(--space-4);
         }
 
@@ -432,175 +477,365 @@ export function StudyAnalytics() {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          margin-bottom: var(--space-4);
+          gap: var(--space-4);
           flex-wrap: wrap;
-          gap: var(--space-3);
         }
 
-        .analytics-header h2 {
-          margin: 0 0 var(--space-1) 0;
-          font-size: var(--font-xl);
-        }
-
-        .analytics-header p {
+        .header-copy h1 {
           margin: 0;
+          font-size: clamp(28px, 4vw, 36px);
+          font-weight: 700;
+          letter-spacing: var(--letter-tight);
+        }
+
+        .header-copy p {
+          margin: var(--space-2) 0 0;
           color: var(--text-muted);
-          font-size: var(--font-meta);
-        }
-
-        .period-selector select {
-          padding: var(--space-2) var(--space-3);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-md);
-          font-size: var(--font-meta);
-          background: var(--bg-surface);
-        }
-
-        .insights-banner {
-          background: linear-gradient(135deg, var(--primary-muted), var(--bg-surface));
-          border: 1px solid var(--primary);
-          border-radius: var(--radius-lg);
-          padding: var(--space-4);
-          margin-bottom: var(--space-4);
-        }
-
-        .insights-banner h3 {
-          margin: 0 0 var(--space-2) 0;
           font-size: var(--font-body);
+          max-width: 62ch;
+        }
+
+        .ai-badge {
+          display: inline-flex;
+          margin-top: var(--space-2);
+          padding: 4px 10px;
+          border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border-default));
+          border-radius: var(--radius-full);
+          background: color-mix(in srgb, var(--primary-muted) 45%, transparent);
           color: var(--primary);
+          font-size: var(--font-tiny);
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
         }
 
-        .insights-banner ul {
-          margin: 0;
-          padding-left: var(--space-4);
+        .header-controls {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: flex-end;
+          gap: var(--space-2);
         }
 
-        .insights-banner li {
-          margin-bottom: var(--space-1);
-          color: var(--text-secondary);
+        .period {
+          display: grid;
+          gap: 4px;
+          min-width: 170px;
+        }
+
+        .period span {
+          font-size: var(--font-tiny);
+          color: var(--text-muted);
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          font-weight: 600;
+        }
+
+        .period select {
+          height: 36px;
+          padding: 0 10px;
+          border-radius: 10px;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+          color: var(--text-primary);
           font-size: var(--font-meta);
         }
 
-        .stats-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-          gap: var(--space-3);
-          margin-bottom: var(--space-4);
-        }
-
-        .usage-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-          gap: var(--space-3);
-          margin-bottom: var(--space-4);
-        }
-
-        .stat-card {
-          background: var(--bg-surface);
+        .ai-hero,
+        .analytics-card {
+          background: var(--bg-elevated);
           border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
-          padding: var(--space-4);
+          border-radius: 16px;
+          box-shadow: var(--shadow-sm);
+          transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+
+        .ai-hero:hover,
+        .analytics-card:hover {
+          transform: translateY(-1px);
+          box-shadow: var(--shadow-md);
+          border-color: var(--border-default);
+        }
+
+        .ai-hero {
+          padding: var(--space-5);
+          border-left: 3px solid color-mix(in srgb, var(--primary) 60%, var(--border-default));
+        }
+
+        .ai-hero-head {
           display: flex;
+          justify-content: space-between;
           align-items: center;
           gap: var(--space-3);
-          box-shadow: var(--shadow-sm);
-          transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+          margin-bottom: var(--space-3);
+          flex-wrap: wrap;
         }
 
-        .stat-card:hover {
-          border-color: var(--border-default);
-          box-shadow: var(--shadow-md);
-          transform: translateY(-1px);
+        .ai-hero h2 {
+          margin: 0;
+          font-size: var(--font-lg);
         }
 
-        .stat-card.primary {
-          background: var(--primary-muted);
-          border-color: var(--primary);
-        }
-
-        .stat-card.primary:hover {
-          box-shadow: var(--shadow-md);
-        }
-
-        .stat-icon {
-          font-size: 28px;
-        }
-
-        .stat-value {
-          font-size: var(--font-xl);
-          font-weight: 700;
-          color: var(--text-primary);
-        }
-
-        .stat-label {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-        }
-
-        .stat-sub {
+        .accent-pill {
           font-size: var(--font-tiny);
           color: var(--text-secondary);
-          margin-top: var(--space-1);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-full);
+          padding: 3px 10px;
+          white-space: nowrap;
         }
 
-        .analytics-columns {
+        .ai-hero ul {
+          margin: 0;
+          padding-left: var(--space-4);
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          gap: var(--space-2);
+        }
+
+        .ai-hero li {
+          color: var(--text-secondary);
+          font-size: var(--font-body);
+          line-height: 1.5;
+        }
+
+        .hero-actions {
+          margin-top: var(--space-4);
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--space-2);
+        }
+
+        .kpi-row {
+          display: grid;
+          gap: var(--space-3);
+          grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        }
+
+        .metric-card {
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: 14px;
+          padding: var(--space-4);
+          display: grid;
+          gap: var(--space-2);
+          transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .metric-card:hover {
+          transform: translateY(-1px);
+          border-color: var(--border-default);
+        }
+
+        .metric-label {
+          font-size: var(--font-tiny);
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          font-weight: 600;
+        }
+
+        .metric-value {
+          font-size: clamp(24px, 3vw, 34px);
+          font-weight: 700;
+          line-height: 1;
+        }
+
+        .metric-hint {
+          font-size: var(--font-meta);
+          color: var(--text-secondary);
+        }
+
+        .analytics-grid {
+          display: grid;
           gap: var(--space-4);
         }
 
-        @media (max-width: 800px) {
-          .analytics-columns {
+        .analytics-grid.top {
+          grid-template-columns: 1.3fr 1fr;
+        }
+
+        .analytics-grid.middle {
+          grid-template-columns: 1.3fr 1fr;
+        }
+
+        .analytics-grid.bottom {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        @media (max-width: 1080px) {
+          .analytics-grid.top,
+          .analytics-grid.middle,
+          .analytics-grid.bottom {
             grid-template-columns: 1fr;
           }
         }
 
         .analytics-card {
-          background: var(--bg-surface);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
           padding: var(--space-4);
-          margin-bottom: var(--space-4);
-          box-shadow: var(--shadow-sm);
-          transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-        }
-
-        .analytics-card:hover {
-          border-color: var(--border-default);
-          box-shadow: var(--shadow-md);
-          transform: translateY(-1px);
-        }
-
-        .analytics-card.full-width {
-          grid-column: 1 / -1;
         }
 
         .analytics-card h3 {
-          margin: 0 0 var(--space-3) 0;
-          font-size: var(--font-body);
+          margin: 0 0 var(--space-3);
+          font-size: var(--font-section);
           font-weight: 600;
         }
 
-        .tool-usage {
+        .performance-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--space-4);
+          align-items: center;
+        }
+
+        @media (max-width: 780px) {
+          .performance-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .score-hero {
+          display: grid;
+          gap: var(--space-2);
+          align-content: center;
+        }
+
+        .score-main {
+          font-size: clamp(34px, 6vw, 56px);
+          font-weight: 700;
+          line-height: 1;
+        }
+
+        .trend-chip {
+          display: inline-flex;
+          width: fit-content;
+          padding: 4px 8px;
+          border-radius: var(--radius-full);
+          font-size: var(--font-tiny);
+          font-weight: 700;
+        }
+
+        .trend-chip.up {
+          color: var(--success);
+          background: color-mix(in srgb, var(--success) 18%, transparent);
+        }
+
+        .trend-chip.down {
+          color: var(--error);
+          background: color-mix(in srgb, var(--error) 16%, transparent);
+        }
+
+        .sparkline {
+          width: 100%;
+          max-width: 260px;
+          height: 72px;
+        }
+
+        .sparkline polyline {
+          fill: none;
+          stroke: var(--primary);
+          stroke-width: 2.5;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+
+        .difficulty-signal {
+          display: grid;
+          gap: var(--space-2);
+        }
+
+        .difficulty-row {
+          display: grid;
+          grid-template-columns: 110px 1fr 42px;
+          gap: var(--space-2);
+          align-items: center;
+          font-size: var(--font-meta);
+        }
+
+        .difficulty-label {
+          color: var(--text-secondary);
+        }
+
+        .difficulty-track {
+          height: 8px;
+          border-radius: var(--radius-full);
+          background: var(--bg-inset);
+          overflow: hidden;
+        }
+
+        .difficulty-fill {
+          height: 100%;
+          border-radius: var(--radius-full);
+        }
+
+        .difficulty-fill.good {
+          background: color-mix(in srgb, var(--success) 85%, white);
+        }
+
+        .difficulty-fill.fair {
+          background: color-mix(in srgb, var(--warning) 85%, white);
+        }
+
+        .difficulty-fill.needs-work {
+          background: color-mix(in srgb, var(--error) 82%, white);
+        }
+
+        .difficulty-value {
+          text-align: right;
+          font-weight: 600;
+        }
+
+        .card-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: var(--space-2);
+          margin-bottom: var(--space-2);
+          flex-wrap: wrap;
+        }
+
+        .mini-badge {
+          font-size: var(--font-tiny);
+          color: var(--text-muted);
+          background: var(--bg-surface);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-full);
+          padding: 3px 8px;
+        }
+
+        .tool-usage-list {
           display: grid;
           gap: var(--space-2);
         }
 
         .tool-row {
           display: grid;
-          grid-template-columns: 90px 1fr 40px;
-          align-items: center;
+          grid-template-columns: 1fr minmax(100px, 1fr) 42px;
           gap: var(--space-2);
+          align-items: center;
+        }
+
+        .tool-label {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+          color: var(--text-secondary);
           font-size: var(--font-meta);
         }
 
-        .tool-name {
-          text-transform: capitalize;
-          color: var(--text-secondary);
+        .tool-label span:last-child {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .tool-icon {
+          font-size: 14px;
+          line-height: 1;
         }
 
         .tool-bar {
-          height: 8px;
+          height: 10px;
           background: var(--bg-inset);
           border-radius: var(--radius-full);
           overflow: hidden;
@@ -608,13 +843,344 @@ export function StudyAnalytics() {
 
         .tool-bar-fill {
           height: 100%;
-          background: var(--primary);
           border-radius: var(--radius-full);
+          background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 76%, #9cc4ff), var(--primary));
+          transition: width 0.25s ease;
         }
 
-        .tool-count {
-          font-weight: 600;
+        .tool-percent {
           text-align: right;
+          font-weight: 600;
+          font-size: var(--font-meta);
+        }
+
+        .trend-chart-wrap {
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+          border-radius: 12px;
+          padding: var(--space-2);
+          overflow: auto;
+        }
+
+        .trend-chart {
+          width: 100%;
+          min-width: 520px;
+          height: 240px;
+          display: block;
+        }
+
+        .guide-line {
+          stroke: color-mix(in srgb, var(--border-default) 55%, transparent);
+          stroke-width: 1;
+        }
+
+        .attempt-bar {
+          fill: color-mix(in srgb, var(--primary) 26%, transparent);
+        }
+
+        .score-line {
+          fill: none;
+          stroke: var(--primary);
+          stroke-width: 3;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+
+        .trend-legend {
+          margin-top: var(--space-2);
+          display: flex;
+          gap: var(--space-3);
+          flex-wrap: wrap;
+          font-size: var(--font-meta);
+          color: var(--text-secondary);
+        }
+
+        .trend-legend span {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .legend {
+          width: 12px;
+          height: 12px;
+          border-radius: 3px;
+          display: inline-block;
+        }
+
+        .legend.score {
+          background: var(--primary);
+        }
+
+        .legend.attempts {
+          background: color-mix(in srgb, var(--primary) 28%, transparent);
+        }
+
+        .weak-areas-list {
+          display: grid;
+          gap: var(--space-2);
+        }
+
+        .weak-item {
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+          border-radius: 12px;
+          padding: var(--space-3);
+          display: grid;
+          gap: var(--space-2);
+        }
+
+        .weak-head {
+          display: flex;
+          justify-content: space-between;
+          gap: var(--space-2);
+          align-items: center;
+        }
+
+        .score-pill {
+          font-size: var(--font-tiny);
+          font-weight: 700;
+          border-radius: var(--radius-full);
+          padding: 3px 8px;
+        }
+
+        .score-pill.excellent {
+          color: var(--success);
+          background: color-mix(in srgb, var(--success) 16%, transparent);
+        }
+
+        .score-pill.good {
+          color: var(--primary);
+          background: color-mix(in srgb, var(--primary) 20%, transparent);
+        }
+
+        .score-pill.fair {
+          color: var(--warning);
+          background: color-mix(in srgb, var(--warning) 20%, transparent);
+        }
+
+        .score-pill.needs-work {
+          color: var(--error);
+          background: color-mix(in srgb, var(--error) 16%, transparent);
+        }
+
+        .weak-item p {
+          margin: 0;
+          color: var(--text-secondary);
+          font-size: var(--font-meta);
+          line-height: 1.5;
+        }
+
+        .weak-actions {
+          display: flex;
+          justify-content: flex-end;
+        }
+
+        .plan-kpis {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: var(--space-2);
+          margin-bottom: var(--space-3);
+        }
+
+        .plan-kpi {
+          border: 1px solid var(--border-subtle);
+          border-radius: 12px;
+          background: var(--bg-surface);
+          padding: var(--space-3);
+          display: grid;
+          gap: 4px;
+        }
+
+        .plan-kpi span {
+          color: var(--text-muted);
+          font-size: var(--font-tiny);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          font-weight: 600;
+        }
+
+        .plan-kpi strong {
+          font-size: var(--font-lg);
+          line-height: 1;
+        }
+
+        @media (max-width: 780px) {
+          .plan-kpis {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .plan-progress {
+          border: 1px solid var(--border-subtle);
+          border-radius: 12px;
+          background: var(--bg-surface);
+          padding: var(--space-3);
+        }
+
+        .progress-head {
+          display: flex;
+          justify-content: space-between;
+          gap: var(--space-2);
+          font-size: var(--font-meta);
+          color: var(--text-secondary);
+          margin-bottom: var(--space-2);
+        }
+
+        .progress-track {
+          height: 8px;
+          border-radius: var(--radius-full);
+          background: var(--bg-inset);
+          overflow: hidden;
+        }
+
+        .progress-fill {
+          height: 100%;
+          border-radius: var(--radius-full);
+          background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 80%, #8ebcff), var(--primary));
+          transition: width 0.25s ease;
+        }
+
+        .heatmap-scroll {
+          overflow-x: auto;
+          padding-bottom: var(--space-2);
+        }
+
+        .heatmap-grid {
+          display: inline-flex;
+          gap: 4px;
+          min-width: fit-content;
+        }
+
+        .heatmap-week {
+          display: grid;
+          gap: 4px;
+          grid-template-rows: repeat(7, 12px);
+        }
+
+        .heat-cell {
+          width: 12px;
+          height: 12px;
+          border-radius: 3px;
+          background: var(--bg-inset);
+          border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+        }
+
+        .heat-cell.empty {
+          opacity: 0.3;
+          border-color: transparent;
+        }
+
+        .heat-cell.i0 { background: color-mix(in srgb, var(--bg-inset) 85%, var(--bg-surface)); }
+        .heat-cell.i1 { background: color-mix(in srgb, var(--primary) 20%, var(--bg-inset)); }
+        .heat-cell.i2 { background: color-mix(in srgb, var(--primary) 42%, var(--bg-inset)); }
+        .heat-cell.i3 { background: color-mix(in srgb, var(--primary) 62%, var(--bg-inset)); }
+        .heat-cell.i4 { background: color-mix(in srgb, var(--primary) 80%, var(--bg-inset)); }
+
+        .heatmap-legend {
+          margin-top: var(--space-3);
+          display: flex;
+          justify-content: flex-end;
+          gap: var(--space-2);
+          align-items: center;
+          font-size: var(--font-tiny);
+          color: var(--text-muted);
+        }
+
+        .legend-scale {
+          display: inline-flex;
+          gap: 4px;
+        }
+
+        .recent-scores {
+          display: flex;
+          gap: var(--space-3);
+          overflow-x: auto;
+          padding-bottom: var(--space-1);
+        }
+
+        .recent-item {
+          min-width: 84px;
+          display: grid;
+          justify-items: center;
+          gap: var(--space-2);
+        }
+
+        .ring {
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          position: relative;
+        }
+
+        .ring::before {
+          content: '';
+          position: absolute;
+          inset: 6px;
+          border-radius: 50%;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-subtle);
+        }
+
+        .ring span {
+          position: relative;
+          z-index: 1;
+          font-size: var(--font-tiny);
+          font-weight: 700;
+        }
+
+        .recent-meta {
+          text-align: center;
+          display: grid;
+          gap: 2px;
+        }
+
+        .recent-meta strong {
+          font-size: var(--font-tiny);
+        }
+
+        .recent-meta span {
+          font-size: var(--font-tiny);
+          color: var(--text-muted);
+        }
+
+        .analytics-btn {
+          height: 36px;
+          border-radius: 10px;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+          color: var(--text-secondary);
+          padding: 0 12px;
+          font-size: var(--font-meta);
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          white-space: nowrap;
+        }
+
+        .analytics-btn:hover {
+          background: var(--bg-hover);
+          color: var(--text-primary);
+          border-color: var(--border-default);
+        }
+
+        .analytics-btn.primary {
+          background: var(--primary);
+          border-color: color-mix(in srgb, var(--primary) 65%, var(--border-default));
+          color: white;
+        }
+
+        .analytics-btn.primary:hover {
+          background: var(--primary-hover);
+          color: white;
+        }
+
+        .analytics-btn.small {
+          height: 30px;
+          font-size: var(--font-tiny);
+          padding: 0 10px;
         }
 
         .muted {
@@ -622,370 +1188,143 @@ export function StudyAnalytics() {
           font-size: var(--font-meta);
         }
 
-        .performance-summary {
-          display: flex;
-          gap: var(--space-4);
-          margin-bottom: var(--space-4);
-          flex-wrap: wrap;
+        .analytics-btn:focus-visible,
+        .period select:focus-visible {
+          outline: 2px solid color-mix(in srgb, var(--primary) 72%, transparent);
+          outline-offset: 2px;
         }
 
-        .perf-stat {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .perf-label {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-        }
-
-        .perf-value {
-          font-size: var(--font-lg);
-          font-weight: 600;
-        }
-
-        .perf-value.success {
-          color: var(--success);
-        }
-
-        .score-distribution h4 {
-          margin: 0 0 var(--space-2) 0;
-          font-size: var(--font-meta);
-          color: var(--text-secondary);
-        }
-
-        .distribution-bars {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-2);
-        }
-
-        .dist-item {
-          display: grid;
-          grid-template-columns: 60px 1fr 30px;
-          align-items: center;
-          gap: var(--space-2);
-        }
-
-        .dist-label {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-        }
-
-        .dist-bar-container {
-          height: 8px;
-          background: var(--bg-inset);
-          border-radius: var(--radius-full);
-          overflow: hidden;
-        }
-
-        .dist-bar {
-          height: 100%;
-          border-radius: var(--radius-full);
-          transition: width 0.3s ease;
-        }
-
-        .dist-bar.excellent { background: var(--success); }
-        .dist-bar.good { background: var(--primary); }
-        .dist-bar.fair { background: var(--warning); }
-        .dist-bar.needs-work { background: var(--error); }
-
-        .dist-count {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-          text-align: right;
-        }
-
-        .mode-list {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-3);
-        }
-
-        .mode-item {
-          padding: var(--space-3);
-          background: var(--bg-inset);
-          border-radius: var(--radius-md);
-        }
-
-        .mode-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: var(--space-1);
-        }
-
-        .mode-name {
-          font-weight: 500;
-        }
-
-        .mode-score {
-          font-weight: 600;
-        }
-
-        .mode-score.excellent { color: var(--success); }
-        .mode-score.good { color: var(--primary); }
-        .mode-score.fair { color: var(--warning); }
-        .mode-score.needs-work { color: var(--error); }
-
-        .mode-details {
-          display: flex;
-          gap: var(--space-3);
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-          margin-bottom: var(--space-2);
-        }
-
-        .mode-bar-container {
-          height: 6px;
-          background: var(--bg-surface);
-          border-radius: var(--radius-full);
-          overflow: hidden;
-        }
-
-        .mode-bar {
-          height: 100%;
-          border-radius: var(--radius-full);
-          transition: width 0.3s ease;
-        }
-
-        .mode-bar.excellent { background: var(--success); }
-        .mode-bar.good { background: var(--primary); }
-        .mode-bar.fair { background: var(--warning); }
-        .mode-bar.needs-work { background: var(--error); }
-
-        .weak-areas-list {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-3);
-        }
-
-        .weak-area-item {
-          padding: var(--space-3);
-          background: var(--bg-inset);
-          border-radius: var(--radius-md);
-          border-left: 3px solid var(--warning);
-        }
-
-        .weak-area-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: var(--space-1);
-        }
-
-        .weak-topic {
-          font-weight: 500;
-        }
-
-        .weak-accuracy {
-          font-weight: 600;
-        }
-
-        .weak-accuracy.excellent { color: var(--success); }
-        .weak-accuracy.good { color: var(--primary); }
-        .weak-accuracy.fair { color: var(--warning); }
-        .weak-accuracy.needs-work { color: var(--error); }
-
-        .weak-suggestion {
-          font-size: var(--font-tiny);
-          color: var(--text-secondary);
-          margin: 0 0 var(--space-2) 0;
-        }
-
-        .weak-bar-container {
-          height: 4px;
-          background: var(--bg-surface);
-          border-radius: var(--radius-full);
-          overflow: hidden;
-        }
-
-        .weak-bar {
-          height: 100%;
-          border-radius: var(--radius-full);
-        }
-
-        .weak-bar.excellent { background: var(--success); }
-        .weak-bar.good { background: var(--primary); }
-        .weak-bar.fair { background: var(--warning); }
-        .weak-bar.needs-work { background: var(--error); }
-
-        .empty-state {
-          text-align: center;
-          padding: var(--space-4);
-          color: var(--text-muted);
-        }
-
-        .empty-icon {
-          font-size: 32px;
-          display: block;
-          margin-bottom: var(--space-2);
-        }
-
-        .empty-hint {
-          font-size: var(--font-tiny);
-        }
-
-        .plans-summary {
-          display: flex;
-          justify-content: space-around;
-          margin-bottom: var(--space-4);
-        }
-
-        .plan-stat {
-          text-align: center;
-        }
-
-        .plan-value {
-          font-size: var(--font-xl);
-          font-weight: 700;
-        }
-
-        .plan-value.success { color: var(--success); }
-        .plan-value.primary { color: var(--primary); }
-
-        .plan-label {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-        }
-
-        .study-days-progress {
-          padding: var(--space-3);
-          background: var(--bg-inset);
-          border-radius: var(--radius-md);
-        }
-
-        .progress-header {
-          display: flex;
-          justify-content: space-between;
-          font-size: var(--font-meta);
-          margin-bottom: var(--space-2);
-        }
-
-        .progress-bar-container {
-          height: 8px;
-          background: var(--bg-surface);
-          border-radius: var(--radius-full);
-          overflow: hidden;
-        }
-
-        .progress-bar {
-          height: 100%;
-          background: var(--success);
-          border-radius: var(--radius-full);
-          transition: width 0.3s ease;
-        }
-
-        .weekly-chart {
-          display: flex;
-          justify-content: space-around;
-          align-items: flex-end;
-          height: 100px;
-          padding-top: var(--space-2);
-        }
-
-        .week-item {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          flex: 1;
-        }
-
-        .week-bar-container {
-          width: 24px;
-          height: 80px;
-          background: var(--bg-inset);
-          border-radius: var(--radius-sm);
-          display: flex;
-          align-items: flex-end;
-          overflow: hidden;
-        }
-
-        .week-bar {
-          width: 100%;
-          background: var(--primary);
-          border-radius: var(--radius-sm);
-          transition: height 0.3s ease;
-          min-height: 4px;
-        }
-
-        .week-label {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-          margin-top: var(--space-1);
-        }
-
-        .recent-scores {
-          display: flex;
-          gap: var(--space-3);
-          overflow-x: auto;
-          padding: var(--space-2) 0;
-        }
-
-        .score-item {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          min-width: 70px;
-        }
-
-        .score-badge {
-          width: 50px;
-          height: 50px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 700;
-          font-size: var(--font-meta);
-          margin-bottom: var(--space-1);
-        }
-
-        .score-badge.excellent { background: var(--success-muted); color: var(--success); }
-        .score-badge.good { background: var(--primary-muted); color: var(--primary); }
-        .score-badge.fair { background: var(--warning-muted); color: var(--warning); }
-        .score-badge.needs-work { background: var(--error-muted); color: var(--error); }
-
-        .score-details {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-        }
-
-        .score-mode {
-          font-size: var(--font-tiny);
-          font-weight: 500;
-        }
-
-        .score-date {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
+        .analytics-btn:active {
+          transform: scale(0.98);
         }
       `}</style>
     </div>
   );
 }
 
+function buildLinePoints(
+  values: number[],
+  width: number,
+  height: number,
+  padding: number,
+  minY: number,
+  maxY: number
+): string {
+  if (values.length === 0) return '';
+  if (values.length === 1) {
+    const y = mapToY(values[0], height, padding, minY, maxY);
+    return `${padding},${y} ${width - padding},${y}`;
+  }
+
+  const step = (width - padding * 2) / (values.length - 1);
+  return values
+    .map((value, index) => {
+      const x = padding + index * step;
+      const y = mapToY(value, height, padding, minY, maxY);
+      return `${x},${y}`;
+    })
+    .join(' ');
+}
+
+function mapToY(value: number, height: number, padding: number, minY: number, maxY: number): number {
+  const clamped = Math.max(minY, Math.min(maxY, value));
+  const ratio = (clamped - minY) / (maxY - minY || 1);
+  return Math.round(height - padding - ratio * (height - padding * 2));
+}
+
+function buildHeatmapWeeks(daily: DailyPoint[]): Array<Array<DailyPoint | null>> {
+  if (daily.length === 0) return [];
+
+  const firstDay = new Date(daily[0].date).getDay();
+  const padded: Array<DailyPoint | null> = [...Array.from({ length: firstDay }, () => null), ...daily];
+  const weeks: Array<Array<DailyPoint | null>> = [];
+
+  for (let index = 0; index < padded.length; index += 7) {
+    const week = padded.slice(index, index + 7);
+    while (week.length < 7) week.push(null);
+    weeks.push(week);
+  }
+
+  return weeks;
+}
+
+function getImprovement(scores: number[]): number {
+  if (scores.length < 4) return 0;
+  const middle = Math.floor(scores.length / 2);
+  const firstHalf = scores.slice(0, middle);
+  const secondHalf = scores.slice(middle);
+  const firstAvg = firstHalf.reduce((sum, value) => sum + value, 0) / Math.max(firstHalf.length, 1);
+  const secondAvg = secondHalf.reduce((sum, value) => sum + value, 0) / Math.max(secondHalf.length, 1);
+  return Math.round(secondAvg - firstAvg);
+}
+
+function getIntensity(value: number, maxValue: number): 0 | 1 | 2 | 3 | 4 {
+  if (value <= 0) return 0;
+  const ratio = value / Math.max(maxValue, 1);
+  if (ratio <= 0.25) return 1;
+  if (ratio <= 0.5) return 2;
+  if (ratio <= 0.75) return 3;
+  return 4;
+}
+
 function formatMode(mode: string): string {
-  const modeNames: Record<string, string> = {
+  const mapping: Record<string, string> = {
     mcq: 'MCQ',
     quiz: 'Quiz',
+    summarize: 'Summarize',
+    assignment: 'Assignment',
+    notes: 'Notes',
+    graph: 'Graph',
+    math: 'Math',
+    exam: 'Exam Prep',
+    srs: 'SRS',
+    visual: 'Visual',
+    matlab: 'MATLAB',
+    focus: 'Focus',
     pop: 'Pop Quiz',
     flashcards: 'Flashcards',
   };
-  return modeNames[mode] || mode.charAt(0).toUpperCase() + mode.slice(1);
+  return mapping[mode] || mode.charAt(0).toUpperCase() + mode.slice(1);
 }
 
-function getScoreClass(score: number): string {
+function getToolIcon(tool: string): string {
+  const mapping: Record<string, string> = {
+    summarize: '📄',
+    assignment: '📝',
+    mcq: '✅',
+    quiz: '🧠',
+    notes: '📒',
+    math: '🧮',
+    graph: '📈',
+    visual: '🔍',
+    matlab: '📐',
+    focus: '⏱️',
+    exam: '🎯',
+    srs: '🧩',
+    audio: '🎧',
+    map: '🗺️',
+  };
+  return mapping[tool] || '🛠️';
+}
+
+function getScoreClass(score: number): 'excellent' | 'good' | 'fair' | 'needs-work' {
   if (score >= 90) return 'excellent';
   if (score >= 70) return 'good';
   if (score >= 50) return 'fair';
   return 'needs-work';
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  });
+function formatShortDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function formatFullDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function csvEscape(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
 }
