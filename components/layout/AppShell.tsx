@@ -7,6 +7,7 @@ import { signOut } from 'next-auth/react';
 import { VaultStatus } from '@/components/security/VaultStatus';
 import { useKeyboardShortcuts, formatShortcut } from '@/hooks/useKeyboardShortcuts';
 import { useToastHelpers } from '@/components/ui/Toast';
+import { useSettings } from '@/providers/SettingsProvider';
 
 interface AppShellProps {
   children: ReactNode;
@@ -50,6 +51,48 @@ const mobileMenuExtras = navItems.filter(item =>
 );
 
 export function AppShell({ children, user }: AppShellProps) {
+  const { settings, updateSettings } = useSettings();
+  const isArabic = settings.language === 'ar';
+  const t = (key: string) => {
+    const ar: Record<string, string> = {
+      Main: 'الرئيسية',
+      Tools: 'الأدوات',
+      Workspace: 'مساحة العمل',
+      Planner: 'المخطط',
+      Library: 'المكتبة',
+      Audio: 'الصوت',
+      Analytics: 'التحليلات',
+      Sharing: 'المشاركة',
+      Settings: 'الإعدادات',
+      User: 'مستخدم',
+      System: 'النظام',
+      'Exporting...': 'جارِ التصدير...',
+      'Preparing your data for download': 'جارِ تجهيز بياناتك للتنزيل',
+      'Export complete': 'اكتمل التصدير',
+      'Your data has been downloaded': 'تم تنزيل بياناتك',
+      'Export failed': 'فشل التصدير',
+      'Could not export your data': 'تعذر تصدير بياناتك',
+      'Export Data': 'تصدير البيانات',
+      'Sign Out': 'تسجيل الخروج',
+      'Keyboard Shortcuts': 'اختصارات لوحة المفاتيح',
+      Navigation: 'التنقل',
+      General: 'عام',
+      'Go to Settings': 'الانتقال إلى الإعدادات',
+      'Toggle Sidebar': 'تبديل الشريط الجانبي',
+      'Show Shortcuts': 'عرض الاختصارات',
+      'Close/Cancel': 'إغلاق/إلغاء',
+      Language: 'اللغة',
+      Arabic: 'العربية',
+      English: 'الإنجليزية',
+      'Switch to Arabic': 'التبديل إلى العربية',
+      'Switch to English': 'التبديل إلى الإنجليزية',
+    };
+    return isArabic ? (ar[key] || key) : key;
+  };
+  const toggleLanguage = () => {
+    void updateSettings({ language: isArabic ? 'en' : 'ar' });
+  };
+
   const pathname = usePathname();
   const router = useRouter();
   const toast = useToastHelpers();
@@ -103,7 +146,7 @@ export function AppShell({ children, user }: AppShellProps) {
 
   const handleExportData = useCallback(async () => {
     try {
-      toast.info('Exporting...', 'Preparing your data for download');
+      toast.info(t('Exporting...'), t('Preparing your data for download'));
 
       // Fetch all user data
       const [foldersRes, filesRes, libraryRes] = await Promise.all([
@@ -139,18 +182,18 @@ export function AppShell({ children, user }: AppShellProps) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      toast.success('Export complete', 'Your data has been downloaded');
+      toast.success(t('Export complete'), t('Your data has been downloaded'));
     } catch (error) {
       console.error('Export failed:', error);
-      toast.error('Export failed', 'Could not export your data');
+      toast.error(t('Export failed'), t('Could not export your data'));
     }
-  }, [toast]);
+  }, [toast, isArabic]);
 
   useKeyboardShortcuts([
-    { key: ',', meta: true, handler: handleGoToSettings, description: 'Settings' },
-    { key: 'b', meta: true, handler: handleToggleSidebar, description: 'Toggle sidebar' },
-    { key: 'Escape', handler: handleEscape, description: 'Close menus' },
-    { key: '/', meta: true, handler: handleShowHelp, description: 'Show shortcuts' },
+    { key: ',', meta: true, handler: handleGoToSettings, description: t('Settings') },
+    { key: 'b', meta: true, handler: handleToggleSidebar, description: t('Toggle Sidebar') },
+    { key: 'Escape', handler: handleEscape, description: t('Close/Cancel') },
+    { key: '/', meta: true, handler: handleShowHelp, description: t('Show Shortcuts') },
   ]);
 
   const isActive = (href: string) => {
@@ -203,16 +246,16 @@ export function AppShell({ children, user }: AppShellProps) {
           <nav className="sidebar-nav">
             {navGroups.map((group) => (
               <div key={group.label} className="nav-group">
-                {sidebarOpen && <div className="nav-group-label">{group.label}</div>}
+                {sidebarOpen && <div className="nav-group-label">{t(group.label)}</div>}
                 {group.items.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
                     className={`nav-item ${isActive(item.href) ? 'active' : ''}`}
-                    title={item.label}
+                    title={t(item.label)}
                   >
                     <span className="nav-icon">{isActive(item.href) ? item.activeIcon : item.icon}</span>
-                    {sidebarOpen && <span className="nav-label">{item.label}</span>}
+                    {sidebarOpen && <span className="nav-label">{t(item.label)}</span>}
                   </Link>
                 ))}
               </div>
@@ -223,28 +266,45 @@ export function AppShell({ children, user }: AppShellProps) {
           <div className="sidebar-footer">
             {sidebarOpen && (
               <>
-                <div className="footer-label">System</div>
+                <div className="footer-label">{t('System')}</div>
                 <div className="vault-pill">
                   <VaultStatus />
                 </div>
                 <button
                   className="download-btn"
                   onClick={handleExportData}
-                  title="Export all your data"
+                  title={t('Export Data')}
                 >
                   <span>⬇️</span>
-                  <span>Export Data</span>
+                  <span>{t('Export Data')}</span>
+                </button>
+                <button
+                  className="download-btn"
+                  onClick={toggleLanguage}
+                  title={isArabic ? t('Switch to English') : t('Switch to Arabic')}
+                >
+                  <span>🌐</span>
+                  <span>{isArabic ? 'EN' : 'AR'}</span>
                 </button>
               </>
             )}
             {!sidebarOpen && (
-              <button
-                className="download-btn-icon"
-                onClick={handleExportData}
-                title="Export all your data"
-              >
-                ⬇️
-              </button>
+              <div className="sidebar-icon-actions">
+                <button
+                  className="download-btn-icon"
+                  onClick={handleExportData}
+                  title={t('Export Data')}
+                >
+                  ⬇️
+                </button>
+                <button
+                  className="download-btn-icon"
+                  onClick={toggleLanguage}
+                  title={isArabic ? t('Switch to English') : t('Switch to Arabic')}
+                >
+                  🌐
+                </button>
+              </div>
             )}
             <div
               className="user-profile"
@@ -259,7 +319,7 @@ export function AppShell({ children, user }: AppShellProps) {
               </div>
               {sidebarOpen && (
                 <div className="user-info">
-                  <span className="user-name">{user.name || 'User'}</span>
+                  <span className="user-name">{user.name || t('User')}</span>
                   <span className="user-email">{user.email}</span>
                 </div>
               )}
@@ -268,13 +328,13 @@ export function AppShell({ children, user }: AppShellProps) {
             {showUserMenu && sidebarOpen && (
               <div className="user-menu">
                 <Link href="/settings" className="user-menu-item">
-                  ⚙️ Settings
+                  ⚙️ {t('Settings')}
                 </Link>
                 <button
                   className="user-menu-item"
                   onClick={() => signOut({ callbackUrl: '/login' })}
                 >
-                  🚪 Sign Out
+                  🚪 {t('Sign Out')}
                 </button>
               </div>
             )}
@@ -315,23 +375,29 @@ export function AppShell({ children, user }: AppShellProps) {
                   </div>
                   {mobileMenuExtras.map((item) => (
                     <Link key={item.href} href={item.href} className="mobile-menu-item" onClick={() => setShowUserMenu(false)}>
-                      {item.icon} {item.label}
+                      {item.icon} {t(item.label)}
                     </Link>
                   ))}
                   <button
                     className="mobile-menu-item"
                     onClick={() => { handleExportData(); setShowUserMenu(false); }}
                   >
-                    ⬇️ Export Data
+                    ⬇️ {t('Export Data')}
+                  </button>
+                  <button
+                    className="mobile-menu-item"
+                    onClick={() => { toggleLanguage(); setShowUserMenu(false); }}
+                  >
+                    🌐 {t('Language')}: {isArabic ? t('Arabic') : t('English')}
                   </button>
                   <Link href="/settings" className="mobile-menu-item" onClick={() => setShowUserMenu(false)}>
-                    ⚙️ Settings
+                    ⚙️ {t('Settings')}
                   </Link>
                   <button
                     className="mobile-menu-item"
                     onClick={() => signOut({ callbackUrl: '/login' })}
                   >
-                    🚪 Sign Out
+                    🚪 {t('Sign Out')}
                   </button>
                 </div>
               </>
@@ -355,7 +421,7 @@ export function AppShell({ children, user }: AppShellProps) {
               className={`mobile-nav-item ${isActive(item.href) ? 'active' : ''}`}
             >
               <span className="mobile-nav-icon">{item.icon}</span>
-              <span className="mobile-nav-label">{item.label}</span>
+              <span className="mobile-nav-label">{t(item.label)}</span>
             </Link>
           ))}
         </nav>
@@ -366,32 +432,32 @@ export function AppShell({ children, user }: AppShellProps) {
         <>
           <div className="shortcuts-backdrop" onClick={() => setShowShortcutsHelp(false)} />
           <div className="shortcuts-modal">
-            <div className="shortcuts-header">
-              <h3>Keyboard Shortcuts</h3>
+              <div className="shortcuts-header">
+              <h3>{t('Keyboard Shortcuts')}</h3>
               <button className="close-btn" onClick={() => setShowShortcutsHelp(false)}>
                 <span>Esc</span>
               </button>
             </div>
             <div className="shortcuts-content">
               <div className="shortcuts-section">
-                <h4>Navigation</h4>
+                <h4>{t('Navigation')}</h4>
                 <div className="shortcut-item">
-                  <span className="shortcut-desc">Go to Settings</span>
+                  <span className="shortcut-desc">{t('Go to Settings')}</span>
                   <kbd>{formatShortcut({ key: ',', meta: true })}</kbd>
                 </div>
                 <div className="shortcut-item">
-                  <span className="shortcut-desc">Toggle Sidebar</span>
+                  <span className="shortcut-desc">{t('Toggle Sidebar')}</span>
                   <kbd>{formatShortcut({ key: 'b', meta: true })}</kbd>
                 </div>
               </div>
               <div className="shortcuts-section">
-                <h4>General</h4>
+                <h4>{t('General')}</h4>
                 <div className="shortcut-item">
-                  <span className="shortcut-desc">Show Shortcuts</span>
+                  <span className="shortcut-desc">{t('Show Shortcuts')}</span>
                   <kbd>{formatShortcut({ key: '/', meta: true })}</kbd>
                 </div>
                 <div className="shortcut-item">
-                  <span className="shortcut-desc">Close/Cancel</span>
+                  <span className="shortcut-desc">{t('Close/Cancel')}</span>
                   <kbd>Esc</kbd>
                 </div>
               </div>
@@ -593,6 +659,12 @@ export function AppShell({ children, user }: AppShellProps) {
           background: var(--bg-hover);
           border-color: var(--border-default);
           color: var(--text-primary);
+        }
+
+        .sidebar-icon-actions {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-2);
         }
 
         .download-btn-icon {

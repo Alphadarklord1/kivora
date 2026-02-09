@@ -5,6 +5,7 @@ import { useToastHelpers } from '@/components/ui/Toast';
 import { SkeletonFolderTree } from '@/components/ui/Skeleton';
 import { NoFoldersState } from '@/components/ui/EmptyState';
 import { ShareDialog } from '@/components/share';
+import { useSettings } from '@/providers/SettingsProvider';
 
 interface Topic {
   id: string;
@@ -28,6 +29,34 @@ interface FolderPanelProps {
 }
 
 export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKey, collapsed = false, onToggleCollapse }: FolderPanelProps) {
+  const { settings } = useSettings();
+  const isArabic = settings.language === 'ar';
+  const t = (key: string) => {
+    const ar: Record<string, string> = {
+      'Study Folders': 'مجلدات الدراسة',
+      'Organize your study materials': 'نظّم موادك الدراسية',
+      folders: 'مجلدات',
+      'Toggle folders': 'تبديل المجلدات',
+      'New folder name...': 'اسم المجلد الجديد...',
+      'Folder created': 'تم إنشاء المجلد',
+      'Failed to create folder': 'فشل إنشاء المجلد',
+      'Please try again': 'يرجى المحاولة مرة أخرى',
+      'Subfolder created': 'تم إنشاء المجلد الفرعي',
+      'Failed to create subfolder': 'فشل إنشاء المجلد الفرعي',
+      'No subfolders': 'لا توجد مجلدات فرعية',
+      'Share folder': 'مشاركة المجلد',
+      'Delete folder': 'حذف المجلد',
+      'Share subfolder': 'مشاركة المجلد الفرعي',
+      'Delete subfolder': 'حذف المجلد الفرعي',
+      'New subfolder name...': 'اسم المجلد الفرعي الجديد...',
+      'Add a subfolder to store files': 'أضف مجلدًا فرعيًا لحفظ الملفات',
+      'Reset Selection': 'إعادة التحديد',
+      'Delete this folder and all its contents?': 'حذف هذا المجلد وكل محتوياته؟',
+      'Delete this subfolder?': 'حذف هذا المجلد الفرعي؟',
+    };
+    return isArabic ? (ar[key] || key) : key;
+  };
+
   const toast = useToastHelpers();
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,14 +119,14 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
       if (res.ok) {
         setNewFolderName('');
         await fetchFolders();
-        toast.success('Folder created');
+        toast.success(t('Folder created'));
       } else {
         const error = await res.json();
-        toast.error('Failed to create folder', error.error || 'Unknown error');
+        toast.error(t('Failed to create folder'), error.error || 'Unknown error');
       }
     } catch (error) {
       console.error('Failed to create folder:', error);
-      toast.error('Failed to create folder', 'Please try again');
+      toast.error(t('Failed to create folder'), t('Please try again'));
     } finally {
       setAddingFolder(false);
     }
@@ -119,14 +148,14 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
       if (res.ok) {
         setNewTopicName('');
         await fetchFolders();
-        toast.success('Subfolder created');
+        toast.success(t('Subfolder created'));
       } else {
         const error = await res.json();
-        toast.error('Failed to create subfolder', error.error || 'Unknown error');
+        toast.error(t('Failed to create subfolder'), error.error || 'Unknown error');
       }
     } catch (error) {
       console.error('Failed to create topic:', error);
-      toast.error('Failed to create subfolder', 'Please try again');
+      toast.error(t('Failed to create subfolder'), t('Please try again'));
     } finally {
       setAddingTopic(false);
     }
@@ -155,7 +184,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
   };
 
   const deleteFolder = async (folderId: string) => {
-    if (!confirm('Delete this folder and all its contents?')) return;
+    if (!confirm(t('Delete this folder and all its contents?'))) return;
 
     try {
       const res = await fetch(`/api/folders/${folderId}`, {
@@ -175,7 +204,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
   };
 
   const deleteTopic = async (folderId: string, topicId: string) => {
-    if (!confirm('Delete this subfolder?')) return;
+    if (!confirm(t('Delete this subfolder?'))) return;
 
     try {
       const res = await fetch(`/api/folders/${folderId}/topics/${topicId}`, {
@@ -199,12 +228,12 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
     <aside className={`panel ${collapsed ? 'collapsed' : ''}`}>
       <div className="panel-header">
         <div>
-          <h2>Study Folders</h2>
-          <p className="sub">Organize your study materials</p>
+          <h2>{t('Study Folders')}</h2>
+          <p className="sub">{t('Organize your study materials')}</p>
         </div>
-        <span className="panel-badge">{folders.length} folders</span>
+        <span className="panel-badge">{folders.length} {t('folders')}</span>
         {collapsed && <span className="panel-icon">📁</span>}
-        <button className="collapse-btn" onClick={onToggleCollapse} aria-label="Toggle folders">
+        <button className="collapse-btn" onClick={onToggleCollapse} aria-label={t('Toggle folders')}>
           {collapsed ? '▶' : '◀'}
         </button>
       </div>
@@ -216,7 +245,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
             type="text"
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
-            placeholder="New folder name..."
+            placeholder={t('New folder name...')}
             disabled={addingFolder}
           />
           <button type="submit" className="btn" disabled={addingFolder || !newFolderName.trim()}>
@@ -253,7 +282,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
                   <button
                     className="icon-btn"
                     onClick={(e) => handleShareFolder(folder, e)}
-                    title="Share folder"
+                    title={t('Share folder')}
                   >
                     🔗
                   </button>
@@ -263,7 +292,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
                       e.stopPropagation();
                       deleteFolder(folder.id);
                     }}
-                    title="Delete folder"
+                    title={t('Delete folder')}
                   >
                     ×
                   </button>
@@ -272,7 +301,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
                 {folder.expanded && (
                   <div className="topic-list">
                     {folder.topics.length === 0 ? (
-                      <div className="empty-topics">No subfolders</div>
+                      <div className="empty-topics">{t('No subfolders')}</div>
                     ) : (
                       folder.topics.map((topic) => (
                         <div
@@ -284,7 +313,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
                           <button
                             className="icon-btn"
                             onClick={(e) => handleShareTopic(folder.id, topic, e)}
-                            title="Share subfolder"
+                            title={t('Share subfolder')}
                           >
                             🔗
                           </button>
@@ -294,7 +323,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
                               e.stopPropagation();
                               deleteTopic(folder.id, topic.id);
                             }}
-                            title="Delete subfolder"
+                            title={t('Delete subfolder')}
                           >
                             ×
                           </button>
@@ -317,14 +346,14 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
                 type="text"
                 value={newTopicName}
                 onChange={(e) => setNewTopicName(e.target.value)}
-                placeholder="New subfolder name..."
+                placeholder={t('New subfolder name...')}
                 disabled={addingTopic}
               />
               <button type="submit" className="btn secondary" disabled={addingTopic || !newTopicName.trim()}>
                 {addingTopic ? '...' : '+'}
               </button>
             </form>
-            <p className="hint">Add a subfolder to store files</p>
+            <p className="hint">{t('Add a subfolder to store files')}</p>
           </>
         )}
 
@@ -336,7 +365,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
               className="reset-btn"
               onClick={() => onSelect(null, '', null, '')}
             >
-              ↺ Reset Selection
+              ↺ {t('Reset Selection')}
             </button>
           </>
         )}

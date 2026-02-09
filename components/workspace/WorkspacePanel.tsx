@@ -19,6 +19,7 @@ import { SkeletonList } from '@/components/ui/Skeleton';
 import { NoFilesState, EmptyState } from '@/components/ui/EmptyState';
 import { ShareDialog } from '@/components/share';
 import { FocusTimer } from '@/components/workspace/FocusTimer';
+import { useSettings } from '@/providers/SettingsProvider';
 
 interface FileItem {
   id: string;
@@ -82,6 +83,97 @@ export function WorkspacePanel({
   selectedTopicName,
   onRefresh,
 }: WorkspacePanelProps) {
+  const { settings } = useSettings();
+  const isArabic = settings.language === 'ar';
+  const t = (key: string) => {
+    const ar: Record<string, string> = {
+      Workspace: 'مساحة العمل',
+      'Select a folder and subfolder': 'اختر مجلدًا ومجلدًا فرعيًا',
+      'Ready to upload': 'جاهز للرفع',
+      'Quick access view': 'عرض الوصول السريع',
+      Compact: 'مضغوط',
+      Files: 'الملفات',
+      Pinned: 'مثبت',
+      Liked: 'مفضل',
+      Recent: 'الأخيرة',
+      'In this subfolder': 'في هذا المجلد الفرعي',
+      'Quick access total': 'إجمالي الوصول السريع',
+      'Fast recalls': 'استرجاع سريع',
+      Favorites: 'المفضلات',
+      'Last opened': 'آخر فتح',
+      Tools: 'الأدوات',
+      'AI Tools': 'أدوات الذكاء الاصطناعي',
+      'Study Tools': 'أدوات الدراسة',
+      'Subject Tools': 'أدوات المواد',
+      Assignment: 'واجب',
+      Summarize: 'تلخيص',
+      MCQ: 'اختيار متعدد',
+      Quiz: 'اختبار',
+      Notes: 'ملاحظات',
+      Math: 'رياضيات',
+      'MATLAB Lab': 'مختبر MATLAB',
+      Focus: 'تركيز',
+      'Exam Prep': 'تجهيز الاختبار',
+      SRS: 'مراجعة متباعدة',
+      Graph: 'رسم بياني',
+      Visual: 'بصري',
+      'Results Hub': 'مركز النتائج',
+      'Generated results will appear here.': 'ستظهر النتائج المُنشأة هنا.',
+      Copy: 'نسخ',
+      Save: 'حفظ',
+      'View Library': 'عرض المكتبة',
+      'Use file in tool:': 'استخدم ملفًا في الأداة:',
+      '-- Select a file --': '-- اختر ملفًا --',
+      'Clear input': 'مسح الإدخال',
+      'Select a folder to use files, or paste text below': 'اختر مجلدًا لاستخدام الملفات، أو ألصق النص أدناه',
+      'Select a file to use in this tool.': 'اختر ملفًا لاستخدامه في هذه الأداة.',
+      'Please enter text to process.': 'يرجى إدخال نص للمعالجة.',
+      'Generating...': 'جارِ التوليد...',
+      Generate: 'توليد',
+      Practice: 'تدريب',
+      Edit: 'تعديل',
+      New: 'جديد',
+      Stop: 'إيقاف',
+      Listen: 'استماع',
+      Library: 'المكتبة',
+      Folder: 'المجلد',
+      Uploading: 'جارِ الرفع...',
+      'Upload File': 'رفع ملف',
+      'Welcome to your Workspace': 'مرحبًا بك في مساحة العمل',
+      'Select a folder and subfolder to view files, or pin/like files for quick access.': 'اختر مجلدًا ومجلدًا فرعيًا لعرض الملفات، أو ثبّت/أعجب بالملفات للوصول السريع.',
+      Share: 'مشاركة',
+      Download: 'تنزيل',
+      Delete: 'حذف',
+      'Use in Tool': 'استخدم في الأداة',
+      'Visual Analyze': 'تحليل بصري',
+      'Analyze Image': 'تحليل الصورة',
+      'Analyze Visually': 'تحليل بصري',
+      'No content': 'لا يوجد محتوى',
+      'Extracting text...': 'جارِ استخراج النص...',
+      'No text extracted': 'لم يتم استخراج نص',
+      'This file may be image-based. Try Visual Analyze.': 'قد يكون هذا الملف معتمدًا على الصور. جرّب التحليل البصري.',
+      'No text available': 'لا يوجد نص متاح',
+      'This file does not contain text content.': 'هذا الملف لا يحتوي على نص.',
+      'Copied to clipboard': 'تم النسخ إلى الحافظة',
+      'Saved to library': 'تم الحفظ في المكتبة',
+      'Failed to save': 'فشل الحفظ',
+      'Could not save to library': 'تعذر الحفظ في المكتبة',
+      'Select a subfolder first': 'اختر مجلدًا فرعيًا أولاً',
+      'Choose a folder and subfolder to save': 'اختر مجلدًا ومجلدًا فرعيًا للحفظ',
+      'Saved to folder': 'تم الحفظ في المجلد',
+      'Could not save to folder': 'تعذر الحفظ في المجلد',
+      'Please try again': 'يرجى المحاولة مرة أخرى',
+      'Upload failed': 'فشل الرفع',
+      'Download started': 'بدأ التنزيل',
+      'This file has no downloadable content': 'هذا الملف لا يحتوي على محتوى قابل للتنزيل',
+      'Download failed': 'فشل التنزيل',
+      'Could not download the file': 'تعذر تنزيل الملف',
+      'Delete this file?': 'هل تريد حذف هذا الملف؟',
+      'Error generating content.': 'حدث خطأ أثناء توليد المحتوى.',
+      'Auto-chain Exam Prep → Exam → SRS': 'ربط تلقائي: تجهيز الاختبار ← الاختبار ← SRS',
+    };
+    return isArabic ? (ar[key] || key) : key;
+  };
   const toast = useToastHelpers();
   const [mainTab, setMainTab] = useState<MainTab>('files');
   const [toolTab, setToolTab] = useState<ToolTab>('assignment');
@@ -230,7 +322,7 @@ export function WorkspacePanel({
         toast.success('File uploaded');
       }
     } catch {
-      toast.error('Upload failed', 'Please try again');
+      toast.error(t('Upload failed'), t('Please try again'));
     } finally {
       setUploading(false);
       e.target.value = '';
@@ -269,7 +361,7 @@ export function WorkspacePanel({
         });
         if (!res.ok) {
           const message = await res.text();
-          toast.error('Conversion failed', message || 'Please try again later.');
+          toast.error(t('Failed to save'), message || t('Please try again'));
           return;
         }
         const pdfBlob = await res.blob();
@@ -295,7 +387,7 @@ export function WorkspacePanel({
         setToolTab('visual');
         return;
       } catch {
-        toast.error('Conversion failed', 'Please try again later.');
+        toast.error(t('Failed to save'), t('Please try again'));
         return;
       }
     }
@@ -380,7 +472,7 @@ export function WorkspacePanel({
         if (blobData) {
           const text = await extractTextFromFile(blobData.blob, blobData.name);
           if (!text.trim()) {
-            toast.warning('No text extracted', 'This file may be image-based. Try Visual Analyze.');
+            toast.warning(t('No text extracted'), t('This file may be image-based. Try Visual Analyze.'));
             if (isVisualSupported(file)) {
               await openVisualForFile(file);
             }
@@ -390,7 +482,7 @@ export function WorkspacePanel({
           applyToolInput(text, source);
         }
       } catch {
-        toast.error('Failed to extract text', 'Could not read the file content');
+        toast.error(t('Failed to save'), t('Could not save to folder'));
       }
     } else if (file.content) {
       if (!file.content.trim()) {
@@ -407,7 +499,7 @@ export function WorkspacePanel({
   };
 
   const handleDeleteFile = async (fileId: string) => {
-    if (!confirm('Delete this file?')) return;
+    if (!confirm(t('Delete this file?'))) return;
 
     try {
       const file = files.find(f => f.id === fileId);
@@ -439,7 +531,7 @@ export function WorkspacePanel({
           a.click();
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
-          toast.success('Download started');
+          toast.success(t('Download started'));
         } else {
           toast.error('File not found', 'The original file is not available on this device');
         }
@@ -454,12 +546,12 @@ export function WorkspacePanel({
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        toast.success('Download started');
+        toast.success(t('Download started'));
       } else {
-        toast.warning('No content', 'This file has no downloadable content');
+        toast.warning(t('No content'), t('This file has no downloadable content'));
       }
     } catch {
-      toast.error('Download failed', 'Could not download the file');
+      toast.error(t('Download failed'), t('Could not download the file'));
     }
   };
 
@@ -526,7 +618,7 @@ export function WorkspacePanel({
   const handleGenerate = async () => {
     const input = toolInputs[toolTab] || '';
     if (!input.trim()) {
-      setOutput('Please enter text to process.');
+      setOutput(t('Please enter text to process.'));
       return;
     }
 
@@ -543,7 +635,7 @@ export function WorkspacePanel({
         setViewMode('output');
       }
     } catch {
-      setOutput('Error generating content.');
+      setOutput(t('Error generating content.'));
       setGeneratedContent(null);
     } finally {
       setGenerating(false);
@@ -575,7 +667,7 @@ export function WorkspacePanel({
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast.success('Copied to clipboard');
+    toast.success(t('Copied to clipboard'));
   };
 
   const handleSpeak = (text: string) => {
@@ -626,18 +718,18 @@ export function WorkspacePanel({
         credentials: 'include',
       });
       if (res.ok) {
-        toast.success('Saved to library');
+        toast.success(t('Saved to library'));
       } else {
-        toast.error('Failed to save', 'Could not save to library');
+        toast.error(t('Failed to save'), t('Could not save to library'));
       }
     } catch {
-      toast.error('Failed to save', 'Please try again');
+      toast.error(t('Failed to save'), t('Please try again'));
     }
   };
 
   const handleSaveToFolder = async () => {
     if (!output || !selectedFolder || !selectedTopic) {
-      toast.warning('Select a subfolder first', 'Choose a folder and subfolder to save');
+      toast.warning(t('Select a subfolder first'), t('Choose a folder and subfolder to save'));
       return;
     }
 
@@ -655,16 +747,16 @@ export function WorkspacePanel({
         credentials: 'include',
       });
       if (res.ok) {
-        toast.success('Saved to folder');
+        toast.success(t('Saved to folder'));
         onRefresh();
         // Refresh files
         const filesRes = await fetch(`/api/files?topicId=${selectedTopic}`, { credentials: 'include' });
         setFiles(await filesRes.json());
       } else {
-        toast.error('Failed to save', 'Could not save to folder');
+        toast.error(t('Failed to save'), t('Could not save to folder'));
       }
     } catch {
-      toast.error('Failed to save', 'Please try again');
+      toast.error(t('Failed to save'), t('Please try again'));
     }
   };
 
@@ -706,12 +798,12 @@ export function WorkspacePanel({
         }),
       });
       if (res.ok) {
-        toast.success('Saved to library');
+        toast.success(t('Saved to library'));
       } else {
-        toast.error('Failed to save', 'Could not save to library');
+        toast.error(t('Failed to save'), t('Could not save to library'));
       }
     } catch {
-      toast.error('Failed to save', 'Please try again');
+      toast.error(t('Failed to save'), t('Please try again'));
     }
   };
 
@@ -720,55 +812,55 @@ export function WorkspacePanel({
       {/* Header */}
       <div className="panel-header">
         <div className="header-info">
-          <h2>Workspace</h2>
+          <h2>{t('Workspace')}</h2>
           {selectedFolder && selectedTopic ? (
             <p className="breadcrumb">{selectedFolderName} / {selectedTopicName}</p>
           ) : (
-            <p className="hint">Select a folder and subfolder</p>
+            <p className="hint">{t('Select a folder and subfolder')}</p>
           )}
         </div>
         <div className="header-actions">
           {selectedTopic && (
-            <span className="status-pill">Ready to upload</span>
+            <span className="status-pill">{t('Ready to upload')}</span>
           )}
           {!selectedTopic && (
-            <span className="status-pill muted">Quick access view</span>
+            <span className="status-pill muted">{t('Quick access view')}</span>
           )}
           <button
             className={`compact-toggle ${compactMode ? 'active' : ''}`}
             onClick={() => setCompactMode(prev => !prev)}
             type="button"
             aria-pressed={compactMode}
-            aria-label="Toggle compact mode"
+            aria-label={t('Compact')}
           >
             <span className="compact-track">
               <span className="compact-thumb" />
             </span>
-            <span className="compact-label">Compact</span>
+            <span className="compact-label">{t('Compact')}</span>
           </button>
         </div>
       </div>
 
       <div className="stats-row">
         <div className="stat-card">
-          <div className="stat-label">Files</div>
+          <div className="stat-label">{t('Files')}</div>
           <div className="stat-value">{selectedFileCount}</div>
-          <div className="stat-meta">{selectedTopic ? 'In this subfolder' : 'Quick access total'}</div>
+          <div className="stat-meta">{selectedTopic ? t('In this subfolder') : t('Quick access total')}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Pinned</div>
+          <div className="stat-label">{t('Pinned')}</div>
           <div className="stat-value">{pinnedFiles.length}</div>
-          <div className="stat-meta">Fast recalls</div>
+          <div className="stat-meta">{t('Fast recalls')}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Liked</div>
+          <div className="stat-label">{t('Liked')}</div>
           <div className="stat-value">{likedFiles.length}</div>
-          <div className="stat-meta">Favorites</div>
+          <div className="stat-meta">{t('Favorites')}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Recent</div>
+          <div className="stat-label">{t('Recent')}</div>
           <div className="stat-value">{recentFiles.length}</div>
-          <div className="stat-meta">Last opened</div>
+          <div className="stat-meta">{t('Last opened')}</div>
         </div>
         <FocusTimer />
       </div>
@@ -779,13 +871,13 @@ export function WorkspacePanel({
           className={`main-tab ${mainTab === 'files' ? 'active' : ''}`}
           onClick={() => setMainTab('files')}
         >
-          📁 Files
+          📁 {t('Files')}
         </button>
         <button
           className={`main-tab ${mainTab === 'tools' ? 'active' : ''}`}
           onClick={() => setMainTab('tools')}
         >
-          🛠️ Tools
+          🛠️ {t('Tools')}
         </button>
       </div>
 
@@ -804,7 +896,7 @@ export function WorkspacePanel({
                   disabled={uploading}
                   style={{ display: 'none' }}
                 />
-                {uploading ? 'Uploading...' : '+ Upload File'}
+                {uploading ? `${t('Uploading')}...` : `+ ${t('Upload File')}`}
               </label>
             )}
 
@@ -813,7 +905,7 @@ export function WorkspacePanel({
               <div className="quick-access">
                 {pinnedFiles.length > 0 && (
                   <div className="quick-section">
-                    <h3>📌 Pinned</h3>
+                    <h3>📌 {t('Pinned')}</h3>
                     <div className="file-list">
                       {pinnedFiles.map(file => (
                         <div key={file.id} className="file-item" onClick={() => handleViewFile(file)}>
@@ -823,7 +915,7 @@ export function WorkspacePanel({
                             <span className="file-date">{formatDate(file.createdAt)}</span>
                           </div>
                           <div className="file-actions">
-                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">🛠️</button>
+                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title={t('Use in Tool')}>🛠️</button>
                             <button className="icon-btn active" onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>📌</button>
                           </div>
                         </div>
@@ -833,7 +925,7 @@ export function WorkspacePanel({
                 )}
                 {likedFiles.length > 0 && (
                   <div className="quick-section">
-                    <h3>❤️ Liked</h3>
+                    <h3>❤️ {t('Liked')}</h3>
                     <div className="file-list">
                       {likedFiles.map(file => (
                         <div key={file.id} className="file-item" onClick={() => handleViewFile(file)}>
@@ -843,7 +935,7 @@ export function WorkspacePanel({
                             <span className="file-date">{formatDate(file.createdAt)}</span>
                           </div>
                           <div className="file-actions">
-                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">🛠️</button>
+                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title={t('Use in Tool')}>🛠️</button>
                             <button className="icon-btn active" onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>❤️</button>
                           </div>
                         </div>
@@ -853,7 +945,7 @@ export function WorkspacePanel({
                 )}
                 {recentFiles.length > 0 && (
                   <div className="quick-section">
-                    <h3>🕐 Recent</h3>
+                    <h3>🕐 {t('Recent')}</h3>
                     <div className="file-list">
                       {recentFiles.map(file => (
                         <div key={file.id} className="file-item" onClick={() => handleViewFile(file)}>
@@ -863,7 +955,7 @@ export function WorkspacePanel({
                             <span className="file-date">{formatDate(file.createdAt)}</span>
                           </div>
                           <div className="file-actions">
-                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">🛠️</button>
+                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title={t('Use in Tool')}>🛠️</button>
                             <button className={`icon-btn ${file.liked ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>{file.liked ? '❤️' : '🤍'}</button>
                             <button className={`icon-btn ${file.pinned ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>📌</button>
                           </div>
@@ -879,8 +971,8 @@ export function WorkspacePanel({
             {!selectedTopic && pinnedFiles.length === 0 && likedFiles.length === 0 && recentFiles.length === 0 && (
               <EmptyState
                 icon="folder"
-                title="Welcome to your Workspace"
-                description="Select a folder and subfolder to view files, or pin/like files for quick access."
+                title={t('Welcome to your Workspace')}
+                description={t('Select a folder and subfolder to view files, or pin/like files for quick access.')}
                 size="lg"
               />
             )}
@@ -902,12 +994,12 @@ export function WorkspacePanel({
                           <span className="file-date">{formatDate(file.createdAt)}</span>
                         </div>
                         <div className="file-actions">
-                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleShareFile(file); }} title="Share">🔗</button>
-                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title="Use in Tool">🛠️</button>
+                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleShareFile(file); }} title={t('Share')}>🔗</button>
+                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleUseInTool(file); }} title={t('Use in Tool')}>🛠️</button>
                           {isVisualSupported(file) && (
-                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleVisualAnalyze(file); }} title="Visual Analyze">🔍</button>
+                            <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleVisualAnalyze(file); }} title={t('Visual Analyze')}>🔍</button>
                           )}
-                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleDownloadFile(file); }} title="Download">⬇️</button>
+                          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); handleDownloadFile(file); }} title={t('Download')}>⬇️</button>
                           <button className={`icon-btn ${file.liked ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFileLike(file.id, file.liked); }}>{file.liked ? '❤️' : '🤍'}</button>
                           <button className={`icon-btn ${file.pinned ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); toggleFilePin(file.id, file.pinned); }}>📌</button>
                           <button className="icon-btn danger" onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.id); }}>🗑️</button>
@@ -928,7 +1020,7 @@ export function WorkspacePanel({
           <div className="tool-groups">
             {toolGroups.map((group) => (
               <div key={group.label} className="tool-group">
-                <p className="tool-group-label">{group.label}</p>
+                <p className="tool-group-label">{t(group.label)}</p>
                 <div className="tool-tabs">
                   {group.tools.map((toolId) => {
                     const tab = toolTabs.find((item) => item.id === toolId);
@@ -939,7 +1031,7 @@ export function WorkspacePanel({
                         className={`tool-tab ${toolTab === tab.id ? 'active' : ''}`}
                         onClick={() => { setToolTab(tab.id); handleToolReset(); }}
                       >
-                        {tab.icon} {tab.label}
+                        {tab.icon} {t(tab.label)}
                       </button>
                     );
                   })}
@@ -951,21 +1043,21 @@ export function WorkspacePanel({
           {/* Results Hub */}
           <div className="results-hub">
             <div className="results-header">
-              <h4>Results Hub</h4>
+              <h4>{t('Results Hub')}</h4>
               <label className="toggle">
                 <input type="checkbox" checked={autoChain} onChange={() => setAutoChain(prev => !prev)} />
-                Auto-chain Exam Prep → Exam → SRS
+                {t('Auto-chain Exam Prep → Exam → SRS')}
               </label>
             </div>
             {recentOutputs.length === 0 ? (
-              <p className="muted">Generated results will appear here.</p>
+              <p className="muted">{t('Generated results will appear here.')}</p>
             ) : (
               recentOutputs.map((r, i) => (
                 <div key={i} className="result-item">
                   <strong>{r.title}</strong>
                   <div className="result-actions">
-                    <button className="btn ghost small" onClick={() => handleCopy(r.content)}>Copy</button>
-                    <button className="btn ghost small" onClick={() => handleSaveResultToLibrary(r)}>Save</button>
+                    <button className="btn ghost small" onClick={() => handleCopy(r.content)}>{t('Copy')}</button>
+                    <button className="btn ghost small" onClick={() => handleSaveResultToLibrary(r)}>{t('Save')}</button>
                   </div>
                 </div>
               ))
@@ -974,7 +1066,7 @@ export function WorkspacePanel({
 
             {/* Quick Library Link */}
             <div className="library-link-row">
-              <Link href="/library" className="library-quick-link">📚 View Library</Link>
+              <Link href="/library" className="library-quick-link">📚 {t('View Library')}</Link>
             </div>
 
             {/* Tool-level Input Helpers */}
@@ -982,12 +1074,12 @@ export function WorkspacePanel({
               <div className="tool-input-row">
                 {selectedTopic && uploadFiles.length > 0 && (
                   <div className="file-selector inline">
-                    <label>Use file in tool:</label>
+                    <label>{t('Use file in tool:')}</label>
                     <select onChange={(e) => {
                       const file = files.find(f => f.id === e.target.value);
                       if (file) handleUseInTool(file);
                     }} defaultValue="">
-                      <option value="">-- Select a file --</option>
+                      <option value="">{t('-- Select a file --')}</option>
                       {uploadFiles.map(f => (
                         <option key={f.id} value={f.id}>{f.name}</option>
                       ))}
@@ -1001,7 +1093,7 @@ export function WorkspacePanel({
                     setToolSources(prev => ({ ...prev, [toolTab]: { type: 'manual' } }));
                   }}
                 >
-                  Clear input
+                  {t('Clear input')}
                 </button>
               </div>
             )}
@@ -1070,21 +1162,21 @@ export function WorkspacePanel({
                       {selectedTopic ? (
                         <span className="context-active">📁 {selectedFolderName} / {selectedTopicName}</span>
                       ) : (
-                        <span className="context-hint">Select a folder to use files, or paste text below</span>
+                        <span className="context-hint">{t('Select a folder to use files, or paste text below')}</span>
                       )}
                     </div>
 
                     {toolInputs[toolTab] ? (
                       <p className="word-count">{toolInputs[toolTab].split(/\s+/).filter(Boolean).length} words</p>
                     ) : (
-                      <p className="muted">Select a file to use in this tool.</p>
+                      <p className="muted">{t('Select a file to use in this tool.')}</p>
                     )}
                     <button
                       className="btn generate-btn"
                       onClick={handleGenerate}
                       disabled={generating || !(toolInputs[toolTab] || '').trim()}
                     >
-                      {generating ? 'Generating...' : `Generate ${toolTabs.find(t => t.id === toolTab)?.label}`}
+                      {generating ? t('Generating...') : `${t('Generate')} ${t(toolTabs.find(tab => tab.id === toolTab)?.label || toolTab)}`}
                     </button>
                   </>
                 )}
@@ -1094,21 +1186,21 @@ export function WorkspacePanel({
                   <>
                     <div className="output-actions">
                       {generatedContent && generatedContent.questions.length > 0 && (
-                        <button className="btn" onClick={handleStartInteractive}>🎯 Practice</button>
+                        <button className="btn" onClick={handleStartInteractive}>🎯 {t('Practice')}</button>
                       )}
-                      <button className="btn secondary" onClick={() => setViewMode('input')}>✏️ Edit</button>
-                      <button className="btn secondary" onClick={handleToolReset}>↺ New</button>
+                      <button className="btn secondary" onClick={() => setViewMode('input')}>✏️ {t('Edit')}</button>
+                      <button className="btn secondary" onClick={handleToolReset}>↺ {t('New')}</button>
                     </div>
 
                     <div className="output-display">{output}</div>
 
                     <div className="save-actions">
-                      <button className="btn secondary" onClick={() => handleCopy(output)}>📋 Copy</button>
+                      <button className="btn secondary" onClick={() => handleCopy(output)}>📋 {t('Copy')}</button>
                       <button className="btn secondary" onClick={() => handleSpeak(output)}>
-                        {speaking ? '🔇 Stop' : '🔊 Listen'}
+                        {speaking ? `🔇 ${t('Stop')}` : `🔊 ${t('Listen')}`}
                       </button>
-                      <button className="btn secondary" onClick={handleSaveToLibrary}>📚 Library</button>
-                      <button className="btn secondary" onClick={handleSaveToFolder} disabled={!selectedTopic}>📁 Folder</button>
+                      <button className="btn secondary" onClick={handleSaveToLibrary}>📚 {t('Library')}</button>
+                      <button className="btn secondary" onClick={handleSaveToFolder} disabled={!selectedTopic}>📁 {t('Folder')}</button>
                     </div>
                   </>
                 )}
@@ -1133,27 +1225,27 @@ export function WorkspacePanel({
             </div>
             <div className="viewer-content">
               {extracting ? (
-                <p className="extracting">Extracting text...</p>
+                <p className="extracting">{t('Extracting text...')}</p>
               ) : viewingImageUrl ? (
                 <div style={{ textAlign: 'center', padding: 'var(--space-4)' }}>
                   <img src={viewingImageUrl} alt={viewingFile.name} style={{ maxWidth: '100%', maxHeight: '60vh', borderRadius: 'var(--radius-md)' }} />
                 </div>
               ) : (
-                <pre>{fileContent || 'No content'}</pre>
+                <pre>{fileContent || t('No content')}</pre>
               )}
             </div>
             <div className="viewer-actions">
               {isImageFile(viewingFile.name) ? (
-                <button className="btn" onClick={() => { setToolTab('visual'); setMainTab('tools'); if (viewingImageUrl) URL.revokeObjectURL(viewingImageUrl); setViewingImageUrl(null); setViewingFile(null); }}>🔍 Analyze Image</button>
+                <button className="btn" onClick={() => { setToolTab('visual'); setMainTab('tools'); if (viewingImageUrl) URL.revokeObjectURL(viewingImageUrl); setViewingImageUrl(null); setViewingFile(null); }}>🔍 {t('Analyze Image')}</button>
               ) : isVisualSupported(viewingFile) ? (
-                <button className="btn" onClick={() => { handleVisualAnalyze(viewingFile); setViewingFile(null); }}>🔍 Analyze Visually</button>
+                <button className="btn" onClick={() => { handleVisualAnalyze(viewingFile); setViewingFile(null); }}>🔍 {t('Analyze Visually')}</button>
               ) : (
-                <button className="btn" onClick={() => { handleUseInTool(viewingFile); setViewingFile(null); }}>🛠️ Use in Tool</button>
+                <button className="btn" onClick={() => { handleUseInTool(viewingFile); setViewingFile(null); }}>🛠️ {t('Use in Tool')}</button>
               )}
-              <button className="btn secondary" onClick={() => { handleShareFile(viewingFile); setViewingFile(null); }}>🔗 Share</button>
-              <button className="btn secondary" onClick={() => handleDownloadFile(viewingFile)}>⬇️ Download</button>
+              <button className="btn secondary" onClick={() => { handleShareFile(viewingFile); setViewingFile(null); }}>🔗 {t('Share')}</button>
+              <button className="btn secondary" onClick={() => handleDownloadFile(viewingFile)}>⬇️ {t('Download')}</button>
               <button className="btn secondary" onClick={() => handleCopy(fileContent)}>📋 Copy</button>
-              <button className="btn danger" onClick={() => { handleDeleteFile(viewingFile.id); setViewingFile(null); }}>🗑️ Delete</button>
+              <button className="btn danger" onClick={() => { handleDeleteFile(viewingFile.id); setViewingFile(null); }}>🗑️ {t('Delete')}</button>
             </div>
           </div>
         </div>
