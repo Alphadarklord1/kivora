@@ -247,11 +247,6 @@ export function WorkspacePanel({
 
   const openVisualForFile = async (file: FileItem) => {
     if (isOfficeFile(file.name)) {
-      const converterBase = process.env.NEXT_PUBLIC_CONVERTER_API_BASE_URL || '';
-      if (!converterBase) {
-        toast.error('Converter not configured', 'Set NEXT_PUBLIC_CONVERTER_API_BASE_URL to enable Office conversion.');
-        return;
-      }
       if (!file.localBlobId) {
         toast.error('File not available', 'Please re-upload the file.');
         return;
@@ -265,12 +260,13 @@ export function WorkspacePanel({
 
         const form = new FormData();
         form.append('file', blobData.blob, blobData.name || file.name);
-        const res = await fetch(`${converterBase.replace(/\/$/, '')}/convert`, {
+        const res = await fetch('/api/tools/convert', {
           method: 'POST',
           body: form,
         });
         if (!res.ok) {
-          toast.error('Conversion failed', 'Please try again later.');
+          const message = await res.text();
+          toast.error('Conversion failed', message || 'Please try again later.');
           return;
         }
         const pdfBlob = await res.blob();

@@ -106,10 +106,6 @@ export function VisualAnalyzer() {
   );
 
   const convertOfficeFile = async (file: { name: string; localBlobId: string | null }) => {
-    const converterBase = process.env.NEXT_PUBLIC_CONVERTER_API_BASE_URL || '';
-    if (!converterBase) {
-      throw new Error('Converter not configured');
-    }
     if (!file.localBlobId) {
       throw new Error('File not found in local storage');
     }
@@ -119,12 +115,13 @@ export function VisualAnalyzer() {
     }
     const form = new FormData();
     form.append('file', blob, file.name);
-    const res = await fetch(`${converterBase.replace(/\/$/, '')}/convert`, {
+    const res = await fetch('/api/tools/convert', {
       method: 'POST',
       body: form,
     });
     if (!res.ok) {
-      throw new Error('Conversion failed');
+      const message = await res.text();
+      throw new Error(message || 'Conversion failed');
     }
     const pdfBlob = await res.blob();
     return { pdfBlob, pdfName: file.name.replace(/\.(doc|docx|ppt|pptx)$/i, '.pdf') };
