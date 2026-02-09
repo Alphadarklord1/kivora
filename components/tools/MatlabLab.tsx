@@ -15,6 +15,11 @@ interface FieldPoint {
   v: number;
 }
 
+interface Eigen2Result {
+  lambda1: number;
+  lambda2: number;
+}
+
 function parseMatrix(input: string): Matrix | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
@@ -93,6 +98,118 @@ function inverse2x2(matrix: Matrix): Matrix | null {
   ];
 }
 
+function traceMatrix(matrix: Matrix): number | null {
+  if (matrix.length !== matrix[0].length) return null;
+  return matrix.reduce((sum, row, i) => sum + row[i], 0);
+}
+
+function matrixNormFro(matrix: Matrix): number {
+  let sumSquares = 0;
+  for (const row of matrix) {
+    for (const v of row) sumSquares += v * v;
+  }
+  return Math.sqrt(sumSquares);
+}
+
+function parseVector(input: string): number[] | null {
+  const matrix = parseMatrix(input);
+  if (!matrix) return null;
+  if (matrix[0].length === 1) return matrix.map(row => row[0]);
+  if (matrix.length === 1) return [...matrix[0]];
+  return null;
+}
+
+function solveLinearSystem(matrix: Matrix, b: number[]): number[] | null {
+  const n = matrix.length;
+  if (n === 0 || matrix[0].length !== n || b.length !== n) return null;
+
+  const a = matrix.map((row, i) => [...row, b[i]]);
+
+  for (let col = 0; col < n; col++) {
+    let pivotRow = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(a[r][col]) > Math.abs(a[pivotRow][col])) pivotRow = r;
+    }
+    if (Math.abs(a[pivotRow][col]) < 1e-10) return null;
+    [a[col], a[pivotRow]] = [a[pivotRow], a[col]];
+
+    const pivot = a[col][col];
+    for (let c = col; c <= n; c++) a[col][c] /= pivot;
+
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const factor = a[r][col];
+      for (let c = col; c <= n; c++) {
+        a[r][c] -= factor * a[col][c];
+      }
+    }
+  }
+
+  return a.map(row => row[n]);
+}
+
+function rankMatrix(input: Matrix): number {
+  const a = input.map(row => [...row]);
+  const rows = a.length;
+  const cols = a[0].length;
+  let rank = 0;
+  let row = 0;
+  const eps = 1e-10;
+
+  for (let col = 0; col < cols && row < rows; col++) {
+    let pivot = row;
+    for (let r = row + 1; r < rows; r++) {
+      if (Math.abs(a[r][col]) > Math.abs(a[pivot][col])) pivot = r;
+    }
+    if (Math.abs(a[pivot][col]) < eps) continue;
+    [a[row], a[pivot]] = [a[pivot], a[row]];
+
+    const div = a[row][col];
+    for (let c = col; c < cols; c++) a[row][c] /= div;
+
+    for (let r = 0; r < rows; r++) {
+      if (r === row) continue;
+      const factor = a[r][col];
+      for (let c = col; c < cols; c++) {
+        a[r][c] -= factor * a[row][c];
+      }
+    }
+    row++;
+    rank++;
+  }
+  return rank;
+}
+
+function identityMatrix(n: number): Matrix {
+  return Array.from({ length: n }, (_, i) =>
+    Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))
+  );
+}
+
+function matrixPower(matrix: Matrix, power: number): Matrix | null {
+  if (power < 0 || !Number.isInteger(power)) return null;
+  if (matrix.length !== matrix[0].length) return null;
+  if (power === 0) return identityMatrix(matrix.length);
+  let out = matrix.map(row => [...row]);
+  for (let i = 1; i < power; i++) {
+    const next = multiplyMatrices(out, matrix);
+    if (!next) return null;
+    out = next;
+  }
+  return out;
+}
+
+function eigen2x2(matrix: Matrix): Eigen2Result | null {
+  if (matrix.length !== 2 || matrix[0].length !== 2) return null;
+  const [[a, b], [c, d]] = matrix;
+  const tr = a + d;
+  const det = a * d - b * c;
+  const disc = tr * tr - 4 * det;
+  if (disc < 0) return null;
+  const root = Math.sqrt(disc);
+  return { lambda1: (tr + root) / 2, lambda2: (tr - root) / 2 };
+}
+
 export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
   const [matrixA, setMatrixA] = useState('[1 2; 3 4]');
   const [matrixB, setMatrixB] = useState('[5 6; 7 8]');
@@ -103,6 +220,8 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
   const [fieldV, setFieldV] = useState('-x');
   const [gridSize, setGridSize] = useState(9);
   const [fieldScale, setFieldScale] = useState(0.7);
+  const [vectorB, setVectorB] = useState('[1; 1]');
+  const [powerN, setPowerN] = useState(2);
 
   const parsedA = useMemo(() => parseMatrix(matrixA), [matrixA]);
   const parsedB = useMemo(() => parseMatrix(matrixB), [matrixB]);
@@ -151,7 +270,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
     return { points, size };
   }, [fieldU, fieldV, gridSize, evalField]);
 
-  const handleMatrixOp = (op: 'add' | 'sub' | 'mul' | 'transA' | 'detA' | 'invA') => {
+  const handleMatrixOp = (op: 'add' | 'sub' | 'mul' | 'transA' | 'detA' | 'invA' | 'traceA' | 'rankA' | 'normA' | 'powA' | 'solveAxB' | 'eig2A') => {
     setError('');
     if (!parsedA) {
       setError('Matrix A is invalid. Use MATLAB format like [1 2; 3 4].');
@@ -186,6 +305,33 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
     if (op === 'invA') {
       const inv = inverse2x2(parsedA);
       output = inv ? formatMatrix(inv) : null;
+    }
+    if (op === 'traceA') {
+      const tr = traceMatrix(parsedA);
+      output = tr === null ? null : `trace(A) = ${Number(tr.toFixed(6))}`;
+    }
+    if (op === 'rankA') {
+      output = `rank(A) = ${rankMatrix(parsedA)}`;
+    }
+    if (op === 'normA') {
+      output = `||A||_F = ${Number(matrixNormFro(parsedA).toFixed(6))}`;
+    }
+    if (op === 'powA') {
+      const pw = matrixPower(parsedA, powerN);
+      output = pw ? formatMatrix(pw) : null;
+    }
+    if (op === 'solveAxB') {
+      const b = parseVector(vectorB);
+      if (!b) {
+        setError('Vector b is invalid. Use format like [1; 2] or [1 2].');
+        return;
+      }
+      const sol = solveLinearSystem(parsedA, b);
+      output = sol ? `x = [${sol.map(v => Number(v.toFixed(6))).join(', ')}]` : null;
+    }
+    if (op === 'eig2A') {
+      const eig = eigen2x2(parsedA);
+      output = eig ? `eig(A) = [${Number(eig.lambda1.toFixed(6))}, ${Number(eig.lambda2.toFixed(6))}]` : null;
     }
 
     if (!output) {
@@ -239,8 +385,37 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
             <button className="btn secondary" onClick={() => handleMatrixOp('transA')}>A&apos;</button>
             <button className="btn secondary" onClick={() => handleMatrixOp('detA')}>det(A)</button>
             <button className="btn secondary" onClick={() => handleMatrixOp('invA')}>inv(A) (2x2)</button>
+            <button className="btn secondary" onClick={() => handleMatrixOp('traceA')}>trace(A)</button>
+            <button className="btn secondary" onClick={() => handleMatrixOp('rankA')}>rank(A)</button>
+            <button className="btn secondary" onClick={() => handleMatrixOp('normA')}>norm(A)</button>
+            <button className="btn secondary" onClick={() => handleMatrixOp('eig2A')}>eig(A) (2x2)</button>
           </div>
           {error && <div className="error">{error}</div>}
+        </section>
+
+        <section className="lab-card">
+          <h4>Linear System / Power</h4>
+          <label>b vector (Ax = b)</label>
+          <input
+            value={vectorB}
+            onChange={(e) => setVectorB(e.target.value)}
+            placeholder="[1; 2]"
+          />
+          <button className="btn" onClick={() => handleMatrixOp('solveAxB')}>
+            Solve Ax = b
+          </button>
+          <label>Power n</label>
+          <input
+            type="number"
+            min={0}
+            max={8}
+            value={powerN}
+            onChange={(e) => setPowerN(Number(e.target.value))}
+          />
+          <button className="btn secondary" onClick={() => handleMatrixOp('powA')}>
+            A^n
+          </button>
+          <p className="hint">`A^n` supports non-negative integers and square matrices.</p>
         </section>
 
         <section className="lab-card wide">

@@ -51,6 +51,11 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
     { label: 'tan', value: 'tan()' },
     { label: 'ln', value: 'ln()' },
     { label: 'log', value: 'log()' },
+    { label: 'e^x', value: 'exp()' },
+    { label: '|x|', value: 'abs()' },
+    { label: 'A\\B', value: 'A\\\\B' },
+    { label: '[ ]', value: '[ ]' },
+    { label: 'x̄', value: 'mean()' },
   ];
 
   const normalizeMatlabSyntax = (input: string) => {
@@ -175,6 +180,17 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
     { label: 'Linear', problem: 'Solve 3x + 7 = 22' },
     { label: 'Arithmetic', problem: 'Calculate 2^8 + 15 * 4 - 32/4' },
     { label: 'Trig Derivative', problem: 'Find the derivative of sin(x) + cos(x)' },
+    { label: 'Limit', problem: 'Find the limit as x->0 of sin(x)/x' },
+    { label: 'Polynomial Root', problem: 'Solve x^3 - 6x^2 + 11x - 6 = 0' },
+    { label: 'Series Sum', problem: 'Calculate sum from n=1 to 10 of n^2' },
+  ];
+
+  const matlabTemplates = [
+    { label: 'Derivative', value: 'd/dx (x^3 + 2*x)' },
+    { label: 'Integral', value: 'integral x^2 dx' },
+    { label: 'Limit', value: 'limit x->0 sin(x)/x' },
+    { label: 'Linear Solve', value: 'Solve 2x + 3 = 11' },
+    { label: 'Matrix Hint', value: '[1 2; 3 4] (use MATLAB Lab for matrix ops)' },
   ];
 
   return (
@@ -311,6 +327,29 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                   }}
                 >
                   {ex.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 'var(--space-4)' }}>
+            <label style={{
+              fontSize: 'var(--font-meta)',
+              color: 'var(--text-muted)',
+              display: 'block',
+              marginBottom: 'var(--space-2)'
+            }}>
+              MATLAB-ready templates:
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+              {matlabTemplates.map((tpl) => (
+                <button
+                  key={tpl.label}
+                  className="btn ghost"
+                  onClick={() => setProblem(tpl.value)}
+                  style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1) var(--space-2)' }}
+                >
+                  {tpl.label}
                 </button>
               ))}
             </div>
