@@ -43,8 +43,20 @@ const tools = [
 ];
 
 export default async function LandingPage() {
-  const session = await auth();
+  const isGuestMode =
+    process.env.LOCAL_DEMO_MODE === '1' ||
+    process.env.AUTH_GUEST_MODE === '1';
+
+  let session = null;
+  try {
+    session = await auth();
+  } catch {
+    // If auth is not configured locally, keep landing page functional.
+    session = null;
+  }
+
   const isLoggedIn = !!session?.user;
+  const canUseWithoutSignIn = isGuestMode || isLoggedIn;
 
   return (
     <div className="landing-page">
@@ -56,7 +68,7 @@ export default async function LandingPage() {
             <span className="logo-text">StudyPilot</span>
           </Link>
           <div className="nav-links">
-            {isLoggedIn ? (
+            {canUseWithoutSignIn ? (
               <Link href="/workspace" className="nav-btn primary">
                 Go to Workspace →
               </Link>
@@ -84,7 +96,7 @@ export default async function LandingPage() {
             Your AI-powered study companion that helps you learn more effectively.
           </p>
           <div className="hero-actions">
-            {isLoggedIn ? (
+            {canUseWithoutSignIn ? (
               <Link href="/workspace" className="hero-btn primary">
                 Open Workspace →
               </Link>
@@ -201,7 +213,7 @@ export default async function LandingPage() {
         <div className="section-container">
           <h2>Ready to Transform Your Study Routine?</h2>
           <p>Join thousands of students who study smarter with StudyPilot.</p>
-          {isLoggedIn ? (
+          {canUseWithoutSignIn ? (
             <Link href="/workspace" className="cta-btn">
               Go to Your Workspace →
             </Link>

@@ -8,12 +8,23 @@ import { users, accounts } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
+const isGuestMode =
+  process.env.LOCAL_DEMO_MODE === '1' ||
+  process.env.AUTH_GUEST_MODE === '1';
+
+const authSecret =
+  process.env.AUTH_SECRET ||
+  process.env.NEXTAUTH_SECRET ||
+  (process.env.NODE_ENV !== 'production'
+    ? 'studypilot-local-dev-secret'
+    : undefined);
+
 export const authConfig: NextAuthConfig = {
   trustHost: true,
   session: {
     strategy: 'jwt',
   },
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+  secret: authSecret,
   providers: [
     Credentials({
       name: 'credentials',
@@ -145,6 +156,11 @@ export const authConfig: NextAuthConfig = {
       return session;
     },
     async authorized({ auth, request: { nextUrl } }) {
+      // Demo/guest mode: bypass auth gate for protected pages.
+      if (isGuestMode) {
+        return true;
+      }
+
       const isLoggedIn = !!auth?.user;
       const isOnDashboard = nextUrl.pathname.startsWith('/workspace') ||
         nextUrl.pathname.startsWith('/tools') ||

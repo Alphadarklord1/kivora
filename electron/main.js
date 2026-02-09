@@ -1,6 +1,6 @@
 const { app, BrowserWindow, Menu, shell, ipcMain, nativeTheme } = require('electron');
 const path = require('path');
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = !app.isPackaged || process.env.NODE_ENV === 'development';
 
 let mainWindow;
 

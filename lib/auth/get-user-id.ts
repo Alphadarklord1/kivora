@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { db } from '@/lib/db';
+import { users } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Extract userId from JWT token with fallback for development.
@@ -24,6 +27,25 @@ export async function getUserId(request: NextRequest): Promise<string | null> {
   if (firstUser) {
     console.log('Using fallback user:', firstUser.email);
     return firstUser.id;
+  }
+
+  // Local demo mode: bootstrap a deterministic demo user for API-backed flows.
+  if (process.env.LOCAL_DEMO_MODE === '1') {
+    const demoEmail = 'demo@local.studypilot';
+    const existingDemoUser = await db.query.users.findFirst({
+      where: eq(users.email, demoEmail),
+    });
+
+    if (existingDemoUser) return existingDemoUser.id;
+
+    const demoUserId = uuidv4();
+    await db.insert(users).values({
+      id: demoUserId,
+      email: demoEmail,
+      name: 'Local Demo',
+      image: null,
+    });
+    return demoUserId;
   }
 
   return null;
