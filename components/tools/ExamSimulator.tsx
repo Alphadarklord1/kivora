@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { generateSmartContent, GeneratedQuestion, type ToolMode, type GeneratedContent } from '@/lib/offline/generate';
 
 export interface ExamPrepData {
@@ -47,12 +47,6 @@ export function ExamSimulator({
     const t = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
     return () => clearInterval(t);
   }, [started, timeLeft]);
-
-  useEffect(() => {
-    if (timeLeft === 0 && started && questions.length) {
-      finishExam();
-    }
-  }, [timeLeft, started, questions.length]);
 
   const formatPrepSummary = (prep: ExamPrepData) => {
     const objectives = prep.learningObjectives.length ? prep.learningObjectives.join('; ') : 'No objectives generated.';
@@ -104,7 +98,7 @@ export function ExamSimulator({
     setTimeLeft(examMinutes * 60);
   };
 
-  const finishExam = async () => {
+  const finishExam = useCallback(async () => {
     if (!questions.length) return;
     const correct = questions.filter(q => answers[q.id] === q.correctIndex).length;
     const score = Math.round((correct / questions.length) * 100);
@@ -127,7 +121,13 @@ export function ExamSimulator({
         metadata: { score, weakTopics, total: questions.length, completedAt: new Date().toISOString() },
       }),
     });
-  };
+  }, [questions, answers, onResult]);
+
+  useEffect(() => {
+    if (timeLeft === 0 && started && questions.length) {
+      void finishExam();
+    }
+  }, [timeLeft, started, questions.length, finishExam]);
 
   return (
     <div className="exam-sim">

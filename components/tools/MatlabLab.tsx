@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 interface MatlabLabProps {
   onGraphExpression?: (expression: string) => void;
@@ -129,14 +129,13 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
     return out;
   };
 
-  const evalField = (expr: string, x: number, y: number) => {
+  const evalField = useCallback((expr: string, x: number, y: number) => {
     const safe = normalizeExpression(expr);
-    // eslint-disable-next-line no-new-func
     const fn = new Function('x', 'y', `return ${safe};`);
     const val = fn(x, y);
     if (typeof val !== 'number' || Number.isNaN(val) || !Number.isFinite(val)) return 0;
     return val;
-  };
+  }, []);
 
   const fieldData = useMemo(() => {
     const size = Math.max(3, Math.min(15, gridSize));
@@ -150,7 +149,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       }
     }
     return { points, size };
-  }, [fieldU, fieldV, gridSize]);
+  }, [fieldU, fieldV, gridSize, evalField]);
 
   const handleMatrixOp = (op: 'add' | 'sub' | 'mul' | 'transA' | 'detA' | 'invA') => {
     setError('');

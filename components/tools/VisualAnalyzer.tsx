@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useFoldersStore } from '@/lib/store/folders';
 import { getBlob } from '@/lib/idb';
@@ -90,9 +90,10 @@ export function VisualAnalyzer() {
     }
   }, [searchParams, files]);
 
-  const allFiles = tempFile && !files.some(f => f.id === tempFile.id)
-    ? [tempFile, ...files]
-    : files;
+  const allFiles = useMemo(
+    () => (tempFile && !files.some(f => f.id === tempFile.id) ? [tempFile, ...files] : files),
+    [tempFile, files]
+  );
 
   // Get filtered topics and files
   const isOfficeFile = (name: string) => /\.(doc|docx|ppt|pptx)$/i.test(name);

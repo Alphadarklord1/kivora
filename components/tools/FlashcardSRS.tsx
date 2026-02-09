@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { generateSmartContent, Flashcard, GeneratedQuestion, type ToolMode, type GeneratedContent } from '@/lib/offline/generate';
 import type { ExamPrepData } from '@/components/tools/ExamSimulator';
 
@@ -28,7 +28,7 @@ export function FlashcardSRS({
   const [showBack, setShowBack] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
 
-  const buildDeckFromQuestions = (questions: GeneratedQuestion[]) =>
+  const buildDeckFromQuestions = useCallback((questions: GeneratedQuestion[]) =>
     questions.map(q => ({
       id: q.id,
       front: q.question,
@@ -36,9 +36,9 @@ export function FlashcardSRS({
       category: q.topic || q.keywords?.[0] || 'General',
       difficulty: q.difficulty,
       keywords: q.keywords || [],
-    }));
+    })), []);
 
-  const buildDeckFromPrep = (prep: ExamPrepData) => {
+  const buildDeckFromPrep = useCallback((prep: ExamPrepData) => {
     if (prep.questionBank?.length) {
       return buildDeckFromQuestions(prep.questionBank);
     }
@@ -47,7 +47,7 @@ export function FlashcardSRS({
       return content.flashcards || [];
     }
     return [];
-  };
+  }, [buildDeckFromQuestions, inputText]);
 
   const generateDeck = async () => {
     const content = generateContent
@@ -79,13 +79,16 @@ export function FlashcardSRS({
     if (!autoGenerate || !prepData || deck.length) return;
     const cards = buildDeckFromPrep(prepData);
     if (cards.length) {
-      setDeck(cards);
-      setIndex(0);
-      setShowBack(false);
-      setSavedId(null);
-      onResult?.('SRS Deck', `Deck ready: ${cards.length} cards`);
+      const timer = window.setTimeout(() => {
+        setDeck(cards);
+        setIndex(0);
+        setShowBack(false);
+        setSavedId(null);
+        onResult?.('SRS Deck', `Deck ready: ${cards.length} cards`);
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
-  }, [autoGenerate, prepData, deck.length, inputText, onResult]);
+  }, [autoGenerate, prepData, deck.length, buildDeckFromPrep, onResult]);
 
   const rate = async (rating: 'again' | 'hard' | 'good' | 'easy') => {
     const next = Math.min(deck.length - 1, index + 1);

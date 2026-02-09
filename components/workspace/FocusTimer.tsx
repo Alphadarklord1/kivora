@@ -16,18 +16,16 @@ export function FocusTimer({ initialMinutes = 25 }: FocusTimerProps) {
     const timer = setInterval(() => {
       setSeconds(prev => {
         if (prev > 0) return prev - 1;
-        setMinutes(m => (m > 0 ? m - 1 : 0));
+        setMinutes(m => {
+          if (m > 0) return m - 1;
+          setRunning(false);
+          return 0;
+        });
         return 59;
       });
     }, 1000);
     return () => clearInterval(timer);
   }, [running]);
-
-  useEffect(() => {
-    if (minutes === 0 && seconds === 0) {
-      setRunning(false);
-    }
-  }, [minutes, seconds]);
 
   const progress = useMemo(() => {
     const total = initialMinutes * 60;

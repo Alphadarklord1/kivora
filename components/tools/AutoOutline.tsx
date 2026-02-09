@@ -19,7 +19,7 @@ export function AutoOutline() {
       ...content.learningObjectives?.map((o, i) => `${i + 1}. ${o}`) || [],
       '',
       'Key Topics:',
-      ...content.keyTopics.map((k, i) => `- ${k}`),
+      ...content.keyTopics.map((k) => `- ${k}`),
       '',
       'Study Questions:',
       ...content.keyTopics.slice(0, 4).map(k => `- Explain ${k} in your own words.`),

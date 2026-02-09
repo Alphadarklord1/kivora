@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type NoiseType = 'white' | 'brown';
 
@@ -20,24 +20,40 @@ export function FocusMode() {
   const remaining = minutes * 60 + seconds;
   const progress = useMemo(() => Math.min(100, ((totalSeconds - remaining) / totalSeconds) * 100), [remaining, totalSeconds]);
 
+  const recordSession = useCallback(async () => {
+    try {
+      await fetch('/api/library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          mode: 'focus',
+          content: 'Focus session completed',
+          metadata: { minutes: 25, completedAt: new Date().toISOString() },
+        }),
+      });
+      setStreak(prev => prev + 1);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     if (!running) return;
     const timer = setInterval(() => {
       setSeconds(prev => {
         if (prev > 0) return prev - 1;
-        setMinutes(m => Math.max(0, m - 1));
+        setMinutes(m => {
+          if (m > 0) return m - 1;
+          setRunning(false);
+          void recordSession();
+          return 0;
+        });
         return 59;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [running]);
-
-  useEffect(() => {
-    if (minutes === 0 && seconds === 0 && running) {
-      setRunning(false);
-      recordSession();
-    }
-  }, [minutes, seconds, running]);
+  }, [running, recordSession]);
 
   useEffect(() => {
     fetch('/api/library', { credentials: 'include' })
@@ -63,25 +79,7 @@ export function FocusMode() {
       .catch(() => setStreak(0));
   }, []);
 
-  const recordSession = async () => {
-    try {
-      await fetch('/api/library', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          mode: 'focus',
-          content: 'Focus session completed',
-          metadata: { minutes: 25, completedAt: new Date().toISOString() },
-        }),
-      });
-      setStreak(prev => prev + 1);
-    } catch {
-      // ignore
-    }
-  };
-
-  const startNoise = () => {
+  const startNoise = useCallback(() => {
     if (audioRef.current) return;
     const ctx = new AudioContext();
     const bufferSize = ctx.sampleRate * 2;
@@ -107,21 +105,21 @@ export function FocusMode() {
     audioRef.current = ctx;
     noiseRef.current = source;
     gainRef.current = gain;
-  };
+  }, [noiseType, volume]);
 
-  const stopNoise = () => {
+  const stopNoise = useCallback(() => {
     noiseRef.current?.stop();
     audioRef.current?.close();
     noiseRef.current = null;
     audioRef.current = null;
     gainRef.current = null;
-  };
+  }, []);
 
   useEffect(() => {
     if (noiseOn) startNoise();
     else stopNoise();
     return () => stopNoise();
-  }, [noiseOn, noiseType]);
+  }, [noiseOn, startNoise, stopNoise]);
 
   useEffect(() => {
     if (gainRef.current) gainRef.current.gain.value = volume;
