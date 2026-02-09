@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useSettings } from '@/providers/SettingsProvider';
 
 interface EmptyStateProps {
   icon?: React.ReactNode;
@@ -200,23 +201,27 @@ export function EmptyState({
 
 // Pre-configured empty states for common scenarios
 export function NoFoldersState({ onCreateFolder }: { onCreateFolder: () => void }) {
+  const { settings } = useSettings();
+  const isArabic = settings.language === 'ar';
   return (
     <EmptyState
       icon="folder"
-      title="No folders yet"
-      description="Create a folder to organize your study materials and files."
-      action={{ label: 'Create Folder', onClick: onCreateFolder }}
+      title={isArabic ? 'لا توجد مجلدات بعد' : 'No folders yet'}
+      description={isArabic ? 'أنشئ مجلدًا لتنظيم موادك وملفاتك الدراسية.' : 'Create a folder to organize your study materials and files.'}
+      action={{ label: isArabic ? 'إنشاء مجلد' : 'Create Folder', onClick: onCreateFolder }}
     />
   );
 }
 
 export function NoFilesState({ onUploadFile }: { onUploadFile: () => void }) {
+  const { settings } = useSettings();
+  const isArabic = settings.language === 'ar';
   return (
     <EmptyState
       icon="file"
-      title="No files in this folder"
-      description="Upload PDFs, documents, or paste text to start generating study materials."
-      action={{ label: 'Upload File', onClick: onUploadFile }}
+      title={isArabic ? 'لا توجد ملفات في هذا المجلد' : 'No files in this folder'}
+      description={isArabic ? 'ارفع ملفات PDF أو مستندات، أو ألصق نصًا لبدء توليد مواد دراسية.' : 'Upload PDFs, documents, or paste text to start generating study materials.'}
+      action={{ label: isArabic ? 'رفع ملف' : 'Upload File', onClick: onUploadFile }}
     />
   );
 }

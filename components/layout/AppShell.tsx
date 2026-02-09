@@ -805,6 +805,33 @@ export function AppShell({ children, user }: AppShellProps) {
           margin-left: 72px;
         }
 
+        :global(html[dir='rtl']) .app-sidebar {
+          left: auto;
+          right: 0;
+          border-right: none;
+          border-left: 1px solid var(--border-subtle);
+        }
+
+        :global(html[dir='rtl']) .app-main.with-sidebar {
+          margin-left: 0;
+          margin-right: 240px;
+        }
+
+        :global(html[dir='rtl']) .app-main.with-collapsed-sidebar {
+          margin-left: 0;
+          margin-right: 72px;
+        }
+
+        :global(html[dir='rtl']) .nav-item::before {
+          left: auto;
+          right: 2px;
+        }
+
+        :global(html[dir='rtl']) .mobile-user-menu {
+          right: auto;
+          left: var(--space-4);
+        }
+
         .app-content {
           flex: 1;
           overflow-y: auto;

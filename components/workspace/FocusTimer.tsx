@@ -1,12 +1,26 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSettings } from '@/providers/SettingsProvider';
 
 interface FocusTimerProps {
   initialMinutes?: number;
 }
 
 export function FocusTimer({ initialMinutes = 25 }: FocusTimerProps) {
+  const { settings } = useSettings();
+  const isArabic = settings.language === 'ar';
+  const t = (key: string) => {
+    const ar: Record<string, string> = {
+      'Focus Mode': 'وضع التركيز',
+      Running: 'يعمل',
+      Idle: 'متوقف',
+      Pause: 'إيقاف مؤقت',
+      Start: 'بدء',
+      Reset: 'إعادة ضبط',
+    };
+    return isArabic ? (ar[key] || key) : key;
+  };
   const [minutes, setMinutes] = useState(initialMinutes);
   const [seconds, setSeconds] = useState(0);
   const [running, setRunning] = useState(false);
@@ -42,8 +56,8 @@ export function FocusTimer({ initialMinutes = 25 }: FocusTimerProps) {
   return (
     <div className="focus-timer">
       <div className="focus-header">
-        <span className="focus-title">Focus Mode</span>
-        <span className={`focus-dot ${running ? 'active' : ''}`} aria-label={running ? 'Running' : 'Idle'} />
+        <span className="focus-title">{t('Focus Mode')}</span>
+        <span className={`focus-dot ${running ? 'active' : ''}`} aria-label={running ? t('Running') : t('Idle')} />
       </div>
 
       <div className={`focus-time ${running ? 'running' : ''}`}>
@@ -55,10 +69,10 @@ export function FocusTimer({ initialMinutes = 25 }: FocusTimerProps) {
 
       <div className="focus-actions">
         <button className={`focus-btn primary ${running ? 'running' : ''}`} onClick={() => setRunning(prev => !prev)}>
-          {running ? 'Pause' : 'Start'}
+          {running ? t('Pause') : t('Start')}
         </button>
         <button className="focus-btn ghost" onClick={reset}>
-          Reset
+          {t('Reset')}
         </button>
       </div>
 
