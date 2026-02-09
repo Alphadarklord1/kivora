@@ -32,11 +32,6 @@ const navGroups = [
       { href: '/tools', label: 'Tools', icon: '🛠️', activeIcon: '🛠️' },
       { href: '/podcast', label: 'Audio', icon: '🎧', activeIcon: '🎧' },
       { href: '/analytics', label: 'Analytics', icon: '📊', activeIcon: '📊' },
-    ],
-  },
-  {
-    label: 'System',
-    items: [
       { href: '/sharing', label: 'Sharing', icon: '🔗', activeIcon: '🔗' },
     ],
   },

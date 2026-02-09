@@ -10,12 +10,10 @@ import { InteractiveQuiz } from './InteractiveQuiz';
 import { MathSolver } from '@/components/tools/MathSolver';
 import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
 import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
-import { AudioPodcast } from '@/components/tools/AudioPodcast';
 import { MatlabLab } from '@/components/tools/MatlabLab';
 import { FocusMode } from '@/components/tools/FocusMode';
 import { ExamSimulator, ExamPrepData } from '@/components/tools/ExamSimulator';
 import { FlashcardSRS } from '@/components/tools/FlashcardSRS';
-import { StudyAnalytics } from '@/components/analytics/StudyAnalytics';
 import { useToastHelpers } from '@/components/ui/Toast';
 import { SkeletonList } from '@/components/ui/Skeleton';
 import { NoFilesState, EmptyState } from '@/components/ui/EmptyState';
@@ -44,7 +42,7 @@ interface WorkspacePanelProps {
 }
 
 type MainTab = 'files' | 'tools';
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'notes' | 'math' | 'graph' | 'visual' | 'audio' | 'matlab' | 'focus' | 'exam' | 'srs' | 'map';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'notes' | 'math' | 'graph' | 'visual' | 'matlab' | 'focus' | 'exam' | 'srs';
 
 const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'assignment', label: 'Assignment', icon: '📝' },
@@ -57,16 +55,14 @@ const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'focus', label: 'Focus', icon: '⏱️' },
   { id: 'exam', label: 'Exam Prep', icon: '🎯' },
   { id: 'srs', label: 'SRS', icon: '🧩' },
-  { id: 'map', label: 'Analytics', icon: '📊' },
   { id: 'graph', label: 'Graph', icon: '📈' },
   { id: 'visual', label: 'Visual', icon: '🔍' },
-  { id: 'audio', label: 'Audio', icon: '🎧' },
 ];
 
 const toolGroups: Array<{ label: string; tools: ToolTab[] }> = [
-  { label: 'AI Tools', tools: ['assignment', 'summarize', 'mcq', 'quiz', 'notes', 'map', 'graph'] },
-  { label: 'Study Tools', tools: ['focus', 'exam', 'srs'] },
-  { label: 'Subject Tools', tools: ['math', 'matlab', 'visual', 'audio'] },
+  { label: 'AI Tools', tools: ['assignment', 'summarize', 'mcq', 'quiz', 'notes'] },
+  { label: 'Study Tools', tools: ['focus', 'exam', 'srs', 'graph'] },
+  { label: 'Subject Tools', tools: ['math', 'matlab', 'visual'] },
 ];
 
 const initialToolInputs = Object.fromEntries(
@@ -1053,10 +1049,6 @@ export function WorkspacePanel({
                   generateContent={generateWithFallback}
                 />
               </div>
-            ) : toolTab === 'map' ? (
-              <div className="tool-content">
-                <StudyAnalytics />
-              </div>
             ) : toolTab === 'matlab' ? (
               <div className="tool-content">
                 <MatlabLab onGraphExpression={handleGraphFromMath} />
@@ -1068,10 +1060,6 @@ export function WorkspacePanel({
             ) : toolTab === 'visual' ? (
               <div className="tool-content">
                 <VisualAnalyzer />
-              </div>
-            ) : toolTab === 'audio' ? (
-              <div className="tool-content">
-                <AudioPodcast />
               </div>
             ) : (
               <div className="tool-content">
