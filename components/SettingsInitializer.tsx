@@ -9,6 +9,11 @@ export function SettingsInitializer() {
     const fontSize = localStorage.getItem('studypilot_fontSize');
     const density = localStorage.getItem('studypilot_density');
     const lineHeight = localStorage.getItem('studypilot_lineHeight');
+    const language = localStorage.getItem('studypilot_language') || 'en';
+
+    // Apply language + direction
+    document.documentElement.setAttribute('lang', language === 'ar' ? 'ar' : 'en');
+    document.documentElement.setAttribute('dir', language === 'ar' ? 'rtl' : 'ltr');
 
     // Apply theme
     if (theme) {

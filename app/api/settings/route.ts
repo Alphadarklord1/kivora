@@ -43,7 +43,6 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const userId = await getUserId(request);
-    console.log('Settings PUT - userId:', userId);
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -51,7 +50,6 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json();
     const { theme, fontSize, lineHeight, density } = body;
-    console.log('Settings PUT - body:', body);
 
     const validThemes = ['light', 'dark', 'system'];
     const validDensities = ['compact', 'normal', 'comfortable'];
@@ -83,7 +81,6 @@ export async function PUT(request: NextRequest) {
         })
         .returning();
 
-      console.log('Settings PUT - created:', newSettings);
       return NextResponse.json(newSettings);
     }
 
@@ -100,7 +97,6 @@ export async function PUT(request: NextRequest) {
       .where(eq(userSettings.userId, userId))
       .returning();
 
-    console.log('Settings PUT - updated:', updated);
     return NextResponse.json(updated);
   } catch (error) {
     console.error('Update settings error:', error);

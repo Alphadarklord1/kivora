@@ -2,11 +2,14 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 
+type AppLanguage = 'en' | 'ar';
+
 interface Settings {
   theme: string;
   fontSize: string;
   lineHeight: string;
   density: string;
+  language: AppLanguage;
 }
 
 interface SettingsContextType {
@@ -20,7 +23,12 @@ const defaultSettings: Settings = {
   fontSize: '1',
   lineHeight: '1.5',
   density: 'normal',
+  language: 'en',
 };
+
+function normalizeLanguage(value: unknown): AppLanguage {
+  return value === 'ar' ? 'ar' : 'en';
+}
 
 function getInitialSettings(): Settings {
   if (typeof window === 'undefined') return defaultSettings;
@@ -28,8 +36,20 @@ function getInitialSettings(): Settings {
   return {
     theme: localStorage.getItem('studypilot_theme') || defaultSettings.theme,
     fontSize: localStorage.getItem('studypilot_fontSize') || defaultSettings.fontSize,
-    lineHeight: defaultSettings.lineHeight,
+    lineHeight: localStorage.getItem('studypilot_lineHeight') || defaultSettings.lineHeight,
     density: localStorage.getItem('studypilot_density') || defaultSettings.density,
+    language: normalizeLanguage(localStorage.getItem('studypilot_language')),
+  };
+}
+
+function normalizeSettings(s: Partial<Settings> | null | undefined): Settings {
+  const fallback = getInitialSettings();
+  return {
+    theme: typeof s?.theme === 'string' ? s.theme : fallback.theme,
+    fontSize: typeof s?.fontSize === 'string' ? s.fontSize : fallback.fontSize,
+    lineHeight: typeof s?.lineHeight === 'string' ? s.lineHeight : fallback.lineHeight,
+    density: typeof s?.density === 'string' ? s.density : fallback.density,
+    language: normalizeLanguage(s?.language ?? fallback.language),
   };
 }
 
@@ -60,13 +80,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     // Apply font scale
     document.documentElement.style.setProperty('--font-scale', s.fontSize);
 
+    // Apply line height scale
+    document.documentElement.style.setProperty('--line-scale', s.lineHeight);
+
     // Apply density
     document.documentElement.setAttribute('data-density', s.density);
+
+    // Apply language and direction
+    document.documentElement.setAttribute('lang', s.language);
+    document.documentElement.setAttribute('dir', s.language === 'ar' ? 'rtl' : 'ltr');
 
     // Save to localStorage for quick load on next visit
     localStorage.setItem('studypilot_theme', s.theme);
     localStorage.setItem('studypilot_fontSize', s.fontSize);
+    localStorage.setItem('studypilot_lineHeight', s.lineHeight);
     localStorage.setItem('studypilot_density', s.density);
+    localStorage.setItem('studypilot_language', s.language);
   }, []);
 
   // Fetch authoritative settings from server (inline script in layout.tsx already applied localStorage values)
@@ -75,16 +104,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       .then(res => res.ok ? res.json() : null)
       .then(serverSettings => {
         if (serverSettings) {
+          const normalized = normalizeSettings(serverSettings);
+
           // Only re-apply to DOM if server settings differ from what's already applied
           const current = getInitialSettings();
-          const changed = serverSettings.theme !== current.theme ||
-            serverSettings.fontSize !== current.fontSize ||
-            serverSettings.density !== current.density;
+          const changed = normalized.theme !== current.theme ||
+            normalized.fontSize !== current.fontSize ||
+            normalized.lineHeight !== current.lineHeight ||
+            normalized.density !== current.density ||
+            normalized.language !== current.language;
 
-          setSettings(serverSettings);
+          setSettings(normalized);
 
           if (changed) {
-            applySettings(serverSettings);
+            applySettings(normalized);
           }
         }
       })
@@ -107,7 +140,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   // Update settings
   const updateSettings = useCallback(async (newSettings: Partial<Settings>) => {
-    const updated = { ...settings, ...newSettings };
+    const updated = normalizeSettings({ ...settings, ...newSettings });
     setSettings(updated);
     applySettings(updated);
 

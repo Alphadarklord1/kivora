@@ -32,6 +32,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           </div>
 
           <div style={{ marginBottom: '12px' }}>
+            <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px' }}>Language</label>
+            <select value={settings.language} onChange={(e) => updateSettings({ language: e.target.value === 'ar' ? 'ar' : 'en' })}>
+              <option value="en">English</option>
+              <option value="ar">العربية</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: '12px' }}>
             <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px' }}>Font Size</label>
             <select value={settings.fontSize} onChange={(e) => updateSettings({ fontSize: e.target.value })}>
               <option value="0.875">Small</option>

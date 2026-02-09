@@ -9,6 +9,11 @@ const settingsScript = `
     var theme = localStorage.getItem('studypilot_theme');
     var fontSize = localStorage.getItem('studypilot_fontSize');
     var density = localStorage.getItem('studypilot_density');
+    var language = localStorage.getItem('studypilot_language') || 'en';
+
+    // Apply language + direction first
+    document.documentElement.setAttribute('lang', language === 'ar' ? 'ar' : 'en');
+    document.documentElement.setAttribute('dir', language === 'ar' ? 'rtl' : 'ltr');
 
     // Apply theme
     if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {

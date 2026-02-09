@@ -229,6 +229,18 @@ body {
   min-height: 100vh;
 }
 
+/* Arabic/RTL support */
+html[dir="rtl"] body {
+  direction: rtl;
+}
+
+html[dir="rtl"] input,
+html[dir="rtl"] textarea,
+html[dir="rtl"] select {
+  direction: rtl;
+  text-align: right;
+}
+
 /* ===== Landing Page Styles (moved from app/page.tsx) ===== */
 .landing-page {
   background: radial-gradient(circle at 12% 8%, rgba(37, 99, 235, 0.06), transparent 38%),

@@ -27,6 +27,33 @@ interface UserSettings {
   fontSize: string;
   lineHeight: string;
   density: string;
+  language: 'en' | 'ar';
+}
+
+const defaultUserSettings: UserSettings = {
+  theme: 'light',
+  fontSize: '1',
+  lineHeight: '1.5',
+  density: 'normal',
+  language: 'en',
+};
+
+function normalizeLanguage(value: unknown): 'en' | 'ar' {
+  return value === 'ar' ? 'ar' : 'en';
+}
+
+function normalizeUserSettings(raw: Partial<UserSettings> | null | undefined): UserSettings {
+  const storedLanguage = typeof window !== 'undefined'
+    ? localStorage.getItem('studypilot_language')
+    : null;
+
+  return {
+    theme: typeof raw?.theme === 'string' ? raw.theme : defaultUserSettings.theme,
+    fontSize: typeof raw?.fontSize === 'string' ? raw.fontSize : defaultUserSettings.fontSize,
+    lineHeight: typeof raw?.lineHeight === 'string' ? raw.lineHeight : defaultUserSettings.lineHeight,
+    density: typeof raw?.density === 'string' ? raw.density : defaultUserSettings.density,
+    language: normalizeLanguage(raw?.language ?? storedLanguage ?? defaultUserSettings.language),
+  };
 }
 
 export default function SettingsPage() {
@@ -121,7 +148,7 @@ export default function SettingsPage() {
       }
 
       if (settingsRes.ok) {
-        const settingsData = await settingsRes.json();
+        const settingsData = normalizeUserSettings(await settingsRes.json());
         setSettings(settingsData);
         applySettings(settingsData);
       }
@@ -156,6 +183,11 @@ export default function SettingsPage() {
     // Apply density
     document.documentElement.setAttribute('data-density', s.density);
     localStorage.setItem('studypilot_density', s.density);
+
+    // Apply language and direction
+    document.documentElement.setAttribute('lang', s.language);
+    document.documentElement.setAttribute('dir', s.language === 'ar' ? 'rtl' : 'ltr');
+    localStorage.setItem('studypilot_language', s.language);
   };
 
   const showMessage = (type: 'success' | 'error', text: string) => {
@@ -200,8 +232,9 @@ export default function SettingsPage() {
 
       if (res.ok) {
         const data = await res.json();
-        setSettings(data);
-        applySettings(data);
+        const merged = normalizeUserSettings({ ...(settings || defaultUserSettings), ...data, ...newSettings });
+        setSettings(merged);
+        applySettings(merged);
         showMessage('success', 'Settings saved');
       } else {
         showMessage('error', 'Failed to save settings');
@@ -486,6 +519,28 @@ export default function SettingsPage() {
                       disabled={saving}
                     >
                       <span>{option.icon}</span>
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Language */}
+              <div className="form-group">
+                <label>Language</label>
+                <p className="option-description">Choose interface direction and reading flow</p>
+                <div className="option-buttons">
+                  {[
+                    { value: 'en', label: 'English', preview: 'EN' },
+                    { value: 'ar', label: 'العربية', preview: 'AR' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      className={`option-btn ${settings.language === option.value ? 'active' : ''}`}
+                      onClick={() => handleSaveSettings({ language: option.value as UserSettings['language'] })}
+                      disabled={saving}
+                    >
+                      <span>{option.preview}</span>
                       <span>{option.label}</span>
                     </button>
                   ))}
