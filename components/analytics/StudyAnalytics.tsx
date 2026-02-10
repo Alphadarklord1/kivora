@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import { generateStudySchedule, type StudyTopic } from '@/lib/planner/generate';
 
 const PERIOD_OPTIONS = [
   { value: 7, label: 'Last 7 days' },
@@ -207,6 +208,56 @@ export function StudyAnalytics() {
     if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const generateCoachPlan = async (topic: string, minutes: number, difficulty: 'easy' | 'medium' | 'hard') => {
+    const examDate = new Date();
+    examDate.setDate(examDate.getDate() + 7);
+    const normalizedDifficulty: StudyTopic['difficulty'] =
+      difficulty === 'hard' ? 4 : difficulty === 'medium' ? 3 : 2;
+
+    const topics: StudyTopic[] = [
+      {
+        name: topic,
+        difficulty: normalizedDifficulty,
+        estimatedHours: Math.max(1, Math.round((minutes * 4) / 60)),
+        completed: false,
+      },
+    ];
+    const schedule = generateStudySchedule(examDate, topics, minutes);
+
+    const res = await fetch('/api/study-plans', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        title: `Coach: ${topic} (${minutes}-min)`,
+        examDate: examDate.toISOString(),
+        dailyMinutes: minutes,
+        topics,
+        schedule,
+        source: 'coach',
+        coachContext: { topic, minutes, difficulty },
+      }),
+    });
+
+    if (res.ok) {
+      router.push('/planner');
+    } else {
+      window.alert('Could not generate plan. Please try again.');
+    }
+  };
+
+  const onCoachAction = async () => {
+    const planAction = data.coachActions?.find((action) => action.type === 'plan');
+    if (!planAction) {
+      router.push('/planner');
+      return;
+    }
+    const topic = planAction.payload.topic || 'General';
+    const minutes = Number(planAction.payload.minutes || '20');
+    const difficulty = (planAction.payload.difficulty || 'medium') as 'easy' | 'medium' | 'hard';
+    await generateCoachPlan(topic, minutes, difficulty);
+  };
+
   return (
     <div className="study-analytics">
       <section className="analytics-header">
@@ -241,7 +292,7 @@ export function StudyAnalytics() {
           ))}
         </ul>
         <div className="hero-actions">
-          <button className="analytics-btn primary" onClick={() => router.push('/planner')}>
+          <button className="analytics-btn primary" onClick={onCoachAction}>
             Generate Plan
           </button>
           <button className="analytics-btn ghost" onClick={scrollToWeakAreas}>
@@ -371,7 +422,10 @@ export function StudyAnalytics() {
                   </div>
                   <p>{area.suggestion}</p>
                   <div className="weak-actions">
-                    <button className="analytics-btn ghost small" onClick={() => router.push('/tools')}>
+                    <button
+                      className="analytics-btn ghost small"
+                      onClick={() => router.push(`/tools?topic=${encodeURIComponent(area.topic)}`)}
+                    >
                       Generate Practice
                     </button>
                   </div>

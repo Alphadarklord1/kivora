@@ -23,8 +23,17 @@ export interface PlanStats {
 export interface WeakArea {
   topic: string;
   accuracy: number;
+  attempts: number;
   totalQuestions: number;
   suggestion: string;
+  estimatedMinutes: number;
+}
+
+export interface CoachAction {
+  id: string;
+  label: string;
+  type: 'practice' | 'review' | 'plan';
+  payload: Record<string, string>;
 }
 
 export interface Activity {
@@ -50,6 +59,7 @@ export interface AnalyticsData {
   quizStats: QuizStats;
   planStats: PlanStats;
   weakAreas: WeakArea[];
+  coachActions: CoachAction[];
   activity: Activity;
   insights: string[];
   usage: UsageStats;

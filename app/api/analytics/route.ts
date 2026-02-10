@@ -13,6 +13,13 @@ interface QuizAnswer {
   topic?: string;
 }
 
+type CoachAction = {
+  id: string;
+  label: string;
+  type: 'practice' | 'review' | 'plan';
+  payload: Record<string, string>;
+};
+
 export async function GET(request: NextRequest) {
   const userId = await getUserId(request);
   if (!userId) {
@@ -183,7 +190,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Convert to weak areas list
-    const weakAreas: { topic: string; accuracy: number; totalQuestions: number; suggestion: string }[] = [];
+    const weakAreas: { topic: string; accuracy: number; attempts: number; totalQuestions: number; suggestion: string; estimatedMinutes: number }[] = [];
 
     for (const [topic, perf] of topicPerformance) {
       const accuracy = Math.round((perf.correct / perf.total) * 100);
@@ -200,8 +207,10 @@ export async function GET(request: NextRequest) {
         weakAreas.push({
           topic,
           accuracy,
+          attempts: perf.total,
           totalQuestions: perf.total,
           suggestion,
+          estimatedMinutes: accuracy < 40 ? 30 : accuracy < 60 ? 20 : 15,
         });
       }
     }
@@ -313,11 +322,56 @@ export async function GET(request: NextRequest) {
     const periodGenerated = userFiles.filter(f => f.type !== 'upload' && f.createdAt >= startDate).length;
     const periodLibraryItems = userLibrary.filter(l => l.createdAt >= startDate).length;
 
+    const coachActions: CoachAction[] = [];
+    if (weakAreas.length > 0) {
+      const weakest = weakAreas[0];
+      coachActions.push({
+        id: `plan-${weakest.topic}`,
+        label: `Generate 20-min plan for ${weakest.topic}`,
+        type: 'plan',
+        payload: {
+          topic: weakest.topic,
+          minutes: '20',
+          difficulty: weakest.accuracy < 40 ? 'hard' : weakest.accuracy < 60 ? 'medium' : 'easy',
+        },
+      });
+      coachActions.push({
+        id: `practice-${weakest.topic}`,
+        label: `Retry weakest topic: ${weakest.topic}`,
+        type: 'practice',
+        payload: {
+          topic: weakest.topic,
+          tool: 'quiz',
+        },
+      });
+      coachActions.push({
+        id: `review-${weakest.topic}`,
+        label: `Review weak area notes: ${weakest.topic}`,
+        type: 'review',
+        payload: {
+          topic: weakest.topic,
+          tool: 'notes',
+        },
+      });
+    } else {
+      coachActions.push({
+        id: 'plan-onboarding',
+        label: 'Generate your first 20-min plan',
+        type: 'plan',
+        payload: {
+          topic: 'General',
+          minutes: '20',
+          difficulty: 'easy',
+        },
+      });
+    }
+
     return NextResponse.json({
       period: periodDays,
       quizStats,
       planStats,
       weakAreas: weakAreas.slice(0, 5), // Top 5 weak areas
+      coachActions,
       activity: {
         currentStreak,
         totalActiveDays: activityByDate.size,

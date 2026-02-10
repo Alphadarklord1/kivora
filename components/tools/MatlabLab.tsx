@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useSettings } from '@/providers/SettingsProvider';
 
 interface MatlabLabProps {
   onGraphExpression?: (expression: string) => void;
@@ -19,6 +20,32 @@ interface Eigen2Result {
   lambda1: number;
   lambda2: number;
 }
+
+type MatlabValue = number | Matrix;
+
+type MatlabVariable = {
+  name: string;
+  type: 'scalar' | 'matrix';
+  shape: string;
+  preview: string;
+  value: MatlabValue;
+};
+
+type MatlabHistoryItem = {
+  command: string;
+  output: string;
+  error?: boolean;
+  timestamp: string;
+};
+
+interface MatlabSession {
+  variables: Record<string, MatlabValue>;
+  history: MatlabHistoryItem[];
+  script: string;
+  command: string;
+}
+
+const MATLAB_SESSION_STORAGE_KEY = 'studypilot.matlab.session.v1';
 
 function parseMatrix(input: string): Matrix | null {
   const trimmed = input.trim();
@@ -210,7 +237,170 @@ function eigen2x2(matrix: Matrix): Eigen2Result | null {
   return { lambda1: (tr + root) / 2, lambda2: (tr - root) / 2 };
 }
 
+function isMatrix(value: MatlabValue): value is Matrix {
+  return Array.isArray(value);
+}
+
+function formatValue(value: MatlabValue): string {
+  if (isMatrix(value)) return formatMatrix(value);
+  return Number(value.toFixed(8)).toString();
+}
+
+function matrixShape(value: MatlabValue): string {
+  if (!isMatrix(value)) return '1x1';
+  return `${value.length}x${value[0]?.length || 0}`;
+}
+
+function matrixPreview(value: MatlabValue): string {
+  if (!isMatrix(value)) return Number(value.toFixed(6)).toString();
+  const firstRow = value[0] || [];
+  return `[${firstRow.slice(0, 3).map(v => Number(v.toFixed(3))).join(', ')}${firstRow.length > 3 ? ', …' : ''}]`;
+}
+
+function scalarMatrixOp(matrix: Matrix, scalar: number, op: '+' | '-' | '*'): Matrix {
+  return matrix.map(row => row.map(v => {
+    if (op === '+') return v + scalar;
+    if (op === '-') return v - scalar;
+    return v * scalar;
+  }));
+}
+
+function scalarFirstMatrixOp(scalar: number, matrix: Matrix, op: '+' | '-'): Matrix {
+  return matrix.map(row => row.map(v => (op === '+' ? scalar + v : scalar - v)));
+}
+
+function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValue>): MatlabValue | null {
+  const trimmed = expr.trim();
+  if (!trimmed) return null;
+
+  const literalMatrix = parseMatrix(trimmed);
+  if (literalMatrix) return literalMatrix;
+
+  const numberLiteral = Number(trimmed);
+  if (!Number.isNaN(numberLiteral) && Number.isFinite(numberLiteral)) return numberLiteral;
+
+  // transpose: A'
+  if (/^[A-Za-z]\w*'$/.test(trimmed)) {
+    const varName = trimmed.slice(0, -1);
+    const value = vars[varName];
+    if (!value || !isMatrix(value)) return null;
+    return transposeMatrix(value);
+  }
+
+  // power: A^n
+  const powMatch = trimmed.match(/^([A-Za-z]\w*)\^(\d+)$/);
+  if (powMatch) {
+    const [, varName, p] = powMatch;
+    const value = vars[varName];
+    if (!value || !isMatrix(value)) return null;
+    return matrixPower(value, Number(p));
+  }
+
+  const fnMatch = trimmed.match(/^([a-zA-Z_]\w*)\((.*)\)$/);
+  if (fnMatch) {
+    const fn = fnMatch[1].toLowerCase();
+    const argRaw = fnMatch[2].trim();
+    const arg = vars[argRaw] ?? evaluateCommandExpression(argRaw, vars);
+    if (arg == null) return null;
+
+    if (fn === 'det' && isMatrix(arg)) return determinant(arg);
+    if (fn === 'trace' && isMatrix(arg)) return traceMatrix(arg);
+    if (fn === 'rank' && isMatrix(arg)) return rankMatrix(arg);
+    if (fn === 'norm' && isMatrix(arg)) return matrixNormFro(arg);
+    if (fn === 'inv' && isMatrix(arg)) return inverse2x2(arg);
+    if (fn === 'transpose' && isMatrix(arg)) return transposeMatrix(arg);
+    if (fn === 'eig' && isMatrix(arg)) {
+      const eig = eigen2x2(arg);
+      if (!eig) return null;
+      return [[eig.lambda1], [eig.lambda2]];
+    }
+    if (fn === 'sqrt' && !isMatrix(arg)) return Math.sqrt(arg);
+    if (fn === 'sin' && !isMatrix(arg)) return Math.sin(arg);
+    if (fn === 'cos' && !isMatrix(arg)) return Math.cos(arg);
+    if (fn === 'tan' && !isMatrix(arg)) return Math.tan(arg);
+    if (fn === 'log' && !isMatrix(arg)) return Math.log(arg);
+    return null;
+  }
+
+  const binary = trimmed.match(/^(.+)\s*([+\-*])\s*(.+)$/);
+  if (binary) {
+    const left = evaluateCommandExpression(binary[1], vars);
+    const right = evaluateCommandExpression(binary[3], vars);
+    const op = binary[2] as '+' | '-' | '*';
+    if (left == null || right == null) return null;
+
+    if (!isMatrix(left) && !isMatrix(right)) {
+      if (op === '+') return left + right;
+      if (op === '-') return left - right;
+      return left * right;
+    }
+    if (isMatrix(left) && isMatrix(right)) {
+      if (op === '+') return addMatrices(left, right);
+      if (op === '-') return subtractMatrices(left, right);
+      return multiplyMatrices(left, right);
+    }
+    if (isMatrix(left) && !isMatrix(right)) {
+      if (op === '*' || op === '+' || op === '-') return scalarMatrixOp(left, right, op);
+    }
+    if (!isMatrix(left) && isMatrix(right)) {
+      if (op === '+') return scalarFirstMatrixOp(left, right, '+');
+      if (op === '-') return scalarFirstMatrixOp(left, right, '-');
+      if (op === '*') return scalarMatrixOp(right, left, '*');
+    }
+    return null;
+  }
+
+  const variableOnly = vars[trimmed];
+  if (variableOnly !== undefined) return variableOnly;
+
+  return null;
+}
+
 export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
+  const { settings } = useSettings();
+  const isArabic = settings.language === 'ar';
+  const t = (key: string) => {
+    const ar: Record<string, string> = {
+      'MATLAB Lab': 'مختبر MATLAB',
+      'Matrix operations, quick plots, and MATLAB-style inputs.': 'عمليات المصفوفات ورسوم سريعة وإدخال بأسلوب MATLAB.',
+      'Plot Expression': 'رسم التعبير',
+      'Matrix A': 'المصفوفة A',
+      'Matrix B': 'المصفوفة B',
+      'Operations': 'العمليات',
+      'Linear System / Power': 'نظام خطي / أس',
+      'Result': 'النتيجة',
+      'Command Window': 'نافذة الأوامر',
+      'Live Script Lite': 'السكربت المباشر (خفيف)',
+      'Run Script': 'تشغيل السكربت',
+      'Running...': 'جارٍ التشغيل...',
+      'Command History': 'سجل الأوامر',
+      'No commands yet.': 'لا توجد أوامر بعد.',
+      'Variables Workspace': 'مساحة المتغيرات',
+      'No variables in workspace yet. Assign with `A = [1 2; 3 4]`.': 'لا توجد متغيرات بعد. أضف متغيرًا مثل: `A = [1 2; 3 4]`.',
+      'Name': 'الاسم',
+      'Type': 'النوع',
+      'Shape': 'الأبعاد',
+      'Preview': 'معاينة',
+      'Run': 'تشغيل',
+      'Use `Enter` to run. Use `↑/↓` for command history. Commands: `clear`, `clc`.': 'استخدم `Enter` للتشغيل و`↑/↓` للتنقل في السجل. أوامر: `clear` و`clc`.',
+      'One command per line. `%` and `//` are treated as comments.': 'أمر واحد في كل سطر. `%` و`//` يعتبران تعليقًا.',
+      'Vector Field': 'حقل متجهات',
+      'Grid': 'الشبكة',
+      'Scale': 'المقياس',
+      'Solve Ax = b': 'حل Ax = b',
+      'A^n': 'A^n',
+      'Workspace cleared.': 'تم مسح مساحة المتغيرات.',
+      'History cleared.': 'تم مسح سجل الأوامر.',
+      'Matrix A is invalid. Use MATLAB format like [1 2; 3 4].': 'المصفوفة A غير صالحة. استخدم صيغة MATLAB مثل [1 2; 3 4].',
+      'Matrix B is invalid. Use MATLAB format like [5 6; 7 8].': 'المصفوفة B غير صالحة. استخدم صيغة MATLAB مثل [5 6; 7 8].',
+      'Vector b is invalid. Use format like [1; 2] or [1 2].': 'المتجه b غير صالح. استخدم [1; 2] أو [1 2].',
+      'Operation failed. Check matrix sizes (A+B requires same size, A*B requires columns of A = rows of B).': 'فشلت العملية. تحقق من أبعاد المصفوفات.',
+      'Run an operation to see output.': 'شغّل عملية لعرض النتيجة.',
+      'Enter a valid matrix A to preview a heatmap.': 'أدخل مصفوفة A صحيحة لعرض الخريطة الحرارية.',
+    };
+    return isArabic ? (ar[key] || key) : key;
+  };
+
   const [matrixA, setMatrixA] = useState('[1 2; 3 4]');
   const [matrixB, setMatrixB] = useState('[5 6; 7 8]');
   const [expression, setExpression] = useState('sin(x) + x^2');
@@ -222,6 +412,61 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
   const [fieldScale, setFieldScale] = useState(0.7);
   const [vectorB, setVectorB] = useState('[1; 1]');
   const [powerN, setPowerN] = useState(2);
+  const [command, setCommand] = useState('A = [1 2; 3 4]');
+  const [scriptText, setScriptText] = useState('A = [1 2; 3 4]\nB = A^2\ndet(B)');
+  const [runtimeVars, setRuntimeVars] = useState<Record<string, MatlabValue>>({});
+  const [history, setHistory] = useState<MatlabHistoryItem[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const [runningScript, setRunningScript] = useState(false);
+  const commandInputRef = useRef<HTMLInputElement | null>(null);
+
+  const variableRows = useMemo<MatlabVariable[]>(() => {
+    return Object.entries(runtimeVars)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, value]) => ({
+        name,
+        type: isMatrix(value) ? 'matrix' : 'scalar',
+        shape: matrixShape(value),
+        preview: matrixPreview(value),
+        value,
+      }));
+  }, [runtimeVars]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(MATLAB_SESSION_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as MatlabSession;
+      if (parsed.variables && typeof parsed.variables === 'object') {
+        setRuntimeVars(parsed.variables);
+      }
+      if (Array.isArray(parsed.history)) {
+        setHistory(parsed.history.slice(-100));
+      }
+      if (typeof parsed.script === 'string') {
+        setScriptText(parsed.script);
+      }
+      if (typeof parsed.command === 'string') {
+        setCommand(parsed.command);
+      }
+    } catch {
+      // Ignore malformed local session and continue with defaults.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const session: MatlabSession = {
+        variables: runtimeVars,
+        history: history.slice(-100),
+        script: scriptText,
+        command,
+      };
+      localStorage.setItem(MATLAB_SESSION_STORAGE_KEY, JSON.stringify(session));
+    } catch {
+      // Ignore storage write failures (quota/private mode).
+    }
+  }, [runtimeVars, history, scriptText, command]);
 
   const parsedA = useMemo(() => parseMatrix(matrixA), [matrixA]);
   const parsedB = useMemo(() => parseMatrix(matrixB), [matrixB]);
@@ -270,15 +515,169 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
     return { points, size };
   }, [fieldU, fieldV, gridSize, evalField]);
 
+  const pushHistory = useCallback((item: MatlabHistoryItem) => {
+    setHistory(prev => [...prev.slice(-99), item]);
+  }, []);
+
+  const runSingleCommand = useCallback((rawCommand: string, source: 'command' | 'script' = 'command'): MatlabHistoryItem => {
+    const text = rawCommand.trim();
+    if (!text) {
+      return {
+        command: rawCommand,
+        output: '',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    if (text.toLowerCase() === 'clear') {
+      setRuntimeVars({});
+      return {
+        command: rawCommand,
+        output: t('Workspace cleared.'),
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    if (text.toLowerCase() === 'clc') {
+      setHistory([]);
+      return {
+        command: rawCommand,
+        output: t('History cleared.'),
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    const assignMatch = text.match(/^([A-Za-z]\w*)\s*=\s*(.+)$/);
+    if (assignMatch) {
+      const varName = assignMatch[1];
+      const expr = assignMatch[2];
+      let computed: MatlabValue | null = null;
+      let output = '';
+
+      setRuntimeVars(prev => {
+        computed = evaluateCommandExpression(expr, prev);
+        if (computed === null) return prev;
+        output = `${varName} = ${formatValue(computed)}`;
+        return { ...prev, [varName]: computed };
+      });
+
+      if (computed === null) {
+        return {
+          command: rawCommand,
+          output: source === 'script' ? `Script line failed: "${rawCommand}"` : `Could not evaluate: ${expr}`,
+          error: true,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      return {
+        command: rawCommand,
+        output,
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    let evaluated: MatlabValue | null = null;
+    setRuntimeVars(prev => {
+      evaluated = evaluateCommandExpression(text, prev);
+      return prev;
+    });
+
+    if (evaluated === null) {
+      return {
+        command: rawCommand,
+        output: source === 'script' ? `Script line failed: "${rawCommand}"` : `Could not evaluate: ${text}`,
+        error: true,
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    return {
+      command: rawCommand,
+      output: formatValue(evaluated),
+      timestamp: new Date().toISOString(),
+    };
+  }, []);
+
+  const runCommand = useCallback(() => {
+    const item = runSingleCommand(command, 'command');
+    if (item.command.trim()) {
+      pushHistory(item);
+      setHistoryIndex(-1);
+    }
+    if (!item.error) {
+      setCommand('');
+    }
+  }, [command, pushHistory, runSingleCommand]);
+
+  const runScript = useCallback(async () => {
+    if (runningScript) return;
+    const lines = scriptText
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('%') && !line.startsWith('//'));
+
+    if (lines.length === 0) return;
+
+    setRunningScript(true);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const item = runSingleCommand(line, 'script');
+      if (item.error) {
+        pushHistory({
+          ...item,
+          output: `Line ${i + 1}: ${item.output}`,
+        });
+        break;
+      }
+      pushHistory(item);
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    setRunningScript(false);
+  }, [pushHistory, runSingleCommand, runningScript, scriptText]);
+
+  const onCommandKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      runCommand();
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setHistoryIndex(prev => {
+        const next = prev < 0 ? history.length - 1 : Math.max(0, prev - 1);
+        const nextCmd = history[next]?.command || '';
+        setCommand(nextCmd);
+        return next;
+      });
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setHistoryIndex(prev => {
+        if (prev < 0) return -1;
+        const next = prev + 1;
+        if (next >= history.length) {
+          setCommand('');
+          return -1;
+        }
+        setCommand(history[next]?.command || '');
+        return next;
+      });
+    }
+  }, [history, runCommand]);
+
   const handleMatrixOp = (op: 'add' | 'sub' | 'mul' | 'transA' | 'detA' | 'invA' | 'traceA' | 'rankA' | 'normA' | 'powA' | 'solveAxB' | 'eig2A') => {
     setError('');
     if (!parsedA) {
-      setError('Matrix A is invalid. Use MATLAB format like [1 2; 3 4].');
+      setError(t('Matrix A is invalid. Use MATLAB format like [1 2; 3 4].'));
       return;
     }
 
     if (['add', 'sub', 'mul'].includes(op) && !parsedB) {
-      setError('Matrix B is invalid. Use MATLAB format like [5 6; 7 8].');
+      setError(t('Matrix B is invalid. Use MATLAB format like [5 6; 7 8].'));
       return;
     }
 
@@ -323,7 +722,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
     if (op === 'solveAxB') {
       const b = parseVector(vectorB);
       if (!b) {
-        setError('Vector b is invalid. Use format like [1; 2] or [1 2].');
+        setError(t('Vector b is invalid. Use format like [1; 2] or [1 2].'));
         return;
       }
       const sol = solveLinearSystem(parsedA, b);
@@ -335,7 +734,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
     }
 
     if (!output) {
-      setError('Operation failed. Check matrix sizes (A+B requires same size, A*B requires columns of A = rows of B).');
+      setError(t('Operation failed. Check matrix sizes (A+B requires same size, A*B requires columns of A = rows of B).'));
       return;
     }
     setResult(output);
@@ -345,19 +744,19 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
     <div className="matlab-lab">
       <div className="lab-header">
         <div>
-          <h3>MATLAB Lab</h3>
-          <p>Matrix operations, quick plots, and MATLAB-style inputs.</p>
+          <h3>{t('MATLAB Lab')}</h3>
+          <p>{t('Matrix operations, quick plots, and MATLAB-style inputs.')}</p>
         </div>
         {onGraphExpression && (
           <button className="btn secondary" onClick={() => onGraphExpression(expression)}>
-            📈 Plot Expression
+            📈 {t('Plot Expression')}
           </button>
         )}
       </div>
 
       <div className="lab-grid">
         <section className="lab-card">
-          <h4>Matrix A</h4>
+          <h4>{t('Matrix A')}</h4>
           <textarea
             value={matrixA}
             onChange={(e) => setMatrixA(e.target.value)}
@@ -367,7 +766,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
         </section>
 
         <section className="lab-card">
-          <h4>Matrix B</h4>
+          <h4>{t('Matrix B')}</h4>
           <textarea
             value={matrixB}
             onChange={(e) => setMatrixB(e.target.value)}
@@ -377,7 +776,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
         </section>
 
         <section className="lab-card">
-          <h4>Operations</h4>
+          <h4>{t('Operations')}</h4>
           <div className="button-grid">
             <button className="btn" onClick={() => handleMatrixOp('add')}>A + B</button>
             <button className="btn" onClick={() => handleMatrixOp('sub')}>A - B</button>
@@ -394,16 +793,14 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
         </section>
 
         <section className="lab-card">
-          <h4>Linear System / Power</h4>
+          <h4>{t('Linear System / Power')}</h4>
           <label>b vector (Ax = b)</label>
           <input
             value={vectorB}
             onChange={(e) => setVectorB(e.target.value)}
             placeholder="[1; 2]"
           />
-          <button className="btn" onClick={() => handleMatrixOp('solveAxB')}>
-            Solve Ax = b
-          </button>
+          <button className="btn" onClick={() => handleMatrixOp('solveAxB')}>{t('Solve Ax = b')}</button>
           <label>Power n</label>
           <input
             type="number"
@@ -412,19 +809,106 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
             value={powerN}
             onChange={(e) => setPowerN(Number(e.target.value))}
           />
-          <button className="btn secondary" onClick={() => handleMatrixOp('powA')}>
-            A^n
-          </button>
+          <button className="btn secondary" onClick={() => handleMatrixOp('powA')}>{t('A^n')}</button>
           <p className="hint">`A^n` supports non-negative integers and square matrices.</p>
         </section>
 
         <section className="lab-card wide">
-          <h4>Result</h4>
-          <pre>{result || 'Run an operation to see output.'}</pre>
+          <h4>{t('Result')}</h4>
+          <pre>{result || t('Run an operation to see output.')}</pre>
         </section>
 
         <section className="lab-card wide">
-          <h4>Plot Expression</h4>
+          <h4>{t('Command Window')}</h4>
+          <div className="command-row">
+            <span className="command-prompt">&gt;&gt;</span>
+            <input
+              ref={commandInputRef}
+              value={command}
+              onChange={(e) => setCommand(e.target.value)}
+              onKeyDown={onCommandKeyDown}
+              placeholder={isArabic ? 'اكتب أمر MATLAB مثل A=[1 2;3 4] أو det(A)' : 'Type MATLAB-style command, e.g. A=[1 2;3 4] or det(A)'}
+            />
+            <button className="btn" onClick={runCommand}>{t('Run')}</button>
+          </div>
+          <p className="hint">{t('Use `Enter` to run. Use `↑/↓` for command history. Commands: `clear`, `clc`.')}</p>
+        </section>
+
+        <section className="lab-card wide">
+          <h4>{t('Live Script Lite')}</h4>
+          <textarea
+            value={scriptText}
+            onChange={(e) => setScriptText(e.target.value)}
+            rows={6}
+          />
+          <div className="script-actions">
+            <button className="btn" onClick={runScript} disabled={runningScript}>
+              {runningScript ? t('Running...') : t('Run Script')}
+            </button>
+            <p className="hint">{t('One command per line. `%` and `//` are treated as comments.')}</p>
+          </div>
+        </section>
+
+        <section className="lab-card wide">
+          <h4>{t('Command History')}</h4>
+          <div className="history-list">
+            {history.length === 0 ? (
+              <p className="hint">{t('No commands yet.')}</p>
+            ) : (
+              history
+                .slice()
+                .reverse()
+                .map((item, idx) => (
+                  <div key={`${item.timestamp}-${idx}`} className={`history-item${item.error ? ' history-error' : ''}`}>
+                    <button
+                      type="button"
+                      className="history-command"
+                      onClick={() => {
+                        setCommand(item.command);
+                        commandInputRef.current?.focus();
+                      }}
+                    >
+                      &gt;&gt; {item.command}
+                    </button>
+                    <pre>{item.output}</pre>
+                  </div>
+                ))
+            )}
+          </div>
+        </section>
+
+        <section className="lab-card wide">
+          <h4>{t('Variables Workspace')}</h4>
+          {variableRows.length === 0 ? (
+            <p className="hint">{t('No variables in workspace yet. Assign with `A = [1 2; 3 4]`.')}</p>
+          ) : (
+            <div className="workspace-table-wrap">
+              <table className="workspace-table">
+                <thead>
+                  <tr>
+                    <th>{t('Name')}</th>
+                    <th>{t('Type')}</th>
+                    <th>{t('Shape')}</th>
+                    <th>{t('Preview')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {variableRows.map((row) => (
+                    <tr key={row.name}>
+                      <td>{row.name}</td>
+                      <td>{row.type}</td>
+                      <td>{row.shape}</td>
+                      <td>{row.preview}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="lab-card wide">
+          <h4>{t('Plot Expression')}</h4>
           <input
             value={expression}
             onChange={(e) => setExpression(e.target.value)}
@@ -434,7 +918,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
         </section>
 
         <section className="lab-card wide">
-          <h4>Matrix Plot (Heatmap)</h4>
+          <h4>{isArabic ? 'خريطة حرارة المصفوفة' : 'Matrix Plot (Heatmap)'}</h4>
           {matrixHeatmap ? (
             <div className="heatmap">
               {matrixHeatmap.matrix.map((row, i) => (
@@ -455,12 +939,12 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
               ))}
             </div>
           ) : (
-            <p className="hint">Enter a valid matrix A to preview a heatmap.</p>
+            <p className="hint">{t('Enter a valid matrix A to preview a heatmap.')}</p>
           )}
         </section>
 
         <section className="lab-card wide">
-          <h4>Vector Field</h4>
+          <h4>{t('Vector Field')}</h4>
           <div className="field-controls">
             <div>
               <label>u(x,y)</label>
@@ -471,7 +955,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
               <input value={fieldV} onChange={(e) => setFieldV(e.target.value)} />
             </div>
             <div>
-              <label>Grid</label>
+              <label>{t('Grid')}</label>
               <input
                 type="number"
                 min={3}
@@ -481,7 +965,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
               />
             </div>
             <div>
-              <label>Scale</label>
+              <label>{t('Scale')}</label>
               <input
                 type="number"
                 step={0.1}
@@ -651,6 +1135,82 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
           font-size: var(--font-meta);
           padding: var(--space-2);
           border-radius: var(--radius-md);
+        }
+
+        .command-row {
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          gap: var(--space-2);
+          align-items: center;
+        }
+
+        .command-prompt {
+          font-family: var(--font-mono, monospace);
+          color: var(--text-secondary);
+          font-size: var(--font-meta);
+        }
+
+        .script-actions {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-3);
+          flex-wrap: wrap;
+        }
+
+        .history-list {
+          display: grid;
+          gap: var(--space-2);
+          max-height: 320px;
+          overflow: auto;
+          padding-right: var(--space-1);
+        }
+
+        .history-item {
+          background: var(--bg-inset);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+          padding: var(--space-2);
+          display: grid;
+          gap: var(--space-1);
+        }
+
+        .history-error {
+          border-color: color-mix(in srgb, var(--error) 40%, transparent);
+        }
+
+        .history-command {
+          border: 0;
+          background: transparent;
+          text-align: left;
+          cursor: pointer;
+          font-family: var(--font-mono, monospace);
+          color: var(--text-primary);
+          font-size: var(--font-meta);
+          padding: 0;
+        }
+
+        .workspace-table-wrap {
+          overflow-x: auto;
+        }
+
+        .workspace-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: var(--font-meta);
+        }
+
+        .workspace-table th,
+        .workspace-table td {
+          padding: var(--space-2);
+          border-bottom: 1px solid var(--border-subtle);
+          text-align: left;
+          white-space: nowrap;
+        }
+
+        .workspace-table th {
+          color: var(--text-muted);
+          font-weight: 600;
         }
 
         @media (max-width: 600px) {

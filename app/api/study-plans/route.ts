@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { title, examDate, dailyMinutes, topics, schedule, folderId } = body;
+  const { title, examDate, dailyMinutes, topics, schedule, folderId, source, coachContext } = body;
 
   if (!title || !examDate || !topics || !schedule) {
     return NextResponse.json(
@@ -41,6 +41,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const scheduleWithMeta =
+    source || coachContext
+      ? {
+          ...schedule,
+          _meta: {
+            source: source || 'manual',
+            coachContext: coachContext || null,
+          },
+        }
+      : schedule;
+
   const [newPlan] = await db.insert(studyPlans).values({
     userId,
     title,
@@ -48,7 +59,7 @@ export async function POST(request: NextRequest) {
     dailyMinutes: dailyMinutes || 60,
     folderId: folderId || null,
     topics,
-    schedule,
+    schedule: scheduleWithMeta,
     status: 'active',
     progress: 0,
   }).returning();
