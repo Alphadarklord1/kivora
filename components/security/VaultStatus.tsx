@@ -3,8 +3,31 @@
 import { useState } from 'react';
 import { useVault } from '@/providers/VaultProvider';
 import { ENCRYPTION_DISABLED } from '@/lib/crypto/vault';
+import { useSettings } from '@/providers/SettingsProvider';
 
 export function VaultStatus() {
+  const { settings } = useSettings();
+  const isArabic = settings.language === 'ar';
+  const t = (key: string) => {
+    const ar: Record<string, string> = {
+      'Encryption paused': 'التشفير متوقف مؤقتًا',
+      'Encryption Paused': 'التشفير متوقف مؤقتًا',
+      'Lock vault': 'قفل الخزنة',
+      'Vault locked': 'الخزنة مقفلة',
+      'Not Set Up': 'غير مُعد',
+      Encrypted: 'مشفّر',
+      Locked: 'مقفل',
+      'End-to-End Encrypted': 'تشفير طرفي كامل',
+      'Set up encryption to protect your data': 'قم بإعداد التشفير لحماية بياناتك',
+      'Your data is encrypted before leaving your device. Click to lock.': 'تُشفّر بياناتك قبل مغادرة جهازك. انقر للقفل.',
+      'Enter your password to access your encrypted data': 'أدخل كلمة المرور للوصول إلى بياناتك المشفرة',
+      'Client-side encryption': 'تشفير على جهاز العميل',
+      'Zero-knowledge architecture': 'بنية بدون معرفة مسبقة',
+      'AES-256 encryption': 'تشفير AES-256',
+      'Vault Locked': 'الخزنة مقفلة',
+    };
+    return isArabic ? (ar[key] || key) : key;
+  };
   const { isSetup, isUnlocked, lock, isLoading } = useVault();
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -19,9 +42,9 @@ export function VaultStatus() {
   if (ENCRYPTION_DISABLED) {
     return (
       <div className="vault-status">
-        <button className="vault-indicator paused" aria-label="Encryption paused">
+        <button className="vault-indicator paused" aria-label={t('Encryption paused')}>
           <span className="vault-icon">⏸️</span>
-          <span className="vault-text">Encryption Paused</span>
+          <span className="vault-text">{t('Encryption Paused')}</span>
         </button>
         <style jsx>{`
           .vault-status {
@@ -57,38 +80,38 @@ export function VaultStatus() {
       <button
         className={`vault-indicator ${isUnlocked ? 'unlocked' : 'locked'}`}
         onClick={isUnlocked ? lock : undefined}
-        aria-label={isUnlocked ? 'Lock vault' : 'Vault locked'}
+        aria-label={isUnlocked ? t('Lock vault') : t('Vault locked')}
       >
         <span className="vault-icon">{isUnlocked ? '🔓' : '🔐'}</span>
         <span className="vault-text">
-          {!isSetup ? 'Not Set Up' : isUnlocked ? 'Encrypted' : 'Locked'}
+          {!isSetup ? t('Not Set Up') : isUnlocked ? t('Encrypted') : t('Locked')}
         </span>
       </button>
 
       {showTooltip && (
         <div className="vault-tooltip">
           <div className="tooltip-header">
-            {isUnlocked ? 'End-to-End Encrypted' : 'Vault Locked'}
+            {isUnlocked ? t('End-to-End Encrypted') : t('Vault Locked')}
           </div>
           <p className="tooltip-content">
             {!isSetup
-              ? 'Set up encryption to protect your data'
+              ? t('Set up encryption to protect your data')
               : isUnlocked
-              ? 'Your data is encrypted before leaving your device. Click to lock.'
-              : 'Enter your password to access your encrypted data'}
+              ? t('Your data is encrypted before leaving your device. Click to lock.')
+              : t('Enter your password to access your encrypted data')}
           </p>
           <div className="tooltip-features">
             <div className="feature">
               <span className="check">✓</span>
-              <span>Client-side encryption</span>
+              <span>{t('Client-side encryption')}</span>
             </div>
             <div className="feature">
               <span className="check">✓</span>
-              <span>Zero-knowledge architecture</span>
+              <span>{t('Zero-knowledge architecture')}</span>
             </div>
             <div className="feature">
               <span className="check">✓</span>
-              <span>AES-256 encryption</span>
+              <span>{t('AES-256 encryption')}</span>
             </div>
           </div>
         </div>

@@ -227,34 +227,48 @@ export function NoFilesState({ onUploadFile }: { onUploadFile: () => void }) {
 }
 
 export function NoSearchResultsState({ query, onClear }: { query: string; onClear: () => void }) {
+  const { settings } = useSettings();
+  const isArabic = settings.language === 'ar';
   return (
     <EmptyState
       icon="search"
-      title="No results found"
-      description={`We couldn't find anything matching "${query}". Try a different search term.`}
-      action={{ label: 'Clear Search', onClick: onClear }}
+      title={isArabic ? 'لا توجد نتائج' : 'No results found'}
+      description={
+        isArabic
+          ? `لم نعثر على نتائج مطابقة لـ "${query}". جرّب كلمات بحث مختلفة.`
+          : `We couldn't find anything matching "${query}". Try a different search term.`
+      }
+      action={{ label: isArabic ? 'مسح البحث' : 'Clear Search', onClick: onClear }}
     />
   );
 }
 
 export function NoLibraryItemsState({ onGoToTools }: { onGoToTools: () => void }) {
+  const { settings } = useSettings();
+  const isArabic = settings.language === 'ar';
   return (
     <EmptyState
       icon="library"
-      title="Your library is empty"
-      description="Save generated content like MCQs, summaries, and notes to your library for easy access."
-      action={{ label: 'Go to Tools', onClick: onGoToTools }}
+      title={isArabic ? 'مكتبتك فارغة' : 'Your library is empty'}
+      description={
+        isArabic
+          ? 'احفظ المحتوى المُنشأ مثل الأسئلة والملخصات والملاحظات للوصول السريع.'
+          : 'Save generated content like MCQs, summaries, and notes to your library for easy access.'
+      }
+      action={{ label: isArabic ? 'الانتقال إلى الأدوات' : 'Go to Tools', onClick: onGoToTools }}
     />
   );
 }
 
 export function ErrorState({ message, onRetry }: { message?: string; onRetry?: () => void }) {
+  const { settings } = useSettings();
+  const isArabic = settings.language === 'ar';
   return (
     <EmptyState
       icon="error"
-      title="Something went wrong"
-      description={message || "We encountered an error. Please try again."}
-      action={onRetry ? { label: 'Try Again', onClick: onRetry } : undefined}
+      title={isArabic ? 'حدث خطأ ما' : 'Something went wrong'}
+      description={message || (isArabic ? 'واجهنا خطأ. يرجى المحاولة مرة أخرى.' : 'We encountered an error. Please try again.')}
+      action={onRetry ? { label: isArabic ? 'حاول مرة أخرى' : 'Try Again', onClick: onRetry } : undefined}
     />
   );
 }
