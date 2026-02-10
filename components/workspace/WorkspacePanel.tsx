@@ -1244,7 +1244,7 @@ export function WorkspacePanel({
               )}
               <button className="btn secondary" onClick={() => { handleShareFile(viewingFile); setViewingFile(null); }}>🔗 {t('Share')}</button>
               <button className="btn secondary" onClick={() => handleDownloadFile(viewingFile)}>⬇️ {t('Download')}</button>
-              <button className="btn secondary" onClick={() => handleCopy(fileContent)}>📋 Copy</button>
+              <button className="btn secondary" onClick={() => handleCopy(fileContent)}>📋 {t('Copy')}</button>
               <button className="btn danger" onClick={() => { handleDeleteFile(viewingFile.id); setViewingFile(null); }}>🗑️ {t('Delete')}</button>
             </div>
           </div>
@@ -1855,6 +1855,50 @@ export function WorkspacePanel({
           .viewer-actions { gap: var(--space-1); }
           .viewer-actions .btn { font-size: var(--font-meta); padding: var(--space-2) var(--space-3); }
         }
+
+        :global(html[dir='rtl']) .workspace-panel {
+          direction: rtl;
+        }
+
+        :global(html[dir='rtl']) .panel-header,
+        :global(html[dir='rtl']) .header-actions,
+        :global(html[dir='rtl']) .results-header,
+        :global(html[dir='rtl']) .tool-input-row,
+        :global(html[dir='rtl']) .viewer-header,
+        :global(html[dir='rtl']) .viewer-actions,
+        :global(html[dir='rtl']) .result-item,
+        :global(html[dir='rtl']) .file-item {
+          direction: rtl;
+        }
+
+        :global(html[dir='rtl']) .header-info,
+        :global(html[dir='rtl']) .panel-header,
+        :global(html[dir='rtl']) .context-info,
+        :global(html[dir='rtl']) .output-display,
+        :global(html[dir='rtl']) .viewer-content pre {
+          text-align: right;
+        }
+
+        :global(html[dir='rtl']) .panel-header::after {
+          right: auto;
+          left: -25%;
+        }
+
+        :global(html[dir='rtl']) .compact-thumb {
+          left: auto;
+          right: 2px;
+        }
+
+        :global(html[dir='rtl']) .compact-toggle.active .compact-thumb {
+          transform: translateX(-14px);
+        }
+
+        :global(html[dir='rtl']) .file-actions,
+        :global(html[dir='rtl']) .result-actions {
+          margin-right: auto;
+          margin-left: 0;
+        }
+
       `}</style>
     </div>
   );

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useToastHelpers } from '@/components/ui/Toast';
 import { SkeletonFolderTree } from '@/components/ui/Skeleton';
-import { NoFoldersState } from '@/components/ui/EmptyState';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { ShareDialog } from '@/components/share';
 import { useSettings } from '@/providers/SettingsProvider';
 
@@ -53,6 +53,9 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
       'Reset Selection': 'إعادة التحديد',
       'Delete this folder and all its contents?': 'حذف هذا المجلد وكل محتوياته؟',
       'Delete this subfolder?': 'حذف هذا المجلد الفرعي؟',
+      'No folders yet': 'لا توجد مجلدات بعد',
+      'Create a folder to organize your study materials': 'أنشئ مجلدًا لتنظيم موادك الدراسية',
+      'Create Folder': 'إنشاء مجلد',
     };
     return isArabic ? (ar[key] || key) : key;
   };
@@ -257,7 +260,16 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
         {loading ? (
           <SkeletonFolderTree />
         ) : folders.length === 0 ? (
-          <NoFoldersState onCreateFolder={() => document.querySelector<HTMLInputElement>('.add-form input')?.focus()} />
+          <EmptyState
+            icon="folder"
+            title={t('No folders yet')}
+            description={t('Create a folder to organize your study materials')}
+            action={{
+              label: t('Create Folder'),
+              onClick: () => document.querySelector<HTMLInputElement>('.add-form input')?.focus(),
+            }}
+            size="md"
+          />
         ) : (
           <div className="folder-list">
             {folders.map((folder) => (
@@ -653,6 +665,32 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
         .panel.collapsed .sub,
         .panel.collapsed .panel-badge {
           display: none;
+        }
+
+        :global(html[dir='rtl']) .panel {
+          direction: rtl;
+        }
+
+        :global(html[dir='rtl']) .panel-header,
+        :global(html[dir='rtl']) .folder,
+        :global(html[dir='rtl']) .topic,
+        :global(html[dir='rtl']) .add-form,
+        :global(html[dir='rtl']) .reset-btn {
+          direction: rtl;
+        }
+
+        :global(html[dir='rtl']) .panel-header,
+        :global(html[dir='rtl']) .panel-body,
+        :global(html[dir='rtl']) .hint,
+        :global(html[dir='rtl']) .empty-topics {
+          text-align: right;
+        }
+
+        :global(html[dir='rtl']) .topic-list {
+          margin-left: 0;
+          margin-right: var(--space-4);
+          padding-left: 0;
+          padding-right: var(--space-1);
         }
       `}</style>
 

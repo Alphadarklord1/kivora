@@ -10,12 +10,13 @@ import { v4 as uuidv4 } from 'uuid';
 
 const isGuestMode =
   process.env.LOCAL_DEMO_MODE === '1' ||
-  process.env.AUTH_GUEST_MODE === '1';
+  process.env.AUTH_GUEST_MODE === '1' ||
+  (!process.env.AUTH_SECRET && !process.env.NEXTAUTH_SECRET);
 
 const authSecret =
   process.env.AUTH_SECRET ||
   process.env.NEXTAUTH_SECRET ||
-  (process.env.NODE_ENV !== 'production'
+  ((process.env.NODE_ENV !== 'production' || isGuestMode)
     ? 'studypilot-local-dev-secret'
     : undefined);
 
