@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { signIn, signOut, getProviders } from 'next-auth/react';
 import { useVault } from '@/providers/VaultProvider';
 import { loadAiPreferences, saveAiPreferences, type AiPreferences } from '@/lib/ai/client';
+import { getSupportedAiTasks } from '@/lib/ai/policy';
 
 type SettingsTab = 'profile' | 'appearance' | 'security' | 'account' | 'ai';
 
@@ -93,6 +94,13 @@ export default function SettingsPage() {
   const [ttsRate, setTtsRate] = useState<number>(1);
   const [ttsPitch, setTtsPitch] = useState<number>(1);
   const [aiPrefs, setAiPrefs] = useState<AiPreferences>(loadAiPreferences());
+  const [desktopAiHealth, setDesktopAiHealth] = useState<{ ok: boolean; status: string; details?: string } | null>(null);
+  const [desktopAiModelInfo, setDesktopAiModelInfo] = useState<{ modelId: string; modelFile: string; quantization: string; bundled: boolean } | null>(null);
+  const [checkingAiRuntime, setCheckingAiRuntime] = useState(false);
+
+  const currentLanguage = settings?.language ?? 'en';
+  const isArabic = currentLanguage === 'ar';
+  const supportedTasks = getSupportedAiTasks(currentLanguage);
 
   useEffect(() => {
     fetchData();
@@ -103,7 +111,7 @@ export default function SettingsPage() {
     const linkedProvider = params.get('linked');
     const tabParam = params.get('tab');
 
-    if (tabParam && ['profile', 'appearance', 'security', 'account'].includes(tabParam)) {
+    if (tabParam && ['profile', 'appearance', 'security', 'account', 'ai'].includes(tabParam)) {
       setTab(tabParam as SettingsTab);
     }
 
@@ -131,6 +139,46 @@ export default function SettingsPage() {
     syncVoices();
     window.speechSynthesis.onvoiceschanged = syncVoices;
   }, []);
+
+  const refreshDesktopAiStatus = async () => {
+    if (typeof window === 'undefined' || !window.electronAPI?.desktopAI) {
+      setDesktopAiHealth(null);
+      setDesktopAiModelInfo(null);
+      return;
+    }
+
+    setCheckingAiRuntime(true);
+    try {
+      const [health, modelInfo] = await Promise.all([
+        window.electronAPI.desktopAI.health(),
+        window.electronAPI.desktopAI.modelInfo(),
+      ]);
+      setDesktopAiHealth({
+        ok: health.ok,
+        status: health.status,
+        details: health.details,
+      });
+      setDesktopAiModelInfo({
+        modelId: modelInfo.modelId,
+        modelFile: modelInfo.modelFile,
+        quantization: modelInfo.quantization,
+        bundled: modelInfo.bundled,
+      });
+    } catch (error) {
+      setDesktopAiHealth({
+        ok: false,
+        status: 'error',
+        details: error instanceof Error ? error.message : 'Failed to check desktop AI runtime',
+      });
+    } finally {
+      setCheckingAiRuntime(false);
+    }
+  };
+
+  useEffect(() => {
+    if (tab !== 'ai') return;
+    void refreshDesktopAiStatus();
+  }, [tab]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -1009,23 +1057,35 @@ export default function SettingsPage() {
           {/* AI Tab */}
           {tab === 'ai' && (
             <div className="settings-section">
-              <h2>AI Models</h2>
-              <p className="section-description">Choose between hosted and offline models</p>
+              <h2>{isArabic ? 'نماذج الذكاء الاصطناعي' : 'AI Models'}</h2>
+              <p className="section-description">
+                {isArabic
+                  ? 'وضع سطح المكتب محلي أولاً مع قيود مخصصة للدراسة فقط.'
+                  : 'Desktop-first AI with offline local runtime and study-only guardrails.'}
+              </p>
 
               <div className="account-card">
-                <h3>Provider</h3>
+                <h3>{isArabic ? 'المزوّد' : 'Provider'}</h3>
                 <div className="form-group">
-                  <label htmlFor="aiProvider">AI provider</label>
+                  <label htmlFor="aiProvider">{isArabic ? 'مزود الذكاء الاصطناعي' : 'AI provider'}</label>
                   <select
                     id="aiProvider"
                     value={aiPrefs.provider}
                     onChange={(e) => setAiPrefs(prev => ({ ...prev, provider: e.target.value as AiPreferences['provider'] }))}
                   >
-                    <option value="auto">Auto (OpenAI → Ollama → Offline)</option>
-                    <option value="openai">OpenAI (Hosted)</option>
-                    <option value="ollama">Ollama (Local)</option>
-                    <option value="offline">Offline only</option>
+                    <option value="desktop-local">{isArabic ? 'محلي على الجهاز (مفضل)' : 'Desktop Local (Recommended)'}</option>
+                    <option value="openai">{isArabic ? 'OpenAI (سحابي)' : 'OpenAI (Cloud)'}</option>
+                    <option value="offline">{isArabic ? 'وضع بدون سحابة' : 'Offline deterministic only'}</option>
                   </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="cloudFallbackToggle">{isArabic ? 'السماح بالرجوع للسحابة عند فشل المحلي' : 'Enable cloud fallback if desktop runtime fails'}</label>
+                  <input
+                    id="cloudFallbackToggle"
+                    type="checkbox"
+                    checked={aiPrefs.enableCloudFallback}
+                    onChange={(e) => setAiPrefs(prev => ({ ...prev, enableCloudFallback: e.target.checked }))}
+                  />
                 </div>
               </div>
 
@@ -1038,39 +1098,58 @@ export default function SettingsPage() {
                     type="text"
                     value={aiPrefs.openaiModel}
                     onChange={(e) => setAiPrefs(prev => ({ ...prev, openaiModel: e.target.value }))}
-                    placeholder="gpt-4o"
+                    placeholder="gpt-4o-mini"
                   />
                   <p className="help-text">Requires `OPENAI_API_KEY` on the server.</p>
                 </div>
               </div>
 
               <div className="account-card">
-                <h3>Ollama (Local)</h3>
-                <div className="form-group">
-                  <label htmlFor="ollamaModel">Model</label>
-                  <input
-                    id="ollamaModel"
-                    type="text"
-                    value={aiPrefs.ollamaModel}
-                    onChange={(e) => setAiPrefs(prev => ({ ...prev, ollamaModel: e.target.value }))}
-                    placeholder="llama3:8b"
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="ollamaBase">Ollama URL</label>
-                  <input
-                    id="ollamaBase"
-                    type="text"
-                    value={aiPrefs.ollamaBaseUrl}
-                    onChange={(e) => setAiPrefs(prev => ({ ...prev, ollamaBaseUrl: e.target.value }))}
-                    placeholder="http://localhost:11434"
-                  />
-                  <p className="help-text">Only localhost is allowed for security.</p>
-                </div>
+                <h3>{isArabic ? 'نموذج سطح المكتب المضمّن' : 'Bundled Desktop Model'}</h3>
+                <p className="help-text">
+                  {isArabic
+                    ? 'Qwen2.5-3B-Instruct (Q4_K_M) — مخصص لمهام الدراسة داخل التطبيق.'
+                    : 'Qwen2.5-3B-Instruct (Q4_K_M) is bundled for local study generation.'}
+                </p>
+                {desktopAiModelInfo && (
+                  <div className="help-text" style={{ marginTop: 8 }}>
+                    <strong>{desktopAiModelInfo.modelId}</strong> · {desktopAiModelInfo.quantization}<br />
+                    <code>{desktopAiModelInfo.modelFile}</code><br />
+                    {desktopAiModelInfo.bundled ? (isArabic ? 'تم العثور على ملف النموذج' : 'Model file found') : (isArabic ? 'ملف النموذج غير موجود' : 'Model file missing')}
+                  </div>
+                )}
+                <button className="btn secondary" onClick={refreshDesktopAiStatus} disabled={checkingAiRuntime}>
+                  {checkingAiRuntime ? (isArabic ? 'جار الفحص...' : 'Checking...') : (isArabic ? 'فحص حالة Runtime' : 'Check Runtime Status')}
+                </button>
+                {desktopAiHealth && (
+                  <p className="help-text" style={{ marginTop: 10 }}>
+                    {isArabic ? 'الحالة:' : 'Status:'} <strong>{desktopAiHealth.status}</strong>
+                    {desktopAiHealth.details ? ` — ${desktopAiHealth.details}` : ''}
+                  </p>
+                )}
+              </div>
+
+              <div className="account-card">
+                <h3>{isArabic ? 'نطاق الذكاء الاصطناعي في StudyPilot' : 'StudyPilot AI Scope'}</h3>
+                <p className="help-text">
+                  {isArabic
+                    ? 'الذكاء الاصطناعي هنا مخصص للدراسة فقط: تلخيص، اختبارات، ملاحظات، تخطيط دراسة، وحل مسائل أكاديمية.'
+                    : 'AI is restricted to academic learning and study-planning tasks only.'}
+                </p>
+                <ul style={{ margin: '0.5rem 0 0 1.25rem' }}>
+                  {supportedTasks.map((task) => (
+                    <li key={task} style={{ marginBottom: '0.25rem' }}>{task}</li>
+                  ))}
+                </ul>
+                <p className="help-text" style={{ marginTop: 10 }}>
+                  {isArabic
+                    ? 'الطلبات خارج الدراسة (مثل الرسائل الشخصية، البرمجة العامة، أو الاستشارات الطبية/القانونية) سيتم رفضها.'
+                    : 'Out-of-scope requests (personal messages, generic coding help, legal/medical/financial advice) are blocked.'}
+                </p>
               </div>
 
               <button className="btn" onClick={handleSaveAi}>
-                Save AI Preferences
+                {isArabic ? 'حفظ إعدادات الذكاء الاصطناعي' : 'Save AI Preferences'}
               </button>
             </div>
           )}

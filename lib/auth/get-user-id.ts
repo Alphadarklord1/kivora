@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { isGuestModeEnabled } from '@/lib/runtime/mode';
 
 /**
  * Extract userId from JWT token with fallback for development.
@@ -30,7 +31,7 @@ export async function getUserId(request: NextRequest): Promise<string | null> {
   }
 
   // Local demo mode: bootstrap a deterministic demo user for API-backed flows.
-  if (process.env.LOCAL_DEMO_MODE === '1') {
+  if (isGuestModeEnabled()) {
     const demoEmail = 'demo@local.studypilot';
     const existingDemoUser = await db.query.users.findFirst({
       where: eq(users.email, demoEmail),

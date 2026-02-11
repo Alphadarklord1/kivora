@@ -7,11 +7,9 @@ import { db } from '@/lib/db';
 import { users, accounts } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { isGuestModeEnabled } from '@/lib/runtime/mode';
 
-const isGuestMode =
-  process.env.LOCAL_DEMO_MODE === '1' ||
-  process.env.AUTH_GUEST_MODE === '1' ||
-  (!process.env.AUTH_SECRET && !process.env.NEXTAUTH_SECRET);
+const isGuestMode = isGuestModeEnabled() || (!process.env.AUTH_SECRET && !process.env.NEXTAUTH_SECRET);
 
 const authSecret =
   process.env.AUTH_SECRET ||

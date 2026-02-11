@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from 'next/headers';
 import { ServiceWorkerRegistration, InstallPrompt } from "@/components/pwa";
+import { DesktopRequired } from '@/components/layout/DesktopRequired';
+import { isDesktopOnlyModeEnabled, isDesktopUserAgent } from '@/lib/runtime/mode';
 import "./globals.css";
 
 // Inline script to prevent flash of unstyled content
@@ -37,7 +40,7 @@ const settingsScript = `
 
 export const metadata: Metadata = {
   title: "StudyPilot",
-  description: "Your AI-powered study companion",
+  description: "Desktop-first study workspace with local AI tools",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -51,12 +54,12 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "StudyPilot",
     title: "StudyPilot",
-    description: "Your AI-powered study companion",
+    description: "Desktop-first study workspace with local AI tools",
   },
   twitter: {
     card: "summary",
     title: "StudyPilot",
-    description: "Your AI-powered study companion",
+    description: "Desktop-first study workspace with local AI tools",
   },
 };
 
@@ -72,11 +75,16 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const desktopOnlyMode = isDesktopOnlyModeEnabled();
+  const shouldEnforceDesktop = desktopOnlyMode && process.env.NODE_ENV === 'production';
+  const userAgent = shouldEnforceDesktop ? (await headers()).get('user-agent') : null;
+  const allowAppShell = !shouldEnforceDesktop || isDesktopUserAgent(userAgent);
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -91,9 +99,13 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: settingsScript }} />
       </head>
       <body>
-        {children}
-        <ServiceWorkerRegistration />
-        <InstallPrompt />
+        {allowAppShell ? children : <DesktopRequired />}
+        {allowAppShell && (
+          <>
+            <ServiceWorkerRegistration />
+            <InstallPrompt />
+          </>
+        )}
       </body>
     </html>
   );

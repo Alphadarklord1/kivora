@@ -53,7 +53,7 @@ const mobileMenuExtras = navItems.filter(item =>
 export function AppShell({ children, user }: AppShellProps) {
   const { settings, updateSettings } = useSettings();
   const isArabic = settings.language === 'ar';
-  const t = (key: string) => {
+  const t = useCallback((key: string) => {
     const ar: Record<string, string> = {
       Main: 'الرئيسية',
       Tools: 'الأدوات',
@@ -88,7 +88,7 @@ export function AppShell({ children, user }: AppShellProps) {
       'Switch to English': 'التبديل إلى الإنجليزية',
     };
     return isArabic ? (ar[key] || key) : key;
-  };
+  }, [isArabic]);
   const toggleLanguage = () => {
     void updateSettings({ language: isArabic ? 'en' : 'ar' });
   };
@@ -187,7 +187,7 @@ export function AppShell({ children, user }: AppShellProps) {
       console.error('Export failed:', error);
       toast.error(t('Export failed'), t('Could not export your data'));
     }
-  }, [toast, isArabic]);
+  }, [toast, t]);
 
   useKeyboardShortcuts([
     { key: ',', meta: true, handler: handleGoToSettings, description: t('Settings') },

@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import Link from 'next/link';
+import { isDesktopOnlyModeEnabled, isGuestModeEnabled } from '@/lib/runtime/mode';
 
 const features = [
   {
@@ -9,8 +10,8 @@ const features = [
   },
   {
     icon: '🤖',
-    title: 'AI-Powered Tools',
-    description: 'Transform your notes into quizzes, summaries, flashcards, and study guides automatically.',
+    title: 'Desktop Local AI',
+    description: 'Run study generation tools with an offline-first desktop workflow.',
   },
   {
     icon: '📝',
@@ -43,9 +44,8 @@ const tools = [
 ];
 
 export default async function LandingPage() {
-  const isGuestMode =
-    process.env.LOCAL_DEMO_MODE === '1' ||
-    process.env.AUTH_GUEST_MODE === '1';
+  const isGuestMode = isGuestModeEnabled();
+  const isDesktopOnly = isDesktopOnlyModeEnabled();
 
   let session = null;
   try {
@@ -70,7 +70,7 @@ export default async function LandingPage() {
           <div className="nav-links">
             {canUseWithoutSignIn ? (
               <Link href="/workspace" className="nav-btn primary">
-                Go to Workspace →
+                {isDesktopOnly ? 'Open Desktop Workspace →' : 'Go to Workspace →'}
               </Link>
             ) : (
               <>
@@ -92,8 +92,7 @@ export default async function LandingPage() {
           <div className="hero-badge">Built for focused learning</div>
           <h1>Study Smarter, Not Harder</h1>
           <p className="hero-subtitle">
-            Transform your study materials into interactive quizzes, summaries, and notes.
-            Your AI-powered study companion that helps you learn more effectively.
+            Transform your study materials into interactive quizzes, summaries, and notes with an offline-first desktop workspace.
           </p>
           <div className="hero-actions">
             {canUseWithoutSignIn ? (
@@ -111,11 +110,11 @@ export default async function LandingPage() {
               </>
             )}
           </div>
-          <p className="hero-note">No credit card required. Free forever for students.</p>
+          <p className="hero-note">{canUseWithoutSignIn ? 'Local mode is available without sign-in.' : 'Create an account to sync your study data.'}</p>
           <div className="hero-trust">
             <span>🔒 Privacy-first</span>
             <span>⚡ Offline-ready tools</span>
-            <span>📱 Mobile-friendly</span>
+            <span>🖥️ Desktop app</span>
           </div>
         </div>
         <div className="hero-visual">
@@ -233,10 +232,12 @@ export default async function LandingPage() {
             <span>StudyPilot</span>
           </div>
           <p>Your AI-powered study companion. Built for students, by students.</p>
-          <div className="footer-links">
-            <Link href="/login">Login</Link>
-            <Link href="/register">Sign Up</Link>
-          </div>
+          {!canUseWithoutSignIn && (
+            <div className="footer-links">
+              <Link href="/login">Login</Link>
+              <Link href="/register">Sign Up</Link>
+            </div>
+          )}
         </div>
       </footer>
     </div>

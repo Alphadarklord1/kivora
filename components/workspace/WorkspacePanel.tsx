@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { extractTextFromFile } from '@/lib/pdf/extract';
 import { idbStore } from '@/lib/idb';
 import { getGeneratedContent, ToolMode, GeneratedContent } from '@/lib/offline/generate';
-import { generateAiContent, loadAiPreferences } from '@/lib/ai/client';
+import { generateAiContent, loadAiPreferences, type AiGenerationPolicyBlock } from '@/lib/ai/client';
 import { InteractiveQuiz } from './InteractiveQuiz';
 import { MathSolver } from '@/components/tools/MathSolver';
 import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
@@ -75,6 +75,16 @@ type ToolSource = { type: 'manual' } | { type: 'file'; fileId: string; fileName:
 const initialToolSources = Object.fromEntries(
   toolTabs.map(tab => [tab.id, { type: 'manual' }])
 ) as Record<ToolTab, ToolSource>;
+
+class AiPolicyBlockError extends Error {
+  block: AiGenerationPolicyBlock;
+
+  constructor(block: AiGenerationPolicyBlock) {
+    super(block.reason);
+    this.name = 'AiPolicyBlockError';
+    this.block = block;
+  }
+}
 
 export function WorkspacePanel({
   selectedFolder,
@@ -171,6 +181,10 @@ export function WorkspacePanel({
       'Delete this file?': 'هل تريد حذف هذا الملف؟',
       'Error generating content.': 'حدث خطأ أثناء توليد المحتوى.',
       'Auto-chain Exam Prep → Exam → SRS': 'ربط تلقائي: تجهيز الاختبار ← الاختبار ← SRS',
+      'Study-only AI': 'ذكاء اصطناعي مخصص للدراسة',
+      'This request is outside StudyPilot scope.': 'هذا الطلب خارج نطاق StudyPilot.',
+      'Try one of these supported study tasks:': 'جرّب إحدى مهام الدراسة المدعومة:',
+      'Switch to': 'الانتقال إلى',
     };
     return isArabic ? (ar[key] || key) : key;
   };
@@ -196,6 +210,7 @@ export function WorkspacePanel({
   const [output, setOutput] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
+  const [aiPolicyBlock, setAiPolicyBlock] = useState<AiGenerationPolicyBlock | null>(null);
   const [showInteractiveQuiz, setShowInteractiveQuiz] = useState(false);
   const [viewMode, setViewMode] = useState<'input' | 'output' | 'practice'>('input');
   const [graphExpression, setGraphExpression] = useState('');
@@ -598,20 +613,27 @@ export function WorkspacePanel({
   };
 
   // Tool functions
-  const generateWithFallback = async (mode: ToolMode, text: string) => {
+  const generateWithFallback = async (mode: ToolMode, text: string): Promise<GeneratedContent> => {
     const prefs = loadAiPreferences();
     const ai = await generateAiContent(text, mode, prefs);
-    if (ai && ai.displayText) {
+
+    if (ai.status === 'policy_block') {
+      throw new AiPolicyBlockError(ai);
+    }
+
+    if (ai.status === 'success' && ai.content?.displayText) {
+      const content = ai.content;
       if (mode === 'mcq' || mode === 'quiz') {
-        if (!ai.questions?.length || !ai.questions[0]?.options?.length) {
+        if (!content.questions?.length || !content.questions[0]?.options?.length) {
           return getGeneratedContent(mode, text);
         }
       }
-      if (mode === 'flashcards' && !ai.flashcards?.length) {
+      if (mode === 'flashcards' && !content.flashcards?.length) {
         return getGeneratedContent(mode, text);
       }
-      return ai;
+      return content;
     }
+
     return getGeneratedContent(mode, text);
   };
 
@@ -622,9 +644,11 @@ export function WorkspacePanel({
       return;
     }
 
+    setAiPolicyBlock(null);
     setGenerating(true);
     try {
       const content = await generateWithFallback(toolTab as ToolMode, input);
+
       setGeneratedContent(content);
       setOutput(content.displayText);
       addResult(toolTab, toolTabs.find(t => t.id === toolTab)?.label || toolTab, content.displayText, toolSources[toolTab]);
@@ -634,7 +658,16 @@ export function WorkspacePanel({
       } else {
         setViewMode('output');
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof AiPolicyBlockError) {
+        setGeneratedContent(null);
+        setOutput('');
+        setAiPolicyBlock(error.block);
+        setShowInteractiveQuiz(false);
+        setViewMode('output');
+        return;
+      }
+
       setOutput(t('Error generating content.'));
       setGeneratedContent(null);
     } finally {
@@ -657,12 +690,25 @@ export function WorkspacePanel({
   const handleToolReset = () => {
     setOutput('');
     setGeneratedContent(null);
+    setAiPolicyBlock(null);
     setShowInteractiveQuiz(false);
     setViewMode('input');
   };
 
   const addResult = (tool: ToolTab, title: string, content: string, source?: ToolSource) => {
     setRecentOutputs(prev => [{ title, content, tool, source }, ...prev].slice(0, 5));
+  };
+
+  const getLocalizedPolicyReason = (block: AiGenerationPolicyBlock) => {
+    if (!isArabic) return block.reason;
+
+    if (block.errorCode === 'INVALID_MODE') {
+      return 'هذا النوع من الأدوات غير مدعوم في الذكاء الاصطناعي داخل StudyPilot.';
+    }
+    if (block.errorCode === 'INSUFFICIENT_STUDY_INPUT') {
+      return 'أضف تفاصيل أكثر من المادة أو المحاضرة ليتم توليد محتوى دراسي مناسب.';
+    }
+    return 'الذكاء الاصطناعي في StudyPilot مخصص فقط لمهام الدراسة والتخطيط الدراسي.';
   };
 
   const handleCopy = (text: string) => {
@@ -1179,6 +1225,36 @@ export function WorkspacePanel({
                       {generating ? t('Generating...') : `${t('Generate')} ${t(toolTabs.find(tab => tab.id === toolTab)?.label || toolTab)}`}
                     </button>
                   </>
+                )}
+
+                {viewMode === 'output' && aiPolicyBlock && !showInteractiveQuiz && (
+                  <div className="policy-block-card">
+                    <div className="policy-block-header">{t('Study-only AI')}</div>
+                    <p className="policy-block-reason">{getLocalizedPolicyReason(aiPolicyBlock)}</p>
+                    <p className="policy-block-hint">{t('Try one of these supported study tasks:')}</p>
+                    <div className="policy-suggestions">
+                      {aiPolicyBlock.suggestionModes.map((mode) => {
+                        const suggestionTab = toolTabs.find((tab) => tab.id === (mode as ToolTab));
+                        if (!suggestionTab) return null;
+
+                        return (
+                          <button
+                            key={mode}
+                            className="btn secondary small"
+                            onClick={() => {
+                              setToolTab(suggestionTab.id);
+                              handleToolReset();
+                            }}
+                          >
+                            {t('Switch to')} {t(suggestionTab.label)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button className="btn ghost small" onClick={() => { setAiPolicyBlock(null); setViewMode('input'); }}>
+                      {t('Edit')}
+                    </button>
+                  </div>
                 )}
 
                 {/* Output Mode */}
@@ -1706,6 +1782,42 @@ export function WorkspacePanel({
           width: 100%;
           padding: var(--space-3);
           font-weight: 600;
+        }
+
+        .policy-block-card {
+          border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border-subtle));
+          background: color-mix(in srgb, var(--primary) 10%, var(--bg-surface));
+          border-radius: var(--radius-lg);
+          padding: var(--space-4);
+          margin-bottom: var(--space-4);
+          display: grid;
+          gap: var(--space-2);
+        }
+
+        .policy-block-header {
+          font-size: var(--font-sm);
+          font-weight: 700;
+          color: var(--primary);
+          letter-spacing: 0.02em;
+          text-transform: uppercase;
+        }
+
+        .policy-block-reason {
+          margin: 0;
+          color: var(--text-primary);
+          line-height: 1.5;
+        }
+
+        .policy-block-hint {
+          margin: 0;
+          color: var(--text-secondary);
+          font-size: var(--font-meta);
+        }
+
+        .policy-suggestions {
+          display: flex;
+          gap: var(--space-2);
+          flex-wrap: wrap;
         }
 
         .output-actions, .save-actions {

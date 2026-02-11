@@ -1,7 +1,7 @@
 {
   "name": "studypilot",
-  "version": "1.0.0",
-  "description": "Your AI-powered study companion",
+  "version": "1.1.0",
+  "description": "Desktop-first AI study workspace",
   "private": true,
   "main": "electron/main.js",
   "author": "StudyPilot",
@@ -14,11 +14,12 @@
     "export": "next build && next export",
     "start": "next start",
     "lint": "eslint",
-    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "demo:local": "LOCAL_DEMO_MODE=1 concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "npm run build && electron-builder",
-    "electron:build:mac": "npm run build && electron-builder --mac",
-    "electron:build:win": "npm run build && electron-builder --win",
+    "test:policy": "node --test --experimental-strip-types tests/ai-policy.test.mjs",
+    "electron:dev": "STUDYPILOT_DESKTOP_ONLY=1 AUTH_GUEST_MODE=1 concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "demo:local": "STUDYPILOT_DESKTOP_ONLY=1 LOCAL_DEMO_MODE=1 AUTH_GUEST_MODE=1 concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:build": "STUDYPILOT_DESKTOP_ONLY=1 AUTH_GUEST_MODE=1 npm run build && electron-builder",
+    "electron:build:mac": "STUDYPILOT_DESKTOP_ONLY=1 AUTH_GUEST_MODE=1 npm run build && electron-builder --mac --arm64",
+    "electron:build:win": "STUDYPILOT_DESKTOP_ONLY=1 AUTH_GUEST_MODE=1 npm run build && electron-builder --win --x64",
     "electron:build:linux": "npm run build && electron-builder --linux",
     "electron:build:all": "npm run build && electron-builder -mwl",
     "mobile:init": "npx cap init",
@@ -38,6 +39,22 @@
       ".next/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "electron/runtime/models",
+        "to": "models",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "electron/runtime/bin",
+        "to": "bin",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
     "mac": {
       "category": "public.app-category.education",
       "icon": "public/icons/icon.png",
@@ -45,14 +62,12 @@
         {
           "target": "dmg",
           "arch": [
-            "x64",
             "arm64"
           ]
         },
         {
           "target": "zip",
           "arch": [
-            "x64",
             "arm64"
           ]
         }

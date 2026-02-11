@@ -1,8 +1,278 @@
 const { app, BrowserWindow, Menu, shell, ipcMain, nativeTheme } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const net = require('net');
+const { spawn } = require('child_process');
+
 const isDev = !app.isPackaged || process.env.NODE_ENV === 'development';
 
+const DESKTOP_AI = {
+  modelId: 'Qwen2.5-3B-Instruct',
+  modelFile: 'qwen2.5-3b-instruct-q4_k_m.gguf',
+  quantization: 'Q4_K_M',
+  startupTimeoutMs: 25000,
+  requestTimeoutMs: 45000,
+  maxRestartAttempts: 4,
+};
+
+const SUPPORTED_TOOL_MODES = new Set([
+  'assignment',
+  'summarize',
+  'mcq',
+  'quiz',
+  'notes',
+  'math',
+  'flashcards',
+  'essay',
+  'planner',
+]);
+
 let mainWindow;
+let desktopAiState = {
+  process: null,
+  port: null,
+  runtimePath: null,
+  modelPath: null,
+  startPromise: null,
+  ready: false,
+  lastError: null,
+  restartAttempts: 0,
+  manualStop: false,
+};
+
+function getPlatformArchTag() {
+  return `${process.platform}-${process.arch}`;
+}
+
+function getRuntimeBinaryPath() {
+  const binaryName = process.platform === 'win32' ? 'studypilot-ai.exe' : 'studypilot-ai';
+  const platformTag = getPlatformArchTag();
+  const relativeParts = ['bin', platformTag, binaryName];
+  const runtimePath = app.isPackaged
+    ? path.join(process.resourcesPath, ...relativeParts)
+    : path.join(__dirname, 'runtime', ...relativeParts);
+  return runtimePath;
+}
+
+function getModelPath() {
+  const relativeParts = ['models', DESKTOP_AI.modelFile];
+  return app.isPackaged
+    ? path.join(process.resourcesPath, ...relativeParts)
+    : path.join(__dirname, 'runtime', ...relativeParts);
+}
+
+function getMockRuntimePath() {
+  return path.join(__dirname, 'runtime', 'mock-ai-runtime.js');
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise
+      .then((value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+  });
+}
+
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        server.close();
+        reject(new Error('Failed to get free port'));
+        return;
+      }
+      const { port } = address;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+async function fetchJson(url, options = {}, timeoutMs = DESKTOP_AI.requestTimeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const data = await response.json().catch(() => ({}));
+    return { response, data };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function isRuntimeHealthy() {
+  if (!desktopAiState.port) return false;
+  try {
+    const { response, data } = await fetchJson(`http://127.0.0.1:${desktopAiState.port}/health`, {}, 3000);
+    return response.ok && !!data.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForRuntimeReady(timeoutMs) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    // eslint-disable-next-line no-await-in-loop
+    const healthy = await isRuntimeHealthy();
+    if (healthy) return true;
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+  return false;
+}
+
+function clearDesktopAiState() {
+  desktopAiState.ready = false;
+  desktopAiState.startPromise = null;
+  desktopAiState.port = null;
+  desktopAiState.runtimePath = null;
+}
+
+function stopDesktopAiRuntime() {
+  desktopAiState.manualStop = true;
+  if (desktopAiState.process && !desktopAiState.process.killed) {
+    desktopAiState.process.kill();
+  }
+  desktopAiState.process = null;
+  clearDesktopAiState();
+}
+
+async function startDesktopAiRuntime() {
+  if (desktopAiState.startPromise) return desktopAiState.startPromise;
+
+  desktopAiState.startPromise = (async () => {
+    const modelPath = getModelPath();
+    const runtimePath = getRuntimeBinaryPath();
+    const mockRuntimePath = getMockRuntimePath();
+    const modelExists = fs.existsSync(modelPath);
+    const runtimeExists = fs.existsSync(runtimePath);
+    const mockExists = fs.existsSync(mockRuntimePath);
+    const canUseMockRuntime = !app.isPackaged && mockExists;
+
+    if (!runtimeExists && !canUseMockRuntime) {
+      desktopAiState.lastError = 'Desktop AI runtime binary is missing';
+      clearDesktopAiState();
+      return;
+    }
+
+    if (!modelExists) {
+      desktopAiState.lastError = `Model file missing at ${modelPath}`;
+      clearDesktopAiState();
+      return;
+    }
+
+    const port = await getFreePort();
+    const command = runtimeExists ? runtimePath : process.execPath;
+    const args = runtimeExists
+      ? ['--host', '127.0.0.1', '--port', String(port), '--model', modelPath]
+      : [mockRuntimePath, '--host', '127.0.0.1', '--port', String(port), '--model', modelPath];
+
+    desktopAiState.manualStop = false;
+    desktopAiState.modelPath = modelPath;
+    desktopAiState.runtimePath = command;
+    desktopAiState.port = port;
+
+    const child = spawn(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        STUDYPILOT_AI_MODEL: modelPath,
+        STUDYPILOT_AI_PORT: String(port),
+      },
+    });
+
+    desktopAiState.process = child;
+
+    child.stdout?.on('data', (chunk) => {
+      const line = String(chunk || '').trim();
+      if (line) {
+        console.log(`[desktop-ai] ${line}`);
+      }
+    });
+
+    child.stderr?.on('data', (chunk) => {
+      const line = String(chunk || '').trim();
+      if (line) {
+        console.warn(`[desktop-ai] ${line}`);
+      }
+    });
+
+    child.on('exit', (code, signal) => {
+      const wasManualStop = desktopAiState.manualStop;
+      const exitLabel = `Desktop AI runtime exited (code=${code}, signal=${signal || 'none'})`;
+      if (!wasManualStop) {
+        desktopAiState.lastError = exitLabel;
+      }
+
+      desktopAiState.process = null;
+      desktopAiState.ready = false;
+      desktopAiState.startPromise = null;
+
+      if (wasManualStop) return;
+
+      if (desktopAiState.restartAttempts >= DESKTOP_AI.maxRestartAttempts) {
+        desktopAiState.lastError = `${exitLabel} - max restart attempts reached`;
+        return;
+      }
+
+      desktopAiState.restartAttempts += 1;
+      const backoffMs = 1000 * desktopAiState.restartAttempts;
+      setTimeout(() => {
+        void startDesktopAiRuntime().catch((error) => {
+          desktopAiState.lastError = error instanceof Error ? error.message : String(error);
+        });
+      }, backoffMs);
+    });
+
+    const healthy = await withTimeout(
+      waitForRuntimeReady(DESKTOP_AI.startupTimeoutMs),
+      DESKTOP_AI.startupTimeoutMs + 1000,
+      'Desktop AI runtime startup timed out'
+    );
+
+    if (!healthy) {
+      desktopAiState.lastError = 'Desktop AI runtime failed health checks';
+      stopDesktopAiRuntime();
+      return;
+    }
+
+    desktopAiState.ready = true;
+    desktopAiState.restartAttempts = 0;
+    desktopAiState.lastError = null;
+  })();
+
+  await desktopAiState.startPromise;
+}
+
+async function ensureDesktopAiRuntime() {
+  if (desktopAiState.ready && desktopAiState.port) {
+    const healthy = await isRuntimeHealthy();
+    if (healthy) return { ok: true };
+  }
+
+  await startDesktopAiRuntime();
+  const healthy = await isRuntimeHealthy();
+  if (healthy) {
+    desktopAiState.ready = true;
+    return { ok: true };
+  }
+
+  return {
+    ok: false,
+    error: desktopAiState.lastError || 'Desktop AI runtime unavailable',
+  };
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -178,9 +448,9 @@ function createMenu() {
       role: 'help',
       submenu: [
         {
-          label: 'Learn More',
+          label: 'Desktop Guide',
           click: async () => {
-            await shell.openExternal('https://studypilot.app');
+            await shell.openExternal('https://github.com/studypilot/app#desktop');
           },
         },
         {
@@ -202,11 +472,22 @@ app.whenReady().then(() => {
   createWindow();
   createMenu();
 
+  // Lazy warmup desktop AI runtime in the background.
+  setTimeout(() => {
+    void startDesktopAiRuntime().catch((error) => {
+      desktopAiState.lastError = error instanceof Error ? error.message : String(error);
+    });
+  }, 1200);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
+});
+
+app.on('before-quit', () => {
+  stopDesktopAiRuntime();
 });
 
 app.on('window-all-closed', () => {
@@ -223,3 +504,135 @@ nativeTheme.on('updated', () => {
 // IPC handlers
 ipcMain.handle('get-platform', () => process.platform);
 ipcMain.handle('get-app-version', () => app.getVersion());
+
+ipcMain.handle('desktop-ai-health', async () => {
+  const runtimePath = getRuntimeBinaryPath();
+  const modelPath = getModelPath();
+  const runtimeAvailable = fs.existsSync(runtimePath) || (!app.isPackaged && fs.existsSync(getMockRuntimePath()));
+  const modelAvailable = fs.existsSync(modelPath);
+
+  if (desktopAiState.startPromise && !desktopAiState.ready) {
+    return {
+      ok: false,
+      status: 'starting',
+      provider: 'desktop-local',
+      model: `${DESKTOP_AI.modelId} (${DESKTOP_AI.quantization})`,
+      runtimePath,
+      modelPath,
+      details: 'Desktop AI runtime is warming up',
+    };
+  }
+
+  if (desktopAiState.ready) {
+    const healthy = await isRuntimeHealthy();
+    if (healthy) {
+      return {
+        ok: true,
+        status: 'ready',
+        provider: 'desktop-local',
+        model: `${DESKTOP_AI.modelId} (${DESKTOP_AI.quantization})`,
+        runtimePath: desktopAiState.runtimePath || runtimePath,
+        modelPath,
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    status: runtimeAvailable && modelAvailable ? 'unavailable' : 'error',
+    provider: 'desktop-local',
+    model: `${DESKTOP_AI.modelId} (${DESKTOP_AI.quantization})`,
+    runtimePath,
+    modelPath,
+    details: desktopAiState.lastError || (!modelAvailable ? 'Model file missing' : 'Runtime unavailable'),
+  };
+});
+
+ipcMain.handle('desktop-ai-model-info', async () => {
+  const runtimePath = getRuntimeBinaryPath();
+  const modelPath = getModelPath();
+  const bundled = fs.existsSync(modelPath);
+  const runtimeAvailable = fs.existsSync(runtimePath) || (!app.isPackaged && fs.existsSync(getMockRuntimePath()));
+
+  return {
+    modelId: DESKTOP_AI.modelId,
+    modelFile: DESKTOP_AI.modelFile,
+    quantization: DESKTOP_AI.quantization,
+    bundled,
+    runtimeAvailable,
+    runtimePath,
+    modelPath,
+  };
+});
+
+ipcMain.handle('desktop-ai-generate', async (_, payload) => {
+  const mode = payload?.mode;
+  const text = payload?.text;
+
+  if (!mode || typeof mode !== 'string' || !SUPPORTED_TOOL_MODES.has(mode)) {
+    return {
+      ok: false,
+      errorCode: 'INVALID_REQUEST',
+      message: 'Unsupported mode for desktop AI',
+    };
+  }
+
+  if (!text || typeof text !== 'string' || text.trim().length < 1) {
+    return {
+      ok: false,
+      errorCode: 'INVALID_REQUEST',
+      message: 'Study text is required',
+    };
+  }
+
+  const runtime = await ensureDesktopAiRuntime();
+  if (!runtime.ok || !desktopAiState.port) {
+    return {
+      ok: false,
+      errorCode: 'RUNTIME_UNAVAILABLE',
+      message: runtime.error || 'Desktop AI runtime is unavailable',
+    };
+  }
+
+  try {
+    const { response, data } = await fetchJson(
+      `http://127.0.0.1:${desktopAiState.port}/generate`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, text }),
+      },
+      DESKTOP_AI.requestTimeoutMs
+    );
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        errorCode: data.errorCode || 'RUNTIME_UNAVAILABLE',
+        message: data.message || data.error || `Desktop AI runtime returned ${response.status}`,
+        reason: data.reason,
+        suggestionModes: data.suggestionModes,
+      };
+    }
+
+    if (!data.content || typeof data.content.displayText !== 'string') {
+      return {
+        ok: false,
+        errorCode: 'RUNTIME_UNAVAILABLE',
+        message: 'Desktop AI runtime returned invalid content',
+      };
+    }
+
+    return {
+      ok: true,
+      content: data.content,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      errorCode: 'RUNTIME_TIMEOUT',
+      message: 'Desktop AI request timed out',
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+});

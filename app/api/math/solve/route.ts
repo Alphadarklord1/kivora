@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import { evaluateAiScope } from '@/lib/ai/policy';
 
 // Math solving API - uses AI for complex problems
 // Supports: Calculus I/II, Linear Algebra, Differential Equations, etc.
@@ -253,6 +254,19 @@ export async function POST(request: NextRequest) {
 
     if (!problem || typeof problem !== 'string') {
       return NextResponse.json({ error: 'Problem is required' }, { status: 400 });
+    }
+
+    const scopeDecision = evaluateAiScope({ mode: 'math', text: problem, source: 'tools' });
+    if (!scopeDecision.allowed) {
+      return NextResponse.json(
+        {
+          error: scopeDecision.reason,
+          errorCode: scopeDecision.errorCode,
+          reason: scopeDecision.reason,
+          suggestionModes: scopeDecision.suggestionModes,
+        },
+        { status: 422 }
+      );
     }
 
     const problemType = detectProblemType(problem);

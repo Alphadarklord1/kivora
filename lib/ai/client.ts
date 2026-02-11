@@ -1,28 +1,79 @@
 import type { GeneratedContent, ToolMode } from '@/lib/offline/generate';
+import {
+  evaluateAiScope,
+  type AiScopeBlocked,
+  type AiScopeErrorCode,
+} from '@/lib/ai/policy';
+import { isElectronRenderer } from '@/lib/runtime/mode';
 
-export type AiProvider = 'auto' | 'openai' | 'ollama' | 'offline';
+export type AiProvider = 'desktop-local' | 'openai' | 'offline';
 
 export interface AiPreferences {
   provider: AiProvider;
   openaiModel: string;
-  ollamaModel: string;
-  ollamaBaseUrl: string;
+  enableCloudFallback: boolean;
+}
+
+export type AiGenerationSuccess = {
+  status: 'success';
+  provider: Exclude<AiProvider, 'offline'>;
+  content: GeneratedContent;
+};
+
+export type AiGenerationPolicyBlock = {
+  status: 'policy_block';
+  errorCode: AiScopeErrorCode;
+  reason: string;
+  suggestionModes: ToolMode[];
+};
+
+export type AiGenerationRuntimeError = {
+  status: 'runtime_error';
+  provider: AiProvider;
+  message: string;
+  details?: string;
+};
+
+export type AiGenerationResult =
+  | AiGenerationSuccess
+  | AiGenerationPolicyBlock
+  | AiGenerationRuntimeError;
+
+function getDefaultProvider(): AiProvider {
+  return isElectronRenderer() ? 'desktop-local' : 'offline';
 }
 
 const DEFAULT_PREFS: AiPreferences = {
-  provider: 'auto',
-  openaiModel: 'gpt-4o',
-  ollamaModel: 'llama3:8b',
-  ollamaBaseUrl: 'http://localhost:11434',
+  provider: getDefaultProvider(),
+  openaiModel: 'gpt-4o-mini',
+  enableCloudFallback: false,
 };
+
+function normalizeProvider(value: string | null): AiProvider {
+  if (value === 'desktop-local' || value === 'openai' || value === 'offline') {
+    return value;
+  }
+
+  // Legacy migration from old preferences.
+  if (value === 'auto' || value === 'ollama') {
+    return isElectronRenderer() ? 'desktop-local' : 'openai';
+  }
+
+  return getDefaultProvider();
+}
+
+function normalizeBoolean(value: string | null, fallback = false): boolean {
+  if (value == null) return fallback;
+  return value === '1' || value.toLowerCase() === 'true';
+}
 
 export function loadAiPreferences(): AiPreferences {
   if (typeof window === 'undefined') return DEFAULT_PREFS;
+
   return {
-    provider: (localStorage.getItem('studypilot_ai_provider') as AiProvider) || DEFAULT_PREFS.provider,
+    provider: normalizeProvider(localStorage.getItem('studypilot_ai_provider')),
     openaiModel: localStorage.getItem('studypilot_ai_openai_model') || DEFAULT_PREFS.openaiModel,
-    ollamaModel: localStorage.getItem('studypilot_ai_ollama_model') || DEFAULT_PREFS.ollamaModel,
-    ollamaBaseUrl: localStorage.getItem('studypilot_ai_ollama_base') || DEFAULT_PREFS.ollamaBaseUrl,
+    enableCloudFallback: normalizeBoolean(localStorage.getItem('studypilot_ai_cloud_fallback'), DEFAULT_PREFS.enableCloudFallback),
   };
 }
 
@@ -30,69 +81,175 @@ export function saveAiPreferences(prefs: AiPreferences) {
   if (typeof window === 'undefined') return;
   localStorage.setItem('studypilot_ai_provider', prefs.provider);
   localStorage.setItem('studypilot_ai_openai_model', prefs.openaiModel);
-  localStorage.setItem('studypilot_ai_ollama_model', prefs.ollamaModel);
-  localStorage.setItem('studypilot_ai_ollama_base', prefs.ollamaBaseUrl);
+  localStorage.setItem('studypilot_ai_cloud_fallback', String(prefs.enableCloudFallback));
+
+  // Cleanup legacy keys to keep stored state consistent.
+  localStorage.removeItem('studypilot_ai_ollama_model');
+  localStorage.removeItem('studypilot_ai_ollama_base');
 }
 
-async function requestAi(
-  provider: 'openai' | 'ollama',
+function toPolicyBlock(decision: AiScopeBlocked): AiGenerationPolicyBlock {
+  return {
+    status: 'policy_block',
+    errorCode: decision.errorCode,
+    reason: decision.reason,
+    suggestionModes: decision.suggestionModes,
+  };
+}
+
+async function parseJsonOrText(res: Response): Promise<Record<string, unknown>> {
+  try {
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    const text = await res.text();
+    return { error: text };
+  }
+}
+
+async function requestOpenAI(
   model: string,
   text: string,
-  mode: ToolMode,
-  prefs: AiPreferences
-) {
-  const res = await fetch('/api/llm/generate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({
-      provider,
-      model,
-      text,
-      mode,
-      ollamaBaseUrl: provider === 'ollama' ? prefs.ollamaBaseUrl : undefined,
-    }),
-  });
+  mode: ToolMode
+): Promise<AiGenerationResult> {
+  try {
+    const res = await fetch('/api/llm/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        provider: 'openai',
+        model,
+        text,
+        mode,
+      }),
+    });
 
-  if (!res.ok) {
-    const message = await res.text();
-    throw new Error(message || 'AI generation failed');
+    const payload = await parseJsonOrText(res);
+    if (!res.ok) {
+      if (res.status === 422) {
+        return {
+          status: 'policy_block',
+          errorCode: (payload.errorCode as AiScopeErrorCode) || 'OUT_OF_SCOPE',
+          reason: String(payload.reason || payload.error || 'Out-of-scope request'),
+          suggestionModes: Array.isArray(payload.suggestionModes)
+            ? (payload.suggestionModes as ToolMode[])
+            : ['summarize', 'notes', 'quiz'],
+        };
+      }
+
+      return {
+        status: 'runtime_error',
+        provider: 'openai',
+        message: String(payload.error || payload.reason || 'OpenAI generation failed'),
+        details: `HTTP ${res.status}`,
+      };
+    }
+
+    const content = payload.content as GeneratedContent | undefined;
+    if (!content || typeof content.displayText !== 'string') {
+      return {
+        status: 'runtime_error',
+        provider: 'openai',
+        message: 'OpenAI returned invalid content',
+      };
+    }
+
+    return {
+      status: 'success',
+      provider: 'openai',
+      content,
+    };
+  } catch (error) {
+    return {
+      status: 'runtime_error',
+      provider: 'openai',
+      message: 'OpenAI request failed',
+      details: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function requestDesktopLocal(
+  text: string,
+  mode: ToolMode
+): Promise<AiGenerationResult> {
+  if (typeof window === 'undefined' || !window.electronAPI?.desktopAI) {
+    return {
+      status: 'runtime_error',
+      provider: 'desktop-local',
+      message: 'Desktop AI runtime is not available',
+      details: 'Electron desktop bridge is missing',
+    };
   }
 
-  return (await res.json()) as { content: GeneratedContent };
+  try {
+    const result = await window.electronAPI.desktopAI.generate({ mode, text });
+    if (result.ok) {
+      return {
+        status: 'success',
+        provider: 'desktop-local',
+        content: result.content,
+      };
+    }
+
+    if (result.errorCode === 'OUT_OF_SCOPE') {
+      return {
+        status: 'policy_block',
+        errorCode: 'OUT_OF_SCOPE',
+        reason: result.reason || result.message,
+        suggestionModes: result.suggestionModes || ['summarize', 'notes', 'quiz'],
+      };
+    }
+
+    return {
+      status: 'runtime_error',
+      provider: 'desktop-local',
+      message: result.message,
+      details: result.errorCode,
+    };
+  } catch (error) {
+    return {
+      status: 'runtime_error',
+      provider: 'desktop-local',
+      message: 'Desktop AI request failed',
+      details: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 export async function generateAiContent(
   text: string,
   mode: ToolMode,
   prefs: AiPreferences
-): Promise<GeneratedContent | null> {
-  if (!text.trim()) return null;
-
-  const provider = prefs.provider;
-  if (provider === 'offline') return null;
-
-  const tryOpenAi = () => requestAi('openai', prefs.openaiModel, text, mode, prefs);
-  const tryOllama = () => requestAi('ollama', prefs.ollamaModel, text, mode, prefs);
-
-  try {
-    if (provider === 'openai') {
-      const data = await tryOpenAi();
-      return data.content;
-    }
-    if (provider === 'ollama') {
-      const data = await tryOllama();
-      return data.content;
-    }
-    // auto
-    try {
-      const data = await tryOpenAi();
-      return data.content;
-    } catch {
-      const data = await tryOllama();
-      return data.content;
-    }
-  } catch {
-    return null;
+): Promise<AiGenerationResult> {
+  const scopeDecision = evaluateAiScope({ mode, text, source: 'workspace' });
+  if (!scopeDecision.allowed) {
+    return toPolicyBlock(scopeDecision);
   }
+
+  if (prefs.provider === 'offline') {
+    return {
+      status: 'runtime_error',
+      provider: 'offline',
+      message: 'AI provider is set to offline-only deterministic mode',
+    };
+  }
+
+  if (prefs.provider === 'openai') {
+    return requestOpenAI(prefs.openaiModel, text, mode);
+  }
+
+  const localResult = await requestDesktopLocal(text, mode);
+  if (localResult.status === 'success' || localResult.status === 'policy_block') {
+    return localResult;
+  }
+
+  if (prefs.enableCloudFallback) {
+    const cloudResult = await requestOpenAI(prefs.openaiModel, text, mode);
+    if (cloudResult.status === 'success' || cloudResult.status === 'policy_block') {
+      return cloudResult;
+    }
+  }
+
+  return localResult;
 }

@@ -47,6 +47,19 @@ interface MatlabSession {
 
 const MATLAB_SESSION_STORAGE_KEY = 'studypilot.matlab.session.v1';
 
+function loadStoredSession(): MatlabSession | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(MATLAB_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MatlabSession;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function parseMatrix(input: string): Matrix | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
@@ -359,7 +372,7 @@ function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValu
 export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
   const { settings } = useSettings();
   const isArabic = settings.language === 'ar';
-  const t = (key: string) => {
+  const t = useCallback((key: string) => {
     const ar: Record<string, string> = {
       'MATLAB Lab': 'مختبر MATLAB',
       'Matrix operations, quick plots, and MATLAB-style inputs.': 'عمليات المصفوفات ورسوم سريعة وإدخال بأسلوب MATLAB.',
@@ -399,7 +412,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       'Enter a valid matrix A to preview a heatmap.': 'أدخل مصفوفة A صحيحة لعرض الخريطة الحرارية.',
     };
     return isArabic ? (ar[key] || key) : key;
-  };
+  }, [isArabic]);
 
   const [matrixA, setMatrixA] = useState('[1 2; 3 4]');
   const [matrixB, setMatrixB] = useState('[5 6; 7 8]');
@@ -412,11 +425,16 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
   const [fieldScale, setFieldScale] = useState(0.7);
   const [vectorB, setVectorB] = useState('[1; 1]');
   const [powerN, setPowerN] = useState(2);
-  const [command, setCommand] = useState('A = [1 2; 3 4]');
-  const [scriptText, setScriptText] = useState('A = [1 2; 3 4]\nB = A^2\ndet(B)');
-  const [runtimeVars, setRuntimeVars] = useState<Record<string, MatlabValue>>({});
-  const [history, setHistory] = useState<MatlabHistoryItem[]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const [restoredSession] = useState<MatlabSession | null>(() => loadStoredSession());
+  const [command, setCommand] = useState(restoredSession?.command || 'A = [1 2; 3 4]');
+  const [scriptText, setScriptText] = useState(restoredSession?.script || 'A = [1 2; 3 4]\nB = A^2\ndet(B)');
+  const [runtimeVars, setRuntimeVars] = useState<Record<string, MatlabValue>>(
+    restoredSession?.variables && typeof restoredSession.variables === 'object' ? restoredSession.variables : {}
+  );
+  const [history, setHistory] = useState<MatlabHistoryItem[]>(
+    Array.isArray(restoredSession?.history) ? restoredSession.history.slice(-100) : []
+  );
+  const [, setHistoryIndex] = useState<number>(-1);
   const [runningScript, setRunningScript] = useState(false);
   const commandInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -431,28 +449,6 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
         value,
       }));
   }, [runtimeVars]);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(MATLAB_SESSION_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as MatlabSession;
-      if (parsed.variables && typeof parsed.variables === 'object') {
-        setRuntimeVars(parsed.variables);
-      }
-      if (Array.isArray(parsed.history)) {
-        setHistory(parsed.history.slice(-100));
-      }
-      if (typeof parsed.script === 'string') {
-        setScriptText(parsed.script);
-      }
-      if (typeof parsed.command === 'string') {
-        setCommand(parsed.command);
-      }
-    } catch {
-      // Ignore malformed local session and continue with defaults.
-    }
-  }, []);
 
   useEffect(() => {
     try {
@@ -597,7 +593,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       output: formatValue(evaluated),
       timestamp: new Date().toISOString(),
     };
-  }, []);
+  }, [t]);
 
   const runCommand = useCallback(() => {
     const item = runSingleCommand(command, 'command');
