@@ -30,6 +30,7 @@
   "build": {
     "appId": "com.studypilot.app",
     "productName": "StudyPilot",
+    "asar": false,
     "directories": {
       "output": "dist-electron"
     },
@@ -37,6 +38,7 @@
       "electron/**/*",
       "public/**/*",
       ".next/**/*",
+      "out/**/*",
       "package.json"
     ],
     "extraResources": [

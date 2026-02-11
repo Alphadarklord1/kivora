@@ -28,6 +28,13 @@ const SUPPORTED_TOOL_MODES = new Set([
 ]);
 
 let mainWindow;
+let appServerProcess = null;
+let appServerUrl = null;
+
+const APP_SERVER = {
+  startupTimeoutMs: 45000,
+};
+
 let desktopAiState = {
   process: null,
   port: null,
@@ -274,7 +281,75 @@ async function ensureDesktopAiRuntime() {
   };
 }
 
-function createWindow() {
+function stopAppServer() {
+  if (appServerProcess && !appServerProcess.killed) {
+    appServerProcess.kill();
+  }
+  appServerProcess = null;
+  appServerUrl = null;
+}
+
+async function waitForServerUrl(url, timeoutMs = APP_SERVER.startupTimeoutMs) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const response = await fetch(url, { method: 'GET' });
+      if (response.ok || response.status < 500) return true;
+    } catch {
+      // keep trying
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  return false;
+}
+
+async function ensureAppServerUrl() {
+  if (isDev) return 'http://localhost:3000';
+  if (appServerUrl) return appServerUrl;
+
+  const port = await getFreePort();
+  const serverUrl = `http://127.0.0.1:${port}`;
+  const nextCliPath = path.join(__dirname, '../node_modules/next/dist/bin/next');
+  const appRoot = path.join(__dirname, '..');
+
+  appServerProcess = spawn(process.execPath, [nextCliPath, 'start', '-p', String(port), '-H', '127.0.0.1'], {
+    cwd: appRoot,
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+      STUDYPILOT_DESKTOP_ONLY: process.env.STUDYPILOT_DESKTOP_ONLY || '1',
+      AUTH_GUEST_MODE: process.env.AUTH_GUEST_MODE || '1',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  appServerProcess.stdout?.on('data', (chunk) => {
+    const line = String(chunk || '').trim();
+    if (line) console.log(`[app-server] ${line}`);
+  });
+  appServerProcess.stderr?.on('data', (chunk) => {
+    const line = String(chunk || '').trim();
+    if (line) console.warn(`[app-server] ${line}`);
+  });
+  appServerProcess.on('exit', (code, signal) => {
+    console.warn(`[app-server] exited code=${code} signal=${signal || 'none'}`);
+    appServerProcess = null;
+    appServerUrl = null;
+  });
+
+  const ready = await waitForServerUrl(serverUrl);
+  if (!ready) {
+    stopAppServer();
+    throw new Error('StudyPilot app server failed to start');
+  }
+
+  appServerUrl = serverUrl;
+  return appServerUrl;
+}
+
+async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -293,11 +368,9 @@ function createWindow() {
   });
 
   // Load the app
-  const startUrl = isDev
-    ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, '../out/index.html')}`;
+  const startUrl = await ensureAppServerUrl();
 
-  mainWindow.loadURL(startUrl);
+  await mainWindow.loadURL(startUrl);
 
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
@@ -469,7 +542,10 @@ function createMenu() {
 
 // App events
 app.whenReady().then(() => {
-  createWindow();
+  createWindow().catch((error) => {
+    console.error('Failed to create main window:', error);
+    app.quit();
+  });
   createMenu();
 
   // Lazy warmup desktop AI runtime in the background.
@@ -481,12 +557,15 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindow().catch((error) => {
+        console.error('Failed to recreate main window:', error);
+      });
     }
   });
 });
 
 app.on('before-quit', () => {
+  stopAppServer();
   stopDesktopAiRuntime();
 });
 
