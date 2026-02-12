@@ -3,7 +3,6 @@ import styles from './page.module.css';
 
 const REPO_RELEASES_URL = 'https://github.com/Alphadarklord1/studypilot/releases';
 const LATEST_RELEASE_URL = 'https://github.com/Alphadarklord1/studypilot/releases/latest';
-const MAC_APPLE_SILICON_URL = 'https://github.com/Alphadarklord1/studypilot/releases/download/v1.1.0/StudyPilot-1.1.0-arm64.dmg';
 
 export default function DownloadsPage() {
   return (
@@ -13,11 +12,8 @@ export default function DownloadsPage() {
         <p>Desktop-only builds are published through GitHub Releases.</p>
 
         <div className={styles.downloadList}>
-          <a href={MAC_APPLE_SILICON_URL} className={`${styles.downloadBtn} ${styles.primary}`} target="_blank" rel="noopener noreferrer">
-            Download macOS (Apple Silicon)
-          </a>
-          <a href={LATEST_RELEASE_URL} className={styles.downloadBtn} target="_blank" rel="noopener noreferrer">
-            Open latest release
+          <a href={LATEST_RELEASE_URL} className={`${styles.downloadBtn} ${styles.primary}`} target="_blank" rel="noopener noreferrer">
+            Open Latest Release (macOS/Windows)
           </a>
           <a href={REPO_RELEASES_URL} className={styles.downloadBtn} target="_blank" rel="noopener noreferrer">
             Browse all releases
@@ -25,7 +21,7 @@ export default function DownloadsPage() {
         </div>
 
         <p className={styles.note}>
-          If a button opens a release page without assets, the build has not been attached to that release yet.
+          If direct asset download fails, open the latest release page and download the DMG/EXE asset manually.
         </p>
 
         <Link href="/" className={styles.backLink}>
