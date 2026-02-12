@@ -2,7 +2,8 @@ import Link from 'next/link';
 import styles from './page.module.css';
 
 const REPO_RELEASES_URL = 'https://github.com/Alphadarklord1/studypilot/releases';
-const LATEST_RELEASE_URL = 'https://github.com/Alphadarklord1/studypilot/releases/latest';
+const RELEASE_V111_URL = 'https://github.com/Alphadarklord1/studypilot/releases/tag/v1.1.1';
+const RELEASE_V111_DMG_URL = 'https://github.com/Alphadarklord1/studypilot/releases/download/v1.1.1/StudyPilot-1.1.0-arm64.dmg';
 
 export default function DownloadsPage() {
   return (
@@ -12,8 +13,11 @@ export default function DownloadsPage() {
         <p>Desktop-only builds are published through GitHub Releases.</p>
 
         <div className={styles.downloadList}>
-          <a href={LATEST_RELEASE_URL} className={`${styles.downloadBtn} ${styles.primary}`} target="_blank" rel="noopener noreferrer">
-            Open Latest Release (macOS/Windows)
+          <a href={RELEASE_V111_URL} className={`${styles.downloadBtn} ${styles.primary}`} target="_blank" rel="noopener noreferrer">
+            Open Release v1.1.1
+          </a>
+          <a href={RELEASE_V111_DMG_URL} className={styles.downloadBtn} target="_blank" rel="noopener noreferrer">
+            Download macOS DMG (v1.1.1)
           </a>
           <a href={REPO_RELEASES_URL} className={styles.downloadBtn} target="_blank" rel="noopener noreferrer">
             Browse all releases
