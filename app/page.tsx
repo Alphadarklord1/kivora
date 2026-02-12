@@ -2,7 +2,7 @@ import { auth } from '@/auth';
 import Link from 'next/link';
 import { isDesktopOnlyModeEnabled, isGuestModeEnabled } from '@/lib/runtime/mode';
 
-const DOWNLOAD_URL = 'https://github.com/Alphadarklord1/studypilot/releases/latest';
+const DOWNLOAD_URL = '/downloads';
 
 const features = [
   {
@@ -71,9 +71,9 @@ export default async function LandingPage() {
             <span className="logo-text">StudyPilot</span>
           </Link>
           <div className="nav-links">
-            <a href={DOWNLOAD_URL} className="nav-btn secondary" target="_blank" rel="noopener noreferrer">
+            <Link href={DOWNLOAD_URL} className="nav-btn secondary">
               Download App
-            </a>
+            </Link>
             {canUseWithoutSignIn ? (
               <Link href="/workspace" className="nav-btn primary">
                 {isDesktopOnly ? 'Open Desktop Workspace →' : 'Go to Workspace →'}
@@ -101,9 +101,9 @@ export default async function LandingPage() {
             Transform your study materials into interactive quizzes, summaries, and notes with an offline-first desktop workspace.
           </p>
           <div className="hero-actions">
-            <a href={DOWNLOAD_URL} className="hero-btn secondary" target="_blank" rel="noopener noreferrer">
+            <Link href={DOWNLOAD_URL} className="hero-btn secondary">
               Download for Mac/Windows
-            </a>
+            </Link>
             {canUseWithoutSignIn ? (
               <Link href="/workspace" className="hero-btn primary">
                 Open Workspace →
