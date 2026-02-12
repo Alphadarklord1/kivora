@@ -1,4 +1,4 @@
-import type { GeneratedContent, ToolMode } from '@/lib/offline/generate';
+import type { GeneratedContent, RewriteOptions, ToolMode } from '@/lib/offline/generate';
 
 type DesktopAiErrorCode =
   | 'RUNTIME_UNAVAILABLE'
@@ -40,7 +40,7 @@ interface DesktopAiModelInfo {
 }
 
 interface DesktopAI {
-  generate: (payload: { mode: ToolMode; text: string }) => Promise<DesktopAiGenerateSuccess | DesktopAiGenerateFailure>;
+  generate: (payload: { mode: ToolMode; text: string; rewriteOptions?: RewriteOptions }) => Promise<DesktopAiGenerateSuccess | DesktopAiGenerateFailure>;
   health: () => Promise<DesktopAiHealth>;
   modelInfo: () => Promise<DesktopAiModelInfo>;
 }

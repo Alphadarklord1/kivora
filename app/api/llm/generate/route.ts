@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getGeneratedContent, type GeneratedContent, type ToolMode } from '@/lib/offline/generate';
+import { getGeneratedContent, type GeneratedContent, type RewriteOptions, type ToolMode } from '@/lib/offline/generate';
 import { evaluateAiScope } from '@/lib/ai/policy';
 
 type Provider = 'openai';
@@ -14,6 +14,7 @@ const MODE_GUIDANCE: Record<string, string> = {
   flashcards: 'Create 8-12 flashcards with front/back pairs.',
   essay: 'Create an outline and thesis with key arguments.',
   planner: 'Create a realistic study plan with actionable session blocks.',
+  rephrase: 'Rewrite the text with the requested tone while preserving meaning and facts.',
 };
 
 const SYSTEM_PROMPT = `You generate study materials. Output ONLY valid JSON.
@@ -29,7 +30,8 @@ The JSON MUST match this shape:
   "sourceText": string,
   "keyTopics": string[],
   "subjectArea": "science"|"humanities"|"social-science"|"business"|"technical"|"general",
-  "learningObjectives": string[]
+  "learningObjectives": string[],
+  "rewriteMeta": { "tone": "formal"|"informal"|"academic"|"professional"|"energetic"|"concise", "customInstruction": string }
 }`;
 
 const extractJson = (text: string) => {
@@ -88,10 +90,10 @@ function sanitizeStringList(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).slice(0, 20);
 }
 
-function coerceGeneratedContent(parsed: unknown, mode: ToolMode, sourceText: string): GeneratedContent | null {
+function coerceGeneratedContent(parsed: unknown, mode: ToolMode, sourceText: string, rewriteOptions?: RewriteOptions): GeneratedContent | null {
   if (!parsed || typeof parsed !== 'object') return null;
 
-  const fallback = getGeneratedContent(mode, sourceText);
+  const fallback = getGeneratedContent(mode, sourceText, rewriteOptions);
   const candidate = parsed as Partial<GeneratedContent>;
   const displayText = typeof candidate.displayText === 'string' ? candidate.displayText.trim() : '';
   if (!displayText) return null;
@@ -114,11 +116,12 @@ function coerceGeneratedContent(parsed: unknown, mode: ToolMode, sourceText: str
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { provider = 'openai', model, text, mode } = body as {
+    const { provider = 'openai', model, text, mode, rewriteOptions } = body as {
       provider?: Provider;
       model?: string;
       text: string;
       mode: ToolMode;
+      rewriteOptions?: RewriteOptions;
     };
 
     if (!text || !mode) {
@@ -143,8 +146,12 @@ export async function POST(request: NextRequest) {
     }
 
     const guidance = MODE_GUIDANCE[mode] || 'Generate helpful study material.';
+    const rewriteLine = mode === 'rephrase'
+      ? `Rewrite options: ${JSON.stringify(rewriteOptions || { tone: 'professional' })}`
+      : '';
     const prompt = `Mode: ${mode}
 Guidance: ${guidance}
+${rewriteLine}
 
 Source text:
 ${text}`;
@@ -166,13 +173,13 @@ ${text}`;
     try {
       parsed = JSON.parse(jsonText);
     } catch {
-      const fallbackContent = getGeneratedContent(mode, text);
+      const fallbackContent = getGeneratedContent(mode, text, rewriteOptions);
       return NextResponse.json({ content: fallbackContent, fallback: true, reason: 'Failed to parse AI JSON' });
     }
 
-    const coerced = coerceGeneratedContent(parsed, mode, text);
+    const coerced = coerceGeneratedContent(parsed, mode, text, rewriteOptions);
     if (!coerced) {
-      const fallbackContent = getGeneratedContent(mode, text);
+      const fallbackContent = getGeneratedContent(mode, text, rewriteOptions);
       return NextResponse.json({ content: fallbackContent, fallback: true, reason: 'Invalid AI response schema' });
     }
 

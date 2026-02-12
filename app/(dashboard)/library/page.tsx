@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ShareDialog } from '@/components/share';
 
 interface LibraryItem {
@@ -32,13 +32,23 @@ export default function LibraryPage() {
   const [pinnedOnly, setPinnedOnly] = useState(false);
   const [previewItem, setPreviewItem] = useState<LibraryItem | null>(null);
   const [editingMeta, setEditingMeta] = useState<LibraryMetadata>({});
+  const [deepLinkResolved, setDeepLinkResolved] = useState(false);
+  const [appliedSearchParam, setAppliedSearchParam] = useState<string | null>(null);
 
   // Share dialog state
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const deepLinkOpenItemId = searchParams.get('openItemId');
+  const deepLinkSearch = searchParams.get('search');
+
+  useEffect(() => {
+    setDeepLinkResolved(false);
+  }, [deepLinkOpenItemId]);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<{ id: string; name: string } | null>(null);
 
-  const readMetadata = (item: LibraryItem): LibraryMetadata => {
+  const readMetadata = useCallback((item: LibraryItem): LibraryMetadata => {
     const meta = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
     return {
       title: typeof meta?.title === 'string' ? meta.title : undefined,
@@ -49,12 +59,17 @@ export default function LibraryPage() {
       sourceFileId: typeof meta?.sourceFileId === 'string' ? meta.sourceFileId : undefined,
       sourceFileName: typeof meta?.sourceFileName === 'string' ? meta.sourceFileName : undefined,
     };
-  };
+  }, []);
 
   const getTitle = (item: LibraryItem) => {
     const meta = readMetadata(item);
     return meta.title || `${formatMode(item.mode)} • ${new Date(item.createdAt).toLocaleDateString()}`;
   };
+
+  const handleOpenPreview = useCallback((item: LibraryItem) => {
+    setPreviewItem(item);
+    setEditingMeta(readMetadata(item));
+  }, [readMetadata]);
 
   const handleShare = (item: LibraryItem) => {
     setShareTarget({ id: item.id, name: getTitle(item) });
@@ -81,6 +96,63 @@ export default function LibraryPage() {
   useEffect(() => {
     fetchLibrary();
   }, [fetchLibrary]);
+
+  useEffect(() => {
+    if (deepLinkSearch === null || deepLinkSearch === appliedSearchParam) return;
+    setSearch(deepLinkSearch);
+    setAppliedSearchParam(deepLinkSearch);
+  }, [appliedSearchParam, deepLinkSearch]);
+
+  const clearOpenItemParam = useCallback(() => {
+    if (!deepLinkOpenItemId) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('openItemId');
+    const nextUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname;
+    router.replace(nextUrl);
+  }, [deepLinkOpenItemId, pathname, router, searchParams]);
+
+  useEffect(() => {
+    if (!deepLinkOpenItemId || loading || deepLinkResolved) return;
+
+    let active = true;
+
+    const openFromDeepLink = async () => {
+      const existing = items.find((item) => item.id === deepLinkOpenItemId);
+      if (existing) {
+        handleOpenPreview(existing);
+        if (active) {
+          setDeepLinkResolved(true);
+          clearOpenItemParam();
+        }
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/library/${deepLinkOpenItemId}`, { credentials: 'include' });
+        if (res.ok) {
+          const item = await res.json() as LibraryItem;
+          if (!active) return;
+          setItems((prev) => {
+            if (prev.some((entry) => entry.id === item.id)) return prev;
+            return [item, ...prev];
+          });
+          handleOpenPreview(item);
+        }
+      } catch {
+        // Keep library visible even if deep-link item is invalid.
+      } finally {
+        if (!active) return;
+        setDeepLinkResolved(true);
+        clearOpenItemParam();
+      }
+    };
+
+    void openFromDeepLink();
+
+    return () => {
+      active = false;
+    };
+  }, [clearOpenItemParam, deepLinkOpenItemId, deepLinkResolved, handleOpenPreview, items, loading]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this item?')) return;
@@ -126,11 +198,6 @@ export default function LibraryPage() {
     const meta = readMetadata(item);
     const updated = { ...meta, pinned: !meta.pinned };
     await updateItemMetadata(item.id, updated);
-  };
-
-  const handleOpenPreview = (item: LibraryItem) => {
-    setPreviewItem(item);
-    setEditingMeta(readMetadata(item));
   };
 
   const handleSaveMeta = async () => {
@@ -212,6 +279,7 @@ export default function LibraryPage() {
       mcq: 'MCQ',
       quiz: 'Quiz',
       notes: 'Notes',
+      rephrase: 'Rephrase',
       math: 'Math',
       exam: 'Exam',
       srs: 'SRS',
@@ -230,7 +298,7 @@ export default function LibraryPage() {
     });
   };
 
-  const modes = ['all', 'assignment', 'summarize', 'mcq', 'quiz', 'notes', 'math', 'exam', 'srs'];
+  const modes = ['all', 'assignment', 'summarize', 'mcq', 'quiz', 'notes', 'rephrase', 'math', 'exam', 'srs'];
   const tags = Array.from(
     new Set(items.flatMap(item => readMetadata(item).tags || []))
   );
@@ -585,6 +653,7 @@ export default function LibraryPage() {
         .card-badge.quiz { background: #fef3c7; color: #d97706; }
         .card-badge.summarize { background: #dbeafe; color: #2563eb; }
         .card-badge.notes { background: #f3e8ff; color: #9333ea; }
+        .card-badge.rephrase { background: #ede9fe; color: #6d28d9; }
         .card-badge.math { background: #fce7f3; color: #db2777; }
         .card-badge.exam { background: #e0f2fe; color: #0284c7; }
         .card-badge.srs { background: #ecfccb; color: #4d7c0f; }

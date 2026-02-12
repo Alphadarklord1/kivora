@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, ReactNode, useCallback } from 'react';
+import { useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
@@ -8,6 +8,7 @@ import { VaultStatus } from '@/components/security/VaultStatus';
 import { useKeyboardShortcuts, formatShortcut } from '@/hooks/useKeyboardShortcuts';
 import { useToastHelpers } from '@/components/ui/Toast';
 import { useSettings } from '@/providers/SettingsProvider';
+import { QuickSearchPalette, type QuickSearchItem } from '@/components/layout/QuickSearchPalette';
 
 interface AppShellProps {
   children: ReactNode;
@@ -16,6 +17,20 @@ interface AppShellProps {
     email?: string | null;
     image?: string | null;
   };
+}
+
+interface QuickSearchFile {
+  id: string;
+  name: string;
+  type: string;
+}
+
+interface QuickSearchLibraryItem {
+  id: string;
+  mode: string;
+  content: string;
+  createdAt: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 const navGroups = [
@@ -63,6 +78,13 @@ export function AppShell({ children, user }: AppShellProps) {
       Audio: 'الصوت',
       Analytics: 'التحليلات',
       Sharing: 'المشاركة',
+      Rephrase: 'إعادة صياغة',
+      Assignment: 'واجب',
+      Summarize: 'تلخيص',
+      MCQ: 'اختيار متعدد',
+      Quiz: 'اختبار',
+      Notes: 'ملاحظات',
+      Math: 'رياضيات',
       Settings: 'الإعدادات',
       User: 'مستخدم',
       System: 'النظام',
@@ -86,6 +108,16 @@ export function AppShell({ children, user }: AppShellProps) {
       English: 'الإنجليزية',
       'Switch to Arabic': 'التبديل إلى العربية',
       'Switch to English': 'التبديل إلى الإنجليزية',
+      'Quick Search': 'بحث سريع',
+      'Search pages, files, and library...': 'ابحث في الصفحات والملفات والمكتبة...',
+      Pages: 'الصفحات',
+      Files: 'الملفات',
+      'No results': 'لا توجد نتائج',
+      Loading: 'جارٍ التحميل',
+      'Type to search pages, files, and library items.': 'اكتب للبحث في الصفحات والملفات وعناصر المكتبة.',
+      'Use arrows to navigate, Enter to open, Esc to close': 'استخدم الأسهم للتنقل، Enter للفتح، Esc للإغلاق',
+      'Open quick search': 'فتح البحث السريع',
+      'Account actions': 'إجراءات الحساب',
     };
     return isArabic ? (ar[key] || key) : key;
   }, [isArabic]);
@@ -101,6 +133,12 @@ export function AppShell({ children, user }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [quickSearchOpen, setQuickSearchOpen] = useState(false);
+  const [quickSearchQuery, setQuickSearchQuery] = useState('');
+  const [quickSearchLoading, setQuickSearchLoading] = useState(false);
+  const [quickSearchLoaded, setQuickSearchLoaded] = useState(false);
+  const [quickSearchFiles, setQuickSearchFiles] = useState<QuickSearchFile[]>([]);
+  const [quickSearchLibrary, setQuickSearchLibrary] = useState<QuickSearchLibraryItem[]>([]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -131,17 +169,38 @@ export function AppShell({ children, user }: AppShellProps) {
     }
   }, [isMobile]);
 
+  const handleOpenQuickSearch = useCallback(() => {
+    if (!quickSearchLoaded) {
+      setQuickSearchLoading(true);
+    }
+    setQuickSearchOpen(true);
+  }, [quickSearchLoaded]);
+
+  const handleCloseQuickSearch = useCallback(() => {
+    setQuickSearchOpen(false);
+    setQuickSearchQuery('');
+  }, []);
+
   const handleEscape = useCallback(() => {
+    if (quickSearchOpen) {
+      handleCloseQuickSearch();
+      return;
+    }
     if (showUserMenu) {
       setShowUserMenu(false);
     }
     if (showShortcutsHelp) {
       setShowShortcutsHelp(false);
     }
-  }, [showUserMenu, showShortcutsHelp]);
+  }, [handleCloseQuickSearch, quickSearchOpen, showShortcutsHelp, showUserMenu]);
 
   const handleShowHelp = useCallback(() => {
     setShowShortcutsHelp(prev => !prev);
+  }, []);
+
+  const handleSignOut = useCallback(() => {
+    setShowUserMenu(false);
+    void signOut({ callbackUrl: '/login' });
   }, []);
 
   const handleExportData = useCallback(async () => {
@@ -189,7 +248,97 @@ export function AppShell({ children, user }: AppShellProps) {
     }
   }, [toast, t]);
 
+  useEffect(() => {
+    if (!quickSearchOpen || quickSearchLoaded || quickSearchLoading) return;
+
+    let cancelled = false;
+
+    Promise.all([
+      fetch('/api/files', { credentials: 'include' }).then(async (res) => (res.ok ? res.json() : [])),
+      fetch('/api/library', { credentials: 'include' }).then(async (res) => (res.ok ? res.json() : [])),
+    ])
+      .then(([fileData, libraryData]) => {
+        if (cancelled) return;
+        setQuickSearchFiles(Array.isArray(fileData) ? fileData : []);
+        setQuickSearchLibrary(Array.isArray(libraryData) ? libraryData : []);
+        setQuickSearchLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setQuickSearchFiles([]);
+        setQuickSearchLibrary([]);
+      })
+      .finally(() => {
+        if (!cancelled) setQuickSearchLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [quickSearchLoaded, quickSearchLoading, quickSearchOpen]);
+
+  const formatLibraryMode = useCallback((mode: string) => {
+    const map: Record<string, string> = {
+      assignment: t('Assignment'),
+      summarize: t('Summarize'),
+      mcq: t('MCQ'),
+      quiz: t('Quiz'),
+      notes: t('Notes'),
+      rephrase: t('Rephrase'),
+      math: t('Math'),
+    };
+    return map[mode] || mode;
+  }, [t]);
+
+  const quickSearchItems = useMemo<QuickSearchItem[]>(() => {
+    const pageItems: QuickSearchItem[] = [
+      { id: 'page-workspace', type: 'page', title: t('Workspace'), subtitle: '/workspace', href: '/workspace', icon: '🎒', searchText: `${t('Workspace')} workspace` },
+      { id: 'page-planner', type: 'page', title: t('Planner'), subtitle: '/planner', href: '/planner', icon: '📅', searchText: `${t('Planner')} planner` },
+      { id: 'page-library', type: 'page', title: t('Library'), subtitle: '/library', href: '/library', icon: '📚', searchText: `${t('Library')} library` },
+      { id: 'page-tools', type: 'page', title: t('Tools'), subtitle: '/tools', href: '/tools', icon: '🛠️', searchText: `${t('Tools')} tools` },
+      { id: 'page-audio', type: 'page', title: t('Audio'), subtitle: '/podcast', href: '/podcast', icon: '🎧', searchText: `${t('Audio')} audio podcast` },
+      { id: 'page-analytics', type: 'page', title: t('Analytics'), subtitle: '/analytics', href: '/analytics', icon: '📊', searchText: `${t('Analytics')} analytics` },
+      { id: 'page-sharing', type: 'page', title: t('Sharing'), subtitle: '/sharing', href: '/sharing', icon: '🔗', searchText: `${t('Sharing')} sharing` },
+      { id: 'page-settings', type: 'page', title: t('Settings'), subtitle: '/settings', href: '/settings', icon: '⚙️', searchText: `${t('Settings')} settings` },
+    ];
+
+    const fileItems = quickSearchFiles.slice(0, 25).map<QuickSearchItem>((file) => ({
+      id: `file-${file.id}`,
+      type: 'file',
+      title: file.name,
+      subtitle: `${t('Files')} • ${file.type}`,
+      href: `/workspace?openFileId=${encodeURIComponent(file.id)}`,
+      icon: file.type === 'upload' || file.type === 'pdf' ? '📄' : '📝',
+      searchText: `${file.name} ${file.type} ${t('Files')}`,
+    }));
+
+    const libraryItems = quickSearchLibrary.slice(0, 25).map<QuickSearchItem>((item) => {
+      const meta = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+      const customTitle = typeof meta.title === 'string' ? meta.title.trim() : '';
+      const title = customTitle || `${formatLibraryMode(item.mode)} • ${new Date(item.createdAt).toLocaleDateString()}`;
+      const snippet = item.content?.slice(0, 120) || '';
+      return {
+        id: `library-${item.id}`,
+        type: 'library',
+        title,
+        subtitle: `${t('Library')} • ${formatLibraryMode(item.mode)}`,
+        href: `/library?openItemId=${encodeURIComponent(item.id)}&search=${encodeURIComponent(quickSearchQuery.trim())}`,
+        icon: '📚',
+        searchText: `${title} ${snippet} ${item.mode}`,
+      };
+    });
+
+    return [...pageItems, ...fileItems, ...libraryItems];
+  }, [formatLibraryMode, quickSearchFiles, quickSearchLibrary, quickSearchQuery, t]);
+
+  const handleQuickSearchSelect = useCallback((item: QuickSearchItem) => {
+    setQuickSearchOpen(false);
+    setQuickSearchQuery('');
+    router.push(item.href);
+  }, [router]);
+
   useKeyboardShortcuts([
+    { key: 'k', meta: true, handler: handleOpenQuickSearch, description: t('Open quick search') },
     { key: ',', meta: true, handler: handleGoToSettings, description: t('Settings') },
     { key: 'b', meta: true, handler: handleToggleSidebar, description: t('Toggle Sidebar') },
     { key: 'Escape', handler: handleEscape, description: t('Close/Cancel') },
@@ -272,6 +421,14 @@ export function AppShell({ children, user }: AppShellProps) {
                 </div>
                 <button
                   className="download-btn"
+                  onClick={handleGoToSettings}
+                  title={t('Settings')}
+                >
+                  <span>⚙️</span>
+                  <span>{t('Settings')}</span>
+                </button>
+                <button
+                  className="download-btn"
                   onClick={handleExportData}
                   title={t('Export Data')}
                 >
@@ -286,10 +443,25 @@ export function AppShell({ children, user }: AppShellProps) {
                   <span>🌐</span>
                   <span>{isArabic ? 'EN' : 'AR'}</span>
                 </button>
+                <button
+                  className="download-btn"
+                  onClick={handleSignOut}
+                  title={t('Sign Out')}
+                >
+                  <span>🚪</span>
+                  <span>{t('Sign Out')}</span>
+                </button>
               </>
             )}
             {!sidebarOpen && (
               <div className="sidebar-icon-actions">
+                <button
+                  className="download-btn-icon"
+                  onClick={handleGoToSettings}
+                  title={t('Settings')}
+                >
+                  ⚙️
+                </button>
                 <button
                   className="download-btn-icon"
                   onClick={handleExportData}
@@ -304,12 +476,16 @@ export function AppShell({ children, user }: AppShellProps) {
                 >
                   🌐
                 </button>
+                <button
+                  className="download-btn-icon"
+                  onClick={handleSignOut}
+                  title={t('Sign Out')}
+                >
+                  🚪
+                </button>
               </div>
             )}
-            <div
-              className="user-profile"
-              onClick={() => setShowUserMenu(!showUserMenu)}
-            >
+            <div className="user-profile" aria-label={t('Account actions')}>
               <div className="user-avatar">
                 {user.image ? (
                   <img src={user.image} alt="" />
@@ -324,20 +500,6 @@ export function AppShell({ children, user }: AppShellProps) {
                 </div>
               )}
             </div>
-
-            {showUserMenu && sidebarOpen && (
-              <div className="user-menu">
-                <Link href="/settings" className="user-menu-item">
-                  ⚙️ {t('Settings')}
-                </Link>
-                <button
-                  className="user-menu-item"
-                  onClick={() => signOut({ callbackUrl: '/login' })}
-                >
-                  🚪 {t('Sign Out')}
-                </button>
-              </div>
-            )}
           </div>
         </aside>
       )}
@@ -378,6 +540,10 @@ export function AppShell({ children, user }: AppShellProps) {
                       {item.icon} {t(item.label)}
                     </Link>
                   ))}
+                  <div className="mobile-menu-divider" />
+                  <Link href="/settings" className="mobile-menu-item" onClick={() => setShowUserMenu(false)}>
+                    ⚙️ {t('Settings')}
+                  </Link>
                   <button
                     className="mobile-menu-item"
                     onClick={() => { handleExportData(); setShowUserMenu(false); }}
@@ -390,12 +556,9 @@ export function AppShell({ children, user }: AppShellProps) {
                   >
                     🌐 {t('Language')}: {isArabic ? t('Arabic') : t('English')}
                   </button>
-                  <Link href="/settings" className="mobile-menu-item" onClick={() => setShowUserMenu(false)}>
-                    ⚙️ {t('Settings')}
-                  </Link>
                   <button
                     className="mobile-menu-item"
-                    onClick={() => signOut({ callbackUrl: '/login' })}
+                    onClick={handleSignOut}
                   >
                     🚪 {t('Sign Out')}
                   </button>
@@ -442,6 +605,10 @@ export function AppShell({ children, user }: AppShellProps) {
               <div className="shortcuts-section">
                 <h4>{t('Navigation')}</h4>
                 <div className="shortcut-item">
+                  <span className="shortcut-desc">{t('Open quick search')}</span>
+                  <kbd>{formatShortcut({ key: 'k', meta: true })}</kbd>
+                </div>
+                <div className="shortcut-item">
                   <span className="shortcut-desc">{t('Go to Settings')}</span>
                   <kbd>{formatShortcut({ key: ',', meta: true })}</kbd>
                 </div>
@@ -466,6 +633,17 @@ export function AppShell({ children, user }: AppShellProps) {
         </>
       )}
 
+      <QuickSearchPalette
+        isOpen={quickSearchOpen}
+        isArabic={isArabic}
+        query={quickSearchQuery}
+        items={quickSearchItems}
+        loading={quickSearchLoading}
+        onQueryChange={setQuickSearchQuery}
+        onClose={handleCloseQuickSearch}
+        onSelect={handleQuickSearchSelect}
+      />
+
       <style jsx>{`
         .app-shell {
           display: flex;
@@ -487,6 +665,7 @@ export function AppShell({ children, user }: AppShellProps) {
           flex-direction: column;
           transition: width 0.2s ease, background 0.2s ease;
           z-index: 100;
+          min-height: 0;
         }
 
         .app-sidebar.collapsed {
@@ -539,6 +718,8 @@ export function AppShell({ children, user }: AppShellProps) {
           display: flex;
           flex-direction: column;
           gap: var(--space-4);
+          overflow-y: auto;
+          min-height: 0;
         }
 
         .app-sidebar.collapsed .sidebar-nav {
@@ -620,6 +801,7 @@ export function AppShell({ children, user }: AppShellProps) {
           display: flex;
           flex-direction: column;
           gap: var(--space-2);
+          background: var(--bg-surface);
         }
 
         .footer-label {
@@ -699,7 +881,7 @@ export function AppShell({ children, user }: AppShellProps) {
           gap: var(--space-3);
           padding: var(--space-2);
           border-radius: var(--radius-md);
-          cursor: pointer;
+          cursor: default;
         }
 
         .user-profile:hover {
@@ -930,6 +1112,11 @@ export function AppShell({ children, user }: AppShellProps) {
 
         .mobile-menu-item:hover {
           background: var(--bg-inset);
+        }
+
+        .mobile-menu-divider {
+          border-top: 1px solid var(--border-subtle);
+          margin: var(--space-1) 0;
         }
 
         /* Mobile Bottom Navigation */

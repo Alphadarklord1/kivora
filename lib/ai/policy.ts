@@ -7,7 +7,8 @@ export type StudyAiMode =
   | 'math'
   | 'flashcards'
   | 'essay'
-  | 'planner';
+  | 'planner'
+  | 'rephrase';
 
 export type AiScopeErrorCode = 'OUT_OF_SCOPE' | 'INSUFFICIENT_STUDY_INPUT' | 'INVALID_MODE';
 
@@ -40,6 +41,7 @@ export const STUDYPILOT_ALLOWED_AI_MODES: StudyAiMode[] = [
   'flashcards',
   'essay',
   'planner',
+  'rephrase',
 ];
 
 const allowedModes = new Set<string>(STUDYPILOT_ALLOWED_AI_MODES);
@@ -54,6 +56,7 @@ const MODE_MIN_LENGTH: Partial<Record<StudyAiMode, number>> = {
   flashcards: 40,
   essay: 40,
   planner: 20,
+  rephrase: 8,
 };
 
 const MATH_SIGNAL = /(?:\d|[+\-*/=^]|integral|derivative|limit|matrix|vector|equation|theorem|proof|det|rank|trace|sin|cos|tan|sqrt|∫|\blim\b|معادلة|تكامل|مصفوفة|اشتقاق)/i;
@@ -93,6 +96,7 @@ function suggestionsForMode(mode: StudyAiMode | null): StudyAiMode[] {
   if (mode === 'math') return ['math', 'notes', 'quiz'];
   if (mode === 'planner') return ['planner', 'summarize', 'quiz'];
   if (mode === 'assignment') return ['assignment', 'notes', 'quiz'];
+  if (mode === 'rephrase') return ['rephrase', 'notes', 'summarize'];
   return [mode, ...DEFAULT_SUGGESTIONS.filter((item) => item !== mode)].slice(0, 3);
 }
 
@@ -135,11 +139,20 @@ export function evaluateAiScope(input: AiScopeInput): AiScopeDecision {
   // Inspect for clearly out-of-scope intents. Preserve academic prompts even if they include a blocked keyword.
   const boundedText = text.slice(0, 1600);
   const blockedIntent = BLOCKED_INTENT_PATTERNS.some((pattern) => pattern.test(boundedText));
-  if (blockedIntent && !ACADEMIC_ANCHOR.test(boundedText)) {
+  if (blockedIntent && !ACADEMIC_ANCHOR.test(boundedText) && mode !== 'rephrase') {
     return {
       allowed: false,
       errorCode: 'OUT_OF_SCOPE',
       reason: 'StudyPilot AI is restricted to academic learning and study-planning tasks.',
+      suggestionModes: suggestionsForMode(mode),
+    };
+  }
+
+  if (blockedIntent && mode === 'rephrase') {
+    return {
+      allowed: false,
+      errorCode: 'OUT_OF_SCOPE',
+      reason: 'Rephrase is available for safe writing improvements only.',
       suggestionModes: suggestionsForMode(mode),
     };
   }
@@ -166,6 +179,7 @@ export function getSupportedAiTasks(language: 'en' | 'ar' = 'en'): string[] {
       'بناء بطاقات مراجعة',
       'تحليل الواجبات وخطط الدراسة',
       'حل مسائل الرياضيات التعليمية',
+      'إعادة صياغة النص بأسلوب رسمي أو أكاديمي أو موجز',
     ];
   }
 
@@ -176,5 +190,6 @@ export function getSupportedAiTasks(language: 'en' | 'ar' = 'en'): string[] {
     'Build flashcards for revision',
     'Break down assignments and study plans',
     'Solve academic math problems',
+    'Rephrase writing in formal, academic, or concise tone',
   ];
 }

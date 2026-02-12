@@ -1,16 +1,20 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { FolderPanel } from '@/components/folders/FolderPanel';
 import { WorkspacePanel } from '@/components/workspace/WorkspacePanel';
 
 export default function WorkspacePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [selectedFolderName, setSelectedFolderName] = useState<string>('');
   const [selectedTopicName, setSelectedTopicName] = useState<string>('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [folderCollapsed, setFolderCollapsed] = useState(false);
+  const openFileId = searchParams.get('openFileId');
 
   const handleFolderSelect = useCallback((folderId: string | null, folderName: string, topicId: string | null, topicName: string) => {
     setSelectedFolder(folderId);
@@ -22,6 +26,14 @@ export default function WorkspacePage() {
   const handleRefresh = useCallback(() => {
     setRefreshKey(k => k + 1);
   }, []);
+
+  const handleOpenFileHandled = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (!params.has('openFileId')) return;
+    params.delete('openFileId');
+    const nextUrl = params.toString() ? `/workspace?${params.toString()}` : '/workspace';
+    router.replace(nextUrl);
+  }, [router, searchParams]);
 
   return (
     <div className="workspace-shell">
@@ -40,6 +52,8 @@ export default function WorkspacePage() {
           selectedFolderName={selectedFolderName}
           selectedTopicName={selectedTopicName}
           onRefresh={handleRefresh}
+          openFileId={openFileId}
+          onOpenFileHandled={handleOpenFileHandled}
         />
       </div>
 

@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { extractTextFromFile } from '@/lib/pdf/extract';
 import { idbStore } from '@/lib/idb';
-import { getGeneratedContent, ToolMode, GeneratedContent } from '@/lib/offline/generate';
+import { getGeneratedContent, ToolMode, GeneratedContent, type RewriteOptions, type RewriteTone } from '@/lib/offline/generate';
 import { generateAiContent, loadAiPreferences, type AiGenerationPolicyBlock } from '@/lib/ai/client';
 import { InteractiveQuiz } from './InteractiveQuiz';
 import { MathSolver } from '@/components/tools/MathSolver';
@@ -40,10 +40,12 @@ interface WorkspacePanelProps {
   selectedFolderName: string;
   selectedTopicName: string;
   onRefresh: () => void;
+  openFileId?: string | null;
+  onOpenFileHandled?: () => void;
 }
 
 type MainTab = 'files' | 'tools';
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'notes' | 'math' | 'graph' | 'visual' | 'matlab' | 'focus' | 'exam' | 'srs';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'notes' | 'rephrase' | 'math' | 'graph' | 'visual' | 'matlab' | 'focus' | 'exam' | 'srs';
 
 const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'assignment', label: 'Assignment', icon: '📝' },
@@ -51,6 +53,7 @@ const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'mcq', label: 'MCQ', icon: '✅' },
   { id: 'quiz', label: 'Quiz', icon: '🧠' },
   { id: 'notes', label: 'Notes', icon: '📝' },
+  { id: 'rephrase', label: 'Rephrase', icon: '✍️' },
   { id: 'math', label: 'Math', icon: '🧮' },
   { id: 'matlab', label: 'MATLAB Lab', icon: '📐' },
   { id: 'focus', label: 'Focus', icon: '⏱️' },
@@ -61,7 +64,7 @@ const toolTabs: { id: ToolTab; label: string; icon: string }[] = [
 ];
 
 const toolGroups: Array<{ label: string; tools: ToolTab[] }> = [
-  { label: 'AI Tools', tools: ['assignment', 'summarize', 'mcq', 'quiz', 'notes'] },
+  { label: 'AI Tools', tools: ['assignment', 'summarize', 'mcq', 'quiz', 'notes', 'rephrase'] },
   { label: 'Study Tools', tools: ['focus', 'exam', 'srs', 'graph'] },
   { label: 'Subject Tools', tools: ['math', 'matlab', 'visual'] },
 ];
@@ -75,6 +78,8 @@ type ToolSource = { type: 'manual' } | { type: 'file'; fileId: string; fileName:
 const initialToolSources = Object.fromEntries(
   toolTabs.map(tab => [tab.id, { type: 'manual' }])
 ) as Record<ToolTab, ToolSource>;
+
+const rewriteToneOptions: RewriteTone[] = ['formal', 'informal', 'academic', 'professional', 'energetic', 'concise'];
 
 class AiPolicyBlockError extends Error {
   block: AiGenerationPolicyBlock;
@@ -92,6 +97,8 @@ export function WorkspacePanel({
   selectedFolderName,
   selectedTopicName,
   onRefresh,
+  openFileId = null,
+  onOpenFileHandled,
 }: WorkspacePanelProps) {
   const { settings } = useSettings();
   const isArabic = settings.language === 'ar';
@@ -120,6 +127,7 @@ export function WorkspacePanel({
       MCQ: 'اختيار متعدد',
       Quiz: 'اختبار',
       Notes: 'ملاحظات',
+      Rephrase: 'إعادة صياغة',
       Math: 'رياضيات',
       'MATLAB Lab': 'مختبر MATLAB',
       Focus: 'تركيز',
@@ -185,6 +193,16 @@ export function WorkspacePanel({
       'This request is outside StudyPilot scope.': 'هذا الطلب خارج نطاق StudyPilot.',
       'Try one of these supported study tasks:': 'جرّب إحدى مهام الدراسة المدعومة:',
       'Switch to': 'الانتقال إلى',
+      Tone: 'النبرة',
+      'Custom instruction': 'تعليمات مخصصة',
+      Optional: 'اختياري',
+      'Formal': 'رسمي',
+      'Informal': 'غير رسمي',
+      'Academic': 'أكاديمي',
+      'Professional': 'مهني',
+      'Energetic': 'حيوي',
+      'Concise': 'موجز',
+      'Add style details (optional)': 'أضف تفاصيل الأسلوب (اختياري)',
     };
     return isArabic ? (ar[key] || key) : key;
   };
@@ -216,11 +234,15 @@ export function WorkspacePanel({
   const [graphExpression, setGraphExpression] = useState('');
   const [toolInputs, setToolInputs] = useState<Record<ToolTab, string>>(() => initialToolInputs);
   const [toolSources, setToolSources] = useState<Record<ToolTab, ToolSource>>(() => initialToolSources);
+  const [rewriteTone, setRewriteTone] = useState<RewriteTone>('professional');
+  const [rewriteInstruction, setRewriteInstruction] = useState('');
   const [recentOutputs, setRecentOutputs] = useState<Array<{ title: string; content: string; tool: ToolTab; source?: ToolSource }>>([]);
   const [autoChain, setAutoChain] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
   const [examPrep, setExamPrep] = useState<ExamPrepData | null>(null);
   const [lastInjected, setLastInjected] = useState<{ text: string; source: ToolSource } | null>(null);
+  const [lastAutoOpenedFileId, setLastAutoOpenedFileId] = useState<string | null>(null);
+  const autoOpeningFileIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const storedCompact = typeof window !== 'undefined' ? localStorage.getItem('studypilot_compact_mode') : null;
@@ -471,6 +493,66 @@ export function WorkspacePanel({
     }
   };
 
+  useEffect(() => {
+    if (!openFileId) {
+      setLastAutoOpenedFileId(null);
+      autoOpeningFileIdRef.current = null;
+      return;
+    }
+
+    if (openFileId === lastAutoOpenedFileId || autoOpeningFileIdRef.current === openFileId) {
+      return;
+    }
+
+    autoOpeningFileIdRef.current = openFileId;
+    let active = true;
+
+    const openById = async () => {
+      try {
+        const knownFile =
+          files.find((file) => file.id === openFileId) ||
+          pinnedFiles.find((file) => file.id === openFileId) ||
+          likedFiles.find((file) => file.id === openFileId) ||
+          recentFiles.find((file) => file.id === openFileId);
+
+        if (knownFile) {
+          await handleViewFile(knownFile);
+        } else {
+          try {
+            const res = await fetch(`/api/files/${openFileId}`, { credentials: 'include' });
+            if (res.ok) {
+              const fetched = await res.json() as FileItem;
+              await handleViewFile(fetched);
+            }
+          } catch {
+            // No-op: invalid deep link should fail quietly.
+          }
+        }
+      } finally {
+        autoOpeningFileIdRef.current = null;
+      }
+
+      if (!active) return;
+      setLastAutoOpenedFileId(openFileId);
+      onOpenFileHandled?.();
+    };
+
+    void openById();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    files,
+    handleViewFile,
+    lastAutoOpenedFileId,
+    likedFiles,
+    onOpenFileHandled,
+    openFileId,
+    pinnedFiles,
+    recentFiles,
+  ]);
+
   const applyToolInput = (text: string, source: ToolSource) => {
     setToolInputs(prev => ({ ...prev, [toolTab]: text }));
     setToolSources(prev => ({ ...prev, [toolTab]: source }));
@@ -613,9 +695,9 @@ export function WorkspacePanel({
   };
 
   // Tool functions
-  const generateWithFallback = async (mode: ToolMode, text: string): Promise<GeneratedContent> => {
+  const generateWithFallback = async (mode: ToolMode, text: string, rewriteOptions?: RewriteOptions): Promise<GeneratedContent> => {
     const prefs = loadAiPreferences();
-    const ai = await generateAiContent(text, mode, prefs);
+    const ai = await generateAiContent(text, mode, prefs, rewriteOptions);
 
     if (ai.status === 'policy_block') {
       throw new AiPolicyBlockError(ai);
@@ -625,16 +707,16 @@ export function WorkspacePanel({
       const content = ai.content;
       if (mode === 'mcq' || mode === 'quiz') {
         if (!content.questions?.length || !content.questions[0]?.options?.length) {
-          return getGeneratedContent(mode, text);
+          return getGeneratedContent(mode, text, rewriteOptions);
         }
       }
       if (mode === 'flashcards' && !content.flashcards?.length) {
-        return getGeneratedContent(mode, text);
+        return getGeneratedContent(mode, text, rewriteOptions);
       }
       return content;
     }
 
-    return getGeneratedContent(mode, text);
+    return getGeneratedContent(mode, text, rewriteOptions);
   };
 
   const handleGenerate = async () => {
@@ -647,7 +729,14 @@ export function WorkspacePanel({
     setAiPolicyBlock(null);
     setGenerating(true);
     try {
-      const content = await generateWithFallback(toolTab as ToolMode, input);
+      const rewriteOptions: RewriteOptions | undefined = toolTab === 'rephrase'
+        ? {
+          tone: rewriteTone,
+          ...(rewriteInstruction.trim() ? { customInstruction: rewriteInstruction.trim() } : {}),
+        }
+        : undefined;
+
+      const content = await generateWithFallback(toolTab as ToolMode, input, rewriteOptions);
 
       setGeneratedContent(content);
       setOutput(content.displayText);
@@ -697,6 +786,18 @@ export function WorkspacePanel({
 
   const addResult = (tool: ToolTab, title: string, content: string, source?: ToolSource) => {
     setRecentOutputs(prev => [{ title, content, tool, source }, ...prev].slice(0, 5));
+  };
+
+  const getToneLabel = (tone: RewriteTone) => {
+    const labels: Record<RewriteTone, string> = {
+      formal: 'Formal',
+      informal: 'Informal',
+      academic: 'Academic',
+      professional: 'Professional',
+      energetic: 'Energetic',
+      concise: 'Concise',
+    };
+    return t(labels[tone]);
   };
 
   const getLocalizedPolicyReason = (block: AiGenerationPolicyBlock) => {
@@ -1116,7 +1217,7 @@ export function WorkspacePanel({
             </div>
 
             {/* Tool-level Input Helpers */}
-            {(['assignment', 'summarize', 'mcq', 'quiz', 'notes', 'exam', 'srs'] as ToolTab[]).includes(toolTab) && (
+            {(['assignment', 'summarize', 'mcq', 'quiz', 'notes', 'rephrase', 'exam', 'srs'] as ToolTab[]).includes(toolTab) && (
               <div className="tool-input-row">
                 {selectedTopic && uploadFiles.length > 0 && (
                   <div className="file-selector inline">
@@ -1211,6 +1312,33 @@ export function WorkspacePanel({
                         <span className="context-hint">{t('Select a folder to use files, or paste text below')}</span>
                       )}
                     </div>
+
+                    {toolTab === 'rephrase' && (
+                      <div className="rewrite-controls">
+                        <label>
+                          {t('Tone')}
+                          <select
+                            value={rewriteTone}
+                            onChange={(event) => setRewriteTone(event.target.value as RewriteTone)}
+                          >
+                            {rewriteToneOptions.map((tone) => (
+                              <option key={tone} value={tone}>
+                                {getToneLabel(tone)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          {t('Custom instruction')} ({t('Optional')})
+                          <input
+                            type="text"
+                            value={rewriteInstruction}
+                            onChange={(event) => setRewriteInstruction(event.target.value)}
+                            placeholder={t('Add style details (optional)')}
+                          />
+                        </label>
+                      </div>
+                    )}
 
                     {toolInputs[toolTab] ? (
                       <p className="word-count">{toolInputs[toolTab].split(/\s+/).filter(Boolean).length} words</p>
@@ -1777,6 +1905,30 @@ export function WorkspacePanel({
         }
 
         .word-count { font-size: var(--font-tiny); color: var(--text-muted); margin: var(--space-2) 0 var(--space-4); }
+
+        .rewrite-controls {
+          display: grid;
+          gap: var(--space-2);
+          margin-bottom: var(--space-4);
+        }
+
+        .rewrite-controls label {
+          display: grid;
+          gap: var(--space-1);
+          font-size: var(--font-meta);
+          color: var(--text-secondary);
+        }
+
+        .rewrite-controls select,
+        .rewrite-controls input {
+          width: 100%;
+          padding: var(--space-2);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+          font-size: var(--font-meta);
+          background: var(--bg-base);
+          color: var(--text-primary);
+        }
 
         .generate-btn {
           width: 100%;

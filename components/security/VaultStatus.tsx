@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useVault } from '@/providers/VaultProvider';
 import { ENCRYPTION_DISABLED } from '@/lib/crypto/vault';
 import { useSettings } from '@/providers/SettingsProvider';
@@ -30,6 +30,87 @@ export function VaultStatus() {
   };
   const { isSetup, isUnlocked, lock, isLoading } = useVault();
   const [showTooltip, setShowTooltip] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [tooltipStyle, setTooltipStyle] = useState<CSSProperties>({});
+  const indicatorRef = useRef<HTMLButtonElement | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+
+  const closeTooltip = useCallback(() => setShowTooltip(false), []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(pointer: coarse)');
+    const update = () => setIsTouchDevice(mediaQuery.matches);
+    update();
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', update);
+      return () => mediaQuery.removeEventListener('change', update);
+    }
+
+    mediaQuery.addListener(update);
+    return () => mediaQuery.removeListener(update);
+  }, []);
+
+  const updateTooltipPosition = useCallback(() => {
+    if (!indicatorRef.current) return;
+
+    const rect = indicatorRef.current.getBoundingClientRect();
+    const tooltipWidth = Math.min(320, Math.max(240, window.innerWidth - 24));
+    const tooltipHeight = tooltipRef.current?.offsetHeight || 190;
+    const horizontalPadding = 8;
+    const left = Math.min(
+      Math.max(rect.left + rect.width / 2 - tooltipWidth / 2, horizontalPadding),
+      window.innerWidth - tooltipWidth - horizontalPadding
+    );
+    const aboveTop = rect.top - tooltipHeight - 10;
+    const top = aboveTop >= horizontalPadding ? aboveTop : rect.bottom + 10;
+
+    setTooltipStyle({
+      position: 'fixed',
+      top,
+      left,
+      width: tooltipWidth,
+      zIndex: 1300,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!showTooltip) return;
+    updateTooltipPosition();
+
+    const handleResizeOrScroll = () => updateTooltipPosition();
+    window.addEventListener('resize', handleResizeOrScroll);
+    window.addEventListener('scroll', handleResizeOrScroll, true);
+    return () => {
+      window.removeEventListener('resize', handleResizeOrScroll);
+      window.removeEventListener('scroll', handleResizeOrScroll, true);
+    };
+  }, [showTooltip, updateTooltipPosition]);
+
+  useEffect(() => {
+    if (!showTooltip) return;
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      if (indicatorRef.current?.contains(target)) return;
+      if (tooltipRef.current?.contains(target)) return;
+      closeTooltip();
+    };
+
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeTooltip();
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    window.addEventListener('keydown', handleKeydown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      window.removeEventListener('keydown', handleKeydown);
+    };
+  }, [closeTooltip, showTooltip]);
 
   if (isLoading) {
     return (
@@ -74,12 +155,27 @@ export function VaultStatus() {
   return (
     <div
       className="vault-status"
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
+      onMouseEnter={() => {
+        if (!isTouchDevice) setShowTooltip(true);
+      }}
+      onMouseLeave={() => {
+        if (!isTouchDevice) closeTooltip();
+      }}
     >
       <button
+        ref={indicatorRef}
         className={`vault-indicator ${isUnlocked ? 'unlocked' : 'locked'}`}
-        onClick={isUnlocked ? lock : undefined}
+        onClick={() => {
+          if (isTouchDevice) {
+            setShowTooltip((prev) => !prev);
+            return;
+          }
+          if (isUnlocked) {
+            lock();
+            closeTooltip();
+          }
+        }}
+        onFocus={() => setShowTooltip(true)}
         aria-label={isUnlocked ? t('Lock vault') : t('Vault locked')}
       >
         <span className="vault-icon">{isUnlocked ? '🔓' : '🔐'}</span>
@@ -89,7 +185,7 @@ export function VaultStatus() {
       </button>
 
       {showTooltip && (
-        <div className="vault-tooltip">
+        <div ref={tooltipRef} className="vault-tooltip" style={tooltipStyle}>
           <div className="tooltip-header">
             {isUnlocked ? t('End-to-End Encrypted') : t('Vault Locked')}
           </div>
@@ -114,6 +210,17 @@ export function VaultStatus() {
               <span>{t('AES-256 encryption')}</span>
             </div>
           </div>
+          {isUnlocked && (
+            <button
+              className="tooltip-action"
+              onClick={() => {
+                lock();
+                closeTooltip();
+              }}
+            >
+              {t('Lock vault')}
+            </button>
+          )}
         </div>
       )}
 
@@ -160,16 +267,11 @@ export function VaultStatus() {
         }
 
         .vault-tooltip {
-          position: absolute;
-          top: calc(100% + var(--space-2));
-          right: 0;
-          width: 280px;
           background: var(--bg-surface);
           border: 1px solid var(--border-default);
           border-radius: var(--radius-lg);
           padding: var(--space-4);
           box-shadow: var(--shadow-lg);
-          z-index: 1000;
         }
 
         .tooltip-header {
@@ -203,6 +305,24 @@ export function VaultStatus() {
           color: var(--primary);
         }
 
+        .tooltip-action {
+          margin-top: var(--space-3);
+          width: 100%;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+          background: var(--bg-base);
+          color: var(--text-primary);
+          padding: var(--space-2) var(--space-3);
+          font-size: var(--font-meta);
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .tooltip-action:hover {
+          background: var(--bg-hover);
+          border-color: var(--border-default);
+        }
+
         .vault-status.loading .vault-icon {
           animation: pulse 1s infinite;
         }
@@ -219,11 +339,6 @@ export function VaultStatus() {
 
           .vault-indicator {
             padding: var(--space-2);
-          }
-
-          .vault-tooltip {
-            right: -50px;
-            width: 260px;
           }
         }
       `}</style>

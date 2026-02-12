@@ -7,7 +7,12 @@ import { solveMath, formatMathSolution, extractMathProblems } from '@/lib/math/s
 // TYPES
 // ============================================
 
-export type ToolMode = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'flashcards' | 'essay' | 'planner';
+export type ToolMode = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'math' | 'flashcards' | 'essay' | 'planner' | 'rephrase';
+export type RewriteTone = 'formal' | 'informal' | 'academic' | 'professional' | 'energetic' | 'concise';
+export type RewriteOptions = {
+  tone: RewriteTone;
+  customInstruction?: string;
+};
 
 export type BloomLevel = 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
 
@@ -65,6 +70,10 @@ export interface GeneratedContent {
   displayText: string;
   subjectArea: SubjectArea;
   learningObjectives?: string[];
+  rewriteMeta?: {
+    tone: RewriteTone;
+    customInstruction?: string;
+  };
 }
 
 // ============================================
@@ -1519,11 +1528,128 @@ function getDifficultyDistribution(questions: GeneratedQuestion[]): string {
   return Object.entries(dist).map(([k, v]) => `${k}: ${v}`).join(', ');
 }
 
+function rewriteSentenceByTone(sentence: string, tone: RewriteTone): string {
+  let updated = sentence.trim();
+  if (!updated) return updated;
+
+  const cleanup = () => {
+    updated = updated
+      .replace(/\b(can't)\b/gi, 'cannot')
+      .replace(/\b(don't)\b/gi, 'do not')
+      .replace(/\b(doesn't)\b/gi, 'does not')
+      .replace(/\b(isn't)\b/gi, 'is not')
+      .replace(/\b(aren't)\b/gi, 'are not')
+      .replace(/\b(won't)\b/gi, 'will not')
+      .replace(/\b(gonna)\b/gi, 'going to')
+      .replace(/\b(kinda)\b/gi, 'somewhat')
+      .replace(/\b(sort of)\b/gi, 'partly')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  };
+
+  switch (tone) {
+    case 'formal':
+      cleanup();
+      updated = updated.replace(/\bget\b/gi, 'obtain').replace(/\bshow\b/gi, 'demonstrate');
+      break;
+    case 'informal':
+      updated = updated
+        .replace(/\btherefore\b/gi, 'so')
+        .replace(/\bhowever\b/gi, 'but')
+        .replace(/\bapproximately\b/gi, 'about')
+        .replace(/\butilize\b/gi, 'use');
+      break;
+    case 'academic':
+      cleanup();
+      updated = updated
+        .replace(/\bshows\b/gi, 'indicates')
+        .replace(/\bproves\b/gi, 'demonstrates')
+        .replace(/\bimportant\b/gi, 'significant');
+      break;
+    case 'professional':
+      cleanup();
+      updated = updated
+        .replace(/\bneed to\b/gi, 'should')
+        .replace(/\ba lot of\b/gi, 'many')
+        .replace(/\bstuff\b/gi, 'materials');
+      break;
+    case 'energetic':
+      updated = updated.replace(/\bis\b/gi, 'is clearly').replace(/\bare\b/gi, 'are clearly');
+      if (!/[.!?]$/.test(updated)) updated += '!';
+      break;
+    case 'concise':
+      updated = updated
+        .replace(/\b(in order to)\b/gi, 'to')
+        .replace(/\b(at this point in time)\b/gi, 'now')
+        .replace(/\b(due to the fact that)\b/gi, 'because')
+        .replace(/\b(it is important to note that)\b/gi, '')
+        .replace(/\b(there is|there are)\b/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      break;
+  }
+
+  return updated;
+}
+
+function applyCustomInstruction(text: string, customInstruction?: string): string {
+  if (!customInstruction) return text;
+  const instruction = customInstruction.trim().toLowerCase();
+  if (!instruction) return text;
+
+  let output = text;
+  if (instruction.includes('bullet')) {
+    output = output
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => (line.startsWith('- ') ? line : `- ${line}`))
+      .join('\n');
+  }
+  if (instruction.includes('short') || instruction.includes('brief')) {
+    output = output
+      .split(/[.!?]+/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .slice(0, 3)
+      .join('. ');
+    if (output && !/[.!?]$/.test(output)) output += '.';
+  }
+  if (instruction.includes('paragraph')) {
+    output = output.replace(/^- /gm, '').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  return output;
+}
+
+export function generateRephraseDisplay(text: string, tone: RewriteTone, customInstruction?: string): string {
+  const cleaned = normalizeText(text);
+  if (!cleaned) return 'Rephrase\n\nPaste text to rewrite.';
+
+  const paragraphs = cleaned
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  const rewrittenParagraphs = paragraphs.map((paragraph) => {
+    const sentences = splitSentences(paragraph);
+    if (!sentences.length) return rewriteSentenceByTone(paragraph, tone);
+    return sentences
+      .map((sentence) => rewriteSentenceByTone(sentence, tone))
+      .join(' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  });
+
+  const rewritten = rewrittenParagraphs.join('\n\n').trim();
+  return applyCustomInstruction(rewritten, customInstruction);
+}
+
 // ============================================
 // MAIN GENERATION FUNCTION
 // ============================================
 
-export function generateSmartContent(mode: ToolMode, text: string): GeneratedContent {
+export function generateSmartContent(mode: ToolMode, text: string, rewriteOptions?: RewriteOptions): GeneratedContent {
   const cleaned = normalizeText(text);
   const sentences = splitSentences(cleaned);
   const keywords = extractKeywordsEnhanced(cleaned);
@@ -1545,6 +1671,7 @@ export function generateSmartContent(mode: ToolMode, text: string): GeneratedCon
   let questions: GeneratedQuestion[] = [];
   let flashcards: Flashcard[] | undefined;
   let displayText = '';
+  let rewriteMeta: GeneratedContent['rewriteMeta'] | undefined;
 
   switch (mode) {
     case 'mcq':
@@ -1650,6 +1777,17 @@ export function generateSmartContent(mode: ToolMode, text: string): GeneratedCon
     case 'math':
       displayText = generateMathSolutions(cleaned);
       break;
+
+    case 'rephrase': {
+      const tone = rewriteOptions?.tone || 'professional';
+      const customInstruction = rewriteOptions?.customInstruction?.trim() || undefined;
+      displayText = generateRephraseDisplay(text, tone, customInstruction);
+      rewriteMeta = {
+        tone,
+        ...(customInstruction ? { customInstruction } : {}),
+      };
+      break;
+    }
   }
 
   return {
@@ -1661,6 +1799,7 @@ export function generateSmartContent(mode: ToolMode, text: string): GeneratedCon
     displayText,
     subjectArea,
     learningObjectives,
+    rewriteMeta,
   };
 }
 
@@ -1725,7 +1864,7 @@ function generateMathSolutions(text: string): string {
 // LEGACY SUPPORT
 // ============================================
 
-export function offlineGenerate(mode: ToolMode, text: string): string {
+export function offlineGenerate(mode: ToolMode, text: string, rewriteOptions?: RewriteOptions): string {
   const cleaned = (text || '').trim();
 
   if (!cleaned) {
@@ -1740,14 +1879,15 @@ export function offlineGenerate(mode: ToolMode, text: string): string {
       flashcards: 'Study Flashcards\n\nPaste content to generate categorized flashcards for efficient memorization and spaced repetition.',
       essay: 'Essay Questions\n\nPaste content to generate essay prompts with grading rubrics and case studies.',
       planner: 'Study Planner\n\nCreate personalized study schedules based on your exam date, topics, and available study time.',
+      rephrase: 'Rephrase\n\nPaste text to rewrite it in your selected tone.',
     };
     return emptyMessages[mode] || 'Please provide content to generate study materials.';
   }
 
-  const content = generateSmartContent(mode, cleaned);
+  const content = generateSmartContent(mode, cleaned, rewriteOptions);
   return content.displayText;
 }
 
-export function getGeneratedContent(mode: ToolMode, text: string): GeneratedContent {
-  return generateSmartContent(mode, (text || '').trim());
+export function getGeneratedContent(mode: ToolMode, text: string, rewriteOptions?: RewriteOptions): GeneratedContent {
+  return generateSmartContent(mode, (text || '').trim(), rewriteOptions);
 }

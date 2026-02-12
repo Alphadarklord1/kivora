@@ -79,6 +79,7 @@ export default function SharedContentPage() {
       mcq: '✅',
       quiz: '🧠',
       notes: '📝',
+      rephrase: '✍️',
       math: '🧮',
     };
     return icons[type] || '📄';
@@ -235,7 +236,7 @@ export default function SharedContentPage() {
         <div className="cta-card">
           <h2>Want to create your own study materials?</h2>
           <p>
-            StudyPilot helps you generate MCQs, summaries, quizzes, and notes from any content.
+            StudyPilot helps you generate MCQs, summaries, quizzes, notes, and rephrased drafts from any content.
           </p>
           <Link href="/register" className="btn">
             Get Started Free
@@ -372,6 +373,7 @@ function LibraryContent({ content }: { content: Record<string, unknown> }) {
       quiz: 'Quiz',
       pop: 'Pop Quiz',
       notes: 'Study Notes',
+      rephrase: 'Rephrase',
       math: 'Math Solution',
     };
     return labels[mode] || mode;

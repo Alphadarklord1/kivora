@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { getGeneratedContent, ToolMode, GeneratedContent } from '@/lib/offline/generate';
+import { getGeneratedContent, ToolMode, GeneratedContent, type RewriteOptions, type RewriteTone } from '@/lib/offline/generate';
 import { InteractiveQuiz } from '@/components/workspace/InteractiveQuiz';
 import { MathSolver } from '@/components/tools/MathSolver';
 import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
@@ -10,7 +10,7 @@ import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
 import { AudioPodcast } from '@/components/tools/AudioPodcast';
 import { useToastHelpers } from '@/components/ui/Toast';
 
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'notes' | 'math' | 'graph' | 'visual' | 'audio';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'notes' | 'rephrase' | 'math' | 'graph' | 'visual' | 'audio';
 
 const toolTabs: { id: ToolTab; label: string; icon: string; description: string }[] = [
   { id: 'assignment', label: 'Assignment', icon: '📝', description: 'Generate assignment questions and prompts' },
@@ -18,6 +18,7 @@ const toolTabs: { id: ToolTab; label: string; icon: string; description: string 
   { id: 'mcq', label: 'MCQ', icon: '✅', description: 'Generate multiple choice questions' },
   { id: 'quiz', label: 'Quiz', icon: '🧠', description: 'Create comprehensive quizzes' },
   { id: 'notes', label: 'Notes', icon: '📝', description: 'Generate Cornell-style study notes' },
+  { id: 'rephrase', label: 'Rephrase', icon: '✍️', description: 'Rewrite text in a selected tone and style' },
   { id: 'math', label: 'Math', icon: '🧮', description: 'Solve mathematical problems step-by-step' },
   { id: 'graph', label: 'Graph', icon: '📈', description: 'Plot and visualize mathematical functions' },
   { id: 'visual', label: 'Visual', icon: '🔍', description: 'Analyze images, diagrams, and PDFs with AI vision' },
@@ -30,6 +31,8 @@ interface FolderData {
   topics?: { id: string; name: string }[];
 }
 
+const rewriteToneOptions: RewriteTone[] = ['formal', 'informal', 'academic', 'professional', 'energetic', 'concise'];
+
 export default function ToolsPage() {
   const toast = useToastHelpers();
   const searchParams = useSearchParams();
@@ -40,6 +43,8 @@ export default function ToolsPage() {
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
   const [showInteractiveQuiz, setShowInteractiveQuiz] = useState(false);
   const [viewMode, setViewMode] = useState<'input' | 'output' | 'practice'>('input');
+  const [rewriteTone, setRewriteTone] = useState<RewriteTone>('professional');
+  const [rewriteInstruction, setRewriteInstruction] = useState('');
 
   // Graph expression state (from Math Solver)
   const [graphExpression, setGraphExpression] = useState('');
@@ -75,14 +80,20 @@ export default function ToolsPage() {
       return;
     }
 
-    if (inputText.trim().length < 50) {
+    if (toolTab !== 'rephrase' && inputText.trim().length < 50) {
       toast.warning('Content too short', 'Please enter at least 50 characters for better results');
       return;
     }
 
     setGenerating(true);
     try {
-      const content = getGeneratedContent(toolTab as ToolMode, inputText);
+      const rewriteOptions: RewriteOptions | undefined = toolTab === 'rephrase'
+        ? {
+          tone: rewriteTone,
+          ...(rewriteInstruction.trim() ? { customInstruction: rewriteInstruction.trim() } : {}),
+        }
+        : undefined;
+      const content = getGeneratedContent(toolTab as ToolMode, inputText, rewriteOptions);
       setGeneratedContent(content);
       setOutput(content.displayText);
       setViewMode('output');
@@ -188,6 +199,7 @@ export default function ToolsPage() {
   };
 
   const currentTool = toolTabs.find(t => t.id === toolTab);
+  const getToneLabel = (tone: RewriteTone) => tone.charAt(0).toUpperCase() + tone.slice(1);
 
   return (
     <div className="tools-page">
@@ -251,6 +263,34 @@ export default function ToolsPage() {
                     placeholder="Paste your study material here... (lectures, textbook excerpts, articles, etc.)"
                     rows={12}
                   />
+                  {toolTab === 'rephrase' && (
+                    <div className="rewrite-controls">
+                      <div className="rewrite-field">
+                        <label htmlFor="tone-select">Tone</label>
+                        <select
+                          id="tone-select"
+                          value={rewriteTone}
+                          onChange={(event) => setRewriteTone(event.target.value as RewriteTone)}
+                        >
+                          {rewriteToneOptions.map((tone) => (
+                            <option key={tone} value={tone}>
+                              {getToneLabel(tone)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="rewrite-field">
+                        <label htmlFor="custom-instruction">Custom instruction (optional)</label>
+                        <input
+                          id="custom-instruction"
+                          type="text"
+                          value={rewriteInstruction}
+                          onChange={(event) => setRewriteInstruction(event.target.value)}
+                          placeholder="Example: Keep it under 90 words and use bullets."
+                        />
+                      </div>
+                    </div>
+                  )}
                   {inputText && (
                     <div className="input-stats">
                       <span>{inputText.split(/\s+/).filter(Boolean).length} words</span>
@@ -570,6 +610,33 @@ export default function ToolsPage() {
           color: var(--text-muted);
           margin-top: var(--space-2);
           margin-bottom: var(--space-4);
+        }
+
+        .rewrite-controls {
+          display: grid;
+          gap: var(--space-3);
+          margin-top: var(--space-3);
+          margin-bottom: var(--space-2);
+        }
+
+        .rewrite-field {
+          display: grid;
+          gap: var(--space-1);
+        }
+
+        .rewrite-field label {
+          font-size: var(--font-meta);
+          color: var(--text-secondary);
+        }
+
+        .rewrite-field select,
+        .rewrite-field input {
+          width: 100%;
+          padding: var(--space-2);
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-md);
+          font-size: var(--font-body);
+          background: var(--bg-base);
         }
 
         .generate-btn {

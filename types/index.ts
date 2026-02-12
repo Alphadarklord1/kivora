@@ -20,7 +20,7 @@ export interface Topic {
 }
 
 // File types
-export type FileType = 'upload' | 'pdf' | 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes';
+export type FileType = 'upload' | 'pdf' | 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'rephrase';
 
 export interface FileItem {
   id: string;
@@ -40,7 +40,7 @@ export interface FileItem {
 }
 
 // Library types
-export type ToolMode = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes';
+export type ToolMode = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'pop' | 'notes' | 'rephrase';
 
 export interface LibraryItem {
   id: string;

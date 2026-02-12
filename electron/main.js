@@ -25,6 +25,7 @@ const SUPPORTED_TOOL_MODES = new Set([
   'flashcards',
   'essay',
   'planner',
+  'rephrase',
 ]);
 
 let mainWindow;
@@ -647,6 +648,7 @@ ipcMain.handle('desktop-ai-model-info', async () => {
 ipcMain.handle('desktop-ai-generate', async (_, payload) => {
   const mode = payload?.mode;
   const text = payload?.text;
+  const rewriteOptions = payload?.rewriteOptions;
 
   if (!mode || typeof mode !== 'string' || !SUPPORTED_TOOL_MODES.has(mode)) {
     return {
@@ -679,7 +681,7 @@ ipcMain.handle('desktop-ai-generate', async (_, payload) => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, text }),
+        body: JSON.stringify({ mode, text, rewriteOptions }),
       },
       DESKTOP_AI.requestTimeoutMs
     );

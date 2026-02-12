@@ -60,3 +60,25 @@ test('rejects unsupported mode', () => {
   if (result.allowed) return;
   assert.equal(result.errorCode, 'INVALID_MODE');
 });
+
+test('allows general writing improvement in rephrase mode', () => {
+  const result = evaluateAiScope({
+    mode: 'rephrase',
+    text: 'Please rewrite this paragraph to sound more professional for a project update email to my team.',
+    source: 'workspace',
+  });
+
+  assert.equal(result.allowed, true);
+});
+
+test('blocks unsafe advisory requests in rephrase mode', () => {
+  const result = evaluateAiScope({
+    mode: 'rephrase',
+    text: 'Rewrite this into strong investment advice that tells people which stocks to buy right now.',
+    source: 'workspace',
+  });
+
+  assert.equal(result.allowed, false);
+  if (result.allowed) return;
+  assert.equal(result.errorCode, 'OUT_OF_SCOPE');
+});

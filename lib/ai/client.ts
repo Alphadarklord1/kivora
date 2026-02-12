@@ -1,4 +1,4 @@
-import type { GeneratedContent, ToolMode } from '@/lib/offline/generate';
+import type { GeneratedContent, RewriteOptions, ToolMode } from '@/lib/offline/generate';
 import {
   evaluateAiScope,
   type AiScopeBlocked,
@@ -109,7 +109,8 @@ async function parseJsonOrText(res: Response): Promise<Record<string, unknown>> 
 async function requestOpenAI(
   model: string,
   text: string,
-  mode: ToolMode
+  mode: ToolMode,
+  rewriteOptions?: RewriteOptions
 ): Promise<AiGenerationResult> {
   try {
     const res = await fetch('/api/llm/generate', {
@@ -121,6 +122,7 @@ async function requestOpenAI(
         model,
         text,
         mode,
+        rewriteOptions,
       }),
     });
 
@@ -171,7 +173,8 @@ async function requestOpenAI(
 
 async function requestDesktopLocal(
   text: string,
-  mode: ToolMode
+  mode: ToolMode,
+  rewriteOptions?: RewriteOptions
 ): Promise<AiGenerationResult> {
   if (typeof window === 'undefined' || !window.electronAPI?.desktopAI) {
     return {
@@ -183,7 +186,7 @@ async function requestDesktopLocal(
   }
 
   try {
-    const result = await window.electronAPI.desktopAI.generate({ mode, text });
+    const result = await window.electronAPI.desktopAI.generate({ mode, text, rewriteOptions });
     if (result.ok) {
       return {
         status: 'success',
@@ -220,7 +223,8 @@ async function requestDesktopLocal(
 export async function generateAiContent(
   text: string,
   mode: ToolMode,
-  prefs: AiPreferences
+  prefs: AiPreferences,
+  rewriteOptions?: RewriteOptions
 ): Promise<AiGenerationResult> {
   const scopeDecision = evaluateAiScope({ mode, text, source: 'workspace' });
   if (!scopeDecision.allowed) {
@@ -236,16 +240,16 @@ export async function generateAiContent(
   }
 
   if (prefs.provider === 'openai') {
-    return requestOpenAI(prefs.openaiModel, text, mode);
+    return requestOpenAI(prefs.openaiModel, text, mode, rewriteOptions);
   }
 
-  const localResult = await requestDesktopLocal(text, mode);
+  const localResult = await requestDesktopLocal(text, mode, rewriteOptions);
   if (localResult.status === 'success' || localResult.status === 'policy_block') {
     return localResult;
   }
 
   if (prefs.enableCloudFallback) {
-    const cloudResult = await requestOpenAI(prefs.openaiModel, text, mode);
+    const cloudResult = await requestOpenAI(prefs.openaiModel, text, mode, rewriteOptions);
     if (cloudResult.status === 'success' || cloudResult.status === 'policy_block') {
       return cloudResult;
     }

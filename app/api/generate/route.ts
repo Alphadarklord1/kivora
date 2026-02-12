@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
-import { db } from '@/lib/db';
 import {
   getGeneratedContent,
   offlineGenerate,
   type ToolMode,
   type GeneratedContent,
 } from '@/lib/offline/generate';
+import { getUserId } from '@/lib/auth/get-user-id';
 
 // Valid tool modes
 const VALID_MODES: ToolMode[] = [
@@ -19,27 +18,14 @@ const VALID_MODES: ToolMode[] = [
   'math',
   'flashcards',
   'essay',
+  'planner',
+  'rephrase',
 ];
 
 // Rate limiting map (in-memory, resets on server restart)
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const RATE_LIMIT = 30; // requests per minute
 const RATE_WINDOW = 60 * 1000; // 1 minute in ms
-
-async function getUserId(request: NextRequest): Promise<string | null> {
-  try {
-    const token = await getToken({
-      req: request,
-      secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
-    });
-    if (token?.id) return token.id as string;
-    if (token?.sub) return token.sub as string;
-  } catch {}
-
-  // Fallback: get first user (TEMPORARY)
-  const firstUser = await db.query.users.findFirst();
-  return firstUser?.id || null;
-}
 
 function checkRateLimit(userId: string): { allowed: boolean; remaining: number; resetIn: number } {
   const now = Date.now();
@@ -97,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { mode, text, format = 'full' } = body;
+    const { mode, text, format = 'full', rewriteOptions } = body;
 
     // Validate mode
     if (!mode || !VALID_MODES.includes(mode as ToolMode)) {
@@ -165,7 +151,7 @@ export async function POST(request: NextRequest) {
 
     if (format === 'text') {
       // Return only the display text (legacy format)
-      const displayText = offlineGenerate(mode as ToolMode, trimmedText);
+      const displayText = offlineGenerate(mode as ToolMode, trimmedText, rewriteOptions);
       response = {
         success: true,
         mode: mode as ToolMode,
@@ -176,7 +162,7 @@ export async function POST(request: NextRequest) {
       };
     } else {
       // Return full structured content
-      const content = getGeneratedContent(mode as ToolMode, trimmedText);
+      const content = getGeneratedContent(mode as ToolMode, trimmedText, rewriteOptions);
       response = {
         success: true,
         mode: mode as ToolMode,

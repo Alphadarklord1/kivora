@@ -2,6 +2,8 @@ import { auth } from '@/auth';
 import Link from 'next/link';
 import { isDesktopOnlyModeEnabled, isGuestModeEnabled } from '@/lib/runtime/mode';
 
+const DOWNLOAD_URL = 'https://github.com/Alphadarklord1/studypilot/releases/latest';
+
 const features = [
   {
     icon: '📁',
@@ -41,6 +43,7 @@ const tools = [
   { icon: '✅', name: 'MCQs', desc: 'Multiple choice questions' },
   { icon: '🧠', name: 'Quizzes', desc: 'Comprehensive tests' },
   { icon: '📒', name: 'Notes', desc: 'Cornell-style study notes' },
+  { icon: '✍️', name: 'Rephrase', desc: 'Rewrite text by tone and style' },
 ];
 
 export default async function LandingPage() {
@@ -68,6 +71,9 @@ export default async function LandingPage() {
             <span className="logo-text">StudyPilot</span>
           </Link>
           <div className="nav-links">
+            <a href={DOWNLOAD_URL} className="nav-btn secondary" target="_blank" rel="noopener noreferrer">
+              Download App
+            </a>
             {canUseWithoutSignIn ? (
               <Link href="/workspace" className="nav-btn primary">
                 {isDesktopOnly ? 'Open Desktop Workspace →' : 'Go to Workspace →'}
@@ -95,6 +101,9 @@ export default async function LandingPage() {
             Transform your study materials into interactive quizzes, summaries, and notes with an offline-first desktop workspace.
           </p>
           <div className="hero-actions">
+            <a href={DOWNLOAD_URL} className="hero-btn secondary" target="_blank" rel="noopener noreferrer">
+              Download for Mac/Windows
+            </a>
             {canUseWithoutSignIn ? (
               <Link href="/workspace" className="hero-btn primary">
                 Open Workspace →
