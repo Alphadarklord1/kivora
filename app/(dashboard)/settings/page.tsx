@@ -31,6 +31,27 @@ interface UserSettings {
   language: 'en' | 'ar';
 }
 
+interface DesktopModelOption {
+  key: string;
+  modelId: string;
+  modelFile: string;
+  quantization: string;
+  recommendedFor: 'laptop' | 'laptop-pc' | 'pc';
+  bundled: boolean;
+  modelPath?: string;
+}
+
+interface DesktopModelInfo {
+  modelId: string;
+  modelFile: string;
+  quantization: string;
+  bundled: boolean;
+  activeModelKey: string | null;
+  recommendedModelKey: string;
+  deviceProfile: 'laptop' | 'laptop-pc' | 'pc';
+  models: DesktopModelOption[];
+}
+
 const defaultUserSettings: UserSettings = {
   theme: 'light',
   fontSize: '1',
@@ -95,8 +116,9 @@ export default function SettingsPage() {
   const [ttsPitch, setTtsPitch] = useState<number>(1);
   const [aiPrefs, setAiPrefs] = useState<AiPreferences>(loadAiPreferences());
   const [desktopAiHealth, setDesktopAiHealth] = useState<{ ok: boolean; status: string; details?: string } | null>(null);
-  const [desktopAiModelInfo, setDesktopAiModelInfo] = useState<{ modelId: string; modelFile: string; quantization: string; bundled: boolean } | null>(null);
+  const [desktopAiModelInfo, setDesktopAiModelInfo] = useState<DesktopModelInfo | null>(null);
   const [checkingAiRuntime, setCheckingAiRuntime] = useState(false);
+  const [switchingDesktopModel, setSwitchingDesktopModel] = useState(false);
 
   const currentLanguage = settings?.language ?? 'en';
   const isArabic = currentLanguage === 'ar';
@@ -158,12 +180,7 @@ export default function SettingsPage() {
         status: health.status,
         details: health.details,
       });
-      setDesktopAiModelInfo({
-        modelId: modelInfo.modelId,
-        modelFile: modelInfo.modelFile,
-        quantization: modelInfo.quantization,
-        bundled: modelInfo.bundled,
-      });
+      setDesktopAiModelInfo(modelInfo);
     } catch (error) {
       setDesktopAiHealth({
         ok: false,
@@ -179,6 +196,24 @@ export default function SettingsPage() {
     if (tab !== 'ai') return;
     void refreshDesktopAiStatus();
   }, [tab]);
+
+  const handleSelectDesktopModel = async (modelKey: string) => {
+    if (!window.electronAPI?.desktopAI) return;
+    setSwitchingDesktopModel(true);
+    try {
+      const result = await window.electronAPI.desktopAI.setModel(modelKey);
+      if (!result.ok) {
+        showMessage('error', result.message || (isArabic ? 'تعذر تبديل النموذج' : 'Failed to switch model'));
+      } else {
+        showMessage('success', isArabic ? 'تم تبديل النموذج المحلي' : 'Desktop model switched');
+      }
+      await refreshDesktopAiStatus();
+    } catch (error) {
+      showMessage('error', error instanceof Error ? error.message : (isArabic ? 'تعذر تبديل النموذج' : 'Failed to switch model'));
+    } finally {
+      setSwitchingDesktopModel(false);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -1108,16 +1143,63 @@ export default function SettingsPage() {
                 <h3>{isArabic ? 'نموذج سطح المكتب المضمّن' : 'Bundled Desktop Model'}</h3>
                 <p className="help-text">
                   {isArabic
-                    ? 'Qwen2.5-3B-Instruct (Q4_K_M) — مخصص لمهام الدراسة داخل التطبيق.'
-                    : 'Qwen2.5-3B-Instruct (Q4_K_M) is bundled for local study generation.'}
+                    ? 'تثبيت StudyPilot يضيف نماذج محلية مضمّنة حسب الحزمة. اختر الأنسب لجهازك.'
+                    : 'StudyPilot installer bundles local models by package. Choose the best fit for your device.'}
                 </p>
                 {desktopAiModelInfo && (
                   <div className="help-text" style={{ marginTop: 8 }}>
-                    <strong>{desktopAiModelInfo.modelId}</strong> · {desktopAiModelInfo.quantization}<br />
-                    <code>{desktopAiModelInfo.modelFile}</code><br />
-                    {desktopAiModelInfo.bundled ? (isArabic ? 'تم العثور على ملف النموذج' : 'Model file found') : (isArabic ? 'ملف النموذج غير موجود' : 'Model file missing')}
+                    <strong>{isArabic ? 'النموذج النشط:' : 'Active model:'}</strong>{' '}
+                    {desktopAiModelInfo.modelId || (isArabic ? 'لا يوجد' : 'None')}<br />
+                    <strong>{isArabic ? 'نوع الجهاز المكتشف:' : 'Detected device profile:'}</strong>{' '}
+                    {desktopAiModelInfo.deviceProfile === 'laptop'
+                      ? (isArabic ? 'لابتوب' : 'Laptop')
+                      : desktopAiModelInfo.deviceProfile === 'pc'
+                        ? (isArabic ? 'كمبيوتر مكتبي' : 'PC')
+                        : (isArabic ? 'لابتوب/كمبيوتر متوسط' : 'Laptop/PC (balanced)')}
                   </div>
                 )}
+                {desktopAiModelInfo?.models?.length ? (
+                  <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                    {desktopAiModelInfo.models.map((model) => {
+                      const isActive = desktopAiModelInfo.activeModelKey === model.key;
+                      const isRecommended = desktopAiModelInfo.recommendedModelKey === model.key;
+                      return (
+                        <div key={model.key} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                            <div>
+                              <strong>{model.modelId}</strong> · {model.quantization}
+                              <div style={{ marginTop: 4 }}>
+                                <code>{model.modelFile}</code>
+                              </div>
+                            </div>
+                            <button
+                              className="btn secondary"
+                              disabled={!model.bundled || isActive || switchingDesktopModel}
+                              onClick={() => handleSelectDesktopModel(model.key)}
+                            >
+                              {isActive
+                                ? (isArabic ? 'نشط' : 'Active')
+                                : (isArabic ? 'تفعيل' : 'Use')}
+                            </button>
+                          </div>
+                          <div className="help-text" style={{ marginTop: 6 }}>
+                            {isRecommended
+                              ? (isArabic ? 'موصى به لهذا الجهاز' : 'Recommended for this device')
+                              : model.recommendedFor === 'laptop'
+                                ? (isArabic ? 'موصى به للابتوب' : 'Recommended for laptops')
+                                : model.recommendedFor === 'pc'
+                                  ? (isArabic ? 'موصى به للكمبيوتر المكتبي' : 'Recommended for desktops')
+                                  : (isArabic ? 'موصى به للأجهزة المتوسطة' : 'Balanced for laptop/PC')}
+                            {' · '}
+                            {model.bundled
+                              ? (isArabic ? 'مضمّن في هذه النسخة' : 'Bundled in this installer')
+                              : (isArabic ? 'غير مضمّن في هذه النسخة' : 'Not bundled in this installer')}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
                 <button className="btn secondary" onClick={refreshDesktopAiStatus} disabled={checkingAiRuntime}>
                   {checkingAiRuntime ? (isArabic ? 'جار الفحص...' : 'Checking...') : (isArabic ? 'فحص حالة Runtime' : 'Check Runtime Status')}
                 </button>

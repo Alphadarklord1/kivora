@@ -2,18 +2,40 @@ const { app, BrowserWindow, Menu, shell, ipcMain, nativeTheme } = require('elect
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
+const os = require('os');
 const { spawn } = require('child_process');
 
 const isDev = !app.isPackaged || process.env.NODE_ENV === 'development';
 
 const DESKTOP_AI = {
-  modelId: 'Qwen2.5-3B-Instruct',
-  modelFile: 'qwen2.5-3b-instruct-q4_k_m.gguf',
-  quantization: 'Q4_K_M',
   startupTimeoutMs: 25000,
   requestTimeoutMs: 45000,
   maxRestartAttempts: 4,
 };
+
+const DESKTOP_AI_MODELS = [
+  {
+    key: 'mini',
+    modelId: 'Qwen2.5-1.5B-Instruct',
+    modelFile: 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
+    quantization: 'Q4_K_M',
+    recommendedFor: 'laptop',
+  },
+  {
+    key: 'balanced',
+    modelId: 'Qwen2.5-3B-Instruct',
+    modelFile: 'qwen2.5-3b-instruct-q4_k_m.gguf',
+    quantization: 'Q4_K_M',
+    recommendedFor: 'laptop-pc',
+  },
+  {
+    key: 'pro',
+    modelId: 'Qwen2.5-7B-Instruct',
+    modelFile: 'qwen2.5-7b-instruct-q4_k_m.gguf',
+    quantization: 'Q4_K_M',
+    recommendedFor: 'pc',
+  },
+];
 
 const SUPPORTED_TOOL_MODES = new Set([
   'assignment',
@@ -41,6 +63,7 @@ let desktopAiState = {
   port: null,
   runtimePath: null,
   modelPath: null,
+  activeModelKey: null,
   startPromise: null,
   ready: false,
   lastError: null,
@@ -62,8 +85,8 @@ function getRuntimeBinaryPath() {
   return runtimePath;
 }
 
-function getModelPath() {
-  const relativeParts = ['models', DESKTOP_AI.modelFile];
+function getModelPath(modelFile) {
+  const relativeParts = ['models', modelFile];
   return app.isPackaged
     ? path.join(process.resourcesPath, ...relativeParts)
     : path.join(__dirname, 'runtime', ...relativeParts);
@@ -71,6 +94,59 @@ function getModelPath() {
 
 function getMockRuntimePath() {
   return path.join(__dirname, 'runtime', 'mock-ai-runtime.js');
+}
+
+function getDeviceProfile() {
+  const totalMemoryGb = os.totalmem() / (1024 ** 3);
+  if (totalMemoryGb <= 12) return 'laptop';
+  if (totalMemoryGb <= 24) return 'laptop-pc';
+  return 'pc';
+}
+
+function getRecommendedModelKey() {
+  const forcedModelKey = process.env.STUDYPILOT_AI_MODEL_KEY;
+  if (forcedModelKey && DESKTOP_AI_MODELS.some((model) => model.key === forcedModelKey)) {
+    return forcedModelKey;
+  }
+
+  const profile = getDeviceProfile();
+  if (profile === 'laptop') return 'mini';
+  if (profile === 'laptop-pc') return 'balanced';
+  return 'pro';
+}
+
+function getModelCatalog() {
+  return DESKTOP_AI_MODELS.map((model) => {
+    const modelPath = getModelPath(model.modelFile);
+    return {
+      ...model,
+      modelPath,
+      bundled: fs.existsSync(modelPath),
+    };
+  });
+}
+
+function resolveActiveModel() {
+  const models = getModelCatalog();
+  const recommendedModelKey = getRecommendedModelKey();
+  const selectedModelKey = desktopAiState.activeModelKey || recommendedModelKey;
+
+  const selectedBundled = models.find((model) => model.key === selectedModelKey && model.bundled);
+  if (selectedBundled) {
+    return selectedBundled;
+  }
+
+  const recommendedBundled = models.find((model) => model.key === recommendedModelKey && model.bundled);
+  if (recommendedBundled) {
+    return recommendedBundled;
+  }
+
+  const fallbackBundled = models.find((model) => model.bundled);
+  if (fallbackBundled) {
+    return fallbackBundled;
+  }
+
+  return null;
 }
 
 function withTimeout(promise, timeoutMs, message) {
@@ -145,6 +221,7 @@ function clearDesktopAiState() {
   desktopAiState.startPromise = null;
   desktopAiState.port = null;
   desktopAiState.runtimePath = null;
+  desktopAiState.modelPath = null;
 }
 
 function stopDesktopAiRuntime() {
@@ -160,10 +237,9 @@ async function startDesktopAiRuntime() {
   if (desktopAiState.startPromise) return desktopAiState.startPromise;
 
   desktopAiState.startPromise = (async () => {
-    const modelPath = getModelPath();
+    const selectedModel = resolveActiveModel();
     const runtimePath = getRuntimeBinaryPath();
     const mockRuntimePath = getMockRuntimePath();
-    const modelExists = fs.existsSync(modelPath);
     const runtimeExists = fs.existsSync(runtimePath);
     const mockExists = fs.existsSync(mockRuntimePath);
     const canUseMockRuntime = !app.isPackaged && mockExists;
@@ -174,11 +250,13 @@ async function startDesktopAiRuntime() {
       return;
     }
 
-    if (!modelExists) {
-      desktopAiState.lastError = `Model file missing at ${modelPath}`;
+    if (!selectedModel) {
+      desktopAiState.lastError = 'No bundled desktop model found';
       clearDesktopAiState();
       return;
     }
+
+    const { modelPath } = selectedModel;
 
     const port = await getFreePort();
     const command = runtimeExists ? runtimePath : process.execPath;
@@ -187,6 +265,7 @@ async function startDesktopAiRuntime() {
       : [mockRuntimePath, '--host', '127.0.0.1', '--port', String(port), '--model', modelPath];
 
     desktopAiState.manualStop = false;
+    desktopAiState.activeModelKey = selectedModel.key;
     desktopAiState.modelPath = modelPath;
     desktopAiState.runtimePath = command;
     desktopAiState.port = port;
@@ -587,16 +666,20 @@ ipcMain.handle('get-app-version', () => app.getVersion());
 
 ipcMain.handle('desktop-ai-health', async () => {
   const runtimePath = getRuntimeBinaryPath();
-  const modelPath = getModelPath();
+  const selectedModel = resolveActiveModel();
+  const modelPath = selectedModel?.modelPath;
   const runtimeAvailable = fs.existsSync(runtimePath) || (!app.isPackaged && fs.existsSync(getMockRuntimePath()));
-  const modelAvailable = fs.existsSync(modelPath);
+  const modelAvailable = Boolean(selectedModel?.bundled);
+  const modelLabel = selectedModel
+    ? `${selectedModel.modelId} (${selectedModel.quantization})`
+    : 'No bundled model';
 
   if (desktopAiState.startPromise && !desktopAiState.ready) {
     return {
       ok: false,
       status: 'starting',
       provider: 'desktop-local',
-      model: `${DESKTOP_AI.modelId} (${DESKTOP_AI.quantization})`,
+      model: modelLabel,
       runtimePath,
       modelPath,
       details: 'Desktop AI runtime is warming up',
@@ -610,7 +693,7 @@ ipcMain.handle('desktop-ai-health', async () => {
         ok: true,
         status: 'ready',
         provider: 'desktop-local',
-        model: `${DESKTOP_AI.modelId} (${DESKTOP_AI.quantization})`,
+        model: modelLabel,
         runtimePath: desktopAiState.runtimePath || runtimePath,
         modelPath,
       };
@@ -621,7 +704,7 @@ ipcMain.handle('desktop-ai-health', async () => {
     ok: false,
     status: runtimeAvailable && modelAvailable ? 'unavailable' : 'error',
     provider: 'desktop-local',
-    model: `${DESKTOP_AI.modelId} (${DESKTOP_AI.quantization})`,
+    model: modelLabel,
     runtimePath,
     modelPath,
     details: desktopAiState.lastError || (!modelAvailable ? 'Model file missing' : 'Runtime unavailable'),
@@ -629,19 +712,81 @@ ipcMain.handle('desktop-ai-health', async () => {
 });
 
 ipcMain.handle('desktop-ai-model-info', async () => {
+  const models = getModelCatalog();
+  const selectedModel = resolveActiveModel();
+  const recommendedModelKey = getRecommendedModelKey();
+  const deviceProfile = getDeviceProfile();
   const runtimePath = getRuntimeBinaryPath();
-  const modelPath = getModelPath();
-  const bundled = fs.existsSync(modelPath);
   const runtimeAvailable = fs.existsSync(runtimePath) || (!app.isPackaged && fs.existsSync(getMockRuntimePath()));
 
   return {
-    modelId: DESKTOP_AI.modelId,
-    modelFile: DESKTOP_AI.modelFile,
-    quantization: DESKTOP_AI.quantization,
-    bundled,
+    modelId: selectedModel?.modelId || '',
+    modelFile: selectedModel?.modelFile || '',
+    quantization: selectedModel?.quantization || '',
+    bundled: Boolean(selectedModel?.bundled),
+    activeModelKey: selectedModel?.key || null,
+    recommendedModelKey,
+    deviceProfile,
+    models: models.map((model) => ({
+      key: model.key,
+      modelId: model.modelId,
+      modelFile: model.modelFile,
+      quantization: model.quantization,
+      recommendedFor: model.recommendedFor,
+      bundled: model.bundled,
+      modelPath: model.modelPath,
+    })),
     runtimeAvailable,
     runtimePath,
-    modelPath,
+    modelPath: selectedModel?.modelPath,
+  };
+});
+
+ipcMain.handle('desktop-ai-set-model', async (_, modelKey) => {
+  if (typeof modelKey !== 'string') {
+    return {
+      ok: false,
+      errorCode: 'INVALID_REQUEST',
+      message: 'Model key is required',
+    };
+  }
+
+  const model = getModelCatalog().find((entry) => entry.key === modelKey);
+  if (!model) {
+    return {
+      ok: false,
+      errorCode: 'INVALID_REQUEST',
+      message: `Unknown model key: ${modelKey}`,
+    };
+  }
+
+  if (!model.bundled) {
+    return {
+      ok: false,
+      errorCode: 'MODEL_NOT_BUNDLED',
+      message: 'Selected model is not bundled with this installer',
+    };
+  }
+
+  const changed = desktopAiState.activeModelKey !== modelKey;
+  desktopAiState.activeModelKey = modelKey;
+
+  if (changed) {
+    stopDesktopAiRuntime();
+    desktopAiState.activeModelKey = modelKey;
+    const runtime = await ensureDesktopAiRuntime();
+    if (!runtime.ok) {
+      return {
+        ok: false,
+        errorCode: 'RUNTIME_UNAVAILABLE',
+        message: runtime.error || 'Desktop AI runtime unavailable',
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    activeModelKey: modelKey,
   };
 });
 

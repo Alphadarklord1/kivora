@@ -34,15 +34,35 @@ interface DesktopAiModelInfo {
   modelFile: string;
   quantization: string;
   bundled: boolean;
+  activeModelKey: string | null;
+  recommendedModelKey: string;
+  deviceProfile: 'laptop' | 'laptop-pc' | 'pc';
+  models: Array<{
+    key: string;
+    modelId: string;
+    modelFile: string;
+    quantization: string;
+    recommendedFor: 'laptop' | 'laptop-pc' | 'pc';
+    bundled: boolean;
+    modelPath?: string;
+  }>;
   runtimeAvailable: boolean;
   runtimePath?: string;
   modelPath?: string;
+}
+
+interface DesktopAiModelSwitchResult {
+  ok: boolean;
+  activeModelKey?: string;
+  errorCode?: 'INVALID_REQUEST' | 'MODEL_NOT_BUNDLED' | 'RUNTIME_UNAVAILABLE';
+  message?: string;
 }
 
 interface DesktopAI {
   generate: (payload: { mode: ToolMode; text: string; rewriteOptions?: RewriteOptions }) => Promise<DesktopAiGenerateSuccess | DesktopAiGenerateFailure>;
   health: () => Promise<DesktopAiHealth>;
   modelInfo: () => Promise<DesktopAiModelInfo>;
+  setModel: (modelKey: string) => Promise<DesktopAiModelSwitchResult>;
 }
 
 interface ElectronAPI {

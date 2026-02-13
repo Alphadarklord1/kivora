@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     generate: (payload) => ipcRenderer.invoke('desktop-ai-generate', payload),
     health: () => ipcRenderer.invoke('desktop-ai-health'),
     modelInfo: () => ipcRenderer.invoke('desktop-ai-model-info'),
+    setModel: (modelKey) => ipcRenderer.invoke('desktop-ai-set-model', modelKey),
   },
 
   // Check if running in Electron
