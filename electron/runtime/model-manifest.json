@@ -1,0 +1,33 @@
+{
+  "version": "1.1.2",
+  "generatedAt": "2026-02-13T00:00:00.000Z",
+  "models": [
+    {
+      "key": "mini",
+      "modelId": "Qwen2.5-1.5B-Instruct",
+      "quantization": "Q4_K_M",
+      "file": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "sizeBytes": 0,
+      "sha256": "",
+      "minRamGb": 8
+    },
+    {
+      "key": "balanced",
+      "modelId": "Qwen2.5-3B-Instruct",
+      "quantization": "Q4_K_M",
+      "file": "qwen2.5-3b-instruct-q4_k_m.gguf",
+      "sizeBytes": 0,
+      "sha256": "",
+      "minRamGb": 16
+    },
+    {
+      "key": "pro",
+      "modelId": "Qwen2.5-7B-Instruct",
+      "quantization": "Q4_K_M",
+      "file": "qwen2.5-7b-instruct-q4_k_m.gguf",
+      "sizeBytes": 0,
+      "sha256": "",
+      "minRamGb": 24
+    }
+  ]
+}

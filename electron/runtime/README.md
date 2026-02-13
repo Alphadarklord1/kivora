@@ -2,6 +2,7 @@
 
 StudyPilot desktop mode expects bundled runtime assets in this directory:
 
+- `model-manifest.json` (fallback model metadata + checksums)
 - `models/qwen2.5-1.5b-instruct-q4_k_m.gguf` (Mini, laptop-friendly)
 - `models/qwen2.5-3b-instruct-q4_k_m.gguf` (Balanced default)
 - `models/qwen2.5-7b-instruct-q4_k_m.gguf` (Pro, desktop-class)
@@ -29,5 +30,8 @@ If only one model is included, StudyPilot auto-falls back to that model.
      - `npm run electron:build:mac:laptop`
      - `npm run electron:build:mac:balanced`
      - `npm run electron:build:mac:pc`
+4. For release, upload optional models and `model-manifest.json` as GitHub release assets under the same app version tag.
+5. Validate manifest before publishing:
+   - `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/studypilot`
 
 `mock-ai-runtime.js` is development-only and is used when a native runtime binary is not present.

@@ -1,0 +1,98 @@
+name: Model Manifest
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (example: v1.1.3)
+        required: true
+        type: string
+      repo:
+        description: owner/repo for release assets
+        required: false
+        default: Alphadarklord1/studypilot
+        type: string
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  generate-validate-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Resolve release context
+        id: ctx
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+            REPO="${{ github.repository }}"
+          else
+            TAG="${{ inputs.tag }}"
+            REPO="${{ inputs.repo }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "repo=$REPO" >> "$GITHUB_OUTPUT"
+          echo "Using tag=$TAG repo=$REPO"
+
+      - name: Download model assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p electron/runtime/models
+          gh release download "${{ steps.ctx.outputs.tag }}" \
+            --repo "${{ steps.ctx.outputs.repo }}" \
+            --pattern "qwen2.5-1.5b-instruct-q4_k_m.gguf" \
+            --pattern "qwen2.5-3b-instruct-q4_k_m.gguf" \
+            --pattern "qwen2.5-7b-instruct-q4_k_m.gguf" \
+            --dir electron/runtime/models
+
+      - name: Generate manifest
+        run: |
+          npm run models:manifest:generate -- \
+            --tag=${{ steps.ctx.outputs.tag }} \
+            --repo=${{ steps.ctx.outputs.repo }} \
+            --models-dir=electron/runtime/models \
+            --out=electron/runtime/model-manifest.json
+
+      - name: Validate manifest
+        run: |
+          npm run models:manifest:validate -- \
+            --manifest=electron/runtime/model-manifest.json \
+            --repo=${{ steps.ctx.outputs.repo }}
+
+      - name: Build verification report
+        run: |
+          mkdir -p .artifacts
+          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('electron/runtime/model-manifest.json','utf8'));const lines=['# Model Manifest Verification','',`Version: ${m.version}`,'', '| Key | File | Size Bytes | SHA256 |', '|---|---|---:|---|']; for(const x of m.models){lines.push(`| ${x.key} | ${x.file} | ${x.sizeBytes} | ${x.sha256} |`)} fs.writeFileSync('.artifacts/model-verification.md', lines.join('\n'))"
+
+      - name: Upload verification artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-manifest-verification-${{ steps.ctx.outputs.tag }}
+          path: |
+            electron/runtime/model-manifest.json
+            .artifacts/model-verification.md
+
+      - name: Upload manifest to release
+        if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ steps.ctx.outputs.tag }}" electron/runtime/model-manifest.json \
+            --repo "${{ steps.ctx.outputs.repo }}" \
+            --clobber

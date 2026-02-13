@@ -9,6 +9,7 @@ import { useKeyboardShortcuts, formatShortcut } from '@/hooks/useKeyboardShortcu
 import { useToastHelpers } from '@/components/ui/Toast';
 import { useSettings } from '@/providers/SettingsProvider';
 import { QuickSearchPalette, type QuickSearchItem } from '@/components/layout/QuickSearchPalette';
+import { ModelSetupWizard } from '@/components/layout/ModelSetupWizard';
 
 interface AppShellProps {
   children: ReactNode;
@@ -139,6 +140,7 @@ export function AppShell({ children, user }: AppShellProps) {
   const [quickSearchLoaded, setQuickSearchLoaded] = useState(false);
   const [quickSearchFiles, setQuickSearchFiles] = useState<QuickSearchFile[]>([]);
   const [quickSearchLibrary, setQuickSearchLibrary] = useState<QuickSearchLibraryItem[]>([]);
+  const [showModelSetupWizard, setShowModelSetupWizard] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -157,6 +159,38 @@ export function AppShell({ children, user }: AppShellProps) {
   // Set mounted after initial render (hydration flag - intentional)
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    if (!mounted || typeof window === 'undefined') return;
+    if (!window.electronAPI?.desktopAI) return;
+
+    let cancelled = false;
+    const checkWizard = async () => {
+      try {
+        const selection = await window.electronAPI?.desktopAI?.getSelection();
+        if (!selection || cancelled) return;
+        const localCompleted = localStorage.getItem('studypilot_model_setup_done') === 'true';
+        if (selection.setupCompleted && !localCompleted) {
+          localStorage.setItem('studypilot_model_setup_done', 'true');
+        }
+        if (selection.wizardEnabled && !selection.setupCompleted && !localCompleted) {
+          setShowModelSetupWizard(true);
+        }
+      } catch {
+        // keep dashboard available even if setup check fails
+      }
+    };
+
+    void checkWizard();
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted]);
+
+  const handleModelWizardComplete = useCallback(() => {
+    localStorage.setItem('studypilot_model_setup_done', 'true');
+    setShowModelSetupWizard(false);
+  }, []);
 
   // Keyboard shortcuts
   const handleGoToSettings = useCallback(() => {
@@ -643,6 +677,13 @@ export function AppShell({ children, user }: AppShellProps) {
         onClose={handleCloseQuickSearch}
         onSelect={handleQuickSearchSelect}
       />
+
+      {showModelSetupWizard && (
+        <ModelSetupWizard
+          isArabic={isArabic}
+          onComplete={handleModelWizardComplete}
+        />
+      )}
 
       <style jsx>{`
         .app-shell {

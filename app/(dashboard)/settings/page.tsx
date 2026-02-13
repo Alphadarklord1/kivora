@@ -37,7 +37,24 @@ interface DesktopModelOption {
   modelFile: string;
   quantization: string;
   recommendedFor: 'laptop' | 'laptop-pc' | 'pc';
+  minRamGb: number;
+  sizeBytes: number;
+  sha256: string;
+  url?: string;
   bundled: boolean;
+  isInstalled: boolean;
+  installedSource: 'bundled' | 'userData' | 'none';
+  isDownloading?: boolean;
+  downloadProgress?: {
+    modelKey: string;
+    state: 'idle' | 'downloading' | 'completed' | 'error';
+    downloadedBytes: number;
+    totalBytes: number;
+    percent: number;
+    speedBps: number;
+    errorCode?: string;
+    message?: string;
+  } | null;
   modelPath?: string;
 }
 
@@ -47,9 +64,22 @@ interface DesktopModelInfo {
   quantization: string;
   bundled: boolean;
   activeModelKey: string | null;
+  selectedModelKey: string;
   recommendedModelKey: string;
   deviceProfile: 'laptop' | 'laptop-pc' | 'pc';
+  setupCompleted: boolean;
+  wizardEnabled: boolean;
+  manifestVersion: string | null;
   models: DesktopModelOption[];
+}
+
+interface DesktopSelection {
+  selectedModelKey: string;
+  activeModelKey: string | null;
+  setupCompleted: boolean;
+  wizardEnabled: boolean;
+  recommendedModelKey: string;
+  deviceProfile: 'laptop' | 'laptop-pc' | 'pc';
 }
 
 const defaultUserSettings: UserSettings = {
@@ -76,6 +106,35 @@ function normalizeUserSettings(raw: Partial<UserSettings> | null | undefined): U
     density: typeof raw?.density === 'string' ? raw.density : defaultUserSettings.density,
     language: normalizeLanguage(raw?.language ?? storedLanguage ?? defaultUserSettings.language),
   };
+}
+
+function formatModelSize(bytes: number, isArabic: boolean) {
+  if (!bytes || bytes <= 0) {
+    return isArabic ? 'الحجم غير متوفر' : 'Size unavailable';
+  }
+  return `${(bytes / (1024 ** 3)).toFixed(1)} GB`;
+}
+
+function mapInstallStatusMessage(status: string, isArabic: boolean) {
+  const map: Record<string, { en: string; ar: string }> = {
+    network_error: {
+      en: 'Could not download model from release assets. Mini remains available offline.',
+      ar: 'تعذر تنزيل النموذج من ملفات الإصدار. نموذج Mini يبقى متاحًا بدون إنترنت.',
+    },
+    checksum_error: {
+      en: 'Model integrity check failed. Mini remains available offline.',
+      ar: 'فشل التحقق من سلامة النموذج. نموذج Mini يبقى متاحًا بدون إنترنت.',
+    },
+    disk_error: {
+      en: 'Could not save model to disk. Mini remains available offline.',
+      ar: 'تعذر حفظ النموذج على القرص. نموذج Mini يبقى متاحًا بدون إنترنت.',
+    },
+    invalid_request: {
+      en: 'Invalid model request.',
+      ar: 'طلب نموذج غير صالح.',
+    },
+  };
+  return isArabic ? (map[status]?.ar || 'تعذر تثبيت النموذج.') : (map[status]?.en || 'Failed to install model.');
 }
 
 export default function SettingsPage() {
@@ -117,8 +176,11 @@ export default function SettingsPage() {
   const [aiPrefs, setAiPrefs] = useState<AiPreferences>(loadAiPreferences());
   const [desktopAiHealth, setDesktopAiHealth] = useState<{ ok: boolean; status: string; details?: string } | null>(null);
   const [desktopAiModelInfo, setDesktopAiModelInfo] = useState<DesktopModelInfo | null>(null);
+  const [desktopAiSelection, setDesktopAiSelection] = useState<DesktopSelection | null>(null);
   const [checkingAiRuntime, setCheckingAiRuntime] = useState(false);
   const [switchingDesktopModel, setSwitchingDesktopModel] = useState(false);
+  const [installingModelKey, setInstallingModelKey] = useState<string | null>(null);
+  const [removingModelKey, setRemovingModelKey] = useState<string | null>(null);
 
   const currentLanguage = settings?.language ?? 'en';
   const isArabic = currentLanguage === 'ar';
@@ -166,21 +228,38 @@ export default function SettingsPage() {
     if (typeof window === 'undefined' || !window.electronAPI?.desktopAI) {
       setDesktopAiHealth(null);
       setDesktopAiModelInfo(null);
+       setDesktopAiSelection(null);
       return;
     }
 
     setCheckingAiRuntime(true);
     try {
-      const [health, modelInfo] = await Promise.all([
+      const [health, modelInfo, selection, downloadStatus] = await Promise.all([
         window.electronAPI.desktopAI.health(),
         window.electronAPI.desktopAI.modelInfo(),
+        window.electronAPI.desktopAI.getSelection(),
+        window.electronAPI.desktopAI.downloadStatus(),
       ]);
+
+      const progressMap = new Map(
+        (downloadStatus.items || []).map((item) => [item.modelKey, item])
+      );
+      const mergedModels = modelInfo.models.map((model) => ({
+        ...model,
+        downloadProgress: progressMap.get(model.key) || model.downloadProgress || null,
+        isDownloading: progressMap.get(model.key)?.state === 'downloading' || Boolean(model.isDownloading),
+      }));
+
       setDesktopAiHealth({
         ok: health.ok,
         status: health.status,
         details: health.details,
       });
-      setDesktopAiModelInfo(modelInfo);
+      setDesktopAiSelection(selection);
+      setDesktopAiModelInfo({
+        ...modelInfo,
+        models: mergedModels,
+      });
     } catch (error) {
       setDesktopAiHealth({
         ok: false,
@@ -195,6 +274,14 @@ export default function SettingsPage() {
   useEffect(() => {
     if (tab !== 'ai') return;
     void refreshDesktopAiStatus();
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab !== 'ai' || !window.electronAPI?.desktopAI) return;
+    const unsubscribe = window.electronAPI.desktopAI.onDownloadProgress(() => {
+      void refreshDesktopAiStatus();
+    });
+    return () => unsubscribe();
   }, [tab]);
 
   const handleSelectDesktopModel = async (modelKey: string) => {
@@ -212,6 +299,42 @@ export default function SettingsPage() {
       showMessage('error', error instanceof Error ? error.message : (isArabic ? 'تعذر تبديل النموذج' : 'Failed to switch model'));
     } finally {
       setSwitchingDesktopModel(false);
+    }
+  };
+
+  const handleInstallDesktopModel = async (modelKey: string) => {
+    if (!window.electronAPI?.desktopAI) return;
+    setInstallingModelKey(modelKey);
+    try {
+      const result = await window.electronAPI.desktopAI.installModel(modelKey);
+      if (!result.ok && result.status !== 'already_installed') {
+        showMessage('error', result.message || mapInstallStatusMessage(result.status, isArabic));
+      } else {
+        showMessage('success', isArabic ? 'تم تثبيت النموذج' : 'Model installed');
+      }
+      await refreshDesktopAiStatus();
+    } catch (error) {
+      showMessage('error', error instanceof Error ? error.message : (isArabic ? 'تعذر تثبيت النموذج' : 'Failed to install model'));
+    } finally {
+      setInstallingModelKey(null);
+    }
+  };
+
+  const handleRemoveDesktopModel = async (modelKey: string) => {
+    if (!window.electronAPI?.desktopAI) return;
+    setRemovingModelKey(modelKey);
+    try {
+      const result = await window.electronAPI.desktopAI.removeModel(modelKey);
+      if (!result.ok) {
+        showMessage('error', result.message || (isArabic ? 'تعذر حذف النموذج' : 'Failed to remove model'));
+      } else {
+        showMessage('success', isArabic ? 'تم حذف النموذج' : 'Model removed');
+      }
+      await refreshDesktopAiStatus();
+    } catch (error) {
+      showMessage('error', error instanceof Error ? error.message : (isArabic ? 'تعذر حذف النموذج' : 'Failed to remove model'));
+    } finally {
+      setRemovingModelKey(null);
     }
   };
 
@@ -1140,22 +1263,27 @@ export default function SettingsPage() {
               </div>
 
               <div className="account-card">
-                <h3>{isArabic ? 'نموذج سطح المكتب المضمّن' : 'Bundled Desktop Model'}</h3>
+                <h3>{isArabic ? 'مدير نماذج سطح المكتب' : 'Desktop Model Manager'}</h3>
                 <p className="help-text">
                   {isArabic
-                    ? 'تثبيت StudyPilot يضيف نماذج محلية مضمّنة حسب الحزمة. اختر الأنسب لجهازك.'
-                    : 'StudyPilot installer bundles local models by package. Choose the best fit for your device.'}
+                    ? 'يبدأ StudyPilot بنموذج Mini دون اتصال. يمكنك تثبيت نماذج أقوى واختيار النموذج النشط.'
+                    : 'StudyPilot starts with offline Mini. Install stronger models and choose the active one.'}
                 </p>
                 {desktopAiModelInfo && (
                   <div className="help-text" style={{ marginTop: 8 }}>
                     <strong>{isArabic ? 'النموذج النشط:' : 'Active model:'}</strong>{' '}
                     {desktopAiModelInfo.modelId || (isArabic ? 'لا يوجد' : 'None')}<br />
+                    <strong>{isArabic ? 'النموذج المختار:' : 'Selected model:'}</strong>{' '}
+                    {desktopAiSelection?.selectedModelKey || desktopAiModelInfo.selectedModelKey}<br />
                     <strong>{isArabic ? 'نوع الجهاز المكتشف:' : 'Detected device profile:'}</strong>{' '}
                     {desktopAiModelInfo.deviceProfile === 'laptop'
                       ? (isArabic ? 'لابتوب' : 'Laptop')
                       : desktopAiModelInfo.deviceProfile === 'pc'
                         ? (isArabic ? 'كمبيوتر مكتبي' : 'PC')
                         : (isArabic ? 'لابتوب/كمبيوتر متوسط' : 'Laptop/PC (balanced)')}
+                    <br />
+                    <strong>{isArabic ? 'إصدار القائمة:' : 'Manifest version:'}</strong>{' '}
+                    {desktopAiModelInfo.manifestVersion || 'N/A'}
                   </div>
                 )}
                 {desktopAiModelInfo?.models?.length ? (
@@ -1163,6 +1291,9 @@ export default function SettingsPage() {
                     {desktopAiModelInfo.models.map((model) => {
                       const isActive = desktopAiModelInfo.activeModelKey === model.key;
                       const isRecommended = desktopAiModelInfo.recommendedModelKey === model.key;
+                      const installing = installingModelKey === model.key || model.isDownloading;
+                      const removing = removingModelKey === model.key;
+                      const downloadPercent = model.downloadProgress?.percent ?? 0;
                       return (
                         <div key={model.key} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -1171,16 +1302,42 @@ export default function SettingsPage() {
                               <div style={{ marginTop: 4 }}>
                                 <code>{model.modelFile}</code>
                               </div>
+                              <div className="help-text" style={{ marginTop: 4 }}>
+                                {formatModelSize(model.sizeBytes, isArabic)} · {model.minRamGb}GB+ RAM
+                              </div>
                             </div>
-                            <button
-                              className="btn secondary"
-                              disabled={!model.bundled || isActive || switchingDesktopModel}
-                              onClick={() => handleSelectDesktopModel(model.key)}
-                            >
-                              {isActive
-                                ? (isArabic ? 'نشط' : 'Active')
-                                : (isArabic ? 'تفعيل' : 'Use')}
-                            </button>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                              {model.isInstalled ? (
+                                <button
+                                  className="btn secondary"
+                                  disabled={isActive || switchingDesktopModel || installing || removing}
+                                  onClick={() => handleSelectDesktopModel(model.key)}
+                                >
+                                  {isActive
+                                    ? (isArabic ? 'نشط' : 'Active')
+                                    : (isArabic ? 'تفعيل' : 'Use')}
+                                </button>
+                              ) : (
+                                <button
+                                  className="btn secondary"
+                                  disabled={installing || switchingDesktopModel || removing}
+                                  onClick={() => handleInstallDesktopModel(model.key)}
+                                >
+                                  {installing
+                                    ? (isArabic ? 'جارِ التثبيت...' : 'Installing...')
+                                    : (isArabic ? 'تثبيت' : 'Install')}
+                                </button>
+                              )}
+                              {model.installedSource === 'userData' && !isActive && (
+                                <button
+                                  className="btn secondary"
+                                  disabled={installing || removing}
+                                  onClick={() => handleRemoveDesktopModel(model.key)}
+                                >
+                                  {removing ? (isArabic ? 'جارِ الحذف...' : 'Removing...') : (isArabic ? 'حذف' : 'Remove')}
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <div className="help-text" style={{ marginTop: 6 }}>
                             {isRecommended
@@ -1191,10 +1348,21 @@ export default function SettingsPage() {
                                   ? (isArabic ? 'موصى به للكمبيوتر المكتبي' : 'Recommended for desktops')
                                   : (isArabic ? 'موصى به للأجهزة المتوسطة' : 'Balanced for laptop/PC')}
                             {' · '}
-                            {model.bundled
-                              ? (isArabic ? 'مضمّن في هذه النسخة' : 'Bundled in this installer')
-                              : (isArabic ? 'غير مضمّن في هذه النسخة' : 'Not bundled in this installer')}
+                            {model.installedSource === 'userData'
+                              ? (isArabic ? 'مثبّت محليًا بعد التثبيت' : 'Installed locally after setup')
+                              : model.bundled
+                                ? (isArabic ? 'مضمّن في هذه النسخة' : 'Bundled in this installer')
+                                : (isArabic ? 'غير مثبت' : 'Not installed')}
                           </div>
+                          {model.downloadProgress && (
+                            <div className="help-text" style={{ marginTop: 4 }}>
+                              {model.downloadProgress.state === 'downloading'
+                                ? `${isArabic ? 'التنزيل جارٍ' : 'Downloading'}: ${downloadPercent}%`
+                                : model.downloadProgress.state === 'error'
+                                  ? `${isArabic ? 'خطأ التنزيل' : 'Download error'}: ${model.downloadProgress.message || ''}`
+                                  : null}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1209,6 +1377,17 @@ export default function SettingsPage() {
                     {desktopAiHealth.details ? ` — ${desktopAiHealth.details}` : ''}
                   </p>
                 )}
+                {desktopAiSelection && (
+                  <p className="help-text" style={{ marginTop: 6 }}>
+                    {isArabic ? 'معالج الإعداد الأول:' : 'First-launch setup:'}{' '}
+                    <strong>{desktopAiSelection.setupCompleted ? (isArabic ? 'مكتمل' : 'Completed') : (isArabic ? 'غير مكتمل' : 'Pending')}</strong>
+                  </p>
+                )}
+                <p className="help-text" style={{ marginTop: 6 }}>
+                  {isArabic
+                    ? 'عند فشل تثبيت النماذج الاختيارية، سيستمر StudyPilot باستخدام Mini بدون إنترنت.'
+                    : 'If optional model install fails, StudyPilot keeps working with Mini offline.'}
+                </p>
               </div>
 
               <div className="account-card">

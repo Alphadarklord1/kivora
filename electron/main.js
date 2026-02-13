@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const net = require('net');
 const os = require('os');
+const crypto = require('crypto');
+const { once } = require('events');
 const { spawn } = require('child_process');
 
 const isDev = !app.isPackaged || process.env.NODE_ENV === 'development';
@@ -11,6 +13,8 @@ const DESKTOP_AI = {
   startupTimeoutMs: 25000,
   requestTimeoutMs: 45000,
   maxRestartAttempts: 4,
+  manifestFetchTimeoutMs: 8000,
+  manifestRetryMs: 5 * 60 * 1000,
 };
 
 const DESKTOP_AI_MODELS = [
@@ -20,6 +24,7 @@ const DESKTOP_AI_MODELS = [
     modelFile: 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
     quantization: 'Q4_K_M',
     recommendedFor: 'laptop',
+    minRamGb: 8,
   },
   {
     key: 'balanced',
@@ -27,6 +32,7 @@ const DESKTOP_AI_MODELS = [
     modelFile: 'qwen2.5-3b-instruct-q4_k_m.gguf',
     quantization: 'Q4_K_M',
     recommendedFor: 'laptop-pc',
+    minRamGb: 16,
   },
   {
     key: 'pro',
@@ -34,8 +40,16 @@ const DESKTOP_AI_MODELS = [
     modelFile: 'qwen2.5-7b-instruct-q4_k_m.gguf',
     quantization: 'Q4_K_M',
     recommendedFor: 'pc',
+    minRamGb: 24,
   },
 ];
+
+const DEFAULT_MODEL_KEY = 'mini';
+const MODEL_MANIFEST_FILENAME = 'model-manifest.json';
+const MODEL_RELEASE_REPO = process.env.STUDYPILOT_MODEL_REPO || 'Alphadarklord1/studypilot';
+const MODEL_WIZARD_ENABLED = (process.env.STUDYPILOT_MODEL_WIZARD || '1') !== '0';
+const DOWNLOAD_EVENT = 'desktop-ai-download-progress';
+const DOWNLOAD_STATE_IDLE = 'idle';
 
 const SUPPORTED_TOOL_MODES = new Set([
   'assignment',
@@ -71,6 +85,13 @@ let desktopAiState = {
   manualStop: false,
 };
 
+let desktopAiConfigCache = null;
+let localManifestCache = null;
+let remoteManifestCache = null;
+let remoteManifestLastAttemptAt = 0;
+const modelDownloadState = new Map();
+const modelDownloadLocks = new Map();
+
 function getPlatformArchTag() {
   return `${process.platform}-${process.arch}`;
 }
@@ -85,15 +106,260 @@ function getRuntimeBinaryPath() {
   return runtimePath;
 }
 
-function getModelPath(modelFile) {
+function getBundledModelPath(modelFile) {
   const relativeParts = ['models', modelFile];
   return app.isPackaged
     ? path.join(process.resourcesPath, ...relativeParts)
     : path.join(__dirname, 'runtime', ...relativeParts);
 }
 
+function getUserModelDir() {
+  return path.join(app.getPath('userData'), 'models');
+}
+
+function getUserModelPath(modelFile) {
+  return path.join(getUserModelDir(), modelFile);
+}
+
+function getDesktopAiConfigPath() {
+  return path.join(app.getPath('userData'), 'desktop-ai-config.json');
+}
+
+function getLocalManifestPath() {
+  return app.isPackaged
+    ? path.join(__dirname, 'runtime', MODEL_MANIFEST_FILENAME)
+    : path.join(__dirname, 'runtime', MODEL_MANIFEST_FILENAME);
+}
+
+function getReleaseAssetUrl(fileName, version = app.getVersion()) {
+  return `https://github.com/${MODEL_RELEASE_REPO}/releases/download/v${version}/${fileName}`;
+}
+
 function getMockRuntimePath() {
   return path.join(__dirname, 'runtime', 'mock-ai-runtime.js');
+}
+
+function getDefaultDesktopAiConfig() {
+  return {
+    selectedModelKey: DEFAULT_MODEL_KEY,
+    setupCompleted: false,
+    lastManifestVersion: null,
+  };
+}
+
+function ensureModelKey(value) {
+  return DESKTOP_AI_MODELS.some((model) => model.key === value) ? value : DEFAULT_MODEL_KEY;
+}
+
+function readDesktopAiConfig() {
+  const fallback = getDefaultDesktopAiConfig();
+  const configPath = getDesktopAiConfigPath();
+
+  try {
+    if (!fs.existsSync(configPath)) {
+      return fallback;
+    }
+
+    const raw = fs.readFileSync(configPath, 'utf8');
+    const parsed = JSON.parse(raw);
+
+    return {
+      selectedModelKey: ensureModelKey(parsed?.selectedModelKey),
+      setupCompleted: Boolean(parsed?.setupCompleted),
+      lastManifestVersion: typeof parsed?.lastManifestVersion === 'string' ? parsed.lastManifestVersion : null,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function getDesktopAiConfig() {
+  if (!desktopAiConfigCache) {
+    desktopAiConfigCache = readDesktopAiConfig();
+  }
+  return desktopAiConfigCache;
+}
+
+function saveDesktopAiConfig(config) {
+  const normalized = {
+    ...getDefaultDesktopAiConfig(),
+    ...config,
+    selectedModelKey: ensureModelKey(config?.selectedModelKey),
+  };
+  const configPath = getDesktopAiConfigPath();
+  const configDir = path.dirname(configPath);
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.writeFileSync(configPath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
+  desktopAiConfigCache = normalized;
+  return normalized;
+}
+
+function patchDesktopAiConfig(partial) {
+  const current = getDesktopAiConfig();
+  return saveDesktopAiConfig({ ...current, ...partial });
+}
+
+function getDefaultManifest(version = app.getVersion()) {
+  return {
+    version,
+    generatedAt: new Date().toISOString(),
+    models: DESKTOP_AI_MODELS.map((model) => ({
+      key: model.key,
+      modelId: model.modelId,
+      quantization: model.quantization,
+      file: model.modelFile,
+      sizeBytes: 0,
+      sha256: '',
+      minRamGb: model.minRamGb,
+      url: getReleaseAssetUrl(model.modelFile, version),
+    })),
+  };
+}
+
+function normalizeManifest(raw, fallbackVersion = app.getVersion()) {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.models)) {
+    return null;
+  }
+
+  const models = raw.models
+    .filter((entry) => entry && typeof entry === 'object' && typeof entry.key === 'string')
+    .map((entry) => ({
+      key: ensureModelKey(entry.key),
+      modelId: typeof entry.modelId === 'string' ? entry.modelId : '',
+      quantization: typeof entry.quantization === 'string' ? entry.quantization : '',
+      file: typeof entry.file === 'string' ? entry.file : '',
+      sizeBytes: Number.isFinite(entry.sizeBytes) ? Number(entry.sizeBytes) : 0,
+      sha256: typeof entry.sha256 === 'string' ? entry.sha256.toLowerCase() : '',
+      minRamGb: Number.isFinite(entry.minRamGb) ? Number(entry.minRamGb) : undefined,
+      url: typeof entry.url === 'string' ? entry.url : undefined,
+    }))
+    .filter((entry) => entry.file.length > 0);
+
+  if (!models.length) return null;
+
+  return {
+    version: typeof raw.version === 'string' ? raw.version : fallbackVersion,
+    generatedAt: typeof raw.generatedAt === 'string' ? raw.generatedAt : undefined,
+    models,
+  };
+}
+
+function getLocalManifest() {
+  if (localManifestCache) return localManifestCache;
+
+  const localPath = getLocalManifestPath();
+  try {
+    if (fs.existsSync(localPath)) {
+      const parsed = JSON.parse(fs.readFileSync(localPath, 'utf8'));
+      const normalized = normalizeManifest(parsed);
+      if (normalized) {
+        localManifestCache = normalized;
+        return normalized;
+      }
+    }
+  } catch {
+    // fallback below
+  }
+
+  localManifestCache = getDefaultManifest();
+  return localManifestCache;
+}
+
+async function getRemoteManifest(forceRefresh = false) {
+  if (!forceRefresh && remoteManifestCache) {
+    return remoteManifestCache;
+  }
+  if (!forceRefresh && Date.now() - remoteManifestLastAttemptAt < DESKTOP_AI.manifestRetryMs) {
+    return null;
+  }
+
+  const manifestUrl = getReleaseAssetUrl(MODEL_MANIFEST_FILENAME);
+  remoteManifestLastAttemptAt = Date.now();
+  try {
+    const { response, data } = await fetchJson(manifestUrl, {}, DESKTOP_AI.manifestFetchTimeoutMs);
+    if (!response.ok) return null;
+    const normalized = normalizeManifest(data);
+    if (!normalized) return null;
+    remoteManifestCache = normalized;
+    patchDesktopAiConfig({ lastManifestVersion: normalized.version || null });
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
+async function getPreferredManifest(options = {}) {
+  const { allowRemote = true, forceRemote = false } = options;
+  if (forceRemote) {
+    const refreshed = await getRemoteManifest(true);
+    if (refreshed) return refreshed;
+  }
+  if (allowRemote) {
+    const remote = await getRemoteManifest(false);
+    if (remote) return remote;
+  }
+  return getLocalManifest();
+}
+
+function getModelCatalog(manifest = getLocalManifest()) {
+  const manifestMap = new Map((manifest?.models || []).map((item) => [item.key, item]));
+  return DESKTOP_AI_MODELS.map((base) => {
+    const meta = manifestMap.get(base.key) || {};
+    const modelFile = meta.file || base.modelFile;
+    const bundledPath = getBundledModelPath(modelFile);
+    const userPath = getUserModelPath(modelFile);
+    const userExists = fs.existsSync(userPath);
+    const bundledExists = fs.existsSync(bundledPath);
+    const installedSource = userExists ? 'userData' : (bundledExists ? 'bundled' : 'none');
+
+    return {
+      key: base.key,
+      modelId: meta.modelId || base.modelId,
+      modelFile,
+      quantization: meta.quantization || base.quantization,
+      recommendedFor: base.recommendedFor,
+      minRamGb: Number.isFinite(meta.minRamGb) ? Number(meta.minRamGb) : base.minRamGb,
+      sizeBytes: Number.isFinite(meta.sizeBytes) ? Number(meta.sizeBytes) : 0,
+      sha256: typeof meta.sha256 === 'string' ? meta.sha256.toLowerCase() : '',
+      url: typeof meta.url === 'string' && meta.url.length > 0 ? meta.url : getReleaseAssetUrl(modelFile),
+      bundledPath,
+      userPath,
+      bundled: bundledExists,
+      isInstalled: installedSource !== 'none',
+      installedSource,
+      modelPath: installedSource === 'userData' ? userPath : (installedSource === 'bundled' ? bundledPath : null),
+      isDownloading: modelDownloadLocks.has(base.key),
+      downloadProgress: modelDownloadState.get(base.key) || null,
+    };
+  });
+}
+
+function getSelectedModelKey() {
+  return desktopAiState.activeModelKey || getDesktopAiConfig().selectedModelKey || DEFAULT_MODEL_KEY;
+}
+
+function emitDownloadEvent(payload) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send(DOWNLOAD_EVENT, payload);
+}
+
+function setDownloadProgress(modelKey, patch) {
+  const current = modelDownloadState.get(modelKey) || {
+    modelKey,
+    state: DOWNLOAD_STATE_IDLE,
+    downloadedBytes: 0,
+    totalBytes: 0,
+    percent: 0,
+    speedBps: 0,
+  };
+  const next = { ...current, ...patch, modelKey };
+  modelDownloadState.set(modelKey, next);
+  emitDownloadEvent(next);
+  return next;
+}
+
+function clearDownloadProgress(modelKey) {
+  modelDownloadState.delete(modelKey);
 }
 
 function getDeviceProfile() {
@@ -115,35 +381,33 @@ function getRecommendedModelKey() {
   return 'pro';
 }
 
-function getModelCatalog() {
-  return DESKTOP_AI_MODELS.map((model) => {
-    const modelPath = getModelPath(model.modelFile);
-    return {
-      ...model,
-      modelPath,
-      bundled: fs.existsSync(modelPath),
-    };
-  });
-}
-
-function resolveActiveModel() {
-  const models = getModelCatalog();
+function resolveActiveModel(models = getModelCatalog()) {
   const recommendedModelKey = getRecommendedModelKey();
-  const selectedModelKey = desktopAiState.activeModelKey || recommendedModelKey;
+  const selectedModelKey = getSelectedModelKey();
 
-  const selectedBundled = models.find((model) => model.key === selectedModelKey && model.bundled);
+  const selectedUserData = models.find((model) => model.key === selectedModelKey && model.installedSource === 'userData');
+  if (selectedUserData) {
+    return selectedUserData;
+  }
+
+  const selectedBundled = models.find((model) => model.key === selectedModelKey && model.installedSource === 'bundled');
   if (selectedBundled) {
     return selectedBundled;
   }
 
-  const recommendedBundled = models.find((model) => model.key === recommendedModelKey && model.bundled);
+  const recommendedBundled = models.find((model) => model.key === recommendedModelKey && model.installedSource === 'bundled');
   if (recommendedBundled) {
     return recommendedBundled;
   }
 
-  const fallbackBundled = models.find((model) => model.bundled);
+  const fallbackBundled = models.find((model) => model.installedSource === 'bundled');
   if (fallbackBundled) {
     return fallbackBundled;
+  }
+
+  const fallbackInstalled = models.find((model) => model.isInstalled);
+  if (fallbackInstalled) {
+    return fallbackInstalled;
   }
 
   return null;
@@ -233,6 +497,205 @@ function stopDesktopAiRuntime() {
   clearDesktopAiState();
 }
 
+function classifyInstallError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+  if (code === 'MODEL_MANIFEST_MISSING') {
+    return {
+      errorCode: 'checksum_error',
+      message: 'Release model metadata is unavailable. Mini remains available offline.',
+    };
+  }
+  if (code === 'MODEL_ASSET_NOT_FOUND') {
+    return {
+      errorCode: 'network_error',
+      message: 'Model asset was not found for this release (404). Mini remains available offline.',
+    };
+  }
+  if (code === 'MODEL_DOWNLOAD_FAILED') {
+    return {
+      errorCode: 'network_error',
+      message: 'Model download failed from release assets. Mini remains available offline.',
+    };
+  }
+  if (message.toLowerCase().includes('abort')) {
+    return { errorCode: 'network_error', message: 'Download interrupted. Mini remains available offline.' };
+  }
+  if (['ENOSPC', 'EACCES', 'EPERM', 'EROFS'].includes(code)) {
+    return { errorCode: 'disk_error', message: 'Failed to write model file to disk. Mini remains available offline.' };
+  }
+  if (message.toLowerCase().includes('checksum')) {
+    return { errorCode: 'checksum_error', message: 'Model integrity check failed (checksum mismatch). Mini remains available offline.' };
+  }
+  return { errorCode: 'network_error', message: message || 'Model download failed. Mini remains available offline.' };
+}
+
+function getDownloadStatusSnapshot() {
+  return Array.from(modelDownloadState.values());
+}
+
+async function installDesktopModel(modelKey) {
+  if (modelDownloadLocks.has(modelKey)) {
+    return { status: 'downloading', modelKey };
+  }
+
+  const manifest = await getPreferredManifest({ forceRemote: true });
+  if (!manifest || !Array.isArray(manifest.models) || !manifest.models.length) {
+    return {
+      status: 'checksum_error',
+      message: 'Release model metadata is unavailable. Mini remains available offline.',
+      modelKey,
+    };
+  }
+  const model = getModelCatalog(manifest).find((entry) => entry.key === modelKey);
+  if (!model) {
+    return { status: 'invalid_request', message: `Unknown model key: ${modelKey}` };
+  }
+  if (model.isInstalled) {
+    return { status: 'already_installed', modelKey };
+  }
+  if (!model.url) {
+    return { status: 'network_error', message: 'Model URL missing in manifest', modelKey };
+  }
+  if (!model.sha256) {
+    return {
+      status: 'checksum_error',
+      message: 'Release model metadata is incomplete (missing checksum). Mini remains available offline.',
+      modelKey,
+    };
+  }
+
+  const lock = {};
+  modelDownloadLocks.set(modelKey, lock);
+  const startedAt = Date.now();
+  setDownloadProgress(modelKey, {
+    state: 'downloading',
+    downloadedBytes: 0,
+    totalBytes: model.sizeBytes || 0,
+    percent: 0,
+    speedBps: 0,
+    errorCode: undefined,
+    message: undefined,
+  });
+
+  const modelDir = getUserModelDir();
+  const targetPath = getUserModelPath(model.modelFile);
+  const tempPath = `${targetPath}.download`;
+  let writer;
+
+  try {
+    fs.mkdirSync(modelDir, { recursive: true });
+    if (fs.existsSync(tempPath)) fs.rmSync(tempPath, { force: true });
+
+    const response = await fetch(model.url);
+    if (!response.ok || !response.body) {
+      const downloadError = new Error(`Failed to download model (${response.status})`);
+      downloadError.code = response.status === 404 ? 'MODEL_ASSET_NOT_FOUND' : 'MODEL_DOWNLOAD_FAILED';
+      throw downloadError;
+    }
+
+    const totalHeader = Number(response.headers.get('content-length') || 0);
+    const totalBytes = totalHeader > 0 ? totalHeader : (model.sizeBytes || 0);
+    const hash = crypto.createHash('sha256');
+    const reader = response.body.getReader();
+    writer = fs.createWriteStream(tempPath, { flags: 'w' });
+    let downloadedBytes = 0;
+    let lastTick = Date.now();
+    let lastDownloaded = 0;
+
+    while (true) {
+      // eslint-disable-next-line no-await-in-loop
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      const chunk = Buffer.from(value);
+      hash.update(chunk);
+      downloadedBytes += chunk.length;
+      if (!writer.write(chunk)) {
+        // eslint-disable-next-line no-await-in-loop
+        await once(writer, 'drain');
+      }
+
+      const now = Date.now();
+      if (now - lastTick >= 200) {
+        const speedBps = ((downloadedBytes - lastDownloaded) / Math.max(1, now - lastTick)) * 1000;
+        const percent = totalBytes > 0 ? Math.min(100, Math.round((downloadedBytes / totalBytes) * 100)) : 0;
+        setDownloadProgress(modelKey, {
+          state: 'downloading',
+          downloadedBytes,
+          totalBytes,
+          percent,
+          speedBps: Math.round(speedBps),
+        });
+        lastTick = now;
+        lastDownloaded = downloadedBytes;
+      }
+    }
+
+    await new Promise((resolve, reject) => {
+      writer.end((error) => (error ? reject(error) : resolve()));
+    });
+
+    const digest = hash.digest('hex').toLowerCase();
+    if (model.sha256 && model.sha256 !== digest) {
+      throw new Error('checksum mismatch');
+    }
+
+    fs.renameSync(tempPath, targetPath);
+    const elapsedMs = Math.max(1, Date.now() - startedAt);
+    const size = fs.statSync(targetPath).size;
+    setDownloadProgress(modelKey, {
+      state: 'completed',
+      downloadedBytes: size,
+      totalBytes: size,
+      percent: 100,
+      speedBps: Math.round((size / elapsedMs) * 1000),
+    });
+    setTimeout(() => clearDownloadProgress(modelKey), 2500);
+
+    return { status: 'success', modelKey };
+  } catch (error) {
+    if (writer) {
+      try { writer.destroy(); } catch {}
+    }
+    if (fs.existsSync(tempPath)) {
+      try { fs.rmSync(tempPath, { force: true }); } catch {}
+    }
+    const mapped = classifyInstallError(error);
+    setDownloadProgress(modelKey, {
+      state: 'error',
+      errorCode: mapped.errorCode,
+      message: mapped.message,
+    });
+    return {
+      status: mapped.errorCode,
+      message: mapped.message,
+      modelKey,
+    };
+  } finally {
+    modelDownloadLocks.delete(modelKey);
+  }
+}
+
+function removeDesktopModel(modelKey) {
+  const model = getModelCatalog().find((entry) => entry.key === modelKey);
+  if (!model || model.installedSource !== 'userData') {
+    return { status: 'not_found', modelKey };
+  }
+
+  const selected = getSelectedModelKey();
+  if (selected === modelKey) {
+    return { status: 'active_model_blocked', modelKey };
+  }
+
+  try {
+    fs.rmSync(model.userPath, { force: true });
+    return { status: 'success', modelKey };
+  } catch {
+    return { status: 'disk_error', modelKey, message: 'Unable to remove model file from disk' };
+  }
+}
+
 async function startDesktopAiRuntime() {
   if (desktopAiState.startPromise) return desktopAiState.startPromise;
 
@@ -250,8 +713,8 @@ async function startDesktopAiRuntime() {
       return;
     }
 
-    if (!selectedModel) {
-      desktopAiState.lastError = 'No bundled desktop model found';
+    if (!selectedModel || !selectedModel.modelPath) {
+      desktopAiState.lastError = 'No installed desktop model found';
       clearDesktopAiState();
       return;
     }
@@ -266,6 +729,7 @@ async function startDesktopAiRuntime() {
 
     desktopAiState.manualStop = false;
     desktopAiState.activeModelKey = selectedModel.key;
+    patchDesktopAiConfig({ selectedModelKey: selectedModel.key });
     desktopAiState.modelPath = modelPath;
     desktopAiState.runtimePath = command;
     desktopAiState.port = port;
@@ -622,6 +1086,9 @@ function createMenu() {
 
 // App events
 app.whenReady().then(() => {
+  const config = getDesktopAiConfig();
+  desktopAiState.activeModelKey = ensureModelKey(config.selectedModelKey);
+
   createWindow().catch((error) => {
     console.error('Failed to create main window:', error);
     app.quit();
@@ -669,10 +1136,10 @@ ipcMain.handle('desktop-ai-health', async () => {
   const selectedModel = resolveActiveModel();
   const modelPath = selectedModel?.modelPath;
   const runtimeAvailable = fs.existsSync(runtimePath) || (!app.isPackaged && fs.existsSync(getMockRuntimePath()));
-  const modelAvailable = Boolean(selectedModel?.bundled);
+  const modelAvailable = Boolean(selectedModel?.isInstalled);
   const modelLabel = selectedModel
     ? `${selectedModel.modelId} (${selectedModel.quantization})`
-    : 'No bundled model';
+    : 'No installed model';
 
   if (desktopAiState.startPromise && !desktopAiState.ready) {
     return {
@@ -712,10 +1179,12 @@ ipcMain.handle('desktop-ai-health', async () => {
 });
 
 ipcMain.handle('desktop-ai-model-info', async () => {
-  const models = getModelCatalog();
+  const manifest = await getPreferredManifest({ allowRemote: false });
+  const models = getModelCatalog(manifest);
   const selectedModel = resolveActiveModel();
   const recommendedModelKey = getRecommendedModelKey();
   const deviceProfile = getDeviceProfile();
+  const config = getDesktopAiConfig();
   const runtimePath = getRuntimeBinaryPath();
   const runtimeAvailable = fs.existsSync(runtimePath) || (!app.isPackaged && fs.existsSync(getMockRuntimePath()));
 
@@ -727,6 +1196,10 @@ ipcMain.handle('desktop-ai-model-info', async () => {
     activeModelKey: selectedModel?.key || null,
     recommendedModelKey,
     deviceProfile,
+    setupCompleted: Boolean(config.setupCompleted),
+    wizardEnabled: MODEL_WIZARD_ENABLED,
+    selectedModelKey: getSelectedModelKey(),
+    manifestVersion: manifest?.version || null,
     models: models.map((model) => ({
       key: model.key,
       modelId: model.modelId,
@@ -734,6 +1207,14 @@ ipcMain.handle('desktop-ai-model-info', async () => {
       quantization: model.quantization,
       recommendedFor: model.recommendedFor,
       bundled: model.bundled,
+      installedSource: model.installedSource,
+      isInstalled: model.isInstalled,
+      isDownloading: model.isDownloading,
+      downloadProgress: model.downloadProgress,
+      sizeBytes: model.sizeBytes,
+      minRamGb: model.minRamGb,
+      sha256: model.sha256,
+      url: model.url,
       modelPath: model.modelPath,
     })),
     runtimeAvailable,
@@ -760,16 +1241,17 @@ ipcMain.handle('desktop-ai-set-model', async (_, modelKey) => {
     };
   }
 
-  if (!model.bundled) {
+  if (!model.isInstalled) {
     return {
       ok: false,
-      errorCode: 'MODEL_NOT_BUNDLED',
-      message: 'Selected model is not bundled with this installer',
+      errorCode: 'MODEL_NOT_INSTALLED',
+      message: 'Selected model is not installed',
     };
   }
 
   const changed = desktopAiState.activeModelKey !== modelKey;
   desktopAiState.activeModelKey = modelKey;
+  patchDesktopAiConfig({ selectedModelKey: modelKey });
 
   if (changed) {
     stopDesktopAiRuntime();
@@ -789,6 +1271,116 @@ ipcMain.handle('desktop-ai-set-model', async (_, modelKey) => {
     activeModelKey: modelKey,
   };
 });
+
+ipcMain.handle('desktop-ai-list-models', async () => {
+  const manifest = await getPreferredManifest({ allowRemote: false });
+  const models = getModelCatalog(manifest);
+  const recommendedModelKey = getRecommendedModelKey();
+
+  return {
+    manifestVersion: manifest?.version || null,
+    recommendedModelKey,
+    models: models.map((model) => ({
+      key: model.key,
+      modelId: model.modelId,
+      modelFile: model.modelFile,
+      quantization: model.quantization,
+      recommendedFor: model.recommendedFor,
+      minRamGb: model.minRamGb,
+      sizeBytes: model.sizeBytes,
+      sha256: model.sha256,
+      url: model.url,
+      bundled: model.bundled,
+      isInstalled: model.isInstalled,
+      installedSource: model.installedSource,
+      modelPath: model.modelPath,
+      isDownloading: model.isDownloading,
+      downloadProgress: model.downloadProgress,
+    })),
+  };
+});
+
+ipcMain.handle('desktop-ai-get-selection', async () => {
+  const config = getDesktopAiConfig();
+  const resolved = resolveActiveModel();
+  return {
+    selectedModelKey: config.selectedModelKey,
+    activeModelKey: resolved?.key || null,
+    setupCompleted: Boolean(config.setupCompleted),
+    wizardEnabled: MODEL_WIZARD_ENABLED,
+    recommendedModelKey: getRecommendedModelKey(),
+    deviceProfile: getDeviceProfile(),
+  };
+});
+
+ipcMain.handle('desktop-ai-complete-setup', async (_, payload) => {
+  const modelKey = typeof payload?.selectedModelKey === 'string' ? payload.selectedModelKey : undefined;
+  const patch = { setupCompleted: true };
+  if (modelKey) {
+    patchDesktopAiConfig({ ...patch, selectedModelKey: ensureModelKey(modelKey) });
+    desktopAiState.activeModelKey = ensureModelKey(modelKey);
+  } else {
+    patchDesktopAiConfig(patch);
+  }
+  return { ok: true };
+});
+
+ipcMain.handle('desktop-ai-install-model', async (_, modelKey) => {
+  if (typeof modelKey !== 'string') {
+    return {
+      ok: false,
+      status: 'invalid_request',
+      message: 'Model key is required',
+    };
+  }
+
+  const result = await installDesktopModel(modelKey);
+  if (result.status === 'success' || result.status === 'already_installed') {
+    return {
+      ok: true,
+      status: result.status,
+      modelKey,
+    };
+  }
+
+  return {
+    ok: false,
+    status: result.status,
+    modelKey,
+    message: result.message || 'Model install failed',
+  };
+});
+
+ipcMain.handle('desktop-ai-remove-model', async (_, modelKey) => {
+  if (typeof modelKey !== 'string') {
+    return {
+      ok: false,
+      status: 'invalid_request',
+      message: 'Model key is required',
+    };
+  }
+
+  const result = removeDesktopModel(modelKey);
+  if (result.status === 'success') {
+    return {
+      ok: true,
+      status: 'success',
+      modelKey,
+    };
+  }
+
+  return {
+    ok: false,
+    status: result.status,
+    modelKey,
+    message: result.message || 'Unable to remove model',
+  };
+});
+
+ipcMain.handle('desktop-ai-download-status', async () => ({
+  ok: true,
+  items: getDownloadStatusSnapshot(),
+}));
 
 ipcMain.handle('desktop-ai-generate', async (_, payload) => {
   const mode = payload?.mode;
