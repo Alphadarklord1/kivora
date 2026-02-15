@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { generateSmartContent, GeneratedQuestion, type ToolMode, type GeneratedContent } from '@/lib/offline/generate';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 export interface ExamPrepData {
   summary: string;
@@ -33,6 +34,33 @@ export function ExamSimulator({
   onSrsSeed,
   generateContent,
 }: ExamSimulatorProps) {
+  const { t } = useI18n({
+    'No objectives generated.': 'لم يتم توليد أهداف.',
+    'No key topics detected.': 'لم يتم اكتشاف موضوعات رئيسية.',
+    Objectives: 'الأهداف',
+    'Key Topics': 'الموضوعات الرئيسية',
+    'Exam Prep + Simulator': 'التحضير للاختبار + المحاكي',
+    'Create objectives, generate an exam, and surface weak areas.': 'أنشئ أهدافًا، ولّد اختبارًا، واكشف نقاط الضعف.',
+    'Preparing...': 'جارٍ التحضير...',
+    'Generate Exam Prep': 'توليد تحضير الاختبار',
+    'Exam source text': 'نص مصدر الاختبار',
+    'Paste study material for exam prep...': 'ألصق المادة الدراسية لتحضير الاختبار...',
+    'Paste text above to start exam prep.': 'ألصق النص أعلاه لبدء تحضير الاختبار.',
+    'Select a file to use as exam source.': 'اختر ملفًا لاستخدامه كمصدر للاختبار.',
+    'Exam Prep': 'تحضير الاختبار',
+    'Learning Objectives': 'أهداف التعلم',
+    'Generate Exam': 'توليد اختبار',
+    'Generate SRS Deck': 'توليد مجموعة SRS',
+    '{count} questions · {minutes} min': '{count} أسئلة · {minutes} دقيقة',
+    'Start Exam': 'بدء الاختبار',
+    'Time left': 'الوقت المتبقي',
+    'Submit Exam': 'إرسال الاختبار',
+    'Score: {score}%': 'النتيجة: {score}%',
+    'Weak areas: {areas}': 'نقاط الضعف: {areas}',
+    'Great job!': 'عمل رائع!',
+    'New Exam': 'اختبار جديد',
+    None: 'لا يوجد',
+  });
   const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [started, setStarted] = useState(false);
@@ -49,9 +77,9 @@ export function ExamSimulator({
   }, [started, timeLeft]);
 
   const formatPrepSummary = (prep: ExamPrepData) => {
-    const objectives = prep.learningObjectives.length ? prep.learningObjectives.join('; ') : 'No objectives generated.';
-    const topics = prep.keyTopics.length ? prep.keyTopics.join(', ') : 'No key topics detected.';
-    return `Objectives: ${objectives}\nKey Topics: ${topics}`;
+    const objectives = prep.learningObjectives.length ? prep.learningObjectives.join('; ') : t('No objectives generated.');
+    const topics = prep.keyTopics.length ? prep.keyTopics.join(', ') : t('No key topics detected.');
+    return `${t('Objectives')}: ${objectives}\n${t('Key Topics')}: ${topics}`;
   };
 
   const buildExamFromPrep = (prep: ExamPrepData | null) => {
@@ -110,6 +138,7 @@ export function ExamSimulator({
     setStarted(false);
 
     onResult?.('Exam', `Score: ${score}% • Weak: ${weakTopics.join(', ') || 'None'}`);
+    onResult?.('Exam', `${t('Score: {score}%', { score })} • ${t('Weak areas: {areas}', { areas: weakTopics.join(', ') || t('None') })}`);
 
     await fetch('/api/library', {
       method: 'POST',
@@ -133,73 +162,73 @@ export function ExamSimulator({
     <div className="exam-sim">
       <div className="exam-header">
         <div>
-          <h3>Exam Prep + Simulator</h3>
-          <p>Create objectives, generate an exam, and surface weak areas.</p>
+          <h3>{t('Exam Prep + Simulator')}</h3>
+          <p>{t('Create objectives, generate an exam, and surface weak areas.')}</p>
         </div>
         <button
           className="btn"
           onClick={generateExamPrep}
           disabled={!inputText.trim() || generatingPrep}
         >
-          {generatingPrep ? 'Preparing...' : 'Generate Exam Prep'}
+          {generatingPrep ? t('Preparing...') : t('Generate Exam Prep')}
         </button>
       </div>
 
       {manualInputEnabled && (
         <div className="input-block">
-          <label>Exam source text</label>
+          <label>{t('Exam source text')}</label>
           <textarea
             value={inputText}
             onChange={(e) => onInputChange(e.target.value)}
             rows={6}
-            placeholder="Paste study material for exam prep..."
+            placeholder={t('Paste study material for exam prep...')}
           />
         </div>
       )}
 
       {!inputText.trim() && (
         <div className="empty">
-          {manualInputEnabled ? 'Paste text above to start exam prep.' : 'Select a file to use as exam source.'}
+          {manualInputEnabled ? t('Paste text above to start exam prep.') : t('Select a file to use as exam source.')}
         </div>
       )}
 
       {prepData && (
         <div className="prep-card">
-          <h4>Exam Prep</h4>
+          <h4>{t('Exam Prep')}</h4>
           <div className="prep-grid">
             <div>
-              <div className="prep-label">Learning Objectives</div>
+              <div className="prep-label">{t('Learning Objectives')}</div>
               <ul>
-                {(prepData.learningObjectives.length ? prepData.learningObjectives : ['No objectives generated.']).map((item, idx) => (
+                {(prepData.learningObjectives.length ? prepData.learningObjectives : [t('No objectives generated.')]).map((item, idx) => (
                   <li key={idx}>{item}</li>
                 ))}
               </ul>
             </div>
             <div>
-              <div className="prep-label">Key Topics</div>
+              <div className="prep-label">{t('Key Topics')}</div>
               <div className="topics">
-                {(prepData.keyTopics.length ? prepData.keyTopics : ['No key topics detected.']).map((topic, idx) => (
+                {(prepData.keyTopics.length ? prepData.keyTopics : [t('No key topics detected.')]).map((topic, idx) => (
                   <span key={idx} className="chip">{topic}</span>
                 ))}
               </div>
             </div>
           </div>
           <div className="prep-actions">
-            <button className="btn secondary" onClick={() => buildExamFromPrep(prepData)}>Generate Exam</button>
-            <button className="btn secondary" onClick={() => onSrsSeed?.(prepData)}>Generate SRS Deck</button>
+            <button className="btn secondary" onClick={() => buildExamFromPrep(prepData)}>{t('Generate Exam')}</button>
+            <button className="btn secondary" onClick={() => onSrsSeed?.(prepData)}>{t('Generate SRS Deck')}</button>
           </div>
         </div>
       )}
 
       {questions.length > 0 && !started && !result && (
         <div className="exam-ready">
-          <p>{questions.length} questions · {examMinutes} min</p>
-          <button className="btn" onClick={startExam}>Start Exam</button>
+          <p>{t('{count} questions · {minutes} min', { count: questions.length, minutes: examMinutes })}</p>
+          <button className="btn" onClick={startExam}>{t('Start Exam')}</button>
         </div>
       )}
 
       {started && (
-        <div className="timer">Time left: {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}</div>
+        <div className="timer">{t('Time left')}: {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}</div>
       )}
 
       {started && questions.map((q, idx) => (
@@ -222,14 +251,14 @@ export function ExamSimulator({
       ))}
 
       {started && (
-        <button className="btn secondary" onClick={finishExam}>Submit Exam</button>
+        <button className="btn secondary" onClick={finishExam}>{t('Submit Exam')}</button>
       )}
 
       {result && (
         <div className="result">
-          <h4>Score: {result.score}%</h4>
-          <p>Weak areas: {result.weak.join(', ') || 'Great job!'}</p>
-          <button className="btn secondary" onClick={() => { setQuestions([]); setResult(null); }}>New Exam</button>
+          <h4>{t('Score: {score}%', { score: result.score })}</h4>
+          <p>{t('Weak areas: {areas}', { areas: result.weak.join(', ') || t('Great job!') })}</p>
+          <button className="btn secondary" onClick={() => { setQuestions([]); setResult(null); }}>{t('New Exam')}</button>
         </div>
       )}
 

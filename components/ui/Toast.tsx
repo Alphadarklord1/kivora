@@ -292,7 +292,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         }
 
         /* Dark mode support */
-        [data-theme='dark'] {
+        [data-theme='dark'],
+        [data-theme='blue'],
+        [data-theme='black'] {
           --toast-success-bg: #064e3b;
           --toast-success-border: #10b981;
           --toast-success-icon: #34d399;

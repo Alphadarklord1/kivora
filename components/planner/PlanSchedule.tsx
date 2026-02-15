@@ -5,6 +5,7 @@ import { GeneratedSchedule, formatScheduleDate, groupByWeek } from '@/lib/planne
 import { downloadICSFile, generateGoogleCalendarURL, generateExamGoogleCalendarURL } from '@/lib/planner/calendar';
 import { StudyPlan } from '@/hooks/useStudyPlans';
 import { useFoldersStore } from '@/lib/store/folders';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface PlanScheduleProps {
   plan: StudyPlan | null;
@@ -22,6 +23,41 @@ export function PlanSchedule({
   plan, generatedSchedule, title, onToggleDay, onSaveNotes,
   onStartTimer, onSave, onDelete, saving,
 }: PlanScheduleProps) {
+  const { t, locale } = useI18n({
+    '{days}d left': 'متبقي {days} يوم',
+    'Exam day!': 'يوم الاختبار!',
+    'days ({progress}%)': 'أيام ({progress}%)',
+    'Study Hours': 'ساعات الدراسة',
+    Topics: 'الموضوعات',
+    'Revision Days': 'أيام المراجعة',
+    'Study Materials': 'مواد الدراسة',
+    'more': 'أخرى',
+    "Today's Study": 'دراسة اليوم',
+    'Start Timer': 'بدء المؤقت',
+    'Show completed days': 'إظهار الأيام المكتملة',
+    'Week {n}': 'الأسبوع {n}',
+    TODAY: 'اليوم',
+    REVISION: 'مراجعة',
+    'Start timer': 'بدء المؤقت',
+    '{count} sessions logged': 'تم تسجيل {count} جلسات',
+    'Add a note for this day...': 'أضف ملاحظة لهذا اليوم...',
+    Save: 'حفظ',
+    Cancel: 'إلغاء',
+    '+ Add note': '+ إضافة ملاحظة',
+    Copy: 'نسخ',
+    Export: 'تصدير',
+    'Saving...': 'جارٍ الحفظ...',
+    'Save Plan': 'حفظ الخطة',
+    'Delete Plan': 'حذف الخطة',
+    'Export Schedule': 'تصدير الجدول',
+    'Study start time': 'وقت بدء الدراسة',
+    'Download .ics File': 'تنزيل ملف .ics',
+    'or add directly': 'أو الإضافة مباشرة',
+    'Google Cal (Day 1)': 'Google Cal (Day 1)',
+    'Google Cal (Exam)': 'Google Cal (Exam)',
+    'Day {n}': 'اليوم {n}',
+    '{count} topics': '{count} موضوعات',
+  });
   const schedule = plan?.schedule || generatedSchedule;
   const isSaved = !!plan;
 
@@ -62,7 +98,7 @@ export function PlanSchedule({
   const handleCopy = () => {
     const text = schedule.days.map(d => {
       const topics = d.topics.map(t => `  ${t.name} (${t.duration}min - ${t.tasks.join(', ')})`).join('\n');
-      return `Day ${d.dayNumber} - ${formatScheduleDate(d.date)}${d.isRevision ? ' [REVISION]' : ''}\n${topics}`;
+      return `${t('Day {n}', { n: d.dayNumber })} - ${formatScheduleDate(d.date, locale)}${d.isRevision ? ` [${t('REVISION')}]` : ''}\n${topics}`;
     }).join('\n\n');
     navigator.clipboard.writeText(`${title}\n${'='.repeat(title.length)}\n\n${text}`);
   };
@@ -97,11 +133,11 @@ export function PlanSchedule({
         <div>
           <h2>{title}</h2>
           <span className="schedule-range">
-            {formatScheduleDate(schedule.startDate)} - {formatScheduleDate(schedule.endDate)}
+            {formatScheduleDate(schedule.startDate, locale)} - {formatScheduleDate(schedule.endDate, locale)}
           </span>
         </div>
         <div className={`countdown ${daysUntilExam <= 7 ? 'urgent' : ''}`}>
-          {daysUntilExam > 0 ? `${daysUntilExam}d left` : 'Exam day!'}
+          {daysUntilExam > 0 ? t('{days}d left', { days: daysUntilExam }) : t('Exam day!')}
         </div>
       </div>
 
@@ -109,7 +145,7 @@ export function PlanSchedule({
       {isSaved && (
         <div className="progress-section">
           <div className="progress-bar"><div className="progress-fill" style={{ width: `${progress}%` }} /></div>
-          <span className="progress-label">{completedDays}/{schedule.totalDays} days ({progress}%)</span>
+          <span className="progress-label">{completedDays}/{schedule.totalDays} {t('days ({progress}%)', { progress })}</span>
         </div>
       )}
 
@@ -117,15 +153,15 @@ export function PlanSchedule({
       <div className="stats-grid">
         <div className="stat-card">
           <span className="stat-value">{schedule.summary.totalStudyHours}h</span>
-          <span className="stat-label">Study Hours</span>
+          <span className="stat-label">{t('Study Hours')}</span>
         </div>
         <div className="stat-card">
           <span className="stat-value">{schedule.summary.topicsCount}</span>
-          <span className="stat-label">Topics</span>
+          <span className="stat-label">{t('Topics')}</span>
         </div>
         <div className="stat-card">
           <span className="stat-value">{schedule.summary.revisionDays}</span>
-          <span className="stat-label">Revision Days</span>
+          <span className="stat-label">{t('Revision Days')}</span>
         </div>
       </div>
 
@@ -134,7 +170,7 @@ export function PlanSchedule({
         <div className="materials-section">
           <h4>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-            Study Materials
+            {t('Study Materials')}
           </h4>
           <div className="materials-list">
             {linkedFiles.slice(0, 8).map(f => (
@@ -143,7 +179,7 @@ export function PlanSchedule({
                 {f.name}
               </span>
             ))}
-            {linkedFiles.length > 8 && <span className="material-chip more">+{linkedFiles.length - 8} more</span>}
+            {linkedFiles.length > 8 && <span className="material-chip more">+{linkedFiles.length - 8} {t('more')}</span>}
           </div>
         </div>
       )}
@@ -152,10 +188,10 @@ export function PlanSchedule({
       {todayIdx !== null && (
         <div className="today-highlight">
           <div className="today-header">
-            <span className="today-label">Today&apos;s Study</span>
+            <span className="today-label">{t("Today's Study")}</span>
             <button className="timer-btn primary" onClick={() => onStartTimer(todayIdx)}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              Start Timer
+              {t('Start Timer')}
             </button>
           </div>
           <div className="today-topics">
@@ -170,7 +206,7 @@ export function PlanSchedule({
       <div className="view-controls">
         <label className="toggle-label">
           <input type="checkbox" checked={showCompleted} onChange={e => setShowCompleted(e.target.checked)} />
-          Show completed days
+          {t('Show completed days')}
         </label>
       </div>
 
@@ -185,7 +221,7 @@ export function PlanSchedule({
           return (
             <div key={weekNum} className="week-section">
               <button className="week-header" onClick={() => toggleWeek(weekNum)}>
-                <span className="week-title">Week {weekNum}</span>
+                <span className="week-title">{t('Week {n}', { n: weekNum })}</span>
                 <span className="week-progress">{weekCompleted}/{weekDays.length}</span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}><polyline points="6 9 12 15 18 9"/></svg>
               </button>
@@ -209,13 +245,13 @@ export function PlanSchedule({
                               />
                             )}
                             <div>
-                              <span className="day-num">Day {day.dayNumber}</span>
-                              <span className="day-date">{formatScheduleDate(day.date)}</span>
+                              <span className="day-num">{t('Day {n}', { n: day.dayNumber })}</span>
+                              <span className="day-date">{formatScheduleDate(day.date, locale)}</span>
                             </div>
-                            {isToday && <span className="today-tag">TODAY</span>}
-                            {day.isRevision && <span className="revision-tag">REVISION</span>}
+                            {isToday && <span className="today-tag">{t('TODAY')}</span>}
+                            {day.isRevision && <span className="revision-tag">{t('REVISION')}</span>}
                           </div>
-                          <button className="timer-btn small" onClick={() => onStartTimer(globalIdx)} title="Start timer">
+                          <button className="timer-btn small" onClick={() => onStartTimer(globalIdx)} title={t('Start timer')}>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                           </button>
                         </div>
@@ -238,7 +274,7 @@ export function PlanSchedule({
                         {day.sessions && day.sessions.length > 0 && (
                           <div className="day-sessions">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                            {day.sessions.length} session{day.sessions.length > 1 ? 's' : ''} logged
+                            {t('{count} sessions logged', { count: day.sessions.length })}
                           </div>
                         )}
 
@@ -250,12 +286,12 @@ export function PlanSchedule({
                                 <textarea
                                   value={noteText}
                                   onChange={e => setNoteText(e.target.value)}
-                                  placeholder="Add a note for this day..."
+                                  placeholder={t('Add a note for this day...')}
                                   rows={2}
                                 />
                                 <div className="note-actions">
-                                  <button className="note-btn save" onClick={() => handleSaveNote(globalIdx)}>Save</button>
-                                  <button className="note-btn" onClick={() => setEditingNote(null)}>Cancel</button>
+                                  <button className="note-btn save" onClick={() => handleSaveNote(globalIdx)}>{t('Save')}</button>
+                                  <button className="note-btn" onClick={() => setEditingNote(null)}>{t('Cancel')}</button>
                                 </div>
                               </div>
                             ) : day.notes ? (
@@ -264,7 +300,7 @@ export function PlanSchedule({
                               </div>
                             ) : (
                               <button className="add-note-btn" onClick={() => { setEditingNote(globalIdx); setNoteText(''); }}>
-                                + Add note
+                                {t('+ Add note')}
                               </button>
                             )}
                           </div>
@@ -283,19 +319,19 @@ export function PlanSchedule({
       <div className="schedule-actions">
         <button className="action-btn" onClick={handleCopy}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Copy
+          {t('Copy')}
         </button>
         <button className="action-btn" onClick={() => setShowExport(true)}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          Export
+          {t('Export')}
         </button>
         {!isSaved && onSave && (
           <button className="action-btn primary" onClick={onSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save Plan'}
+            {saving ? t('Saving...') : t('Save Plan')}
           </button>
         )}
         {isSaved && onDelete && (
-          <button className="action-btn danger" onClick={onDelete}>Delete Plan</button>
+          <button className="action-btn danger" onClick={onDelete}>{t('Delete Plan')}</button>
         )}
       </div>
 
@@ -304,25 +340,25 @@ export function PlanSchedule({
         <div className="modal-overlay" onClick={() => setShowExport(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Export Schedule</h3>
+              <h3>{t('Export Schedule')}</h3>
               <button className="modal-close" onClick={() => setShowExport(false)}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
             <div className="modal-body">
               <div className="form-group-modal">
-                <label>Study start time</label>
+                <label>{t('Study start time')}</label>
                 <select value={studyStartHour} onChange={e => setStudyStartHour(Number(e.target.value))}>
                   {Array.from({ length: 15 }, (_, i) => i + 6).map(h => (
                     <option key={h} value={h}>{h === 12 ? '12 PM' : h > 12 ? `${h - 12} PM` : `${h} AM`}</option>
                   ))}
                 </select>
               </div>
-              <button className="export-btn" onClick={handleExportICS}>Download .ics File</button>
-              <div className="export-divider">or add directly</div>
+              <button className="export-btn" onClick={handleExportICS}>{t('Download .ics File')}</button>
+              <div className="export-divider">{t('or add directly')}</div>
               <div className="export-quick">
-                <button className="export-quick-btn" onClick={handleGoogleDay1}>Google Cal (Day 1)</button>
-                <button className="export-quick-btn" onClick={handleGoogleExam}>Google Cal (Exam)</button>
+                <button className="export-quick-btn" onClick={handleGoogleDay1}>{t('Google Cal (Day 1)')}</button>
+                <button className="export-quick-btn" onClick={handleGoogleExam}>{t('Google Cal (Exam)')}</button>
               </div>
             </div>
           </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface Expression {
   id: string;
@@ -26,6 +27,29 @@ interface GraphingCalculatorProps {
 }
 
 export function GraphingCalculator({ initialExpression }: GraphingCalculatorProps) {
+  const { t } = useI18n({
+    'Parabola': 'قطع مكافئ',
+    'Sine Wave': 'موجة جيب',
+    'Cosine': 'جيب التمام',
+    'Cubic': 'تكعيبي',
+    'Exponential': 'أسي',
+    'Absolute': 'قيمة مطلقة',
+    'Tangent': 'ظل',
+    'Log': 'لوغاريتم',
+    'Invalid expression': 'تعبير غير صالح',
+    'Graphing Calculator': 'آلة الرسم البياني',
+    'Plot and visualize mathematical functions': 'ارسم الدوال الرياضية بصريًا.',
+    'Quick add:': 'إضافة سريعة:',
+    'e.g. x^2, sin(x), 2*x + 1': 'مثال: x^2, sin(x), 2*x + 1',
+    'Add expression': 'إضافة تعبير',
+    'Zoom in': 'تكبير',
+    'Zoom out': 'تصغير',
+    'Reset view': 'إعادة العرض',
+    'Reset': 'إعادة ضبط',
+    'Grid': 'الشبكة',
+    'to': 'إلى',
+    'Supports: x^2, sin(x), cos(x), tan(x), sqrt(x), abs(x), log(x), exp(x), pi, e. Use * for multiplication. Drag to pan, scroll to zoom.': 'يدعم: x^2, sin(x), cos(x), tan(x), sqrt(x), abs(x), log(x), exp(x), pi, e. استخدم * للضرب. اسحب للتحريك واستخدم عجلة الفأرة للتكبير.',
+  });
   const graphRef = useRef<HTMLDivElement>(null);
   const [expressions, setExpressions] = useState<Expression[]>([
     { id: '1', fn: initialExpression || 'x^2', color: COLORS[0] },
@@ -68,7 +92,7 @@ export function GraphingCalculator({ initialExpression }: GraphingCalculatorProp
         },
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid expression');
+      setError(err instanceof Error ? err.message : t('Invalid expression'));
     }
   }, [expressions, xDomain, yDomain, showGrid]);
 
@@ -156,18 +180,18 @@ export function GraphingCalculator({ initialExpression }: GraphingCalculatorProp
       {/* Header */}
       <div className="graph-header">
         <div>
-          <h3>Graphing Calculator</h3>
-          <p>Plot and visualize mathematical functions</p>
+          <h3>{t('Graphing Calculator')}</h3>
+          <p>{t('Plot and visualize mathematical functions')}</p>
         </div>
       </div>
 
       {/* Presets */}
       <div className="presets">
-        <label>Quick add:</label>
+        <label>{t('Quick add:')}</label>
         <div className="preset-btns">
           {PRESETS.map(p => (
             <button key={p.label} className="preset-btn" onClick={() => handlePreset(p.fn)}>
-              {p.label}
+              {t(p.label)}
             </button>
           ))}
         </div>
@@ -183,7 +207,7 @@ export function GraphingCalculator({ initialExpression }: GraphingCalculatorProp
               type="text"
               value={expr.fn}
               onChange={(e) => updateExpression(expr.id, e.target.value)}
-              placeholder="e.g. x^2, sin(x), 2*x + 1"
+              placeholder={t('e.g. x^2, sin(x), 2*x + 1')}
               className="expr-input"
             />
             {expressions.length > 1 && (
@@ -194,7 +218,7 @@ export function GraphingCalculator({ initialExpression }: GraphingCalculatorProp
           </div>
         ))}
         <button className="add-expr-btn" onClick={addExpression}>
-          + Add expression
+          + {t('Add expression')}
         </button>
       </div>
 
@@ -208,13 +232,13 @@ export function GraphingCalculator({ initialExpression }: GraphingCalculatorProp
       {/* Graph Controls */}
       <div className="graph-controls">
         <div className="zoom-btns">
-          <button className="ctrl-btn" onClick={zoomIn} title="Zoom in">+</button>
-          <button className="ctrl-btn" onClick={zoomOut} title="Zoom out">-</button>
-          <button className="ctrl-btn" onClick={resetView} title="Reset view">Reset</button>
+          <button className="ctrl-btn" onClick={zoomIn} title={t('Zoom in')}>+</button>
+          <button className="ctrl-btn" onClick={zoomOut} title={t('Zoom out')}>-</button>
+          <button className="ctrl-btn" onClick={resetView} title={t('Reset view')}>{t('Reset')}</button>
         </div>
         <label className="grid-toggle">
           <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} />
-          Grid
+          {t('Grid')}
         </label>
       </div>
 
@@ -228,7 +252,7 @@ export function GraphingCalculator({ initialExpression }: GraphingCalculatorProp
             onChange={(e) => setXDomain([Number(e.target.value), xDomain[1]])}
             className="domain-input"
           />
-          <span>to</span>
+          <span>{t('to')}</span>
           <input
             type="number"
             value={xDomain[1]}
@@ -244,7 +268,7 @@ export function GraphingCalculator({ initialExpression }: GraphingCalculatorProp
             onChange={(e) => setYDomain([Number(e.target.value), yDomain[1]])}
             className="domain-input"
           />
-          <span>to</span>
+          <span>{t('to')}</span>
           <input
             type="number"
             value={yDomain[1]}
@@ -259,8 +283,7 @@ export function GraphingCalculator({ initialExpression }: GraphingCalculatorProp
 
       {/* Help text */}
       <p className="graph-help">
-        Supports: x^2, sin(x), cos(x), tan(x), sqrt(x), abs(x), log(x), exp(x), pi, e.
-        Use * for multiplication. Drag to pan, scroll to zoom.
+        {t('Supports: x^2, sin(x), cos(x), tan(x), sqrt(x), abs(x), log(x), exp(x), pi, e. Use * for multiplication. Drag to pan, scroll to zoom.')}
       </p>
 
       <style jsx>{`

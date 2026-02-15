@@ -40,7 +40,9 @@ export function Skeleton({
           }
         }
 
-        [data-theme='dark'] {
+        [data-theme='dark'],
+        [data-theme='blue'],
+        [data-theme='black'] {
           --skeleton-bg: #374151;
         }
       `}</style>

@@ -212,9 +212,9 @@ export function calculateProgress(schedule: GeneratedSchedule): number {
 /**
  * Format a date for display
  */
-export function formatScheduleDate(dateStr: string): string {
+export function formatScheduleDate(dateStr: string, locale?: string): string {
   const date = new Date(dateStr);
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString(locale, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',

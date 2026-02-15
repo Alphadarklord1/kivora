@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStudyTimer } from '@/lib/planner/timer-store';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 function formatTime(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
@@ -11,6 +12,15 @@ function formatTime(totalSeconds: number): string {
 }
 
 export function StudyTimerFloat() {
+  const { t } = useI18n({
+    'Expand timer': 'توسيع المؤقت',
+    'Study Session': 'جلسة دراسة',
+    Minimize: 'تصغير',
+    'Stop timer': 'إيقاف المؤقت',
+    'Go to Planner': 'الانتقال إلى المخطط',
+    Break: 'استراحة',
+    Study: 'دراسة',
+  });
   const timer = useStudyTimer();
   const router = useRouter();
   const [minimized, setMinimized] = useState(false);
@@ -20,7 +30,7 @@ export function StudyTimerFloat() {
   if (minimized) {
     return (
       <>
-        <button className="float-mini" onClick={() => setMinimized(false)} title="Expand timer">
+        <button className="float-mini" onClick={() => setMinimized(false)} title={t('Expand timer')}>
           <span className={`mini-dot ${timer.isRunning ? 'running' : 'paused'} ${timer.breakMode ? 'break' : ''}`} />
           <span className="mini-time">{formatTime(timer.seconds)}</span>
         </button>
@@ -71,22 +81,22 @@ export function StudyTimerFloat() {
       <div className="float-card">
         <div className="float-header">
           <span className="float-title" title={timer.currentPlanTitle}>
-            {timer.currentPlanTitle || 'Study Session'}
+            {timer.currentPlanTitle || t('Study Session')}
           </span>
           <div className="float-header-actions">
-            <button className="float-icon-btn" onClick={() => setMinimized(true)} title="Minimize">
+            <button className="float-icon-btn" onClick={() => setMinimized(true)} title={t('Minimize')}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
             </button>
-            <button className="float-icon-btn close" onClick={timer.clearTimer} title="Stop timer">
+            <button className="float-icon-btn close" onClick={timer.clearTimer} title={t('Stop timer')}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
         </div>
 
-        <div className={`float-body ${timer.breakMode ? 'break' : ''}`} onClick={() => router.push('/planner')} title="Go to Planner">
+        <div className={`float-body ${timer.breakMode ? 'break' : ''}`} onClick={() => router.push('/planner')} title={t('Go to Planner')}>
           <span className="float-time">{formatTime(timer.seconds)}</span>
           <span className={`float-mode ${timer.breakMode ? 'break' : 'study'}`}>
-            {timer.breakMode ? 'Break' : 'Study'}
+            {timer.breakMode ? t('Break') : t('Study')}
           </span>
         </div>
 

@@ -32,14 +32,22 @@ export async function getUserId(request: NextRequest): Promise<string | null> {
 
     if (existingDemoUser) return existingDemoUser.id;
 
-    const demoUserId = uuidv4();
-    await db.insert(users).values({
-      id: demoUserId,
-      email: demoEmail,
-      name: 'Local Demo',
-      image: null,
-    });
-    return demoUserId;
+    try {
+      const demoUserId = uuidv4();
+      await db.insert(users).values({
+        id: demoUserId,
+        email: demoEmail,
+        name: 'Local Demo',
+        image: null,
+      });
+      return demoUserId;
+    } catch {
+      // Concurrent guest bootstrap may create the same demo user.
+      const retryDemoUser = await db.query.users.findFirst({
+        where: eq(users.email, demoEmail),
+      });
+      return retryDemoUser?.id ?? null;
+    }
   }
 
   return null;

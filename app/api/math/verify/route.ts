@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import { isGuestModeEnabled } from '@/lib/runtime/mode';
 
 // Verify math answers by searching the web
 
@@ -117,7 +118,7 @@ function checkAnswerInResults(
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user?.id) {
+    if (!session?.user?.id && !isGuestModeEnabled()) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

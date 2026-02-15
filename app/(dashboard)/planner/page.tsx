@@ -5,6 +5,7 @@ import { useStudyPlans, StudyPlan } from '@/hooks/useStudyPlans';
 import { useStudyTimer } from '@/lib/planner/timer-store';
 import { generateStudySchedule, GeneratedSchedule, StudyTopic } from '@/lib/planner/generate';
 import { PlanList, PlanForm, PlanSchedule, PlanTimer } from '@/components/planner';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 type View = 'list' | 'form' | 'schedule' | 'timer';
 
@@ -17,6 +18,15 @@ interface PendingPlan {
 }
 
 export default function PlannerPage() {
+  const { t } = useI18n({
+    'Delete this study plan?': 'حذف خطة الدراسة هذه؟',
+    'Study Planner': 'مخطط الدراسة',
+    'Plan your study schedule and track progress': 'خطط جدول دراستك وتابع تقدمك',
+    'No Study Plans Yet': 'لا توجد خطط دراسة بعد',
+    'Create your first plan to organize your study schedule with smart time allocation.': 'أنشئ خطتك الأولى لتنظيم جدول دراستك بتوزيع وقت ذكي.',
+    'Create Study Plan': 'إنشاء خطة دراسة',
+    'Select a plan from the sidebar or create a new one': 'اختر خطة من الشريط الجانبي أو أنشئ خطة جديدة',
+  });
   const { plans, loading, createPlan, updatePlan, deletePlan, updateProgress } = useStudyPlans();
   const timer = useStudyTimer();
 
@@ -118,7 +128,7 @@ export default function PlannerPage() {
   const handleDelete = useCallback(async (planId?: string) => {
     const id = planId || selectedPlan?.id;
     if (!id) return;
-    if (!confirm('Delete this study plan?')) return;
+    if (!confirm(t('Delete this study plan?'))) return;
     const ok = await deletePlan(id);
     if (ok) {
       if (selectedPlan?.id === id) {
@@ -148,8 +158,8 @@ export default function PlannerPage() {
   return (
     <div className="planner-page">
       <div className="page-header">
-        <h1>Study Planner</h1>
-        <p>Plan your study schedule and track progress</p>
+        <h1>{t('Study Planner')}</h1>
+        <p>{t('Plan your study schedule and track progress')}</p>
       </div>
 
       <div className="planner-layout">
@@ -197,10 +207,10 @@ export default function PlannerPage() {
                 <line x1="10" y1="14" x2="14" y2="14"/>
                 <line x1="12" y1="12" x2="12" y2="16"/>
               </svg>
-              <h3>No Study Plans Yet</h3>
-              <p>Create your first plan to organize your study schedule with smart time allocation.</p>
+              <h3>{t('No Study Plans Yet')}</h3>
+              <p>{t('Create your first plan to organize your study schedule with smart time allocation.')}</p>
               <button className="create-btn" onClick={handleNewPlan}>
-                Create Study Plan
+                {t('Create Study Plan')}
               </button>
             </div>
           )}
@@ -210,7 +220,7 @@ export default function PlannerPage() {
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3 }}>
                 <polyline points="15 18 9 12 15 6"/>
               </svg>
-              <p>Select a plan from the sidebar or create a new one</p>
+              <p>{t('Select a plan from the sidebar or create a new one')}</p>
             </div>
           )}
         </main>

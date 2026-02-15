@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { MathRenderer, MathText } from '@/components/math/MathRenderer';
 import { solveOffline, MathSolution, MathStep } from '@/lib/math/offline-solver';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface VerificationResult {
   isLikelyCorrect: boolean;
@@ -21,6 +22,47 @@ interface MathSolverProps {
 }
 
 export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
+  const { t } = useI18n({
+    'Please enter a math problem': 'يرجى إدخال مسألة رياضية',
+    'Matrix inputs are best handled in MATLAB Lab. Switch to the MATLAB Lab tool.': 'إدخالات المصفوفات تُعالج بشكل أفضل في MATLAB Lab. انتقل إلى أداة MATLAB Lab.',
+    'Failed to solve': 'تعذر الحل',
+    'Failed to solve problem': 'تعذر حل المسألة',
+    'Verification failed': 'فشل التحقق',
+    'Failed to verify answer': 'تعذر التحقق من الإجابة',
+    'Math Solver': 'محلل الرياضيات',
+    'Offline': 'بدون إنترنت',
+    'Calculus, Algebra, Arithmetic & more': 'تفاضل وتكامل، جبر، حساب والمزيد',
+    'Reset': 'إعادة ضبط',
+    'Offline Mode': 'وضع بدون إنترنت',
+    'AI Mode': 'وضع الذكاء الاصطناعي',
+    'MATLAB Syntax Mode': 'وضع صياغة MATLAB',
+    'Enabled': 'مفعّل',
+    'Disabled': 'معطل',
+    'Try an example:': 'جرّب مثالًا:',
+    'MATLAB-ready templates:': 'قوالب جاهزة لـ MATLAB:',
+    'Enter your math problem:': 'أدخل المسألة الرياضية:',
+    'Quick symbols': 'رموز سريعة',
+    'Open keyboard': 'فتح لوحة الرموز',
+    'Examples:': 'أمثلة:',
+    'Supports MATLAB style: `.^`, `.*`, `./` and standard math (`x^2`, `sqrt()`).': 'يدعم صياغة MATLAB مثل `.^`, `.*`, `./` والرياضيات القياسية (`x^2`, `sqrt()`).',
+    'Math Keyboard': 'لوحة رموز الرياضيات',
+    'Close': 'إغلاق',
+    'Preview:': 'معاينة:',
+    'Solving...': 'جارٍ الحل...',
+    'Solve Problem': 'حل المسألة',
+    'Solved Offline': 'تم الحل بدون إنترنت',
+    'Problem': 'المسألة',
+    'Step-by-Step Solution': 'حل خطوة بخطوة',
+    'Final Answer': 'الإجابة النهائية',
+    'Verifying...': 'جارٍ التحقق...',
+    'Verify Answer (Web Search)': 'تحقق من الإجابة (بحث ويب)',
+    'Could not verify': 'تعذر التحقق',
+    'Copy Solution': 'نسخ الحل',
+    'New Problem': 'مسألة جديدة',
+    'Graph this': 'ارسمها',
+    'Try with AI': 'جرّب بالذكاء الاصطناعي',
+    'Likely Correct ({confidence} confidence)': 'غالبًا صحيحة (ثقة {confidence})',
+  });
   const [problem, setProblem] = useState('');
   const [solution, setSolution] = useState<MathSolution | null>(null);
   const [verification, setVerification] = useState<VerificationResult | null>(null);
@@ -68,7 +110,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
 
   const handleSolve = async () => {
     if (!problem.trim()) {
-      setError('Please enter a math problem');
+      setError(t('Please enter a math problem'));
       return;
     }
 
@@ -81,7 +123,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
       const normalized = matlabMode ? normalizeMatlabSyntax(problem.trim()) : problem.trim();
 
       if (/\[.*\]/.test(normalized)) {
-        setError('Matrix inputs are best handled in MATLAB Lab. Switch to the MATLAB Lab tool.');
+        setError(t('Matrix inputs are best handled in MATLAB Lab. Switch to the MATLAB Lab tool.'));
         setSolving(false);
         return;
       }
@@ -96,7 +138,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
 
         if (!res.ok) {
           const data = await res.json();
-          throw new Error(data.error || 'Failed to solve');
+          throw new Error(data.error || t('Failed to solve'));
         }
 
         const data = await res.json();
@@ -107,7 +149,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
         setSolution(result);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to solve problem');
+      setError(err instanceof Error ? err.message : t('Failed to solve problem'));
     } finally {
       setSolving(false);
     }
@@ -131,13 +173,13 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
       });
 
       if (!res.ok) {
-        throw new Error('Verification failed');
+        throw new Error(t('Verification failed'));
       }
 
       const data = await res.json();
       setVerification(data);
     } catch {
-      setError('Failed to verify answer');
+      setError(t('Failed to verify answer'));
     } finally {
       setVerifying(false);
     }
@@ -204,7 +246,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
       }}>
         <div>
           <h3 style={{ marginBottom: 'var(--space-1)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <span>Math Solver</span>
+            <span>{t('Math Solver')}</span>
             {solution?.isOffline && (
               <span style={{
                 fontSize: 'var(--font-tiny)',
@@ -213,17 +255,17 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                 borderRadius: 'var(--radius-sm)',
                 color: 'var(--text-muted)'
               }}>
-                Offline
+                {t('Offline')}
               </span>
             )}
           </h3>
           <p style={{ fontSize: 'var(--font-meta)', color: 'var(--text-muted)', margin: 0 }}>
-            Calculus, Algebra, Arithmetic & more
+            {t('Calculus, Algebra, Arithmetic & more')}
           </p>
         </div>
         {(solution || problem) && (
           <button className="btn ghost" onClick={handleReset} style={{ fontSize: 'var(--font-meta)' }}>
-            Reset
+            {t('Reset')}
           </button>
         )}
       </div>
@@ -259,14 +301,14 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               onClick={() => setUseAI(false)}
               style={{ flex: 1, fontSize: 'var(--font-meta)' }}
             >
-              Offline Mode
+              {t('Offline Mode')}
             </button>
             <button
               className={`btn ${useAI ? '' : 'ghost'}`}
               onClick={() => setUseAI(true)}
               style={{ flex: 1, fontSize: 'var(--font-meta)' }}
             >
-              AI Mode
+              {t('AI Mode')}
             </button>
           </div>
 
@@ -282,13 +324,13 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
             background: 'var(--bg-surface)',
             fontSize: 'var(--font-meta)'
           }}>
-            <span>MATLAB Syntax Mode</span>
+            <span>{t('MATLAB Syntax Mode')}</span>
             <button
               className={`btn ${matlabMode ? '' : 'ghost'}`}
               onClick={() => setMatlabMode(prev => !prev)}
               style={{ fontSize: 'var(--font-tiny)' }}
             >
-              {matlabMode ? 'Enabled' : 'Disabled'}
+              {matlabMode ? t('Enabled') : t('Disabled')}
             </button>
           </div>
 
@@ -313,7 +355,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               display: 'block',
               marginBottom: 'var(--space-2)'
             }}>
-              Try an example:
+              {t('Try an example:')}
             </label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
               {exampleProblems.map((ex) => (
@@ -339,7 +381,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               display: 'block',
               marginBottom: 'var(--space-2)'
             }}>
-              MATLAB-ready templates:
+              {t('MATLAB-ready templates:')}
             </label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
               {matlabTemplates.map((tpl) => (
@@ -363,7 +405,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               marginBottom: 'var(--space-2)',
               display: 'block'
             }}>
-              Enter your math problem:
+              {t('Enter your math problem:')}
             </label>
             {/* Inline Symbol Bar */}
             <div style={{
@@ -380,14 +422,14 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                 marginBottom: 'var(--space-2)'
               }}>
                 <span style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)' }}>
-                  Quick symbols
+                  {t('Quick symbols')}
                 </span>
                 <button
                   className="btn"
                   onClick={() => setShowKeyboard(true)}
                   style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1) var(--space-2)' }}
                 >
-                  Open keyboard
+                  {t('Open keyboard')}
                 </button>
               </div>
               <div style={{
@@ -410,7 +452,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
             <textarea
               value={problem}
               onChange={(e) => setProblem(e.target.value)}
-              placeholder={`Examples:
+              placeholder={`${t('Examples:')}
 - Find the derivative of x^3 + 2x^2 - 5x
 - Integrate x^2 + 3x dx
 - Solve x^2 - 5x + 6 = 0
@@ -426,7 +468,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               color: 'var(--text-muted)',
               marginTop: 'var(--space-2)'
             }}>
-              Supports MATLAB style: `.^`, `.*`, `./` and standard math (`x^2`, `sqrt()`).
+              {t('Supports MATLAB style: `.^`, `.*`, `./` and standard math (`x^2`, `sqrt()`).')}
             </p>
           </div>
           {showKeyboard && (
@@ -461,8 +503,8 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                     marginBottom: 'var(--space-3)',
                   }}
                 >
-                  <h4 style={{ margin: 0 }}>Math Keyboard</h4>
-                  <button className="btn ghost" onClick={() => setShowKeyboard(false)}>Close</button>
+                  <h4 style={{ margin: 0 }}>{t('Math Keyboard')}</h4>
+                  <button className="btn ghost" onClick={() => setShowKeyboard(false)}>{t('Close')}</button>
                 </div>
                 <div
                   style={{
@@ -496,7 +538,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                 display: 'block',
                 marginBottom: 'var(--space-2)'
               }}>
-                Preview:
+                {t('Preview:')}
               </label>
               <div style={{ fontSize: 'var(--font-lg)' }}>
                 <MathRenderer math={problem} display={true} />
@@ -516,7 +558,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               fontWeight: 600
             }}
           >
-            {solving ? 'Solving...' : 'Solve Problem'}
+            {solving ? t('Solving...') : t('Solve Problem')}
           </button>
         </>
       )}
@@ -544,7 +586,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                 borderRadius: 'var(--radius-sm)',
                 fontSize: 'var(--font-tiny)'
               }}>
-                Solved Offline
+                {t('Solved Offline')}
               </span>
             )}
           </div>
@@ -558,7 +600,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
             textAlign: 'center'
           }}>
             <div style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
-              Problem
+              {t('Problem')}
             </div>
             <div style={{ fontSize: 'var(--font-xl)' }}>
               <MathRenderer math={solution.problem} display={true} />
@@ -568,7 +610,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
           {/* Steps */}
           <div style={{ marginBottom: 'var(--space-4)' }}>
             <h4 style={{ marginBottom: 'var(--space-3)', fontSize: 'var(--font-body)', fontWeight: 600 }}>
-              Step-by-Step Solution
+              {t('Step-by-Step Solution')}
             </h4>
 
             {solution.steps.map((step, index) => (
@@ -591,7 +633,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               fontWeight: 600,
               marginBottom: 'var(--space-2)'
             }}>
-              Final Answer
+              {t('Final Answer')}
             </div>
             <div style={{ fontSize: 'var(--font-xl)', fontWeight: 600 }}>
               <MathRenderer math={solution.finalAnswer} display={true} />
@@ -606,7 +648,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               disabled={verifying}
               style={{ width: '100%', marginBottom: 'var(--space-3)' }}
             >
-              {verifying ? 'Verifying...' : 'Verify Answer (Web Search)'}
+              {verifying ? t('Verifying...') : t('Verify Answer (Web Search)')}
             </button>
           )}
 
@@ -629,8 +671,8 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                 </span>
                 <strong>
                   {verification.isLikelyCorrect
-                    ? `Likely Correct (${verification.confidence} confidence)`
-                    : 'Could not verify'}
+                    ? t('Likely Correct ({confidence} confidence)', { confidence: verification.confidence })
+                    : t('Could not verify')}
                 </strong>
               </div>
               <p style={{ fontSize: 'var(--font-meta)', margin: 0 }}>
@@ -642,10 +684,10 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
           {/* Actions */}
           <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
             <button className="btn secondary" onClick={handleCopy}>
-              Copy Solution
+              {t('Copy Solution')}
             </button>
             <button className="btn secondary" onClick={() => setSolution(null)}>
-              New Problem
+              {t('New Problem')}
             </button>
             {onGraphExpression && solution.problemType !== 'arithmetic' && (
               <button
@@ -660,7 +702,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                   onGraphExpression(expr);
                 }}
               >
-                📈 Graph this
+                📈 {t('Graph this')}
               </button>
             )}
             {solution.isOffline && solution.finalAnswer === 'Use AI mode for detailed solution' && (
@@ -671,7 +713,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                   setUseAI(true);
                 }}
               >
-                Try with AI
+                {t('Try with AI')}
               </button>
             )}
           </div>

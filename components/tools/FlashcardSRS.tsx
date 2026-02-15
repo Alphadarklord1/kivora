@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { generateSmartContent, Flashcard, GeneratedQuestion, type ToolMode, type GeneratedContent } from '@/lib/offline/generate';
 import type { ExamPrepData } from '@/components/tools/ExamSimulator';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface FlashcardSRSProps {
   inputText?: string;
@@ -23,6 +24,28 @@ export function FlashcardSRS({
   onResult,
   generateContent,
 }: FlashcardSRSProps) {
+  const { t } = useI18n({
+    'General': 'عام',
+    'SRS Deck': 'مجموعة SRS',
+    'Deck ready: {count} cards': 'المجموعة جاهزة: {count} بطاقات',
+    'Flashcard SRS': 'بطاقات SRS',
+    'Generate spaced‑repetition flashcards from your notes.': 'أنشئ بطاقات تكرار متباعد من ملاحظاتك.',
+    'SRS source text': 'نص المصدر لـ SRS',
+    'Paste study material for flashcards...': 'ألصق المادة الدراسية لإنشاء البطاقات...',
+    'Generate Deck': 'توليد مجموعة',
+    'Use Exam Prep': 'استخدام تحضير الاختبار',
+    'Add text or generate Exam Prep first.': 'أضف نصًا أو أنشئ تحضير الاختبار أولًا.',
+    'Select a file or generate Exam Prep first.': 'اختر ملفًا أو أنشئ تحضير الاختبار أولًا.',
+    'Back': 'الخلف',
+    'Front': 'الأمام',
+    'Again': 'مرة أخرى',
+    'Hard': 'صعب',
+    'Good': 'جيد',
+    'Easy': 'سهل',
+    'Saved': 'تم الحفظ',
+    'Save Deck': 'حفظ المجموعة',
+    'Card {index} of {total}': 'البطاقة {index} من {total}',
+  });
   const [deck, setDeck] = useState<Flashcard[]>([]);
   const [index, setIndex] = useState(0);
   const [showBack, setShowBack] = useState(false);
@@ -33,7 +56,7 @@ export function FlashcardSRS({
       id: q.id,
       front: q.question,
       back: q.correctAnswer,
-      category: q.topic || q.keywords?.[0] || 'General',
+      category: q.topic || q.keywords?.[0] || t('General'),
       difficulty: q.difficulty,
       keywords: q.keywords || [],
     })), []);
@@ -59,7 +82,7 @@ export function FlashcardSRS({
     setShowBack(false);
     setSavedId(null);
     if (cards.length) {
-      onResult?.('SRS Deck', `Deck ready: ${cards.length} cards`);
+      onResult?.(t('SRS Deck'), t('Deck ready: {count} cards', { count: cards.length }));
     }
   };
 
@@ -71,7 +94,7 @@ export function FlashcardSRS({
     setShowBack(false);
     setSavedId(null);
     if (cards.length) {
-      onResult?.('SRS Deck', `Deck ready: ${cards.length} cards`);
+      onResult?.(t('SRS Deck'), t('Deck ready: {count} cards', { count: cards.length }));
     }
   };
 
@@ -84,7 +107,7 @@ export function FlashcardSRS({
         setIndex(0);
         setShowBack(false);
         setSavedId(null);
-        onResult?.('SRS Deck', `Deck ready: ${cards.length} cards`);
+        onResult?.(t('SRS Deck'), t('Deck ready: {count} cards', { count: cards.length }));
       }, 0);
       return () => window.clearTimeout(timer);
     }
@@ -127,32 +150,32 @@ export function FlashcardSRS({
   if (!deck.length) {
     return (
       <div className="srs">
-        <h3>Flashcard SRS</h3>
-        <p>Generate spaced‑repetition flashcards from your notes.</p>
+        <h3>{t('Flashcard SRS')}</h3>
+        <p>{t('Generate spaced‑repetition flashcards from your notes.')}</p>
         {manualInputEnabled && (
           <div className="input-block">
-            <label>SRS source text</label>
+            <label>{t('SRS source text')}</label>
             <textarea
               value={inputText}
               onChange={(e) => onInputChange(e.target.value)}
               rows={6}
-              placeholder="Paste study material for flashcards..."
+              placeholder={t('Paste study material for flashcards...')}
             />
           </div>
         )}
         <div className="actions">
           <button className="btn" onClick={generateDeck} disabled={!inputText.trim()}>
-            Generate Deck
+            {t('Generate Deck')}
           </button>
           {prepData && (
             <button className="btn secondary" onClick={generateFromPrep}>
-              Use Exam Prep
+              {t('Use Exam Prep')}
             </button>
           )}
         </div>
         {!inputText.trim() && !prepData && (
           <div className="empty">
-            {manualInputEnabled ? 'Add text or generate Exam Prep first.' : 'Select a file or generate Exam Prep first.'}
+            {manualInputEnabled ? t('Add text or generate Exam Prep first.') : t('Select a file or generate Exam Prep first.')}
           </div>
         )}
         <style jsx>{`
@@ -172,19 +195,19 @@ export function FlashcardSRS({
   return (
     <div className="srs">
       <div className="card" onClick={() => setShowBack(prev => !prev)}>
-        <div className="label">{showBack ? 'Back' : 'Front'}</div>
+        <div className="label">{showBack ? t('Back') : t('Front')}</div>
         <div className="content">{showBack ? card.back : card.front}</div>
       </div>
       <div className="actions">
-        <button className="btn secondary" onClick={() => rate('again')}>Again</button>
-        <button className="btn secondary" onClick={() => rate('hard')}>Hard</button>
-        <button className="btn" onClick={() => rate('good')}>Good</button>
-        <button className="btn" onClick={() => rate('easy')}>Easy</button>
+        <button className="btn secondary" onClick={() => rate('again')}>{t('Again')}</button>
+        <button className="btn secondary" onClick={() => rate('hard')}>{t('Hard')}</button>
+        <button className="btn" onClick={() => rate('good')}>{t('Good')}</button>
+        <button className="btn" onClick={() => rate('easy')}>{t('Easy')}</button>
         <button className="btn secondary" onClick={saveDeck} disabled={!!savedId}>
-          {savedId ? 'Saved' : 'Save Deck'}
+          {savedId ? t('Saved') : t('Save Deck')}
         </button>
       </div>
-      <div className="meta">Card {index + 1} of {deck.length}</div>
+      <div className="meta">{t('Card {index} of {total}', { index: index + 1, total: deck.length })}</div>
       <style jsx>{`
         .srs { display: grid; gap: var(--space-3); }
         .card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 16px; padding: var(--space-5); text-align: center; cursor: pointer; }

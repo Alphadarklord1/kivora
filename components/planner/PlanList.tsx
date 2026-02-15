@@ -3,6 +3,7 @@
 import { StudyPlan } from '@/hooks/useStudyPlans';
 import { useState } from 'react';
 import { formatScheduleDate } from '@/lib/planner/generate';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface PlanListProps {
   plans: StudyPlan[];
@@ -16,6 +17,18 @@ interface PlanListProps {
 type Filter = 'all' | 'active' | 'completed';
 
 export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPlan, onDeletePlan: _onDeletePlan }: PlanListProps) {
+  const { t, locale } = useI18n({
+    'Study Plans': 'خطط الدراسة',
+    'Create new plan': 'إنشاء خطة جديدة',
+    All: 'الكل',
+    Active: 'نشطة',
+    Done: 'منتهية',
+    'No plans yet': 'لا توجد خطط بعد',
+    'No {filter} plans': 'لا توجد خطط {filter}',
+    active: 'نشطة',
+    completed: 'منتهية',
+    '{count} topics': '{count} موضوعات',
+  });
   const [filter, setFilter] = useState<Filter>('all');
 
   const filtered = filter === 'all' ? plans : plans.filter(p => p.status === filter);
@@ -25,21 +38,21 @@ export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPl
   return (
     <div className="plan-list">
       <div className="plan-list-header">
-        <h3>Study Plans</h3>
-        <button className="new-plan-btn" onClick={onNewPlan} title="Create new plan">
+        <h3>{t('Study Plans')}</h3>
+        <button className="new-plan-btn" onClick={onNewPlan} title={t('Create new plan')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div>
 
       <div className="filter-tabs">
         <button className={`filter-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
-          All ({plans.length})
+          {t('All')} ({plans.length})
         </button>
         <button className={`filter-tab ${filter === 'active' ? 'active' : ''}`} onClick={() => setFilter('active')}>
-          Active ({activePlans})
+          {t('Active')} ({activePlans})
         </button>
         <button className={`filter-tab ${filter === 'completed' ? 'active' : ''}`} onClick={() => setFilter('completed')}>
-          Done ({completedPlans})
+          {t('Done')} ({completedPlans})
         </button>
       </div>
 
@@ -52,7 +65,7 @@ export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPl
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}>
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
           </svg>
-          <p>{filter === 'all' ? 'No plans yet' : `No ${filter} plans`}</p>
+          <p>{filter === 'all' ? t('No plans yet') : t('No {filter} plans', { filter: t(filter) })}</p>
         </div>
       ) : (
         <div className="plans-scroll">
@@ -69,9 +82,9 @@ export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPl
               <div className="plan-meta">
                 <span className="plan-date">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                  {formatScheduleDate(plan.examDate)}
+                  {formatScheduleDate(plan.examDate, locale)}
                 </span>
-                <span className="plan-topics">{plan.topics.length} topics</span>
+                <span className="plan-topics">{t('{count} topics', { count: plan.topics.length })}</span>
               </div>
               <div className="plan-progress-bar">
                 <div className="plan-progress-fill" style={{ width: `${plan.progress}%` }} />

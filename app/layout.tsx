@@ -19,12 +19,11 @@ const settingsScript = `
     document.documentElement.setAttribute('dir', language === 'ar' ? 'rtl' : 'ltr');
 
     // Apply theme
-    if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      document.documentElement.setAttribute('data-theme', 'dark');
-    } else if (theme === 'light') {
-      document.documentElement.setAttribute('data-theme', 'light');
+    var normalizedTheme = theme === 'dark' ? 'blue' : theme;
+    if (normalizedTheme === 'blue' || normalizedTheme === 'black' || normalizedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', normalizedTheme);
     } else {
-      document.documentElement.setAttribute('data-theme', window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', window.matchMedia('(prefers-color-scheme: dark)').matches ? 'blue' : 'light');
     }
 
     // Apply font scale

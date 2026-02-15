@@ -3,9 +3,10 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 
 type AppLanguage = 'en' | 'ar';
+type AppTheme = 'light' | 'blue' | 'black' | 'system';
 
 interface Settings {
-  theme: string;
+  theme: AppTheme;
   fontSize: string;
   lineHeight: string;
   density: string;
@@ -30,11 +31,17 @@ function normalizeLanguage(value: unknown): AppLanguage {
   return value === 'ar' ? 'ar' : 'en';
 }
 
+function normalizeTheme(value: unknown): AppTheme {
+  if (value === 'dark') return 'blue'; // Backward compatibility
+  if (value === 'blue' || value === 'black' || value === 'light' || value === 'system') return value;
+  return defaultSettings.theme;
+}
+
 function getInitialSettings(): Settings {
   if (typeof window === 'undefined') return defaultSettings;
 
   return {
-    theme: localStorage.getItem('studypilot_theme') || defaultSettings.theme,
+    theme: normalizeTheme(localStorage.getItem('studypilot_theme') || defaultSettings.theme),
     fontSize: localStorage.getItem('studypilot_fontSize') || defaultSettings.fontSize,
     lineHeight: localStorage.getItem('studypilot_lineHeight') || defaultSettings.lineHeight,
     density: localStorage.getItem('studypilot_density') || defaultSettings.density,
@@ -45,7 +52,7 @@ function getInitialSettings(): Settings {
 function normalizeSettings(s: Partial<Settings> | null | undefined): Settings {
   const fallback = getInitialSettings();
   return {
-    theme: typeof s?.theme === 'string' ? s.theme : fallback.theme,
+    theme: normalizeTheme(s?.theme ?? fallback.theme),
     fontSize: typeof s?.fontSize === 'string' ? s.fontSize : fallback.fontSize,
     lineHeight: typeof s?.lineHeight === 'string' ? s.lineHeight : fallback.lineHeight,
     density: typeof s?.density === 'string' ? s.density : fallback.density,
@@ -72,7 +79,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     // Apply theme
     if (s.theme === 'system') {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', prefersDark ? 'blue' : 'light');
     } else {
       document.documentElement.setAttribute('data-theme', s.theme);
     }
@@ -131,7 +138,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e: MediaQueryListEvent) => {
-      document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', e.matches ? 'blue' : 'light');
     };
 
     mediaQuery.addEventListener('change', handleChange);

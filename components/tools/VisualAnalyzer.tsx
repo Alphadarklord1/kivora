@@ -6,6 +6,7 @@ import { useFoldersStore } from '@/lib/store/folders';
 import { getBlob } from '@/lib/idb';
 import { renderAllPDFPages, cropImageRegion, PDFPageRender, extractImagesFromPDF, ExtractedImage } from '@/lib/pdf/image-extract';
 import { MathText } from '@/components/math/MathRenderer';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 type AnalysisMode = 'describe' | 'explain' | 'extract-text' | 'solve-math';
 
@@ -23,6 +24,44 @@ interface SelectionRegion {
 }
 
 export function VisualAnalyzer() {
+  const { t, locale } = useI18n({
+    'Analysis failed': 'فشل التحليل',
+    'Please select an image file (PNG, JPG, etc.)': 'يرجى اختيار ملف صورة (PNG أو JPG وغيرها)',
+    'Image is too large. Maximum size is 4MB.': 'الصورة كبيرة جدًا. الحد الأقصى 4MB.',
+    'Failed to read image file': 'تعذر قراءة ملف الصورة',
+    'Describe': 'وصف',
+    'Get a detailed description of the image content': 'احصل على وصف تفصيلي لمحتوى الصورة',
+    'Explain': 'شرح',
+    'Explain the concept shown in the diagram/chart': 'اشرح المفهوم الظاهر في الرسم/المخطط',
+    'Extract Text': 'استخراج النص',
+    'Extract any text visible in the image (OCR)': 'استخرج أي نص ظاهر في الصورة (OCR)',
+    'Solve Math': 'حل الرياضيات',
+    'Solve equations or math problems in the image': 'حل المعادلات أو المسائل الرياضية في الصورة',
+    'Visual Analyzer': 'المحلل البصري',
+    'Analyze diagrams, charts, equations, and images from your PDFs': 'حلل الرسومات والمخططات والمعادلات والصور من ملفات PDF.',
+    'Folder': 'المجلد',
+    'Select folder...': 'اختر مجلدًا...',
+    'Topic': 'الموضوع',
+    'Select topic...': 'اختر موضوعًا...',
+    'File': 'الملف',
+    'Select file...': 'اختر ملفًا...',
+    'Loading PDF...': 'جارٍ تحميل PDF...',
+    'Page {current} of {total}': 'صفحة {current} من {total}',
+    'Click and drag to select a region': 'انقر واسحب لتحديد منطقة',
+    'Extracted Images ({count})': 'الصور المستخرجة ({count})',
+    'Page {page}': 'صفحة {page}',
+    'Selected Region': 'المنطقة المحددة',
+    'Clear': 'مسح',
+    'Analysis Mode': 'وضع التحليل',
+    'Analyzing...': 'جارٍ التحليل...',
+    'Analyze Image': 'تحليل الصورة',
+    'Analysis Results': 'نتائج التحليل',
+    'Select a PDF or upload an image': 'اختر ملف PDF أو ارفع صورة',
+    'Choose a PDF file above, or upload an image directly for analysis.': 'اختر ملف PDF من الأعلى، أو ارفع صورة مباشرة للتحليل.',
+    'Upload Image': 'رفع صورة',
+    'Uploaded Image': 'الصورة المرفوعة',
+    'Change': 'تغيير',
+  });
   const searchParams = useSearchParams();
   // File selection state
   const [selectedFolderId, setSelectedFolderId] = useState<string>('');
@@ -288,7 +327,7 @@ export function VisualAnalyzer() {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || 'Analysis failed');
+        throw new Error(data.error || t('Analysis failed'));
       }
 
       const data = await res.json();
@@ -301,7 +340,7 @@ export function VisualAnalyzer() {
         ...prev,
       ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Analysis failed');
+      setError(err instanceof Error ? err.message : t('Analysis failed'));
     } finally {
       setAnalyzing(false);
     }
@@ -319,12 +358,12 @@ export function VisualAnalyzer() {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      setError('Please select an image file (PNG, JPG, etc.)');
+      setError(t('Please select an image file (PNG, JPG, etc.)'));
       return;
     }
 
     if (file.size > 4 * 1024 * 1024) {
-      setError('Image is too large. Maximum size is 4MB.');
+      setError(t('Image is too large. Maximum size is 4MB.'));
       return;
     }
 
@@ -334,31 +373,31 @@ export function VisualAnalyzer() {
       setSelection(null);
       setError('');
     };
-    reader.onerror = () => setError('Failed to read image file');
+    reader.onerror = () => setError(t('Failed to read image file'));
     reader.readAsDataURL(file);
     e.target.value = '';
   };
 
   const modeLabels: Record<AnalysisMode, { label: string; icon: string; description: string }> = {
     describe: {
-      label: 'Describe',
+      label: t('Describe'),
       icon: '🖼️',
-      description: 'Get a detailed description of the image content',
+      description: t('Get a detailed description of the image content'),
     },
     explain: {
-      label: 'Explain',
+      label: t('Explain'),
       icon: '💡',
-      description: 'Explain the concept shown in the diagram/chart',
+      description: t('Explain the concept shown in the diagram/chart'),
     },
     'extract-text': {
-      label: 'Extract Text',
+      label: t('Extract Text'),
       icon: '📝',
-      description: 'Extract any text visible in the image (OCR)',
+      description: t('Extract any text visible in the image (OCR)'),
     },
     'solve-math': {
-      label: 'Solve Math',
+      label: t('Solve Math'),
       icon: '🧮',
-      description: 'Solve equations or math problems in the image',
+      description: t('Solve equations or math problems in the image'),
     },
   };
 
@@ -367,7 +406,7 @@ export function VisualAnalyzer() {
       {/* Header */}
       <div style={{ marginBottom: 'var(--space-4)' }}>
         <h3 style={{ marginBottom: 'var(--space-1)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-          <span>Visual Analyzer</span>
+          <span>{t('Visual Analyzer')}</span>
           <span style={{
             fontSize: 'var(--font-tiny)',
             background: 'var(--primary-muted)',
@@ -379,7 +418,7 @@ export function VisualAnalyzer() {
           </span>
         </h3>
         <p style={{ fontSize: 'var(--font-meta)', color: 'var(--text-muted)', margin: 0 }}>
-          Analyze diagrams, charts, equations, and images from your PDFs
+          {t('Analyze diagrams, charts, equations, and images from your PDFs')}
         </p>
       </div>
 
@@ -411,7 +450,7 @@ export function VisualAnalyzer() {
             display: 'block',
             marginBottom: 'var(--space-1)',
           }}>
-            Folder
+            {t('Folder')}
           </label>
           <select
             value={selectedFolderId}
@@ -422,7 +461,7 @@ export function VisualAnalyzer() {
             }}
             style={{ width: '100%' }}
           >
-            <option value="">Select folder...</option>
+            <option value="">{t('Select folder...')}</option>
             {folders.map((f) => (
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
@@ -436,7 +475,7 @@ export function VisualAnalyzer() {
             display: 'block',
             marginBottom: 'var(--space-1)',
           }}>
-            Topic
+            {t('Topic')}
           </label>
           <select
             value={selectedTopicId}
@@ -447,7 +486,7 @@ export function VisualAnalyzer() {
             disabled={!selectedFolderId}
             style={{ width: '100%' }}
           >
-            <option value="">Select topic...</option>
+            <option value="">{t('Select topic...')}</option>
             {folderTopics.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
@@ -461,7 +500,7 @@ export function VisualAnalyzer() {
             display: 'block',
             marginBottom: 'var(--space-1)',
           }}>
-            File
+            {t('File')}
           </label>
           <select
             value={selectedFileId}
@@ -469,7 +508,7 @@ export function VisualAnalyzer() {
             disabled={!selectedTopicId}
             style={{ width: '100%' }}
           >
-            <option value="">Select file...</option>
+            <option value="">{t('Select file...')}</option>
             {topicFiles.map((f) => (
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
@@ -484,7 +523,7 @@ export function VisualAnalyzer() {
           textAlign: 'center',
           color: 'var(--text-muted)',
         }}>
-          <div style={{ marginBottom: 'var(--space-2)' }}>Loading PDF...</div>
+          <div style={{ marginBottom: 'var(--space-2)' }}>{t('Loading PDF...')}</div>
           <div style={{
             width: '200px',
             height: '4px',
@@ -525,7 +564,7 @@ export function VisualAnalyzer() {
                   ←
                 </button>
                 <span style={{ fontSize: 'var(--font-meta)' }}>
-                  Page {currentPage} of {pages.length}
+                  {t('Page {current} of {total}', { current: currentPage, total: pages.length })}
                 </span>
                 <button
                   className="btn ghost"
@@ -538,7 +577,7 @@ export function VisualAnalyzer() {
               </div>
 
               <div style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)' }}>
-                Click and drag to select a region
+                {t('Click and drag to select a region')}
               </div>
             </div>
 
@@ -589,7 +628,7 @@ export function VisualAnalyzer() {
             {extractedImages.length > 0 && (
               <div style={{ marginTop: 'var(--space-4)' }}>
                 <h4 style={{ fontSize: 'var(--font-meta)', marginBottom: 'var(--space-2)' }}>
-                  Extracted Images ({extractedImages.length})
+                  {t('Extracted Images ({count})', { count: extractedImages.length })}
                 </h4>
                 <div style={{
                   display: 'flex',
@@ -626,7 +665,7 @@ export function VisualAnalyzer() {
                         color: 'var(--text-muted)',
                         marginTop: 'var(--space-1)',
                       }}>
-                        Page {img.pageNumber}
+                        {t('Page {page}', { page: img.pageNumber })}
                       </div>
                     </button>
                   ))}
@@ -646,13 +685,13 @@ export function VisualAnalyzer() {
                   alignItems: 'center',
                   marginBottom: 'var(--space-2)',
                 }}>
-                  <h4 style={{ fontSize: 'var(--font-meta)', margin: 0 }}>Selected Region</h4>
+                  <h4 style={{ fontSize: 'var(--font-meta)', margin: 0 }}>{t('Selected Region')}</h4>
                   <button
                     className="btn ghost"
                     onClick={clearSelection}
                     style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1)' }}
                   >
-                    Clear
+                    {t('Clear')}
                   </button>
                 </div>
                 <div style={{
@@ -677,7 +716,7 @@ export function VisualAnalyzer() {
             {/* Analysis mode selector */}
             <div style={{ marginBottom: 'var(--space-4)' }}>
               <h4 style={{ fontSize: 'var(--font-meta)', marginBottom: 'var(--space-2)' }}>
-                Analysis Mode
+                {t('Analysis Mode')}
               </h4>
               <div style={{
                 display: 'grid',
@@ -722,14 +761,14 @@ export function VisualAnalyzer() {
                 marginBottom: 'var(--space-4)',
               }}
             >
-              {analyzing ? 'Analyzing...' : `Analyze Image`}
+              {analyzing ? t('Analyzing...') : t('Analyze Image')}
             </button>
 
             {/* Results */}
             {results.length > 0 && (
               <div>
                 <h4 style={{ fontSize: 'var(--font-meta)', marginBottom: 'var(--space-2)' }}>
-                  Analysis Results
+                  {t('Analysis Results')}
                 </h4>
                 <div style={{
                   maxHeight: '400px',
@@ -765,7 +804,7 @@ export function VisualAnalyzer() {
                           fontSize: 'var(--font-tiny)',
                           color: 'var(--text-muted)',
                         }}>
-                          {result.timestamp.toLocaleTimeString()}
+                          {result.timestamp.toLocaleTimeString(locale)}
                         </span>
                       </div>
                       <div style={{
@@ -800,9 +839,9 @@ export function VisualAnalyzer() {
           <div style={{ fontSize: '3em', marginBottom: 'var(--space-2)' }}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           </div>
-          <h4 style={{ marginBottom: 'var(--space-2)' }}>Select a PDF or upload an image</h4>
+          <h4 style={{ marginBottom: 'var(--space-2)' }}>{t('Select a PDF or upload an image')}</h4>
           <p style={{ fontSize: 'var(--font-meta)', maxWidth: '300px', margin: '0 auto var(--space-4)' }}>
-            Choose a PDF file above, or upload an image directly for analysis.
+            {t('Choose a PDF file above, or upload an image directly for analysis.')}
           </p>
           <label style={{
             display: 'inline-flex',
@@ -822,7 +861,7 @@ export function VisualAnalyzer() {
               onChange={handleDirectImageUpload}
               style={{ display: 'none' }}
             />
-            Upload Image
+            {t('Upload Image')}
           </label>
         </div>
       )}
@@ -832,7 +871,7 @@ export function VisualAnalyzer() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
-              <h4 style={{ fontSize: 'var(--font-meta)', margin: 0 }}>Uploaded Image</h4>
+              <h4 style={{ fontSize: 'var(--font-meta)', margin: 0 }}>{t('Uploaded Image')}</h4>
               <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                 <label style={{
                   display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)',
@@ -841,9 +880,9 @@ export function VisualAnalyzer() {
                   cursor: 'pointer', fontSize: 'var(--font-tiny)',
                 }}>
                   <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={handleDirectImageUpload} style={{ display: 'none' }} />
-                  Change
+                  {t('Change')}
                 </label>
-                <button className="btn ghost" onClick={clearSelection} style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1)' }}>Clear</button>
+                <button className="btn ghost" onClick={clearSelection} style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1)' }}>{t('Clear')}</button>
               </div>
             </div>
             <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'var(--bg-inset)' }}>
@@ -854,7 +893,7 @@ export function VisualAnalyzer() {
           <div>
             {/* Analysis mode selector */}
             <div style={{ marginBottom: 'var(--space-4)' }}>
-              <h4 style={{ fontSize: 'var(--font-meta)', marginBottom: 'var(--space-2)' }}>Analysis Mode</h4>
+              <h4 style={{ fontSize: 'var(--font-meta)', marginBottom: 'var(--space-2)' }}>{t('Analysis Mode')}</h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
                 {(Object.keys(modeLabels) as AnalysisMode[]).map((mode) => (
                   <button key={mode} onClick={() => setAnalysisMode(mode)} className={`btn ${analysisMode === mode ? '' : 'ghost'}`}
@@ -868,13 +907,13 @@ export function VisualAnalyzer() {
             </div>
 
             <button className="btn" onClick={analyzeImage} disabled={analyzing} style={{ width: '100%', marginBottom: 'var(--space-4)' }}>
-              {analyzing ? 'Analyzing...' : 'Analyze Image'}
+              {analyzing ? t('Analyzing...') : t('Analyze Image')}
             </button>
 
             {/* Results */}
             {results.length > 0 && (
               <div>
-                <h4 style={{ fontSize: 'var(--font-meta)', marginBottom: 'var(--space-2)' }}>Analysis Results</h4>
+                <h4 style={{ fontSize: 'var(--font-meta)', marginBottom: 'var(--space-2)' }}>{t('Analysis Results')}</h4>
                 <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
                   {results.map((result, idx) => (
                     <div key={idx} style={{ padding: 'var(--space-3)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-2)' }}>
@@ -882,7 +921,7 @@ export function VisualAnalyzer() {
                         <span style={{ padding: '2px 6px', background: 'var(--primary-muted)', color: 'var(--primary)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-tiny)' }}>
                           {modeLabels[result.mode].icon} {modeLabels[result.mode].label}
                         </span>
-                        <span style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)' }}>{result.timestamp.toLocaleTimeString()}</span>
+                        <span style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)' }}>{result.timestamp.toLocaleTimeString(locale)}</span>
                       </div>
                       <div style={{ fontSize: 'var(--font-meta)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                         {result.mode === 'solve-math' ? <MathText>{result.content}</MathText> : result.content}

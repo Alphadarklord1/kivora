@@ -4,6 +4,12 @@ import { userSettings } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 
+function normalizeTheme(theme: unknown): 'light' | 'blue' | 'black' | 'system' {
+  if (theme === 'dark') return 'blue';
+  if (theme === 'light' || theme === 'blue' || theme === 'black' || theme === 'system') return theme;
+  return 'light';
+}
+
 export async function GET(request: NextRequest) {
   try {
     const userId = await getUserId(request);
@@ -33,7 +39,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(newSettings);
     }
 
-    return NextResponse.json(settings[0]);
+      return NextResponse.json({
+        ...settings[0],
+        theme: normalizeTheme(settings[0].theme),
+      });
   } catch (error) {
     console.error('Get settings error:', error);
     return NextResponse.json({ error: 'Failed to get settings' }, { status: 500 });
@@ -50,8 +59,9 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json();
     const { theme, fontSize, lineHeight, density } = body;
+    const normalizedTheme = theme === undefined ? undefined : normalizeTheme(theme);
 
-    const validThemes = ['light', 'dark', 'system'];
+    const validThemes = ['light', 'blue', 'black', 'system', 'dark'];
     const validDensities = ['compact', 'normal', 'comfortable'];
 
     if (theme && !validThemes.includes(theme)) {
@@ -74,7 +84,7 @@ export async function PUT(request: NextRequest) {
         .insert(userSettings)
         .values({
           userId,
-          theme: theme || 'light',
+          theme: normalizedTheme || 'light',
           fontSize: fontSize || '1',
           lineHeight: lineHeight || '1.5',
           density: density || 'normal',
@@ -88,7 +98,7 @@ export async function PUT(request: NextRequest) {
     const [updated] = await db
       .update(userSettings)
       .set({
-        ...(theme !== undefined && { theme }),
+        ...(theme !== undefined && { theme: normalizedTheme }),
         ...(fontSize !== undefined && { fontSize }),
         ...(lineHeight !== undefined && { lineHeight }),
         ...(density !== undefined && { density }),

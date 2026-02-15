@@ -6,6 +6,8 @@ import { useVault } from '@/providers/VaultProvider';
 import { loadAiPreferences, saveAiPreferences, type AiPreferences } from '@/lib/ai/client';
 import { getSupportedAiTasks } from '@/lib/ai/policy';
 import { isElectronRenderer } from '@/lib/runtime/mode';
+import { useI18n } from '@/lib/i18n/useI18n';
+import { ENCRYPTION_DISABLED } from '@/lib/crypto/vault';
 
 type SettingsTab = 'profile' | 'appearance' | 'security' | 'account' | 'ai';
 
@@ -25,7 +27,7 @@ interface UserAccount {
 }
 
 interface UserSettings {
-  theme: string;
+  theme: 'light' | 'blue' | 'black' | 'system';
   fontSize: string;
   lineHeight: string;
   density: string;
@@ -102,13 +104,19 @@ function normalizeLanguage(value: unknown): 'en' | 'ar' {
   return value === 'ar' ? 'ar' : 'en';
 }
 
+function normalizeTheme(value: unknown): UserSettings['theme'] {
+  if (value === 'dark') return 'blue';
+  if (value === 'light' || value === 'blue' || value === 'black' || value === 'system') return value;
+  return defaultUserSettings.theme;
+}
+
 function normalizeUserSettings(raw: Partial<UserSettings> | null | undefined): UserSettings {
   const storedLanguage = typeof window !== 'undefined'
     ? localStorage.getItem('studypilot_language')
     : null;
 
   return {
-    theme: typeof raw?.theme === 'string' ? raw.theme : defaultUserSettings.theme,
+    theme: normalizeTheme(raw?.theme),
     fontSize: typeof raw?.fontSize === 'string' ? raw.fontSize : defaultUserSettings.fontSize,
     lineHeight: typeof raw?.lineHeight === 'string' ? raw.lineHeight : defaultUserSettings.lineHeight,
     density: typeof raw?.density === 'string' ? raw.density : defaultUserSettings.density,
@@ -195,6 +203,111 @@ export default function SettingsPage() {
 
   const currentLanguage = settings?.language ?? 'en';
   const isArabic = currentLanguage === 'ar';
+  const { t, formatDate } = useI18n({
+    'Settings': 'الإعدادات',
+    'Manage your account and preferences': 'إدارة حسابك وتفضيلاتك',
+    'Loading settings...': 'جارٍ تحميل الإعدادات...',
+    'Profile': 'الملف الشخصي',
+    'Appearance': 'المظهر',
+    'Security': 'الأمان',
+    'Account': 'الحساب',
+    'Profile updated successfully': 'تم تحديث الملف الشخصي بنجاح',
+    'Failed to update profile': 'تعذر تحديث الملف الشخصي',
+    'Settings saved': 'تم حفظ الإعدادات',
+    'Failed to save settings': 'تعذر حفظ الإعدادات',
+    'AI preferences saved': 'تم حفظ تفضيلات الذكاء الاصطناعي',
+    'Passwords do not match': 'كلمات المرور غير متطابقة',
+    'Password must be at least 6 characters': 'يجب أن تكون كلمة المرور 6 أحرف على الأقل',
+    'Password changed successfully': 'تم تغيير كلمة المرور بنجاح',
+    'Failed to change password': 'تعذر تغيير كلمة المرور',
+    'Encryption passwords do not match': 'كلمات مرور التشفير غير متطابقة',
+    'Encryption password must be at least 8 characters': 'يجب أن تكون كلمة مرور التشفير 8 أحرف على الأقل',
+    'Encryption password changed successfully': 'تم تغيير كلمة مرور التشفير بنجاح',
+    'Failed to change encryption password': 'تعذر تغيير كلمة مرور التشفير',
+    'Current encryption password is incorrect': 'كلمة مرور التشفير الحالية غير صحيحة',
+    'Encryption has been reset. Your encrypted data is now inaccessible.': 'تمت إعادة تعيين التشفير. بياناتك المشفرة غير قابلة للوصول الآن.',
+    'Delete Account': 'حذف الحساب',
+    'Cancel': 'إلغاء',
+    'Deleting...': 'جارٍ الحذف...',
+    'Save Changes': 'حفظ التغييرات',
+    'Saving...': 'جارٍ الحفظ...',
+    'Name': 'الاسم',
+    'Email': 'البريد الإلكتروني',
+    'Your name': 'اسمك',
+    'Profile Information': 'معلومات الملف الشخصي',
+    'Update your personal information': 'تحديث معلوماتك الشخصية',
+    'Your Stats': 'إحصاءاتك',
+    'Folders': 'المجلدات',
+    'Files': 'الملفات',
+    'Library Items': 'عناصر المكتبة',
+    'Theme': 'السمة',
+    'Light': 'فاتح',
+    'Blue Mode': 'الوضع الأزرق',
+    'Black Mode': 'الوضع الأسود',
+    'System': 'النظام',
+    'Language': 'اللغة',
+    'Choose interface direction and reading flow': 'اختر اتجاه الواجهة وتدفق القراءة',
+    'Font Size': 'حجم الخط',
+    'Adjust the text size across the app': 'اضبط حجم النص في التطبيق',
+    'Small': 'صغير',
+    'Normal': 'عادي',
+    'Large': 'كبير',
+    'Extra Large': 'كبير جدًا',
+    'UI Density': 'كثافة الواجهة',
+    'Control spacing between elements': 'تحكم في المسافات بين العناصر',
+    'Compact': 'مضغوط',
+    'Tighter spacing': 'مسافات ضيقة',
+    'Balanced spacing': 'مسافات متوازنة',
+    'Comfortable': 'مريح',
+    'More breathing room': 'مساحة إضافية',
+    'Line Height': 'تباعد الأسطر',
+    'Increase or decrease reading comfort': 'زيادة أو تقليل راحة القراءة',
+    'Tight': 'ضيق',
+    'Relaxed': 'مريح',
+    'Extra': 'إضافي',
+    'Audio Voice': 'صوت القراءة',
+    'Choose a clearer voice for Listen': 'اختر صوتًا أوضح لميزة الاستماع',
+    'System Default': 'افتراضي النظام',
+    'Rate': 'السرعة',
+    'Pitch': 'النبرة',
+    'Preview': 'معاينة',
+    'Sample Folder': 'مجلد نموذجي',
+    'Added today': 'أضيف اليوم',
+    'Generated content': 'محتوى مولّد',
+    'Manage your password, encryption, and security settings': 'إدارة كلمة المرور والتشفير وإعدادات الأمان',
+    'End-to-End Encryption': 'تشفير من طرف إلى طرف',
+    'Not Set Up': 'غير مفعّل',
+    'Active & Unlocked': 'نشط ومفتوح',
+    'Locked': 'مقفل',
+    'Lock Now': 'اقفل الآن',
+    'Change Encryption Password': 'تغيير كلمة مرور التشفير',
+    'Current Encryption Password': 'كلمة مرور التشفير الحالية',
+    'Enter current encryption password': 'أدخل كلمة مرور التشفير الحالية',
+    'New Encryption Password': 'كلمة مرور تشفير جديدة',
+    'At least 8 characters': '8 أحرف على الأقل',
+    'Confirm New Encryption Password': 'تأكيد كلمة مرور التشفير الجديدة',
+    'Confirm new encryption password': 'أكد كلمة مرور التشفير الجديدة',
+    'Changing...': 'جارٍ التغيير...',
+    'Reset Encryption': 'إعادة تعيين التشفير',
+    'Reset Encryption Modal Title': 'إعادة تعيين التشفير',
+    'Reset Encryption Modal Body': 'هذا الإجراء لا يمكن التراجع عنه. ستصبح كل بياناتك المشفرة غير قابلة للوصول بشكل دائم.',
+    'Reset Encryption Modal Confirm': 'هل أنت متأكد أنك تريد المتابعة؟',
+    'Yes, Reset Encryption': 'نعم، أعد تعيين التشفير',
+    'Change Login Password': 'تغيير كلمة مرور تسجيل الدخول',
+    'Set Login Password': 'تعيين كلمة مرور تسجيل الدخول',
+    'Current Login Password': 'كلمة مرور تسجيل الدخول الحالية',
+    'Enter current password': 'أدخل كلمة المرور الحالية',
+    'New Login Password': 'كلمة مرور تسجيل دخول جديدة',
+    'At least 6 characters': '6 أحرف على الأقل',
+    'Confirm New Login Password': 'تأكيد كلمة مرور تسجيل الدخول الجديدة',
+    'Confirm new password': 'أكد كلمة المرور الجديدة',
+    'Account Info': 'معلومات الحساب',
+    'Member since': 'عضو منذ',
+    'Danger Zone': 'منطقة الخطر',
+    'Delete account warning': 'عند حذف الحساب لا يمكن التراجع. يرجى التأكد.',
+    'Type DELETE MY ACCOUNT to confirm:': 'اكتب DELETE MY ACCOUNT للتأكيد:',
+    'Encryption is temporarily disabled for all users.': 'تم تعطيل التشفير مؤقتًا لجميع المستخدمين.',
+  });
   const supportedTasks = getSupportedAiTasks(currentLanguage);
 
   useEffect(() => {
@@ -211,7 +324,8 @@ export default function SettingsPage() {
     }
 
     if (linkedProvider) {
-      setMessage({ type: 'success', text: `${linkedProvider.charAt(0).toUpperCase() + linkedProvider.slice(1)} account connected successfully!` });
+      const providerName = linkedProvider.charAt(0).toUpperCase() + linkedProvider.slice(1);
+      setMessage({ type: 'success', text: isArabic ? `تم ربط حساب ${providerName} بنجاح` : `${providerName} account connected successfully!` });
       setTimeout(() => setMessage(null), 3000);
       // Clean up URL
       window.history.replaceState({}, '', '/settings?tab=account');
@@ -310,7 +424,7 @@ export default function SettingsPage() {
       setDesktopAiHealth({
         ok: false,
         status: 'error',
-        details: error instanceof Error ? error.message : 'Failed to check desktop AI runtime',
+        details: error instanceof Error ? error.message : (isArabic ? 'تعذر التحقق من Runtime المحلي' : 'Failed to check desktop AI runtime'),
       });
     } finally {
       setCheckingAiRuntime(false);
@@ -416,9 +530,9 @@ export default function SettingsPage() {
   };
 
   const applySettings = (s: UserSettings) => {
-    const resolveTheme = (theme: string) => {
+    const resolveTheme = (theme: UserSettings['theme']) => {
       if (theme === 'system') {
-        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'blue' : 'light';
       }
       return theme;
     };
@@ -464,13 +578,13 @@ export default function SettingsPage() {
       if (res.ok) {
         const data = await res.json();
         setAccount(prev => prev ? { ...prev, ...data } : null);
-        showMessage('success', 'Profile updated successfully');
+        showMessage('success', t('Profile updated successfully'));
       } else {
         const error = await res.json();
-        showMessage('error', error.error || 'Failed to update profile');
+        showMessage('error', error.error || t('Failed to update profile'));
       }
     } catch {
-      showMessage('error', 'Failed to update profile');
+      showMessage('error', t('Failed to update profile'));
     } finally {
       setSaving(false);
     }
@@ -491,12 +605,12 @@ export default function SettingsPage() {
         const merged = normalizeUserSettings({ ...(settings || defaultUserSettings), ...data, ...newSettings });
         setSettings(merged);
         applySettings(merged);
-        showMessage('success', 'Settings saved');
+        showMessage('success', t('Settings saved'));
       } else {
-        showMessage('error', 'Failed to save settings');
+        showMessage('error', t('Failed to save settings'));
       }
     } catch {
-      showMessage('error', 'Failed to save settings');
+      showMessage('error', t('Failed to save settings'));
     } finally {
       setSaving(false);
     }
@@ -509,17 +623,17 @@ export default function SettingsPage() {
 
     saveAiPreferences(normalizedPrefs);
     setAiPrefs(normalizedPrefs);
-    showMessage('success', 'AI preferences saved');
+    showMessage('success', t('AI preferences saved'));
   };
 
   const handleChangePassword = async () => {
     if (newPassword !== confirmPassword) {
-      showMessage('error', 'Passwords do not match');
+      showMessage('error', t('Passwords do not match'));
       return;
     }
 
     if (newPassword.length < 6) {
-      showMessage('error', 'Password must be at least 6 characters');
+      showMessage('error', t('Password must be at least 6 characters'));
       return;
     }
 
@@ -533,16 +647,16 @@ export default function SettingsPage() {
       });
 
       if (res.ok) {
-        showMessage('success', 'Password changed successfully');
+        showMessage('success', t('Password changed successfully'));
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
       } else {
         const error = await res.json();
-        showMessage('error', error.error || 'Failed to change password');
+        showMessage('error', error.error || t('Failed to change password'));
       }
     } catch {
-      showMessage('error', 'Failed to change password');
+      showMessage('error', t('Failed to change password'));
     } finally {
       setSaving(false);
     }
@@ -550,12 +664,12 @@ export default function SettingsPage() {
 
   const handleChangeVaultPassword = async () => {
     if (vaultNewPassword !== vaultConfirmPassword) {
-      showMessage('error', 'Encryption passwords do not match');
+      showMessage('error', t('Encryption passwords do not match'));
       return;
     }
 
     if (vaultNewPassword.length < 8) {
-      showMessage('error', 'Encryption password must be at least 8 characters');
+      showMessage('error', t('Encryption password must be at least 8 characters'));
       return;
     }
 
@@ -563,15 +677,15 @@ export default function SettingsPage() {
     try {
       const success = await vault.changePassword(vaultCurrentPassword, vaultNewPassword);
       if (success) {
-        showMessage('success', 'Encryption password changed successfully');
+        showMessage('success', t('Encryption password changed successfully'));
         setVaultCurrentPassword('');
         setVaultNewPassword('');
         setVaultConfirmPassword('');
       } else {
-        showMessage('error', 'Failed to change encryption password');
+        showMessage('error', t('Failed to change encryption password'));
       }
     } catch {
-      showMessage('error', 'Current encryption password is incorrect');
+      showMessage('error', t('Current encryption password is incorrect'));
     } finally {
       setSaving(false);
     }
@@ -580,21 +694,21 @@ export default function SettingsPage() {
   const handleResetVault = () => {
     vault.destroyVault();
     setShowResetVaultModal(false);
-    showMessage('success', 'Encryption has been reset. Your encrypted data is now inaccessible.');
+    showMessage('success', t('Encryption has been reset. Your encrypted data is now inaccessible.'));
   };
 
   const handleLinkAccount = async (provider: 'google' | 'github') => {
     setLinkingProvider(provider);
     try {
       if (!providers?.[provider]) {
-        showMessage('error', `${provider} sign-in is not configured`);
+        showMessage('error', isArabic ? `تسجيل الدخول عبر ${provider} غير مفعّل` : `${provider} sign-in is not configured`);
         setLinkingProvider(null);
         return;
       }
       // Redirect to OAuth provider - when they come back, the account will be linked
       await signIn(provider, { callbackUrl: '/settings?tab=account&linked=' + provider });
     } catch {
-      showMessage('error', `Failed to connect ${provider}`);
+      showMessage('error', isArabic ? `تعذر ربط ${provider}` : `Failed to connect ${provider}`);
       setLinkingProvider(null);
     }
   };
@@ -608,15 +722,16 @@ export default function SettingsPage() {
       });
 
       if (res.ok) {
-        showMessage('success', `${provider.charAt(0).toUpperCase() + provider.slice(1)} account disconnected`);
+        const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
+        showMessage('success', isArabic ? `تم فصل حساب ${providerName}` : `${providerName} account disconnected`);
         // Refresh account data
         fetchData();
       } else {
         const error = await res.json();
-        showMessage('error', error.error || `Failed to disconnect ${provider}`);
+        showMessage('error', error.error || (isArabic ? `تعذر فصل ${provider}` : `Failed to disconnect ${provider}`));
       }
     } catch {
-      showMessage('error', `Failed to disconnect ${provider}`);
+      showMessage('error', isArabic ? `تعذر فصل ${provider}` : `Failed to disconnect ${provider}`);
     } finally {
       setUnlinkingProvider(null);
     }
@@ -624,7 +739,7 @@ export default function SettingsPage() {
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmation !== 'DELETE MY ACCOUNT') {
-      showMessage('error', 'Please type "DELETE MY ACCOUNT" to confirm');
+      showMessage('error', isArabic ? 'يرجى كتابة "DELETE MY ACCOUNT" للتأكيد' : 'Please type "DELETE MY ACCOUNT" to confirm');
       return;
     }
 
@@ -641,10 +756,10 @@ export default function SettingsPage() {
         await signOut({ callbackUrl: '/login' });
       } else {
         const error = await res.json();
-        showMessage('error', error.error || 'Failed to delete account');
+        showMessage('error', error.error || (isArabic ? 'تعذر حذف الحساب' : 'Failed to delete account'));
       }
     } catch {
-      showMessage('error', 'Failed to delete account');
+      showMessage('error', isArabic ? 'تعذر حذف الحساب' : 'Failed to delete account');
     } finally {
       setSaving(false);
       setShowDeleteModal(false);
@@ -652,17 +767,17 @@ export default function SettingsPage() {
   };
 
   const tabs: { id: SettingsTab; label: string; icon: string }[] = [
-    { id: 'profile', label: 'Profile', icon: '👤' },
-    { id: 'appearance', label: 'Appearance', icon: '🎨' },
-    { id: 'security', label: 'Security', icon: '🔒' },
-    { id: 'account', label: 'Account', icon: '⚙️' },
+    { id: 'profile', label: t('Profile'), icon: '👤' },
+    { id: 'appearance', label: t('Appearance'), icon: '🎨' },
+    { id: 'security', label: t('Security'), icon: '🔒' },
+    { id: 'account', label: t('Account'), icon: '⚙️' },
     { id: 'ai', label: 'AI', icon: '🤖' },
   ];
 
   if (loading) {
     return (
       <div className="settings-page">
-        <div className="settings-loading">Loading settings...</div>
+        <div className="settings-loading">{t('Loading settings...')}</div>
       </div>
     );
   }
@@ -672,8 +787,8 @@ export default function SettingsPage() {
       <div className="settings-container">
         {/* Header */}
         <div className="settings-header">
-          <h1>Settings</h1>
-          <p>Manage your account and preferences</p>
+          <h1>{t('Settings')}</h1>
+          <p>{t('Manage your account and preferences')}</p>
         </div>
 
         {/* Message */}
@@ -702,22 +817,22 @@ export default function SettingsPage() {
           {/* Profile Tab */}
           {tab === 'profile' && (
             <div className="settings-section">
-              <h2>Profile Information</h2>
-              <p className="section-description">Update your personal information</p>
+              <h2>{t('Profile Information')}</h2>
+              <p className="section-description">{t('Update your personal information')}</p>
 
               <div className="form-group">
-                <label htmlFor="name">Name</label>
+                <label htmlFor="name">{t('Name')}</label>
                 <input
                   id="name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Your name"
+                  placeholder={t('Your name')}
                 />
               </div>
 
               <div className="form-group">
-                <label htmlFor="email">Email</label>
+                <label htmlFor="email">{t('Email')}</label>
                 <input
                   id="email"
                   type="email"
@@ -732,25 +847,25 @@ export default function SettingsPage() {
                 onClick={handleSaveProfile}
                 disabled={saving}
               >
-                {saving ? 'Saving...' : 'Save Changes'}
+                {saving ? t('Saving...') : t('Save Changes')}
               </button>
 
               {/* Stats */}
               {account?.stats && (
                 <div className="profile-stats">
-                  <h3>Your Stats</h3>
+                  <h3>{t('Your Stats')}</h3>
                   <div className="stats-grid">
                     <div className="stat-item">
                       <span className="stat-value">{account.stats.folders}</span>
-                      <span className="stat-label">Folders</span>
+                      <span className="stat-label">{t('Folders')}</span>
                     </div>
                     <div className="stat-item">
                       <span className="stat-value">{account.stats.files}</span>
-                      <span className="stat-label">Files</span>
+                      <span className="stat-label">{t('Files')}</span>
                     </div>
                     <div className="stat-item">
                       <span className="stat-value">{account.stats.libraryItems}</span>
-                      <span className="stat-label">Library Items</span>
+                      <span className="stat-label">{t('Library Items')}</span>
                     </div>
                   </div>
                 </div>
@@ -761,22 +876,23 @@ export default function SettingsPage() {
           {/* Appearance Tab */}
           {tab === 'appearance' && settings && (
             <div className="settings-section">
-              <h2>Appearance</h2>
-              <p className="section-description">Customize how StudyPilot looks</p>
+              <h2>{t('Appearance')}</h2>
+              <p className="section-description">{isArabic ? 'خصص شكل StudyPilot بالطريقة التي تناسبك' : 'Customize how StudyPilot looks'}</p>
 
               {/* Theme */}
               <div className="form-group">
-                <label>Theme</label>
+                <label>{t('Theme')}</label>
                 <div className="option-buttons">
                   {[
-                    { value: 'light', label: 'Light', icon: '☀️' },
-                    { value: 'dark', label: 'Dark', icon: '🌙' },
-                    { value: 'system', label: 'System', icon: '💻' },
+                    { value: 'light', label: t('Light'), icon: '☀️' },
+                    { value: 'blue', label: t('Blue Mode'), icon: '🌊' },
+                    { value: 'black', label: t('Black Mode'), icon: '🌑' },
+                    { value: 'system', label: t('System'), icon: '💻' },
                   ].map((option) => (
                     <button
                       key={option.value}
                       className={`option-btn ${settings.theme === option.value ? 'active' : ''}`}
-                      onClick={() => handleSaveSettings({ theme: option.value })}
+                      onClick={() => handleSaveSettings({ theme: option.value as UserSettings['theme'] })}
                       disabled={saving}
                     >
                       <span>{option.icon}</span>
@@ -788,8 +904,8 @@ export default function SettingsPage() {
 
               {/* Language */}
               <div className="form-group">
-                <label>Language</label>
-                <p className="option-description">Choose interface direction and reading flow</p>
+                <label>{t('Language')}</label>
+                <p className="option-description">{t('Choose interface direction and reading flow')}</p>
                 <div className="option-buttons">
                   {[
                     { value: 'en', label: 'English', preview: 'EN' },
@@ -810,14 +926,14 @@ export default function SettingsPage() {
 
               {/* Font Size */}
               <div className="form-group">
-                <label>Font Size</label>
-                <p className="option-description">Adjust the text size across the app</p>
+                <label>{t('Font Size')}</label>
+                <p className="option-description">{t('Adjust the text size across the app')}</p>
                 <div className="option-buttons">
                   {[
-                    { value: '0.875', label: 'Small', preview: 'Aa' },
-                    { value: '1', label: 'Normal', preview: 'Aa' },
-                    { value: '1.125', label: 'Large', preview: 'Aa' },
-                    { value: '1.25', label: 'Extra Large', preview: 'Aa' },
+                    { value: '0.875', label: t('Small'), preview: 'Aa' },
+                    { value: '1', label: t('Normal'), preview: 'Aa' },
+                    { value: '1.125', label: t('Large'), preview: 'Aa' },
+                    { value: '1.25', label: t('Extra Large'), preview: 'Aa' },
                   ].map((option) => (
                     <button
                       key={option.value}
@@ -835,13 +951,13 @@ export default function SettingsPage() {
 
               {/* Density */}
               <div className="form-group">
-                <label>UI Density</label>
-                <p className="option-description">Control spacing between elements</p>
+                <label>{t('UI Density')}</label>
+                <p className="option-description">{t('Control spacing between elements')}</p>
                 <div className="option-buttons density-buttons">
                   {[
-                    { value: 'compact', label: 'Compact', icon: '▪️', desc: 'Tighter spacing' },
-                    { value: 'normal', label: 'Normal', icon: '◾', desc: 'Balanced spacing' },
-                    { value: 'comfortable', label: 'Comfortable', icon: '⬛', desc: 'More breathing room' },
+                    { value: 'compact', label: t('Compact'), icon: '▪️', desc: t('Tighter spacing') },
+                    { value: 'normal', label: t('Normal'), icon: '◾', desc: t('Balanced spacing') },
+                    { value: 'comfortable', label: t('Comfortable'), icon: '⬛', desc: t('More breathing room') },
                   ].map((option) => (
                     <button
                       key={option.value}
@@ -859,14 +975,14 @@ export default function SettingsPage() {
 
               {/* Line Height */}
               <div className="form-group">
-                <label>Line Height</label>
-                <p className="option-description">Increase or decrease reading comfort</p>
+                <label>{t('Line Height')}</label>
+                <p className="option-description">{t('Increase or decrease reading comfort')}</p>
                 <div className="option-buttons">
                   {[
-                    { value: '0.95', label: 'Tight' },
-                    { value: '1', label: 'Normal' },
-                    { value: '1.1', label: 'Relaxed' },
-                    { value: '1.2', label: 'Extra' },
+                    { value: '0.95', label: t('Tight') },
+                    { value: '1', label: t('Normal') },
+                    { value: '1.1', label: t('Relaxed') },
+                    { value: '1.2', label: t('Extra') },
                   ].map((option) => (
                     <button
                       key={option.value}
@@ -882,8 +998,8 @@ export default function SettingsPage() {
 
               {/* Audio Voice */}
               <div className="form-group">
-                <label>Audio Voice</label>
-                <p className="option-description">Choose a clearer voice for Listen</p>
+                <label>{t('Audio Voice')}</label>
+                <p className="option-description">{t('Choose a clearer voice for Listen')}</p>
                 <select
                   value={ttsVoice}
                   onChange={(e) => {
@@ -892,7 +1008,7 @@ export default function SettingsPage() {
                     localStorage.setItem('studypilot_tts_voice', value);
                   }}
                 >
-                  <option value="">System Default</option>
+                  <option value="">{t('System Default')}</option>
                   {voices.map((voice) => (
                     <option key={voice.name} value={voice.name}>
                       {voice.name} ({voice.lang})
@@ -901,7 +1017,7 @@ export default function SettingsPage() {
                 </select>
                 <div className="audio-sliders">
                   <label>
-                    Rate
+                    {t('Rate')}
                     <input
                       type="range"
                       min="0.7"
@@ -916,7 +1032,7 @@ export default function SettingsPage() {
                     />
                   </label>
                   <label>
-                    Pitch
+                    {t('Pitch')}
                     <input
                       type="range"
                       min="0.8"
@@ -935,24 +1051,24 @@ export default function SettingsPage() {
 
               {/* Preview Section */}
               <div className="appearance-preview">
-                <label>Preview</label>
+                <label>{t('Preview')}</label>
                 <div className="preview-card">
                   <div className="preview-header">
                     <span className="preview-icon">📁</span>
-                    <span className="preview-title">Sample Folder</span>
+                    <span className="preview-title">{t('Sample Folder')}</span>
                   </div>
                   <div className="preview-item">
                     <span className="preview-file-icon">📄</span>
                     <div className="preview-file-info">
                       <span className="preview-file-name">Study Notes.pdf</span>
-                      <span className="preview-file-meta">Added today</span>
+                      <span className="preview-file-meta">{t('Added today')}</span>
                     </div>
                   </div>
                   <div className="preview-item">
                     <span className="preview-file-icon">📝</span>
                     <div className="preview-file-info">
-                      <span className="preview-file-name">Quiz Questions</span>
-                      <span className="preview-file-meta">Generated content</span>
+                      <span className="preview-file-name">{isArabic ? 'أسئلة الاختبار' : 'Quiz Questions'}</span>
+                      <span className="preview-file-meta">{t('Generated content')}</span>
                     </div>
                   </div>
                 </div>
@@ -963,24 +1079,25 @@ export default function SettingsPage() {
           {/* Security Tab */}
           {tab === 'security' && (
             <div className="settings-section">
-              <h2>Security</h2>
-              <p className="section-description">Manage your password, encryption, and security settings</p>
+              <h2>{t('Security')}</h2>
+              <p className="section-description">{t('Manage your password, encryption, and security settings')}</p>
 
               {/* End-to-End Encryption Section */}
+              {!ENCRYPTION_DISABLED ? (
               <div className="security-card encryption-card">
                 <div className="encryption-header">
                   <div className="encryption-status">
                     <span className="encryption-icon">{vault.isUnlocked ? '🔓' : '🔐'}</span>
                     <div>
-                      <h3>End-to-End Encryption</h3>
+                      <h3>{t('End-to-End Encryption')}</h3>
                       <span className={`encryption-badge ${vault.isSetup ? (vault.isUnlocked ? 'active' : 'locked') : 'inactive'}`}>
-                        {!vault.isSetup ? 'Not Set Up' : vault.isUnlocked ? 'Active & Unlocked' : 'Locked'}
+                        {!vault.isSetup ? t('Not Set Up') : vault.isUnlocked ? t('Active & Unlocked') : t('Locked')}
                       </span>
                     </div>
                   </div>
                   {vault.isUnlocked && (
                     <button className="btn secondary small" onClick={vault.lock}>
-                      Lock Now
+                      {t('Lock Now')}
                     </button>
                   )}
                 </div>
@@ -988,60 +1105,62 @@ export default function SettingsPage() {
                 <div className="encryption-features">
                   <div className="feature-item">
                     <span className="feature-check">✓</span>
-                    <span>AES-256 encryption (military grade)</span>
+                    <span>{isArabic ? 'تشفير AES-256 (مستوى عسكري)' : 'AES-256 encryption (military grade)'}</span>
                   </div>
                   <div className="feature-item">
                     <span className="feature-check">✓</span>
-                    <span>Zero-knowledge architecture</span>
+                    <span>{isArabic ? 'هيكلية بدون معرفة مسبقة' : 'Zero-knowledge architecture'}</span>
                   </div>
                   <div className="feature-item">
                     <span className="feature-check">✓</span>
-                    <span>Data encrypted before leaving your device</span>
+                    <span>{isArabic ? 'تُشفَّر البيانات قبل مغادرة جهازك' : 'Data encrypted before leaving your device'}</span>
                   </div>
                   <div className="feature-item">
                     <span className="feature-check">✓</span>
-                    <span>We cannot access your encrypted data</span>
+                    <span>{isArabic ? 'لا يمكننا الوصول إلى بياناتك المشفرة' : 'We cannot access your encrypted data'}</span>
                   </div>
                 </div>
 
                 {vault.isSetup && vault.isUnlocked && (
                   <>
                     <div className="encryption-divider"></div>
-                    <h4>Change Encryption Password</h4>
+                    <h4>{t('Change Encryption Password')}</h4>
                     <p className="helper-text">
-                      This is separate from your login password. It&apos;s used to encrypt your data.
+                      {isArabic
+                        ? 'هذه مختلفة عن كلمة مرور تسجيل الدخول. تُستخدم لتشفير بياناتك.'
+                        : 'This is separate from your login password. It\'s used to encrypt your data.'}
                     </p>
 
                     <div className="form-group">
-                      <label htmlFor="vaultCurrentPassword">Current Encryption Password</label>
+                      <label htmlFor="vaultCurrentPassword">{t('Current Encryption Password')}</label>
                       <input
                         id="vaultCurrentPassword"
                         type="password"
                         value={vaultCurrentPassword}
                         onChange={(e) => setVaultCurrentPassword(e.target.value)}
-                        placeholder="Enter current encryption password"
+                        placeholder={t('Enter current encryption password')}
                       />
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="vaultNewPassword">New Encryption Password</label>
+                      <label htmlFor="vaultNewPassword">{t('New Encryption Password')}</label>
                       <input
                         id="vaultNewPassword"
                         type="password"
                         value={vaultNewPassword}
                         onChange={(e) => setVaultNewPassword(e.target.value)}
-                        placeholder="At least 8 characters"
+                        placeholder={t('At least 8 characters')}
                       />
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="vaultConfirmPassword">Confirm New Encryption Password</label>
+                      <label htmlFor="vaultConfirmPassword">{t('Confirm New Encryption Password')}</label>
                       <input
                         id="vaultConfirmPassword"
                         type="password"
                         value={vaultConfirmPassword}
                         onChange={(e) => setVaultConfirmPassword(e.target.value)}
-                        placeholder="Confirm new encryption password"
+                        placeholder={t('Confirm new encryption password')}
                       />
                     </div>
 
@@ -1050,7 +1169,7 @@ export default function SettingsPage() {
                       onClick={handleChangeVaultPassword}
                       disabled={saving || !vaultCurrentPassword || !vaultNewPassword || !vaultConfirmPassword}
                     >
-                      {saving ? 'Changing...' : 'Change Encryption Password'}
+                      {saving ? t('Changing...') : t('Change Encryption Password')}
                     </button>
                   </>
                 )}
@@ -1059,63 +1178,71 @@ export default function SettingsPage() {
                   <>
                     <div className="encryption-divider danger"></div>
                     <div className="encryption-danger">
-                      <h4>Reset Encryption</h4>
+                      <h4>{t('Reset Encryption')}</h4>
                       <p>
-                        If you&apos;ve forgotten your encryption password, you can reset it.
-                        <strong> Warning: This will make all your encrypted data permanently inaccessible.</strong>
+                        {isArabic
+                          ? 'إذا نسيت كلمة مرور التشفير، يمكنك إعادة تعيينها.'
+                          : 'If you\'ve forgotten your encryption password, you can reset it.'}
+                        <strong>{isArabic ? ' تحذير: سيجعل هذا كل بياناتك المشفرة غير قابلة للوصول بشكل دائم.' : ' Warning: This will make all your encrypted data permanently inaccessible.'}</strong>
                       </p>
                       <button
                         className="btn danger small"
                         onClick={() => setShowResetVaultModal(true)}
                       >
-                        Reset Encryption
+                        {t('Reset Encryption')}
                       </button>
                     </div>
                   </>
                 )}
               </div>
+              ) : (
+                <div className="security-card">
+                  <h3>{t('End-to-End Encryption')}</h3>
+                  <p>{t('Encryption is temporarily disabled for all users.')}</p>
+                </div>
+              )}
 
               {/* Login Password Section */}
               <div className="security-card">
-                <h3>{account?.hasPassword ? 'Change Login Password' : 'Set Login Password'}</h3>
+                <h3>{account?.hasPassword ? t('Change Login Password') : t('Set Login Password')}</h3>
                 <p>
                   {account?.hasPassword
-                    ? 'Update your login password (separate from encryption)'
-                    : 'Set a password to login with email and password'}
+                    ? (isArabic ? 'حدّث كلمة مرور تسجيل الدخول (منفصلة عن التشفير)' : 'Update your login password (separate from encryption)')
+                    : (isArabic ? 'عيّن كلمة مرور لتسجيل الدخول بالبريد وكلمة المرور' : 'Set a password to login with email and password')}
                 </p>
 
                 {account?.hasPassword && (
                   <div className="form-group">
-                    <label htmlFor="currentPassword">Current Login Password</label>
+                    <label htmlFor="currentPassword">{t('Current Login Password')}</label>
                     <input
                       id="currentPassword"
                       type="password"
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
-                      placeholder="Enter current password"
+                      placeholder={t('Enter current password')}
                     />
                   </div>
                 )}
 
                 <div className="form-group">
-                  <label htmlFor="newPassword">New Login Password</label>
+                  <label htmlFor="newPassword">{t('New Login Password')}</label>
                   <input
                     id="newPassword"
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="At least 6 characters"
+                    placeholder={t('At least 6 characters')}
                   />
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="confirmPassword">Confirm New Login Password</label>
+                  <label htmlFor="confirmPassword">{t('Confirm New Login Password')}</label>
                   <input
                     id="confirmPassword"
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm new password"
+                    placeholder={t('Confirm new password')}
                   />
                 </div>
 
@@ -1124,7 +1251,7 @@ export default function SettingsPage() {
                   onClick={handleChangePassword}
                   disabled={saving || !newPassword || !confirmPassword}
                 >
-                  {saving ? 'Saving...' : account?.hasPassword ? 'Change Login Password' : 'Set Login Password'}
+                  {saving ? t('Saving...') : account?.hasPassword ? t('Change Login Password') : t('Set Login Password')}
                 </button>
               </div>
             </div>
@@ -1133,13 +1260,13 @@ export default function SettingsPage() {
           {/* Account Tab */}
           {tab === 'account' && (
             <div className="settings-section">
-              <h2>Account</h2>
-              <p className="section-description">Manage your account and connected services</p>
+              <h2>{t('Account')}</h2>
+              <p className="section-description">{isArabic ? 'إدارة حسابك والخدمات المرتبطة' : 'Manage your account and connected services'}</p>
 
               {/* Connected Accounts */}
               <div className="account-card">
-                <h3>Connected Accounts</h3>
-                <p>Sign in methods linked to your account</p>
+                <h3>{isArabic ? 'الحسابات المرتبطة' : 'Connected Accounts'}</h3>
+                <p>{isArabic ? 'طرق تسجيل الدخول المرتبطة بحسابك' : 'Sign in methods linked to your account'}</p>
 
                 <div className="connected-accounts">
                   {/* Email/Password */}
@@ -1147,19 +1274,19 @@ export default function SettingsPage() {
                     <div className="connected-info">
                       <span className="connected-icon email-icon">📧</span>
                       <div>
-                        <strong>Email & Password</strong>
+                        <strong>{isArabic ? 'البريد وكلمة المرور' : 'Email & Password'}</strong>
                         <span>{account?.email}</span>
                       </div>
                     </div>
                     <div className="connected-actions">
                       {account?.hasPassword ? (
-                        <span className="connected-status active">Active</span>
+                        <span className="connected-status active">{isArabic ? 'نشط' : 'Active'}</span>
                       ) : (
                         <button
                           className="btn small"
                           onClick={() => setTab('security')}
                         >
-                          Set Password
+                          {isArabic ? 'تعيين كلمة مرور' : 'Set Password'}
                         </button>
                       )}
                     </div>
@@ -1178,19 +1305,19 @@ export default function SettingsPage() {
                       </span>
                       <div>
                         <strong>Google</strong>
-                        <span>Sign in with Google</span>
+                        <span>{isArabic ? 'تسجيل الدخول باستخدام Google' : 'Sign in with Google'}</span>
                       </div>
                     </div>
                     <div className="connected-actions">
                       {account?.connectedAccounts.includes('google') ? (
                         <>
-                          <span className="connected-status active">Connected</span>
+                          <span className="connected-status active">{isArabic ? 'متصل' : 'Connected'}</span>
                           <button
                             className="btn small secondary"
                             onClick={() => handleUnlinkAccount('google')}
                             disabled={unlinkingProvider === 'google'}
                           >
-                            {unlinkingProvider === 'google' ? 'Disconnecting...' : 'Disconnect'}
+                            {unlinkingProvider === 'google' ? (isArabic ? 'جارٍ الفصل...' : 'Disconnecting...') : (isArabic ? 'فصل' : 'Disconnect')}
                           </button>
                         </>
                       ) : (
@@ -1199,7 +1326,7 @@ export default function SettingsPage() {
                           onClick={() => handleLinkAccount('google')}
                           disabled={linkingProvider === 'google' || !providers?.google}
                         >
-                          {linkingProvider === 'google' ? 'Connecting...' : 'Connect'}
+                          {linkingProvider === 'google' ? (isArabic ? 'جارٍ الربط...' : 'Connecting...') : (isArabic ? 'ربط' : 'Connect')}
                         </button>
                       )}
                     </div>
@@ -1215,19 +1342,19 @@ export default function SettingsPage() {
                       </span>
                       <div>
                         <strong>GitHub</strong>
-                        <span>Sign in with GitHub</span>
+                        <span>{isArabic ? 'تسجيل الدخول باستخدام GitHub' : 'Sign in with GitHub'}</span>
                       </div>
                     </div>
                     <div className="connected-actions">
                       {account?.connectedAccounts.includes('github') ? (
                         <>
-                          <span className="connected-status active">Connected</span>
+                          <span className="connected-status active">{isArabic ? 'متصل' : 'Connected'}</span>
                           <button
                             className="btn small secondary"
                             onClick={() => handleUnlinkAccount('github')}
                             disabled={unlinkingProvider === 'github'}
                           >
-                            {unlinkingProvider === 'github' ? 'Disconnecting...' : 'Disconnect'}
+                            {unlinkingProvider === 'github' ? (isArabic ? 'جارٍ الفصل...' : 'Disconnecting...') : (isArabic ? 'فصل' : 'Disconnect')}
                           </button>
                         </>
                       ) : (
@@ -1236,7 +1363,7 @@ export default function SettingsPage() {
                           onClick={() => handleLinkAccount('github')}
                           disabled={linkingProvider === 'github' || !providers?.github}
                         >
-                          {linkingProvider === 'github' ? 'Connecting...' : 'Connect'}
+                          {linkingProvider === 'github' ? (isArabic ? 'جارٍ الربط...' : 'Connecting...') : (isArabic ? 'ربط' : 'Connect')}
                         </button>
                       )}
                     </div>
@@ -1246,22 +1373,22 @@ export default function SettingsPage() {
 
               {/* Member Since */}
               <div className="account-card">
-                <h3>Account Info</h3>
+                <h3>{t('Account Info')}</h3>
                 <div className="account-info-item">
-                  <span>Member since</span>
-                  <strong>{account?.createdAt ? new Date(account.createdAt).toLocaleDateString() : 'N/A'}</strong>
+                  <span>{t('Member since')}</span>
+                  <strong>{account?.createdAt ? formatDate(account.createdAt) : (isArabic ? 'غير متاح' : 'N/A')}</strong>
                 </div>
               </div>
 
               {/* Danger Zone */}
               <div className="account-card danger">
-                <h3>Danger Zone</h3>
-                <p>Once you delete your account, there is no going back. Please be certain.</p>
+                <h3>{t('Danger Zone')}</h3>
+                <p>{t('Delete account warning')}</p>
                 <button
                   className="btn danger"
                   onClick={() => setShowDeleteModal(true)}
                 >
-                  Delete Account
+                  {t('Delete Account')}
                 </button>
               </div>
             </div>
@@ -1313,7 +1440,7 @@ export default function SettingsPage() {
               <div className="account-card">
                 <h3>OpenAI</h3>
                 <div className="form-group">
-                  <label htmlFor="openaiModel">Model</label>
+                  <label htmlFor="openaiModel">{isArabic ? 'النموذج' : 'Model'}</label>
                   <input
                     id="openaiModel"
                     type="text"
@@ -1321,7 +1448,7 @@ export default function SettingsPage() {
                     onChange={(e) => setAiPrefs(prev => ({ ...prev, openaiModel: e.target.value }))}
                     placeholder="gpt-4o-mini"
                   />
-                  <p className="help-text">Requires `OPENAI_API_KEY` on the server.</p>
+                  <p className="help-text">{isArabic ? 'يتطلب `OPENAI_API_KEY` على الخادم.' : 'Requires `OPENAI_API_KEY` on the server.'}</p>
                 </div>
               </div>
 
@@ -1347,7 +1474,7 @@ export default function SettingsPage() {
                           : (isArabic ? 'لابتوب/كمبيوتر متوسط' : 'Laptop/PC (balanced)')}
                       <br />
                       <strong>{isArabic ? 'إصدار القائمة:' : 'Manifest version:'}</strong>{' '}
-                      {desktopAiModelInfo.manifestVersion || 'N/A'}
+                      {desktopAiModelInfo.manifestVersion || (isArabic ? 'غير متاح' : 'N/A')}
                     </div>
                   )}
                   {desktopAiModelInfo?.models?.length ? (
@@ -1520,26 +1647,27 @@ export default function SettingsPage() {
       {showResetVaultModal && (
         <div className="modal-overlay" onClick={() => setShowResetVaultModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Reset Encryption</h2>
+            <h2>{t('Reset Encryption Modal Title')}</h2>
             <p>
-              <strong>This action is irreversible.</strong> All your encrypted data
-              (folder names, file names, file content, library items) will become
-              permanently inaccessible.
+              <strong>{isArabic ? 'هذا الإجراء لا يمكن التراجع عنه.' : 'This action is irreversible.'}</strong>{' '}
+              {isArabic
+                ? 'جميع بياناتك المشفرة (أسماء المجلدات والملفات والمحتوى وعناصر المكتبة) ستصبح غير قابلة للوصول بشكل دائم.'
+                : 'All your encrypted data (folder names, file names, file content, library items) will become permanently inaccessible.'}
             </p>
-            <p>Are you sure you want to continue?</p>
+            <p>{t('Reset Encryption Modal Confirm')}</p>
 
             <div className="modal-actions">
               <button
                 className="btn secondary"
                 onClick={() => setShowResetVaultModal(false)}
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button
                 className="btn danger"
                 onClick={handleResetVault}
               >
-                Yes, Reset Encryption
+                {t('Yes, Reset Encryption')}
               </button>
             </div>
           </div>
@@ -1550,15 +1678,15 @@ export default function SettingsPage() {
       {showDeleteModal && (
         <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Delete Account</h2>
-            <p>This action cannot be undone. All your data will be permanently deleted.</p>
-            <p>Type <strong>DELETE MY ACCOUNT</strong> to confirm:</p>
+            <h2>{t('Delete Account')}</h2>
+            <p>{isArabic ? 'لا يمكن التراجع عن هذا الإجراء. سيتم حذف كل بياناتك نهائيًا.' : 'This action cannot be undone. All your data will be permanently deleted.'}</p>
+            <p>{t('Type DELETE MY ACCOUNT to confirm:')}</p>
 
             <input
               type="text"
               value={deleteConfirmation}
               onChange={(e) => setDeleteConfirmation(e.target.value)}
-              placeholder="DELETE MY ACCOUNT"
+                placeholder="DELETE MY ACCOUNT"
             />
 
             <div className="modal-actions">
@@ -1569,14 +1697,14 @@ export default function SettingsPage() {
                   setDeleteConfirmation('');
                 }}
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button
                 className="btn danger"
                 onClick={handleDeleteAccount}
                 disabled={saving || deleteConfirmation !== 'DELETE MY ACCOUNT'}
               >
-                {saving ? 'Deleting...' : 'Delete Account'}
+                {saving ? t('Deleting...') : t('Delete Account')}
               </button>
             </div>
           </div>

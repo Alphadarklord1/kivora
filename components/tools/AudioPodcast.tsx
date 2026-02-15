@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { extractTextFromFile } from '@/lib/pdf/extract';
 import { idbStore } from '@/lib/idb';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface Folder {
   id: string;
@@ -60,6 +61,42 @@ const WEB_SPEECH_PREMIUM = [
 ];
 
 export function AudioPodcast() {
+  const { t } = useI18n({
+    'Failed to generate audio file': 'تعذر توليد ملف الصوت',
+    'AI Podcast Generator': 'مولد البودكاست بالذكاء الاصطناعي',
+    'Turn your study notes into natural-sounding audio': 'حوّل ملاحظاتك الدراسية إلى صوت طبيعي.',
+    'Reset': 'إعادة ضبط',
+    'Neural TTS': 'تحويل عصبي TTS',
+    'Browser TTS': 'تحويل المتصفح TTS',
+    'Using browser voices - quality varies by device': 'استخدام أصوات المتصفح - الجودة تختلف حسب الجهاز',
+    'Neural TTS - High quality offline voices (larger download, cached after first use)': 'تحويل عصبي TTS - أصوات عالية الجودة بدون إنترنت (تنزيل أكبر ويتم حفظها بعد الاستخدام الأول)',
+    'Downloading voice model...': 'جارٍ تنزيل نموذج الصوت...',
+    'Hide File Selector': 'إخفاء محدد الملفات',
+    'Select from StudyPilot': 'اختر من StudyPilot',
+    '-- Select Folder --': '-- اختر مجلدًا --',
+    '-- Select Subfolder --': '-- اختر مجلدًا فرعيًا --',
+    'Loading files...': 'جارٍ تحميل الملفات...',
+    'No files in this subfolder': 'لا توجد ملفات في هذا المجلد الفرعي',
+    'Extracting...': 'جارٍ الاستخراج...',
+    'Paste your study notes or summary:': 'ألصق ملاحظاتك أو ملخصك الدراسي:',
+    'Paste your study material here, or select a file from StudyPilot above...': 'ألصق المادة الدراسية هنا، أو اختر ملفًا من StudyPilot بالأعلى...',
+    '{count} words': '{count} كلمة',
+    'Estimated duration: {duration}': 'المدة المتوقعة: {duration}',
+    'Select Voice:': 'اختر الصوت:',
+    'Speed: {speed}x': 'السرعة: {speed}x',
+    'Generating...': 'جارٍ التوليد...',
+    'Resume': 'متابعة',
+    'Play': 'تشغيل',
+    'Pause': 'إيقاف مؤقت',
+    'Stop': 'إيقاف',
+    'Download': 'تنزيل',
+    'Tips for best results:': 'نصائح لأفضل نتيجة:',
+    'Neural TTS produces much more natural speech than browser voices': 'تحويل Neural TTS ينتج صوتًا طبيعيًا أكثر من أصوات المتصفح',
+    'Voice models are cached - only download once per voice': 'نماذج الصوت تُحفظ محليًا - تنزيل مرة واحدة فقط لكل صوت',
+    'Shorter summaries (under 500 words) generate faster': 'الملخصات الأقصر (أقل من 500 كلمة) تُولد أسرع',
+    'Download audio to listen offline on any device': 'نزّل الصوت للاستماع بدون إنترنت على أي جهاز',
+    'Adjust speed without re-generating (Neural TTS only)': 'عدّل السرعة دون إعادة التوليد (Neural TTS فقط)',
+  });
   const [text, setText] = useState('');
   const [selectedVoice, setSelectedVoice] = useState<string>('en_US-hfc_female-high');
   const [speed, setSpeed] = useState(1);
@@ -497,7 +534,7 @@ export function AudioPodcast() {
         URL.revokeObjectURL(url);
       }
     } catch {
-      setError('Failed to generate audio file');
+      setError(t('Failed to generate audio file'));
     } finally {
       setIsGenerating(false);
     }
@@ -538,12 +575,12 @@ export function AudioPodcast() {
       {/* Header */}
       <div className="header">
         <div>
-          <h3>AI Podcast Generator</h3>
-          <p>Turn your study notes into natural-sounding audio</p>
+          <h3>{t('AI Podcast Generator')}</h3>
+          <p>{t('Turn your study notes into natural-sounding audio')}</p>
         </div>
         {(text || isPlaying) && (
           <button className="btn ghost" onClick={handleReset}>
-            Reset
+            {t('Reset')}
           </button>
         )}
       </div>
@@ -555,22 +592,22 @@ export function AudioPodcast() {
           onClick={() => setUseFallback(false)}
           disabled={!piperLoaded}
         >
-          🧠 Neural TTS
+          🧠 {t('Neural TTS')}
           {!piperLoaded && <span className="loading-dot">...</span>}
         </button>
         <button
           className={`engine-btn ${useFallback ? 'active' : ''}`}
           onClick={() => setUseFallback(true)}
         >
-          🔊 Browser TTS
+          🔊 {t('Browser TTS')}
         </button>
       </div>
 
       {/* Info Badge */}
       <div className={`info-badge ${useFallback ? 'fallback' : 'neural'}`}>
         {useFallback
-          ? 'Using browser voices - quality varies by device'
-          : 'Neural TTS - High quality offline voices (larger download, cached after first use)'
+          ? t('Using browser voices - quality varies by device')
+          : t('Neural TTS - High quality offline voices (larger download, cached after first use)')
         }
       </div>
 
@@ -583,7 +620,7 @@ export function AudioPodcast() {
       {downloadingVoice && (
         <div className="download-progress">
           <div className="download-info">
-            <span>Downloading voice model...</span>
+            <span>{t('Downloading voice model...')}</span>
             <span>{downloadProgress}%</span>
           </div>
           <div className="download-bar">
@@ -599,7 +636,7 @@ export function AudioPodcast() {
           onClick={() => setShowFileSelector(!showFileSelector)}
           disabled={isPlaying}
         >
-          📁 {showFileSelector ? 'Hide File Selector' : 'Select from StudyPilot'}
+          📁 {showFileSelector ? t('Hide File Selector') : t('Select from StudyPilot')}
         </button>
 
         {showFileSelector && (
@@ -610,7 +647,7 @@ export function AudioPodcast() {
                 onChange={(e) => setSelectedFolder(e.target.value)}
                 className="picker-select"
               >
-                <option value="">-- Select Folder --</option>
+                <option value="">{t('-- Select Folder --')}</option>
                 {folders.map(folder => (
                   <option key={folder.id} value={folder.id}>{folder.name}</option>
                 ))}
@@ -622,7 +659,7 @@ export function AudioPodcast() {
                 className="picker-select"
                 disabled={!selectedFolder}
               >
-                <option value="">-- Select Subfolder --</option>
+                <option value="">{t('-- Select Subfolder --')}</option>
                 {topics.map(topic => (
                   <option key={topic.id} value={topic.id}>{topic.name}</option>
                 ))}
@@ -630,11 +667,11 @@ export function AudioPodcast() {
             </div>
 
             {loadingFiles && (
-              <div className="loading-files">Loading files...</div>
+              <div className="loading-files">{t('Loading files...')}</div>
             )}
 
             {selectedTopic && !loadingFiles && files.length === 0 && (
-              <div className="no-files">No files in this subfolder</div>
+              <div className="no-files">{t('No files in this subfolder')}</div>
             )}
 
             {files.length > 0 && (
@@ -648,7 +685,7 @@ export function AudioPodcast() {
                   >
                     <span className="file-icon">{getFileIcon(file.name, file.type)}</span>
                     <span className="file-name">{file.name}</span>
-                    {extractingFile && <span className="extracting">Extracting...</span>}
+                    {extractingFile && <span className="extracting">{t('Extracting...')}</span>}
                   </button>
                 ))}
               </div>
@@ -659,25 +696,25 @@ export function AudioPodcast() {
 
       {/* Text Input */}
       <div className="input-section">
-        <label>Paste your study notes or summary:</label>
+        <label>{t('Paste your study notes or summary:')}</label>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Paste your study material here, or select a file from StudyPilot above..."
+          placeholder={t('Paste your study material here, or select a file from StudyPilot above...')}
           rows={8}
           disabled={isPlaying}
         />
         {text && (
           <div className="text-stats">
-            <span>{text.split(/\s+/).filter(Boolean).length} words</span>
-            <span>Estimated duration: {estimatedDuration()}</span>
+            <span>{t('{count} words', { count: text.split(/\s+/).filter(Boolean).length })}</span>
+            <span>{t('Estimated duration: {duration}', { duration: estimatedDuration() })}</span>
           </div>
         )}
       </div>
 
       {/* Voice Selection */}
       <div className="voice-section">
-        <label>Select Voice:</label>
+        <label>{t('Select Voice:')}</label>
 
         {!useFallback ? (
           // Piper Neural Voices
@@ -723,7 +760,7 @@ export function AudioPodcast() {
       {/* Speed Control */}
       <div className="control-section">
         <div className="control-item">
-          <label>Speed: {speed}x</label>
+          <label>{t('Speed: {speed}x', { speed })}</label>
           <input
             type="range"
             min="0.5"
@@ -756,11 +793,11 @@ export function AudioPodcast() {
               onClick={handlePlay}
               disabled={!text.trim() || isGenerating || piperLoading || !!downloadingVoice}
             >
-              {piperLoading ? 'Generating...' : isPaused ? '▶ Resume' : '▶ Play'}
+              {piperLoading ? t('Generating...') : isPaused ? `▶ ${t('Resume')}` : `▶ ${t('Play')}`}
             </button>
           ) : (
             <button className="btn pause-btn" onClick={handlePause}>
-              ⏸ Pause
+              ⏸ {t('Pause')}
             </button>
           )}
           <button
@@ -768,27 +805,27 @@ export function AudioPodcast() {
             onClick={handleStop}
             disabled={!isPlaying && !isPaused}
           >
-            ⏹ Stop
+            ⏹ {t('Stop')}
           </button>
           <button
             className="btn secondary download-btn"
             onClick={handleDownload}
             disabled={!text.trim() || isGenerating || isPlaying || useFallback}
           >
-            {isGenerating ? 'Generating...' : '⬇ Download'}
+            {isGenerating ? t('Generating...') : `⬇ ${t('Download')}`}
           </button>
         </div>
       </div>
 
       {/* Tips */}
       <div className="tips-section">
-        <h4>Tips for best results:</h4>
+        <h4>{t('Tips for best results:')}</h4>
         <ul>
-          <li>Neural TTS produces much more natural speech than browser voices</li>
-          <li>Voice models are cached - only download once per voice</li>
-          <li>Shorter summaries (under 500 words) generate faster</li>
-          <li>Download audio to listen offline on any device</li>
-          <li>Adjust speed without re-generating (Neural TTS only)</li>
+          <li>{t('Neural TTS produces much more natural speech than browser voices')}</li>
+          <li>{t('Voice models are cached - only download once per voice')}</li>
+          <li>{t('Shorter summaries (under 500 words) generate faster')}</li>
+          <li>{t('Download audio to listen offline on any device')}</li>
+          <li>{t('Adjust speed without re-generating (Neural TTS only)')}</li>
         </ul>
       </div>
 

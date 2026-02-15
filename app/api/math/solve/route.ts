@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { evaluateAiScope } from '@/lib/ai/policy';
+import { isGuestModeEnabled } from '@/lib/runtime/mode';
 
 // Math solving API - uses AI for complex problems
 // Supports: Calculus I/II, Linear Algebra, Differential Equations, etc.
@@ -246,7 +247,7 @@ function fallbackSolver(problem: string, problemType: string): MathSolution {
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user?.id) {
+    if (!session?.user?.id && !isGuestModeEnabled()) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

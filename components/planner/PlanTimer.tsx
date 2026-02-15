@@ -2,6 +2,7 @@
 
 import { useStudyTimer } from '@/lib/planner/timer-store';
 import { StudyPlan } from '@/hooks/useStudyPlans';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface PlanTimerProps {
   plan: StudyPlan | null;
@@ -15,6 +16,21 @@ function formatTime(totalSeconds: number): string {
 }
 
 export function PlanTimer({ plan, onBack }: PlanTimerProps) {
+  const { t } = useI18n({
+    'Back to Schedule': 'العودة إلى الجدول',
+    'Break Time': 'وقت الاستراحة',
+    'Study Session': 'جلسة دراسة',
+    '{count} sessions completed': 'تم إكمال {count} جلسات',
+    ' (long break)': ' (استراحة طويلة)',
+    ' (short break)': ' (استراحة قصيرة)',
+    Pause: 'إيقاف مؤقت',
+    Resume: 'استئناف',
+    Start: 'بدء',
+    Reset: 'إعادة تعيين',
+    Duration: 'المدة',
+    'Day {n}': 'اليوم {n}',
+    '{count} topics': '{count} موضوعات',
+  });
   const timer = useStudyTimer();
 
   const dayIndex = timer.currentDayIndex;
@@ -30,15 +46,15 @@ export function PlanTimer({ plan, onBack }: PlanTimerProps) {
     <div className="plan-timer">
       <button className="back-btn" onClick={onBack}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-        Back to Schedule
+        {t('Back to Schedule')}
       </button>
 
       <div className={`timer-container ${timer.breakMode ? 'break' : ''}`}>
-        <span className="timer-label">{timer.breakMode ? 'Break Time' : 'Study Session'}</span>
+        <span className="timer-label">{timer.breakMode ? t('Break Time') : t('Study Session')}</span>
         <div className="timer-display">{formatTime(timer.seconds)}</div>
         <span className="timer-sessions">
-          {timer.sessionsCompleted} session{timer.sessionsCompleted !== 1 ? 's' : ''} completed
-          {timer.breakMode && (timer.sessionsCompleted % 4 === 0 ? ' (long break)' : ' (short break)')}
+          {t('{count} sessions completed', { count: timer.sessionsCompleted })}
+          {timer.breakMode && (timer.sessionsCompleted % 4 === 0 ? t(' (long break)') : t(' (short break)'))}
         </span>
       </div>
 
@@ -46,22 +62,22 @@ export function PlanTimer({ plan, onBack }: PlanTimerProps) {
         {timer.isRunning ? (
           <button className="control-btn pause" onClick={timer.pauseTimer}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-            Pause
+            {t('Pause')}
           </button>
         ) : (
           <button className="control-btn start" onClick={timer.resumeTimer}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            {timer.seconds < timer.duration ? 'Resume' : 'Start'}
+            {timer.seconds < timer.duration ? t('Resume') : t('Start')}
           </button>
         )}
         <button className="control-btn reset" onClick={timer.resetTimer}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-          Reset
+          {t('Reset')}
         </button>
       </div>
 
       <div className="presets">
-        <span className="presets-label">Duration</span>
+        <span className="presets-label">{t('Duration')}</span>
         <div className="preset-btns">
           {presets.map(p => (
             <button
@@ -78,7 +94,7 @@ export function PlanTimer({ plan, onBack }: PlanTimerProps) {
 
       {currentDay && (
         <div className="day-info">
-          <h4>Day {currentDay.dayNumber} — {currentDay.topics.length} topic{currentDay.topics.length !== 1 ? 's' : ''}</h4>
+          <h4>{t('Day {n}', { n: currentDay.dayNumber })} — {t('{count} topics', { count: currentDay.topics.length })}</h4>
           <div className="day-topics-list">
             {currentDay.topics.map((t, i) => (
               <div key={i} className="timer-topic">

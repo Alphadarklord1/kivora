@@ -1,10 +1,27 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 type NoiseType = 'white' | 'brown';
 
 export function FocusMode() {
+  const { t } = useI18n({
+    'Focus session completed': 'اكتملت جلسة التركيز',
+    'Focus Mode': 'وضع التركيز',
+    'Stay on track with sessions, noise, and streaks.': 'حافظ على المسار مع الجلسات والضوضاء وسلسلة الأيام.',
+    'Streak: {count} days': 'السلسلة: {count} يوم',
+    'Pause': 'إيقاف مؤقت',
+    'Start': 'ابدأ',
+    'Reset': 'إعادة ضبط',
+    'Noise': 'الضوضاء',
+    'White or brown noise to block distractions.': 'ضوضاء بيضاء أو بنية لحجب المشتتات.',
+    'White': 'بيضاء',
+    'Brown': 'بنية',
+    'Noise On': 'تشغيل الضوضاء',
+    'Noise Off': 'إيقاف الضوضاء',
+    'Volume': 'مستوى الصوت',
+  });
   const [minutes, setMinutes] = useState(25);
   const [seconds, setSeconds] = useState(0);
   const [running, setRunning] = useState(false);
@@ -28,7 +45,7 @@ export function FocusMode() {
         credentials: 'include',
         body: JSON.stringify({
           mode: 'focus',
-          content: 'Focus session completed',
+          content: t('Focus session completed'),
           metadata: { minutes: 25, completedAt: new Date().toISOString() },
         }),
       });
@@ -135,35 +152,35 @@ export function FocusMode() {
     <div className="focus-mode">
       <div className="focus-card">
         <div>
-          <h3>Focus Mode</h3>
-          <p>Stay on track with sessions, noise, and streaks.</p>
+          <h3>{t('Focus Mode')}</h3>
+          <p>{t('Stay on track with sessions, noise, and streaks.')}</p>
         </div>
-        <div className="streak">🔥 Streak: {streak} days</div>
+        <div className="streak">🔥 {t('Streak: {count} days', { count: streak })}</div>
       </div>
 
       <div className="timer-card">
         <div className="time">{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</div>
         <div className="bar"><span style={{ width: `${progress}%` }} /></div>
         <div className="actions">
-          <button className="btn" onClick={() => setRunning(prev => !prev)}>{running ? 'Pause' : 'Start'}</button>
-          <button className="btn secondary" onClick={reset}>Reset</button>
+          <button className="btn" onClick={() => setRunning(prev => !prev)}>{running ? t('Pause') : t('Start')}</button>
+          <button className="btn secondary" onClick={reset}>{t('Reset')}</button>
         </div>
       </div>
 
       <div className="noise-card">
         <div>
-          <h4>Noise</h4>
-          <p>White or brown noise to block distractions.</p>
+          <h4>{t('Noise')}</h4>
+          <p>{t('White or brown noise to block distractions.')}</p>
         </div>
         <div className="noise-controls">
-          <button className={`btn ${noiseType === 'white' ? '' : 'secondary'}`} onClick={() => setNoiseType('white')}>White</button>
-          <button className={`btn ${noiseType === 'brown' ? '' : 'secondary'}`} onClick={() => setNoiseType('brown')}>Brown</button>
+          <button className={`btn ${noiseType === 'white' ? '' : 'secondary'}`} onClick={() => setNoiseType('white')}>{t('White')}</button>
+          <button className={`btn ${noiseType === 'brown' ? '' : 'secondary'}`} onClick={() => setNoiseType('brown')}>{t('Brown')}</button>
           <button className={`btn ${noiseOn ? '' : 'secondary'}`} onClick={() => setNoiseOn(prev => !prev)}>
-            {noiseOn ? 'Noise On' : 'Noise Off'}
+            {noiseOn ? t('Noise On') : t('Noise Off')}
           </button>
         </div>
         <label>
-          Volume
+          {t('Volume')}
           <input type="range" min="0" max="1" step="0.05" value={volume} onChange={(e) => setVolume(Number(e.target.value))} />
         </label>
       </div>

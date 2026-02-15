@@ -17,16 +17,17 @@ export function SettingsInitializer() {
 
     // Apply theme
     if (theme) {
+      const normalizedTheme = theme === 'dark' ? 'blue' : theme;
       if (theme === 'system') {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', prefersDark ? 'blue' : 'light');
       } else {
-        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.setAttribute('data-theme', normalizedTheme);
       }
     } else {
       // Default to system preference
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', prefersDark ? 'blue' : 'light');
     }
 
     // Apply font scale
@@ -51,7 +52,7 @@ export function SettingsInitializer() {
     const handleChange = (e: MediaQueryListEvent) => {
       const savedTheme = localStorage.getItem('studypilot_theme');
       if (savedTheme === 'system' || !savedTheme) {
-        document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', e.matches ? 'blue' : 'light');
       }
     };
 

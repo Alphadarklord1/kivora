@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { StudyTopic } from '@/lib/planner/generate';
 import { useFoldersStore } from '@/lib/store/folders';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface PlanFormProps {
   onGenerate: (data: {
@@ -16,6 +17,27 @@ interface PlanFormProps {
 }
 
 export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
+  const { t } = useI18n({
+    'Enter a plan title': 'أدخل عنوان الخطة',
+    'Pick an exam date': 'اختر تاريخ الاختبار',
+    'Exam date must be in the future': 'يجب أن يكون تاريخ الاختبار في المستقبل',
+    'Add at least one topic': 'أضف موضوعًا واحدًا على الأقل',
+    'Create Study Plan': 'إنشاء خطة دراسة',
+    'Plan Title': 'عنوان الخطة',
+    'e.g., Final Exam - Biology 101': 'مثال: الاختبار النهائي - أحياء 101',
+    'Exam Date': 'تاريخ الاختبار',
+    'Daily Study ({minutes} min)': 'الدراسة اليومية ({minutes} دقيقة)',
+    'Link Study Materials (optional)': 'ربط مواد الدراسة (اختياري)',
+    'No folder linked': 'لا يوجد مجلد مرتبط',
+    'Files from this folder will appear in your schedule view': 'ستظهر ملفات هذا المجلد في عرض الجدول',
+    Topics: 'الموضوعات',
+    'Topic {index}': 'موضوع {index}',
+    'Remove topic': 'حذف الموضوع',
+    Difficulty: 'الصعوبة',
+    'Est. hours': 'الساعات المقدّرة',
+    'Add Topic': 'إضافة موضوع',
+    'Generate Schedule': 'توليد الجدول',
+  });
   const { folders } = useFoldersStore();
   const [title, setTitle] = useState('');
   const [examDate, setExamDate] = useState('');
@@ -46,12 +68,12 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
   const handleSubmit = () => {
     setError('');
 
-    if (!title.trim()) { setError('Enter a plan title'); return; }
-    if (!examDate) { setError('Pick an exam date'); return; }
-    if (new Date(examDate) <= new Date()) { setError('Exam date must be in the future'); return; }
+    if (!title.trim()) { setError(t('Enter a plan title')); return; }
+    if (!examDate) { setError(t('Pick an exam date')); return; }
+    if (new Date(examDate) <= new Date()) { setError(t('Exam date must be in the future')); return; }
 
     const validTopics = topics.filter(t => t.name.trim());
-    if (validTopics.length === 0) { setError('Add at least one topic'); return; }
+    if (validTopics.length === 0) { setError(t('Add at least one topic')); return; }
 
     onGenerate({
       title: title.trim(),
@@ -65,7 +87,7 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
   return (
     <div className="plan-form">
       <div className="form-header">
-        <h2>Create Study Plan</h2>
+        <h2>{t('Create Study Plan')}</h2>
         {onCancel && (
           <button className="cancel-btn" onClick={onCancel}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -76,22 +98,22 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
       {error && <div className="form-error">{error}</div>}
 
       <div className="form-group">
-        <label>Plan Title</label>
+        <label>{t('Plan Title')}</label>
         <input
           type="text"
           value={title}
           onChange={e => setTitle(e.target.value)}
-          placeholder="e.g., Final Exam - Biology 101"
+          placeholder={t('e.g., Final Exam - Biology 101')}
         />
       </div>
 
       <div className="form-row">
         <div className="form-group">
-          <label>Exam Date</label>
+          <label>{t('Exam Date')}</label>
           <input type="date" value={examDate} onChange={e => setExamDate(e.target.value)} min={minDate} />
         </div>
         <div className="form-group">
-          <label>Daily Study ({dailyMinutes} min)</label>
+          <label>{t('Daily Study ({minutes} min)', { minutes: dailyMinutes })}</label>
           <input
             type="range"
             min={30}
@@ -108,21 +130,21 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
 
       {folders.length > 0 && (
         <div className="form-group">
-          <label>Link Study Materials (optional)</label>
+          <label>{t('Link Study Materials (optional)')}</label>
           <select value={folderId} onChange={e => setFolderId(e.target.value)}>
-            <option value="">No folder linked</option>
+            <option value="">{t('No folder linked')}</option>
             {folders.map(f => (
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
           </select>
           {folderId && (
-            <span className="folder-hint">Files from this folder will appear in your schedule view</span>
+            <span className="folder-hint">{t('Files from this folder will appear in your schedule view')}</span>
           )}
         </div>
       )}
 
       <div className="form-group">
-        <label>Topics</label>
+        <label>{t('Topics')}</label>
         <div className="topics-list">
           {topics.map((topic, idx) => (
             <div key={idx} className="topic-card">
@@ -131,18 +153,18 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
                   type="text"
                   value={topic.name}
                   onChange={e => updateTopic(idx, 'name', e.target.value)}
-                  placeholder={`Topic ${idx + 1}`}
+                  placeholder={t('Topic {index}', { index: idx + 1 })}
                   className="topic-name"
                 />
                 {topics.length > 1 && (
-                  <button className="remove-btn" onClick={() => removeTopic(idx)} title="Remove topic">
+                  <button className="remove-btn" onClick={() => removeTopic(idx)} title={t('Remove topic')}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                   </button>
                 )}
               </div>
               <div className="topic-meta">
                 <div className="meta-item">
-                  <span className="meta-label">Difficulty</span>
+                  <span className="meta-label">{t('Difficulty')}</span>
                   <div className="star-rating">
                     {[1, 2, 3, 4, 5].map(s => (
                       <button
@@ -156,7 +178,7 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
                   </div>
                 </div>
                 <div className="meta-item">
-                  <span className="meta-label">Est. hours</span>
+                  <span className="meta-label">{t('Est. hours')}</span>
                   <input
                     type="number"
                     min={1}
@@ -172,13 +194,13 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
         </div>
         <button className="add-topic-btn" onClick={addTopic}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Add Topic
+          {t('Add Topic')}
         </button>
       </div>
 
       <button className="generate-btn" onClick={handleSubmit}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        Generate Schedule
+        {t('Generate Schedule')}
       </button>
 
       <style jsx>{`

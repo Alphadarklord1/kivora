@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { generateStudySchedule, type StudyTopic } from '@/lib/planner/generate';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 const PERIOD_OPTIONS = [
   { value: 7, label: 'Last 7 days' },
@@ -15,8 +16,75 @@ const PERIOD_OPTIONS = [
 type DailyPoint = { date: string; quizzes: number; avgScore: number };
 
 export function StudyAnalytics() {
+  const { t, locale } = useI18n({
+    'Last 7 days': 'آخر 7 أيام',
+    'Last 30 days': 'آخر 30 يومًا',
+    'Last 90 days': 'آخر 90 يومًا',
+    'Last year': 'آخر سنة',
+    'Failed to load analytics': 'فشل تحميل التحليلات',
+    'Try Again': 'حاول مرة أخرى',
+    'Study Analytics': 'تحليلات الدراسة',
+    'Track outcomes, identify weak spots, and improve consistency with AI guidance.': 'تتبّع النتائج، وحدد نقاط الضعف، وحسّن الاستمرارية بإرشاد الذكاء الاصطناعي.',
+    'AI-powered insights': 'رؤى مدعومة بالذكاء الاصطناعي',
+    Range: 'النطاق',
+    'Export PDF': 'تصدير PDF',
+    'Export CSV': 'تصدير CSV',
+    'Share Snapshot': 'مشاركة اللقطة',
+    'AI Study Advisor': 'مستشار الدراسة الذكي',
+    'Adaptive recommendations': 'توصيات تكيفية',
+    'Generate Plan': 'توليد خطة',
+    'Review Weak Areas': 'مراجعة نقاط الضعف',
+    'Average Score': 'متوسط الدرجة',
+    'Across all attempts': 'عبر جميع المحاولات',
+    'Average score across selected period': 'متوسط الدرجة خلال الفترة المحددة',
+    'Total Quizzes': 'إجمالي الاختبارات',
+    'Attempts completed': 'المحاولات المكتملة',
+    'Total quiz attempts in selected period': 'إجمالي محاولات الاختبار في الفترة المحددة',
+    'Study Streak': 'سلسلة الدراسة',
+    'Consecutive days': 'أيام متتالية',
+    'Current consecutive active-study days': 'عدد الأيام المتتالية النشطة حاليًا',
+    'Tools Used': 'الأدوات المستخدمة',
+    'No usage yet': 'لا يوجد استخدام بعد',
+    'Distinct tools used this period': 'عدد الأدوات المختلفة المستخدمة في هذه الفترة',
+    'Active Study Plan': 'الخطة الدراسية النشطة',
+    'Plans currently marked active': 'الخطط المصنفة نشطة حاليًا',
+    'Quiz Performance': 'أداء الاختبارات',
+    'Easy Signal': 'إشارة السهل',
+    'Medium Signal': 'إشارة المتوسط',
+    'Hard Signal': 'إشارة الصعب',
+    'Tool Usage': 'استخدام الأدوات',
+    'Most used: {tool}': 'الأكثر استخدامًا: {tool}',
+    'No tool activity yet.': 'لا يوجد نشاط أدوات بعد.',
+    'Performance Trend': 'اتجاه الأداء',
+    'Score trend': 'اتجاه الدرجات',
+    Attempts: 'المحاولات',
+    'Areas to Improve': 'المجالات التي تحتاج تحسين',
+    'Generate Practice': 'توليد تدريب',
+    'No weak areas identified yet. Keep practicing to get targeted coaching.': 'لم يتم تحديد نقاط ضعف بعد. واصل التدريب للحصول على توجيه أدق.',
+    'Study Plan Analytics': 'تحليلات خطة الدراسة',
+    'Completion Rate': 'معدل الإكمال',
+    'Avg Study Time': 'متوسط وقت الدراسة',
+    'Consistency Score': 'درجة الاستمرارية',
+    'Completed Days': 'الأيام المكتملة',
+    'Weekly Activity Heatmap': 'خريطة حرارة النشاط الأسبوعي',
+    Low: 'منخفض',
+    High: 'مرتفع',
+    'Recent Quiz Scores': 'درجات الاختبارات الأخيرة',
+    'Study Analytics Snapshot': 'لقطة تحليلات الدراسة',
+    'Average score: {value}%': 'متوسط الدرجة: {value}%',
+    'Total quizzes: {value}': 'إجمالي الاختبارات: {value}',
+    'Current streak: {value} day(s)': 'السلسلة الحالية: {value} يوم',
+    'Most used tool: {value}': 'الأداة الأكثر استخدامًا: {value}',
+    'Consistency score: {value}%': 'درجة الاستمرارية: {value}%',
+    General: 'عام',
+    'Could not generate plan. Please try again.': 'تعذر توليد الخطة. يرجى المحاولة مرة أخرى.',
+    'No AI insights yet. Complete a few more quizzes to unlock adaptive guidance.': 'لا توجد رؤى ذكاء اصطناعي بعد. أكمل بعض الاختبارات الإضافية لفتح التوجيه التكيفي.',
+    'Top: {tool}': 'الأعلى: {tool}',
+    'total plans': 'إجمالي الخطط',
+  });
   const router = useRouter();
   const { data, loading, error, refresh, setPeriod, period } = useAnalytics(30);
+  const periodOptions = PERIOD_OPTIONS.map((option) => ({ ...option, label: t(option.label) }));
 
   if (loading) {
     return (
@@ -67,8 +135,8 @@ export function StudyAnalytics() {
   if (error) {
     return (
       <div className="analytics-error">
-        <p>Failed to load analytics</p>
-        <button className="btn" onClick={refresh}>Try Again</button>
+        <p>{t('Failed to load analytics')}</p>
+        <button className="btn" onClick={refresh}>{t('Try Again')}</button>
         <style jsx>{`
           .analytics-error {
             text-align: center;
@@ -143,20 +211,20 @@ export function StudyAnalytics() {
 
   const aiInsights = insights.length > 0
     ? insights
-    : ['No AI insights yet. Complete a few more quizzes to unlock adaptive guidance.'];
+    : [t('No AI insights yet. Complete a few more quizzes to unlock adaptive guidance.')];
 
   const exportCsv = () => {
     const rows: string[][] = [
       ['Metric', 'Value'],
-      ['Average Score', `${quizStats.averageScore}%`],
-      ['Total Quizzes', `${quizStats.totalAttempts}`],
+      [t('Average Score'), `${quizStats.averageScore}%`],
+      [t('Total Quizzes'), `${quizStats.totalAttempts}`],
       ['Current Streak', `${activity.currentStreak}`],
-      ['Tools Used', `${toolUsageEntries.length}`],
+      [t('Tools Used'), `${toolUsageEntries.length}`],
       ['Active Plans', `${planStats.activePlans}`],
-      ['Completion Rate', `${completionRate}%`],
-      ['Consistency Score', `${consistencyScore}%`],
+      [t('Completion Rate'), `${completionRate}%`],
+      [t('Consistency Score'), `${consistencyScore}%`],
       ['Average Study Minutes', `${avgStudyMinutes}`],
-      ['Most Used Tool', formatMode(mostUsedTool)],
+      ['Most Used Tool', formatMode(mostUsedTool, t)],
       ['---', '---'],
       ['Weak Area', 'Accuracy'],
       ...weakAreas.map((item) => [item.topic, `${item.accuracy}%`]),
@@ -180,18 +248,18 @@ export function StudyAnalytics() {
 
   const shareSnapshot = async () => {
     const snapshot = [
-      `Study Analytics (${period}d)`,
-      `Average score: ${quizStats.averageScore}%`,
-      `Total quizzes: ${quizStats.totalAttempts}`,
-      `Current streak: ${activity.currentStreak} day(s)`,
-      `Most used tool: ${formatMode(mostUsedTool)}`,
-      `Consistency score: ${consistencyScore}%`,
+      `${t('Study Analytics')} (${period}d)`,
+      t('Average score: {value}%', { value: quizStats.averageScore }),
+      t('Total quizzes: {value}', { value: quizStats.totalAttempts }),
+      t('Current streak: {value} day(s)', { value: activity.currentStreak }),
+      t('Most used tool: {value}', { value: formatMode(mostUsedTool, t) }),
+      t('Consistency score: {value}%', { value: consistencyScore }),
     ].join('\n');
 
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Study Analytics Snapshot',
+          title: t('Study Analytics Snapshot'),
           text: snapshot,
         });
         return;
@@ -242,7 +310,7 @@ export function StudyAnalytics() {
     if (res.ok) {
       router.push('/planner');
     } else {
-      window.alert('Could not generate plan. Please try again.');
+      window.alert(t('Could not generate plan. Please try again.'));
     }
   };
 
@@ -262,29 +330,29 @@ export function StudyAnalytics() {
     <div className="study-analytics">
       <section className="analytics-header">
         <div className="header-copy">
-          <h1>Study Analytics</h1>
-          <p>Track outcomes, identify weak spots, and improve consistency with AI guidance.</p>
-          <span className="ai-badge">AI-powered insights</span>
+          <h1>{t('Study Analytics')}</h1>
+          <p>{t('Track outcomes, identify weak spots, and improve consistency with AI guidance.')}</p>
+          <span className="ai-badge">{t('AI-powered insights')}</span>
         </div>
         <div className="header-controls">
           <label className="period">
-            <span>Range</span>
+            <span>{t('Range')}</span>
             <select value={period} onChange={(e) => setPeriod(Number(e.target.value))}>
-              {PERIOD_OPTIONS.map((option) => (
+              {periodOptions.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
           </label>
-          <button className="analytics-btn ghost" onClick={exportPdf}>Export PDF</button>
-          <button className="analytics-btn ghost" onClick={exportCsv}>Export CSV</button>
-          <button className="analytics-btn ghost" onClick={shareSnapshot}>Share Snapshot</button>
+          <button className="analytics-btn ghost" onClick={exportPdf}>{t('Export PDF')}</button>
+          <button className="analytics-btn ghost" onClick={exportCsv}>{t('Export CSV')}</button>
+          <button className="analytics-btn ghost" onClick={shareSnapshot}>{t('Share Snapshot')}</button>
         </div>
       </section>
 
       <section className="ai-hero">
         <div className="ai-hero-head">
-          <h2>🧠 AI Study Advisor</h2>
-          <span className="accent-pill">Adaptive recommendations</span>
+          <h2>🧠 {t('AI Study Advisor')}</h2>
+          <span className="accent-pill">{t('Adaptive recommendations')}</span>
         </div>
         <ul>
           {aiInsights.slice(0, 3).map((insight, index) => (
@@ -293,21 +361,21 @@ export function StudyAnalytics() {
         </ul>
         <div className="hero-actions">
           <button className="analytics-btn primary" onClick={onCoachAction}>
-            Generate Plan
+            {t('Generate Plan')}
           </button>
           <button className="analytics-btn ghost" onClick={scrollToWeakAreas}>
-            Review Weak Areas
+            {t('Review Weak Areas')}
           </button>
         </div>
       </section>
 
       <section className="kpi-row">
         {[
-          { label: 'Average Score', value: `${quizStats.averageScore}%`, hint: 'Across all attempts', tooltip: 'Average score across selected period' },
-          { label: 'Total Quizzes', value: `${quizStats.totalAttempts}`, hint: 'Attempts completed', tooltip: 'Total quiz attempts in selected period' },
-          { label: 'Study Streak', value: `${activity.currentStreak}`, hint: 'Consecutive days', tooltip: 'Current consecutive active-study days' },
-          { label: 'Tools Used', value: `${toolUsageEntries.length}`, hint: mostUsedTool === 'none' ? 'No usage yet' : `Top: ${formatMode(mostUsedTool)}`, tooltip: 'Distinct tools used this period' },
-          { label: 'Active Study Plan', value: `${planStats.activePlans}`, hint: `${planStats.totalPlans} total plans`, tooltip: 'Plans currently marked active' },
+          { label: t('Average Score'), value: `${quizStats.averageScore}%`, hint: t('Across all attempts'), tooltip: t('Average score across selected period') },
+          { label: t('Total Quizzes'), value: `${quizStats.totalAttempts}`, hint: t('Attempts completed'), tooltip: t('Total quiz attempts in selected period') },
+          { label: t('Study Streak'), value: `${activity.currentStreak}`, hint: t('Consecutive days'), tooltip: t('Current consecutive active-study days') },
+          { label: t('Tools Used'), value: `${toolUsageEntries.length}`, hint: mostUsedTool === 'none' ? t('No usage yet') : t('Top: {tool}', { tool: formatMode(mostUsedTool, t) }), tooltip: t('Distinct tools used this period') },
+          { label: t('Active Study Plan'), value: `${planStats.activePlans}`, hint: `${planStats.totalPlans} ${t('total plans')}`, tooltip: t('Plans currently marked active') },
         ].map((metric) => (
           <article key={metric.label} className="metric-card" title={metric.tooltip}>
             <span className="metric-label">{metric.label}</span>
@@ -319,22 +387,22 @@ export function StudyAnalytics() {
 
       <section className="analytics-grid top">
         <article className="analytics-card performance">
-          <h3>Quiz Performance</h3>
+          <h3>{t('Quiz Performance')}</h3>
           <div className="performance-grid">
             <div className="score-hero">
               <div className="score-main">{quizStats.averageScore}%</div>
               <div className={`trend-chip ${improvement >= 0 ? 'up' : 'down'}`}>
                 {improvement >= 0 ? '↑' : '↓'} {Math.abs(improvement)}%
               </div>
-              <svg viewBox="0 0 220 70" className="sparkline" role="img" aria-label="Score sparkline trend">
+              <svg viewBox="0 0 220 70" className="sparkline" role="img" aria-label={t('Score trend')}>
                 <polyline points={buildLinePoints(chronologicalScores.length ? chronologicalScores : [0], 220, 70, 6, 0, 100)} />
               </svg>
             </div>
             <div className="difficulty-signal">
               {[
-                { label: 'Easy Signal', value: easySignal, tone: 'good' as const },
-                { label: 'Medium Signal', value: mediumSignal, tone: 'fair' as const },
-                { label: 'Hard Signal', value: hardSignal, tone: 'needs-work' as const },
+                { label: t('Easy Signal'), value: easySignal, tone: 'good' as const },
+                { label: t('Medium Signal'), value: mediumSignal, tone: 'fair' as const },
+                { label: t('Hard Signal'), value: hardSignal, tone: 'needs-work' as const },
               ].map((item) => (
                 <div key={item.label} className="difficulty-row" title={`${item.label}: ${item.value}%`}>
                   <span className="difficulty-label">{item.label}</span>
@@ -350,21 +418,21 @@ export function StudyAnalytics() {
 
         <article className="analytics-card tool-usage-card">
           <div className="card-head">
-            <h3>Tool Usage</h3>
-            <span className="mini-badge">Most used: {formatMode(mostUsedTool)}</span>
+            <h3>{t('Tool Usage')}</h3>
+            <span className="mini-badge">{t('Most used: {tool}', { tool: formatMode(mostUsedTool, t) })}</span>
           </div>
           {toolUsageEntries.length === 0 ? (
-            <p className="muted">No tool activity yet.</p>
+            <p className="muted">{t('No tool activity yet.')}</p>
           ) : (
             <div className="tool-usage-list">
               {toolUsageEntries.slice(0, 7).map(([tool, count]) => {
                 const width = Math.round((count / maxToolCount) * 100);
                 const percent = Math.round((count / totalToolHits) * 100);
                 return (
-                  <div key={tool} className="tool-row" title={`${formatMode(tool)}: ${count} uses`}>
+                  <div key={tool} className="tool-row" title={`${formatMode(tool, t)}: ${count} uses`}>
                     <div className="tool-label">
                       <span className="tool-icon">{getToolIcon(tool)}</span>
-                      <span>{formatMode(tool)}</span>
+                      <span>{formatMode(tool, t)}</span>
                     </div>
                     <div className="tool-bar">
                       <div className="tool-bar-fill" style={{ width: `${width}%` }} />
@@ -380,9 +448,9 @@ export function StudyAnalytics() {
 
       <section className="analytics-grid middle">
         <article className="analytics-card trend-card">
-          <h3>Performance Trend</h3>
+          <h3>{t('Performance Trend')}</h3>
           <div className="trend-chart-wrap">
-            <svg viewBox="0 0 760 220" className="trend-chart" role="img" aria-label="Score and attempts trend">
+            <svg viewBox="0 0 760 220" className="trend-chart" role="img" aria-label={`${t('Score trend')} + ${t('Attempts')}`}>
               <line x1="20" y1="20" x2="740" y2="20" className="guide-line" />
               <line x1="20" y1="110" x2="740" y2="110" className="guide-line" />
               <line x1="20" y1="200" x2="740" y2="200" className="guide-line" />
@@ -405,13 +473,13 @@ export function StudyAnalytics() {
             </svg>
           </div>
           <div className="trend-legend">
-            <span><i className="legend score" /> Score trend</span>
-            <span><i className="legend attempts" /> Attempts</span>
+            <span><i className="legend score" /> {t('Score trend')}</span>
+            <span><i className="legend attempts" /> {t('Attempts')}</span>
           </div>
         </article>
 
         <article id="weak-areas-card" className="analytics-card weak-areas-card">
-          <h3>Areas to Improve</h3>
+          <h3>{t('Areas to Improve')}</h3>
           {weakAreas.length > 0 ? (
             <div className="weak-areas-list">
               {weakAreas.slice(0, 4).map((area, index) => (
@@ -426,38 +494,38 @@ export function StudyAnalytics() {
                       className="analytics-btn ghost small"
                       onClick={() => router.push(`/tools?topic=${encodeURIComponent(area.topic)}`)}
                     >
-                      Generate Practice
+                      {t('Generate Practice')}
                     </button>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="muted">No weak areas identified yet. Keep practicing to get targeted coaching.</p>
+            <p className="muted">{t('No weak areas identified yet. Keep practicing to get targeted coaching.')}</p>
           )}
         </article>
       </section>
 
       <section className="analytics-grid bottom">
         <article className="analytics-card plan-card">
-          <h3>Study Plan Analytics</h3>
+          <h3>{t('Study Plan Analytics')}</h3>
           <div className="plan-kpis">
             <div className="plan-kpi">
-              <span>Completion Rate</span>
+              <span>{t('Completion Rate')}</span>
               <strong>{completionRate}%</strong>
             </div>
             <div className="plan-kpi">
-              <span>Avg Study Time</span>
+              <span>{t('Avg Study Time')}</span>
               <strong>{avgStudyMinutes} min</strong>
             </div>
             <div className="plan-kpi">
-              <span>Consistency Score</span>
+              <span>{t('Consistency Score')}</span>
               <strong>{consistencyScore}%</strong>
             </div>
           </div>
           <div className="plan-progress">
             <div className="progress-head">
-              <span>Completed Days</span>
+              <span>{t('Completed Days')}</span>
               <span>{planStats.completedDays} / {Math.max(planStats.totalStudyDays, 0)}</span>
             </div>
             <div className="progress-track">
@@ -467,7 +535,7 @@ export function StudyAnalytics() {
         </article>
 
         <article className="analytics-card heatmap-card">
-          <h3>Weekly Activity Heatmap</h3>
+          <h3>{t('Weekly Activity Heatmap')}</h3>
           <div className="heatmap-scroll">
             <div className="heatmap-grid">
               {heatmapWeeks.map((week, weekIndex) => (
@@ -479,7 +547,7 @@ export function StudyAnalytics() {
                       <span
                         key={`${day.date}-${dayIndex}`}
                         className={`heat-cell i${intensity}`}
-                        title={`${formatFullDate(day.date)} • ${day.quizzes} activity`}
+                        title={`${formatFullDate(day.date, locale)} • ${day.quizzes} activity`}
                       />
                     );
                   })}
@@ -488,7 +556,7 @@ export function StudyAnalytics() {
             </div>
           </div>
           <div className="heatmap-legend">
-            <span>Low</span>
+            <span>{t('Low')}</span>
             <div className="legend-scale">
               <i className="heat-cell i0" />
               <i className="heat-cell i1" />
@@ -496,14 +564,14 @@ export function StudyAnalytics() {
               <i className="heat-cell i3" />
               <i className="heat-cell i4" />
             </div>
-            <span>High</span>
+            <span>{t('High')}</span>
           </div>
         </article>
       </section>
 
       {quizStats.recentScores.length > 0 && (
         <section className="analytics-card recent-card">
-          <h3>Recent Quiz Scores</h3>
+          <h3>{t('Recent Quiz Scores')}</h3>
           <div className="recent-scores">
             {quizStats.recentScores.slice(0, 10).map((score, index) => (
               <div key={`${score.date}-${score.mode}-${index}`} className="recent-item">
@@ -511,8 +579,8 @@ export function StudyAnalytics() {
                   <span>{score.score}%</span>
                 </div>
                 <div className="recent-meta">
-                  <strong>{formatMode(score.mode)}</strong>
-                  <span>{formatShortDate(score.date)}</span>
+                  <strong>{formatMode(score.mode, t)}</strong>
+                  <span>{formatShortDate(score.date, locale)}</span>
                 </div>
               </div>
             ))}
@@ -1321,7 +1389,7 @@ function getIntensity(value: number, maxValue: number): 0 | 1 | 2 | 3 | 4 {
   return 4;
 }
 
-function formatMode(mode: string): string {
+function formatMode(mode: string, t?: (key: string, params?: Record<string, string | number>) => string): string {
   const mapping: Record<string, string> = {
     mcq: 'MCQ',
     quiz: 'Quiz',
@@ -1338,7 +1406,8 @@ function formatMode(mode: string): string {
     pop: 'Pop Quiz',
     flashcards: 'Flashcards',
   };
-  return mapping[mode] || mode.charAt(0).toUpperCase() + mode.slice(1);
+  const value = mapping[mode] || mode.charAt(0).toUpperCase() + mode.slice(1);
+  return t ? t(value) : value;
 }
 
 function getToolIcon(tool: string): string {
@@ -1368,12 +1437,12 @@ function getScoreClass(score: number): 'excellent' | 'good' | 'fair' | 'needs-wo
   return 'needs-work';
 }
 
-function formatShortDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+function formatShortDate(dateStr: string, locale?: string): string {
+  return new Date(dateStr).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
 
-function formatFullDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+function formatFullDate(dateStr: string, locale?: string): string {
+  return new Date(dateStr).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 function csvEscape(value: string): string {
