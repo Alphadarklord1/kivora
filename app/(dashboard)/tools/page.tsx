@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getGeneratedContent, ToolMode, GeneratedContent, type RewriteOptions, type RewriteTone } from '@/lib/offline/generate';
+import { generateAiContent, loadAiPreferences } from '@/lib/ai/client';
 import { InteractiveQuiz } from '@/components/workspace/InteractiveQuiz';
 import { MathSolver } from '@/components/tools/MathSolver';
 import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
@@ -74,7 +75,7 @@ export default function ToolsPage() {
     }
   }, [searchParams]);
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!inputText.trim()) {
       toast.warning('No content', 'Please enter text to process');
       return;
@@ -93,11 +94,38 @@ export default function ToolsPage() {
           ...(rewriteInstruction.trim() ? { customInstruction: rewriteInstruction.trim() } : {}),
         }
         : undefined;
-      const content = getGeneratedContent(toolTab as ToolMode, inputText, rewriteOptions);
+
+      const prefs = loadAiPreferences();
+      const ai = await generateAiContent(inputText, toolTab as ToolMode, prefs, rewriteOptions);
+
+      if (ai.status === 'policy_block') {
+        const suggestions = ai.suggestionModes?.length ? ` Try: ${ai.suggestionModes.join(', ')}.` : '';
+        toast.warning('Study-only AI', `${ai.reason}${suggestions}`);
+        setGeneratedContent(null);
+        setOutput('');
+        setViewMode('input');
+        return;
+      }
+
+      const content = ai.status === 'success'
+        ? ai.content
+        : getGeneratedContent(toolTab as ToolMode, inputText, rewriteOptions);
+
       setGeneratedContent(content);
       setOutput(content.displayText);
       setViewMode('output');
-      toast.success('Generated successfully');
+
+      if (ai.status === 'success') {
+        if (ai.provider === 'openai' && !ai.fallbackUsed) {
+          toast.success('Generated with OpenAI');
+        } else if (ai.fallbackUsed) {
+          toast.warning('Cloud unavailable, used offline fallback', ai.reason || undefined);
+        } else {
+          toast.success('Generated successfully');
+        }
+      } else {
+        toast.warning('Cloud unavailable, used offline fallback', ai.message);
+      }
     } catch {
       toast.error('Generation failed', 'An error occurred while generating content');
       setGeneratedContent(null);

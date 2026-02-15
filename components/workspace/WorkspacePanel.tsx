@@ -91,6 +91,13 @@ class AiPolicyBlockError extends Error {
   }
 }
 
+interface GenerationOutcome {
+  content: GeneratedContent;
+  source: 'openai' | 'desktop-local' | 'offline';
+  fallbackUsed: boolean;
+  reason?: string;
+}
+
 export function WorkspacePanel({
   selectedFolder,
   selectedTopic,
@@ -188,6 +195,8 @@ export function WorkspacePanel({
       'Could not download the file': 'تعذر تنزيل الملف',
       'Delete this file?': 'هل تريد حذف هذا الملف؟',
       'Error generating content.': 'حدث خطأ أثناء توليد المحتوى.',
+      'Generated with OpenAI': 'تم التوليد عبر OpenAI',
+      'Cloud unavailable, used offline fallback': 'تعذر استخدام السحابة، تم استخدام البديل المحلي',
       'Auto-chain Exam Prep → Exam → SRS': 'ربط تلقائي: تجهيز الاختبار ← الاختبار ← SRS',
       'Study-only AI': 'ذكاء اصطناعي مخصص للدراسة',
       'This request is outside StudyPilot scope.': 'هذا الطلب خارج نطاق StudyPilot.',
@@ -695,7 +704,11 @@ export function WorkspacePanel({
   };
 
   // Tool functions
-  const generateWithFallback = async (mode: ToolMode, text: string, rewriteOptions?: RewriteOptions): Promise<GeneratedContent> => {
+  const generateWithStatus = async (
+    mode: ToolMode,
+    text: string,
+    rewriteOptions?: RewriteOptions
+  ): Promise<GenerationOutcome> => {
     const prefs = loadAiPreferences();
     const ai = await generateAiContent(text, mode, prefs, rewriteOptions);
 
@@ -707,16 +720,45 @@ export function WorkspacePanel({
       const content = ai.content;
       if (mode === 'mcq' || mode === 'quiz') {
         if (!content.questions?.length || !content.questions[0]?.options?.length) {
-          return getGeneratedContent(mode, text, rewriteOptions);
+          return {
+            content: getGeneratedContent(mode, text, rewriteOptions),
+            source: 'offline',
+            fallbackUsed: true,
+            reason: 'Invalid quiz schema from AI response',
+          };
         }
       }
       if (mode === 'flashcards' && !content.flashcards?.length) {
-        return getGeneratedContent(mode, text, rewriteOptions);
+        return {
+          content: getGeneratedContent(mode, text, rewriteOptions),
+          source: 'offline',
+          fallbackUsed: true,
+          reason: 'Invalid flashcards schema from AI response',
+        };
       }
-      return content;
+      return {
+        content,
+        source: ai.provider,
+        fallbackUsed: ai.fallbackUsed,
+        reason: ai.reason,
+      };
     }
 
-    return getGeneratedContent(mode, text, rewriteOptions);
+    return {
+      content: getGeneratedContent(mode, text, rewriteOptions),
+      source: 'offline',
+      fallbackUsed: true,
+      reason: ai.status === 'runtime_error' ? ai.message : (ai.reason || 'Invalid AI response'),
+    };
+  };
+
+  const generateWithFallback = async (
+    mode: ToolMode,
+    text: string,
+    rewriteOptions?: RewriteOptions
+  ): Promise<GeneratedContent> => {
+    const generation = await generateWithStatus(mode, text, rewriteOptions);
+    return generation.content;
   };
 
   const handleGenerate = async () => {
@@ -736,7 +778,8 @@ export function WorkspacePanel({
         }
         : undefined;
 
-      const content = await generateWithFallback(toolTab as ToolMode, input, rewriteOptions);
+      const generation = await generateWithStatus(toolTab as ToolMode, input, rewriteOptions);
+      const content = generation.content;
 
       setGeneratedContent(content);
       setOutput(content.displayText);
@@ -746,6 +789,15 @@ export function WorkspacePanel({
         setViewMode('practice');
       } else {
         setViewMode('output');
+      }
+
+      if (generation.source === 'openai' && !generation.fallbackUsed) {
+        toast.success(t('Generated with OpenAI'));
+      } else if (generation.fallbackUsed) {
+        toast.warning(
+          t('Cloud unavailable, used offline fallback'),
+          generation.reason || undefined
+        );
       }
     } catch (error) {
       if (error instanceof AiPolicyBlockError) {

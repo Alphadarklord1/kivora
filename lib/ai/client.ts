@@ -1,4 +1,9 @@
-import type { GeneratedContent, RewriteOptions, ToolMode } from '@/lib/offline/generate';
+import {
+  getGeneratedContent,
+  type GeneratedContent,
+  type RewriteOptions,
+  type ToolMode,
+} from '@/lib/offline/generate';
 import {
   evaluateAiScope,
   type AiScopeBlocked,
@@ -16,8 +21,11 @@ export interface AiPreferences {
 
 export type AiGenerationSuccess = {
   status: 'success';
-  provider: Exclude<AiProvider, 'offline'>;
+  provider: AiProvider;
   content: GeneratedContent;
+  fallbackUsed: boolean;
+  reason?: string;
+  primaryProvider?: Exclude<AiProvider, 'offline'>;
 };
 
 export type AiGenerationPolicyBlock = {
@@ -40,7 +48,7 @@ export type AiGenerationResult =
   | AiGenerationRuntimeError;
 
 function getDefaultProvider(): AiProvider {
-  return isElectronRenderer() ? 'desktop-local' : 'offline';
+  return isElectronRenderer() ? 'desktop-local' : 'openai';
 }
 
 const DEFAULT_PREFS: AiPreferences = {
@@ -160,6 +168,8 @@ async function requestOpenAI(
       status: 'success',
       provider: 'openai',
       content,
+      fallbackUsed: Boolean(payload.fallback),
+      reason: typeof payload.reason === 'string' ? payload.reason : undefined,
     };
   } catch (error) {
     return {
@@ -192,6 +202,7 @@ async function requestDesktopLocal(
         status: 'success',
         provider: 'desktop-local',
         content: result.content,
+        fallbackUsed: false,
       };
     }
 
@@ -233,14 +244,29 @@ export async function generateAiContent(
 
   if (prefs.provider === 'offline') {
     return {
-      status: 'runtime_error',
+      status: 'success',
       provider: 'offline',
-      message: 'AI provider is set to offline-only deterministic mode',
+      content: getGeneratedContent(mode, text, rewriteOptions),
+      fallbackUsed: true,
+      reason: 'AI provider is set to offline deterministic mode',
+      primaryProvider: 'openai',
     };
   }
 
   if (prefs.provider === 'openai') {
-    return requestOpenAI(prefs.openaiModel, text, mode, rewriteOptions);
+    const cloudResult = await requestOpenAI(prefs.openaiModel, text, mode, rewriteOptions);
+    if (cloudResult.status === 'success' || cloudResult.status === 'policy_block') {
+      return cloudResult;
+    }
+
+    return {
+      status: 'success',
+      provider: 'offline',
+      content: getGeneratedContent(mode, text, rewriteOptions),
+      fallbackUsed: true,
+      reason: cloudResult.message,
+      primaryProvider: 'openai',
+    };
   }
 
   const localResult = await requestDesktopLocal(text, mode, rewriteOptions);

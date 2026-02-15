@@ -5,6 +5,7 @@ import { signIn, signOut, getProviders } from 'next-auth/react';
 import { useVault } from '@/providers/VaultProvider';
 import { loadAiPreferences, saveAiPreferences, type AiPreferences } from '@/lib/ai/client';
 import { getSupportedAiTasks } from '@/lib/ai/policy';
+import { isElectronRenderer } from '@/lib/runtime/mode';
 
 type SettingsTab = 'profile' | 'appearance' | 'security' | 'account' | 'ai';
 
@@ -80,6 +81,13 @@ interface DesktopSelection {
   wizardEnabled: boolean;
   recommendedModelKey: string;
   deviceProfile: 'laptop' | 'laptop-pc' | 'pc';
+}
+
+interface WebAiCapabilities {
+  webAiEnabled: boolean;
+  openaiConfigured: boolean;
+  defaultModel: string;
+  desktopOnlyMode: boolean;
 }
 
 const defaultUserSettings: UserSettings = {
@@ -181,6 +189,9 @@ export default function SettingsPage() {
   const [switchingDesktopModel, setSwitchingDesktopModel] = useState(false);
   const [installingModelKey, setInstallingModelKey] = useState<string | null>(null);
   const [removingModelKey, setRemovingModelKey] = useState<string | null>(null);
+  const [isElectronApp, setIsElectronApp] = useState(false);
+  const [webAiCapabilities, setWebAiCapabilities] = useState<WebAiCapabilities | null>(null);
+  const [loadingWebAiCapabilities, setLoadingWebAiCapabilities] = useState(false);
 
   const currentLanguage = settings?.language ?? 'en';
   const isArabic = currentLanguage === 'ar';
@@ -210,6 +221,25 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const electronRuntime = isElectronRenderer();
+    setIsElectronApp(electronRuntime);
+
+    if (!electronRuntime) {
+      const storedProvider = localStorage.getItem('studypilot_ai_provider');
+      if (!storedProvider || storedProvider === 'desktop-local') {
+        setAiPrefs(prev => ({
+          ...prev,
+          provider: 'openai',
+          enableCloudFallback: false,
+        }));
+      } else {
+        setAiPrefs(prev => ({
+          ...prev,
+          enableCloudFallback: false,
+        }));
+      }
+    }
+
     const syncVoices = () => {
       const list = window.speechSynthesis.getVoices();
       setVoices(list);
@@ -224,11 +254,27 @@ export default function SettingsPage() {
     window.speechSynthesis.onvoiceschanged = syncVoices;
   }, []);
 
+  const refreshWebAiCapabilities = async () => {
+    if (typeof window === 'undefined' || isElectronRenderer()) return;
+    setLoadingWebAiCapabilities(true);
+    try {
+      const res = await fetch('/api/ai/capabilities', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setWebAiCapabilities(data);
+      }
+    } catch {
+      setWebAiCapabilities(null);
+    } finally {
+      setLoadingWebAiCapabilities(false);
+    }
+  };
+
   const refreshDesktopAiStatus = async () => {
     if (typeof window === 'undefined' || !window.electronAPI?.desktopAI) {
       setDesktopAiHealth(null);
       setDesktopAiModelInfo(null);
-       setDesktopAiSelection(null);
+      setDesktopAiSelection(null);
       return;
     }
 
@@ -273,11 +319,15 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (tab !== 'ai') return;
-    void refreshDesktopAiStatus();
+    if (isElectronRenderer()) {
+      void refreshDesktopAiStatus();
+    } else {
+      void refreshWebAiCapabilities();
+    }
   }, [tab]);
 
   useEffect(() => {
-    if (tab !== 'ai' || !window.electronAPI?.desktopAI) return;
+    if (tab !== 'ai' || !window.electronAPI?.desktopAI || !isElectronRenderer()) return;
     const unsubscribe = window.electronAPI.desktopAI.onDownloadProgress(() => {
       void refreshDesktopAiStatus();
     });
@@ -453,7 +503,12 @@ export default function SettingsPage() {
   };
 
   const handleSaveAi = () => {
-    saveAiPreferences(aiPrefs);
+    const normalizedPrefs: AiPreferences = !isElectronApp && aiPrefs.provider === 'desktop-local'
+      ? { ...aiPrefs, provider: 'openai', enableCloudFallback: false }
+      : aiPrefs;
+
+    saveAiPreferences(normalizedPrefs);
+    setAiPrefs(normalizedPrefs);
     showMessage('success', 'AI preferences saved');
   };
 
@@ -1217,9 +1272,13 @@ export default function SettingsPage() {
             <div className="settings-section">
               <h2>{isArabic ? 'نماذج الذكاء الاصطناعي' : 'AI Models'}</h2>
               <p className="section-description">
-                {isArabic
-                  ? 'وضع سطح المكتب محلي أولاً مع قيود مخصصة للدراسة فقط.'
-                  : 'Desktop-first AI with offline local runtime and study-only guardrails.'}
+                {isElectronApp
+                  ? (isArabic
+                    ? 'وضع سطح المكتب محلي أولاً مع قيود مخصصة للدراسة فقط.'
+                    : 'Desktop-first AI with offline local runtime and study-only guardrails.')
+                  : (isArabic
+                    ? 'الويب يستخدم OpenAI افتراضيًا مع بديل محلي عند تعذر الخدمة.'
+                    : 'Web uses OpenAI by default with deterministic offline fallback if cloud fails.')}
               </p>
 
               <div className="account-card">
@@ -1231,20 +1290,24 @@ export default function SettingsPage() {
                     value={aiPrefs.provider}
                     onChange={(e) => setAiPrefs(prev => ({ ...prev, provider: e.target.value as AiPreferences['provider'] }))}
                   >
-                    <option value="desktop-local">{isArabic ? 'محلي على الجهاز (مفضل)' : 'Desktop Local (Recommended)'}</option>
+                    {isElectronApp && (
+                      <option value="desktop-local">{isArabic ? 'محلي على الجهاز (مفضل)' : 'Desktop Local (Recommended)'}</option>
+                    )}
                     <option value="openai">{isArabic ? 'OpenAI (سحابي)' : 'OpenAI (Cloud)'}</option>
                     <option value="offline">{isArabic ? 'وضع بدون سحابة' : 'Offline deterministic only'}</option>
                   </select>
                 </div>
-                <div className="form-group">
-                  <label htmlFor="cloudFallbackToggle">{isArabic ? 'السماح بالرجوع للسحابة عند فشل المحلي' : 'Enable cloud fallback if desktop runtime fails'}</label>
-                  <input
-                    id="cloudFallbackToggle"
-                    type="checkbox"
-                    checked={aiPrefs.enableCloudFallback}
-                    onChange={(e) => setAiPrefs(prev => ({ ...prev, enableCloudFallback: e.target.checked }))}
-                  />
-                </div>
+                {isElectronApp && (
+                  <div className="form-group">
+                    <label htmlFor="cloudFallbackToggle">{isArabic ? 'السماح بالرجوع للسحابة عند فشل المحلي' : 'Enable cloud fallback if desktop runtime fails'}</label>
+                    <input
+                      id="cloudFallbackToggle"
+                      type="checkbox"
+                      checked={aiPrefs.enableCloudFallback}
+                      onChange={(e) => setAiPrefs(prev => ({ ...prev, enableCloudFallback: e.target.checked }))}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="account-card">
@@ -1262,133 +1325,169 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="account-card">
-                <h3>{isArabic ? 'مدير نماذج سطح المكتب' : 'Desktop Model Manager'}</h3>
-                <p className="help-text">
-                  {isArabic
-                    ? 'يبدأ StudyPilot بنموذج Mini دون اتصال. يمكنك تثبيت نماذج أقوى واختيار النموذج النشط.'
-                    : 'StudyPilot starts with offline Mini. Install stronger models and choose the active one.'}
-                </p>
-                {desktopAiModelInfo && (
-                  <div className="help-text" style={{ marginTop: 8 }}>
-                    <strong>{isArabic ? 'النموذج النشط:' : 'Active model:'}</strong>{' '}
-                    {desktopAiModelInfo.modelId || (isArabic ? 'لا يوجد' : 'None')}<br />
-                    <strong>{isArabic ? 'النموذج المختار:' : 'Selected model:'}</strong>{' '}
-                    {desktopAiSelection?.selectedModelKey || desktopAiModelInfo.selectedModelKey}<br />
-                    <strong>{isArabic ? 'نوع الجهاز المكتشف:' : 'Detected device profile:'}</strong>{' '}
-                    {desktopAiModelInfo.deviceProfile === 'laptop'
-                      ? (isArabic ? 'لابتوب' : 'Laptop')
-                      : desktopAiModelInfo.deviceProfile === 'pc'
-                        ? (isArabic ? 'كمبيوتر مكتبي' : 'PC')
-                        : (isArabic ? 'لابتوب/كمبيوتر متوسط' : 'Laptop/PC (balanced)')}
-                    <br />
-                    <strong>{isArabic ? 'إصدار القائمة:' : 'Manifest version:'}</strong>{' '}
-                    {desktopAiModelInfo.manifestVersion || 'N/A'}
-                  </div>
-                )}
-                {desktopAiModelInfo?.models?.length ? (
-                  <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
-                    {desktopAiModelInfo.models.map((model) => {
-                      const isActive = desktopAiModelInfo.activeModelKey === model.key;
-                      const isRecommended = desktopAiModelInfo.recommendedModelKey === model.key;
-                      const installing = installingModelKey === model.key || model.isDownloading;
-                      const removing = removingModelKey === model.key;
-                      const downloadPercent = model.downloadProgress?.percent ?? 0;
-                      return (
-                        <div key={model.key} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                            <div>
-                              <strong>{model.modelId}</strong> · {model.quantization}
-                              <div style={{ marginTop: 4 }}>
-                                <code>{model.modelFile}</code>
+              {isElectronApp ? (
+                <div className="account-card">
+                  <h3>{isArabic ? 'مدير نماذج سطح المكتب' : 'Desktop Model Manager'}</h3>
+                  <p className="help-text">
+                    {isArabic
+                      ? 'يبدأ StudyPilot بنموذج Mini دون اتصال. يمكنك تثبيت نماذج أقوى واختيار النموذج النشط.'
+                      : 'StudyPilot starts with offline Mini. Install stronger models and choose the active one.'}
+                  </p>
+                  {desktopAiModelInfo && (
+                    <div className="help-text" style={{ marginTop: 8 }}>
+                      <strong>{isArabic ? 'النموذج النشط:' : 'Active model:'}</strong>{' '}
+                      {desktopAiModelInfo.modelId || (isArabic ? 'لا يوجد' : 'None')}<br />
+                      <strong>{isArabic ? 'النموذج المختار:' : 'Selected model:'}</strong>{' '}
+                      {desktopAiSelection?.selectedModelKey || desktopAiModelInfo.selectedModelKey}<br />
+                      <strong>{isArabic ? 'نوع الجهاز المكتشف:' : 'Detected device profile:'}</strong>{' '}
+                      {desktopAiModelInfo.deviceProfile === 'laptop'
+                        ? (isArabic ? 'لابتوب' : 'Laptop')
+                        : desktopAiModelInfo.deviceProfile === 'pc'
+                          ? (isArabic ? 'كمبيوتر مكتبي' : 'PC')
+                          : (isArabic ? 'لابتوب/كمبيوتر متوسط' : 'Laptop/PC (balanced)')}
+                      <br />
+                      <strong>{isArabic ? 'إصدار القائمة:' : 'Manifest version:'}</strong>{' '}
+                      {desktopAiModelInfo.manifestVersion || 'N/A'}
+                    </div>
+                  )}
+                  {desktopAiModelInfo?.models?.length ? (
+                    <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                      {desktopAiModelInfo.models.map((model) => {
+                        const isActive = desktopAiModelInfo.activeModelKey === model.key;
+                        const isRecommended = desktopAiModelInfo.recommendedModelKey === model.key;
+                        const installing = installingModelKey === model.key || model.isDownloading;
+                        const removing = removingModelKey === model.key;
+                        const downloadPercent = model.downloadProgress?.percent ?? 0;
+                        return (
+                          <div key={model.key} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                              <div>
+                                <strong>{model.modelId}</strong> · {model.quantization}
+                                <div style={{ marginTop: 4 }}>
+                                  <code>{model.modelFile}</code>
+                                </div>
+                                <div className="help-text" style={{ marginTop: 4 }}>
+                                  {formatModelSize(model.sizeBytes, isArabic)} · {model.minRamGb}GB+ RAM
+                                </div>
                               </div>
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                {model.isInstalled ? (
+                                  <button
+                                    className="btn secondary"
+                                    disabled={isActive || switchingDesktopModel || installing || removing}
+                                    onClick={() => handleSelectDesktopModel(model.key)}
+                                  >
+                                    {isActive
+                                      ? (isArabic ? 'نشط' : 'Active')
+                                      : (isArabic ? 'تفعيل' : 'Use')}
+                                  </button>
+                                ) : (
+                                  <button
+                                    className="btn secondary"
+                                    disabled={installing || switchingDesktopModel || removing}
+                                    onClick={() => handleInstallDesktopModel(model.key)}
+                                  >
+                                    {installing
+                                      ? (isArabic ? 'جارِ التثبيت...' : 'Installing...')
+                                      : (isArabic ? 'تثبيت' : 'Install')}
+                                  </button>
+                                )}
+                                {model.installedSource === 'userData' && !isActive && (
+                                  <button
+                                    className="btn secondary"
+                                    disabled={installing || removing}
+                                    onClick={() => handleRemoveDesktopModel(model.key)}
+                                  >
+                                    {removing ? (isArabic ? 'جارِ الحذف...' : 'Removing...') : (isArabic ? 'حذف' : 'Remove')}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            <div className="help-text" style={{ marginTop: 6 }}>
+                              {isRecommended
+                                ? (isArabic ? 'موصى به لهذا الجهاز' : 'Recommended for this device')
+                                : model.recommendedFor === 'laptop'
+                                  ? (isArabic ? 'موصى به للابتوب' : 'Recommended for laptops')
+                                  : model.recommendedFor === 'pc'
+                                    ? (isArabic ? 'موصى به للكمبيوتر المكتبي' : 'Recommended for desktops')
+                                    : (isArabic ? 'موصى به للأجهزة المتوسطة' : 'Balanced for laptop/PC')}
+                              {' · '}
+                              {model.installedSource === 'userData'
+                                ? (isArabic ? 'مثبّت محليًا بعد التثبيت' : 'Installed locally after setup')
+                                : model.bundled
+                                  ? (isArabic ? 'مضمّن في هذه النسخة' : 'Bundled in this installer')
+                                  : (isArabic ? 'غير مثبت' : 'Not installed')}
+                            </div>
+                            {model.downloadProgress && (
                               <div className="help-text" style={{ marginTop: 4 }}>
-                                {formatModelSize(model.sizeBytes, isArabic)} · {model.minRamGb}GB+ RAM
+                                {model.downloadProgress.state === 'downloading'
+                                  ? `${isArabic ? 'التنزيل جارٍ' : 'Downloading'}: ${downloadPercent}%`
+                                  : model.downloadProgress.state === 'error'
+                                    ? `${isArabic ? 'خطأ التنزيل' : 'Download error'}: ${model.downloadProgress.message || ''}`
+                                    : null}
                               </div>
-                            </div>
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                              {model.isInstalled ? (
-                                <button
-                                  className="btn secondary"
-                                  disabled={isActive || switchingDesktopModel || installing || removing}
-                                  onClick={() => handleSelectDesktopModel(model.key)}
-                                >
-                                  {isActive
-                                    ? (isArabic ? 'نشط' : 'Active')
-                                    : (isArabic ? 'تفعيل' : 'Use')}
-                                </button>
-                              ) : (
-                                <button
-                                  className="btn secondary"
-                                  disabled={installing || switchingDesktopModel || removing}
-                                  onClick={() => handleInstallDesktopModel(model.key)}
-                                >
-                                  {installing
-                                    ? (isArabic ? 'جارِ التثبيت...' : 'Installing...')
-                                    : (isArabic ? 'تثبيت' : 'Install')}
-                                </button>
-                              )}
-                              {model.installedSource === 'userData' && !isActive && (
-                                <button
-                                  className="btn secondary"
-                                  disabled={installing || removing}
-                                  onClick={() => handleRemoveDesktopModel(model.key)}
-                                >
-                                  {removing ? (isArabic ? 'جارِ الحذف...' : 'Removing...') : (isArabic ? 'حذف' : 'Remove')}
-                                </button>
-                              )}
-                            </div>
+                            )}
                           </div>
-                          <div className="help-text" style={{ marginTop: 6 }}>
-                            {isRecommended
-                              ? (isArabic ? 'موصى به لهذا الجهاز' : 'Recommended for this device')
-                              : model.recommendedFor === 'laptop'
-                                ? (isArabic ? 'موصى به للابتوب' : 'Recommended for laptops')
-                                : model.recommendedFor === 'pc'
-                                  ? (isArabic ? 'موصى به للكمبيوتر المكتبي' : 'Recommended for desktops')
-                                  : (isArabic ? 'موصى به للأجهزة المتوسطة' : 'Balanced for laptop/PC')}
-                            {' · '}
-                            {model.installedSource === 'userData'
-                              ? (isArabic ? 'مثبّت محليًا بعد التثبيت' : 'Installed locally after setup')
-                              : model.bundled
-                                ? (isArabic ? 'مضمّن في هذه النسخة' : 'Bundled in this installer')
-                                : (isArabic ? 'غير مثبت' : 'Not installed')}
-                          </div>
-                          {model.downloadProgress && (
-                            <div className="help-text" style={{ marginTop: 4 }}>
-                              {model.downloadProgress.state === 'downloading'
-                                ? `${isArabic ? 'التنزيل جارٍ' : 'Downloading'}: ${downloadPercent}%`
-                                : model.downloadProgress.state === 'error'
-                                  ? `${isArabic ? 'خطأ التنزيل' : 'Download error'}: ${model.downloadProgress.message || ''}`
-                                  : null}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : null}
-                <button className="btn secondary" onClick={refreshDesktopAiStatus} disabled={checkingAiRuntime}>
-                  {checkingAiRuntime ? (isArabic ? 'جار الفحص...' : 'Checking...') : (isArabic ? 'فحص حالة Runtime' : 'Check Runtime Status')}
-                </button>
-                {desktopAiHealth && (
-                  <p className="help-text" style={{ marginTop: 10 }}>
-                    {isArabic ? 'الحالة:' : 'Status:'} <strong>{desktopAiHealth.status}</strong>
-                    {desktopAiHealth.details ? ` — ${desktopAiHealth.details}` : ''}
-                  </p>
-                )}
-                {desktopAiSelection && (
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  <button className="btn secondary" onClick={refreshDesktopAiStatus} disabled={checkingAiRuntime}>
+                    {checkingAiRuntime ? (isArabic ? 'جار الفحص...' : 'Checking...') : (isArabic ? 'فحص حالة Runtime' : 'Check Runtime Status')}
+                  </button>
+                  {desktopAiHealth && (
+                    <p className="help-text" style={{ marginTop: 10 }}>
+                      {isArabic ? 'الحالة:' : 'Status:'} <strong>{desktopAiHealth.status}</strong>
+                      {desktopAiHealth.details ? ` — ${desktopAiHealth.details}` : ''}
+                    </p>
+                  )}
+                  {desktopAiSelection && (
+                    <p className="help-text" style={{ marginTop: 6 }}>
+                      {isArabic ? 'معالج الإعداد الأول:' : 'First-launch setup:'}{' '}
+                      <strong>{desktopAiSelection.setupCompleted ? (isArabic ? 'مكتمل' : 'Completed') : (isArabic ? 'غير مكتمل' : 'Pending')}</strong>
+                    </p>
+                  )}
                   <p className="help-text" style={{ marginTop: 6 }}>
-                    {isArabic ? 'معالج الإعداد الأول:' : 'First-launch setup:'}{' '}
-                    <strong>{desktopAiSelection.setupCompleted ? (isArabic ? 'مكتمل' : 'Completed') : (isArabic ? 'غير مكتمل' : 'Pending')}</strong>
+                    {isArabic
+                      ? 'عند فشل تثبيت النماذج الاختيارية، سيستمر StudyPilot باستخدام Mini بدون إنترنت.'
+                      : 'If optional model install fails, StudyPilot keeps working with Mini offline.'}
                   </p>
-                )}
-                <p className="help-text" style={{ marginTop: 6 }}>
-                  {isArabic
-                    ? 'عند فشل تثبيت النماذج الاختيارية، سيستمر StudyPilot باستخدام Mini بدون إنترنت.'
-                    : 'If optional model install fails, StudyPilot keeps working with Mini offline.'}
-                </p>
-              </div>
+                </div>
+              ) : (
+                <div className="account-card">
+                  <h3>{isArabic ? 'حالة ذكاء الويب' : 'Web AI Status'}</h3>
+                  {loadingWebAiCapabilities ? (
+                    <p className="help-text">{isArabic ? 'جار التحميل...' : 'Loading...'}</p>
+                  ) : (
+                    <>
+                      <p className="help-text">
+                        {isArabic ? 'ذكاء الويب مفعل:' : 'Web AI enabled:'}{' '}
+                        <strong>{webAiCapabilities?.webAiEnabled ? (isArabic ? 'نعم' : 'Yes') : (isArabic ? 'لا' : 'No')}</strong>
+                      </p>
+                      <p className="help-text">
+                        {isArabic ? 'مفتاح OpenAI متوفر:' : 'OpenAI key configured:'}{' '}
+                        <strong>{webAiCapabilities?.openaiConfigured ? (isArabic ? 'نعم' : 'Yes') : (isArabic ? 'لا' : 'No')}</strong>
+                      </p>
+                      <p className="help-text">
+                        {isArabic ? 'النموذج الافتراضي:' : 'Default model:'}{' '}
+                        <strong>{webAiCapabilities?.defaultModel || 'gpt-4o-mini'}</strong>
+                      </p>
+                      <p className="help-text">
+                        {isArabic ? 'وضع سطح المكتب فقط:' : 'Desktop-only mode:'}{' '}
+                        <strong>{webAiCapabilities?.desktopOnlyMode ? (isArabic ? 'مفعّل' : 'Enabled') : (isArabic ? 'معطل' : 'Disabled')}</strong>
+                      </p>
+                    </>
+                  )}
+                  <button className="btn secondary" onClick={refreshWebAiCapabilities} disabled={loadingWebAiCapabilities}>
+                    {loadingWebAiCapabilities ? (isArabic ? 'جار الفحص...' : 'Checking...') : (isArabic ? 'تحديث الحالة' : 'Refresh Status')}
+                  </button>
+                  <p className="help-text" style={{ marginTop: 8 }}>
+                    {isArabic
+                      ? 'إذا تعذر الوصول إلى السحابة، سيستخدم التطبيق بديلًا محليًا تلقائيًا.'
+                      : 'If cloud is unavailable, the app will automatically use deterministic offline fallback.'}
+                  </p>
+                </div>
+              )}
 
               <div className="account-card">
                 <h3>{isArabic ? 'نطاق الذكاء الاصطناعي في StudyPilot' : 'StudyPilot AI Scope'}</h3>

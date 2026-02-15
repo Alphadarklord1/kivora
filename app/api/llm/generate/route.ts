@@ -1,8 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGeneratedContent, type GeneratedContent, type RewriteOptions, type ToolMode } from '@/lib/offline/generate';
 import { evaluateAiScope } from '@/lib/ai/policy';
+import { InMemoryRateLimiter } from '@/lib/ai/web-rate-limit';
 
 type Provider = 'openai';
+
+const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL_DEFAULT || 'gpt-4o-mini';
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.round(parsed);
+}
+
+const RATE_LIMIT_WINDOW_MS = parsePositiveInt(process.env.WEB_AI_RATE_LIMIT_WINDOW_MS, 600_000);
+const RATE_LIMIT_MAX = parsePositiveInt(process.env.WEB_AI_RATE_LIMIT_MAX, 20);
+
+type GlobalWithRateLimiter = typeof globalThis & {
+  __studypilotWebAiLimiter?: InMemoryRateLimiter;
+};
+
+const globalForRateLimiter = globalThis as GlobalWithRateLimiter;
+const rateLimiter = globalForRateLimiter.__studypilotWebAiLimiter || new InMemoryRateLimiter({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  maxRequests: RATE_LIMIT_MAX,
+});
+globalForRateLimiter.__studypilotWebAiLimiter = rateLimiter;
 
 const MODE_GUIDANCE: Record<string, string> = {
   assignment: 'Provide a structured plan, key requirements, and suggested approach.',
@@ -45,33 +68,52 @@ const extractJson = (text: string) => {
 async function callOpenAI(model: string, prompt: string) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: 'OPENAI_API_KEY not configured' }, { status: 503 });
+    return {
+      ok: false as const,
+      status: 503,
+      errorCode: 'OPENAI_NOT_CONFIGURED',
+      reason: 'OPENAI_API_KEY not configured',
+    };
   }
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.3,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: prompt },
-      ],
-    }),
-  });
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.3,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: prompt },
+        ],
+      }),
+    });
 
-  if (!res.ok) {
-    const text = await res.text();
-    return NextResponse.json({ error: text || 'OpenAI request failed' }, { status: res.status });
+    if (!res.ok) {
+      const text = await res.text();
+      return {
+        ok: false as const,
+        status: res.status,
+        errorCode: 'OPENAI_UPSTREAM_ERROR',
+        reason: text || 'OpenAI request failed',
+      };
+    }
+
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content || '';
+    return { ok: true as const, raw: content };
+  } catch (error) {
+    return {
+      ok: false as const,
+      status: 502,
+      errorCode: 'OPENAI_REQUEST_FAILED',
+      reason: error instanceof Error ? error.message : 'OpenAI request failed',
+    };
   }
-
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content || '';
-  return NextResponse.json({ raw: content });
 }
 
 function isValidSubjectArea(value: unknown): value is GeneratedContent['subjectArea'] {
@@ -115,6 +157,27 @@ function coerceGeneratedContent(parsed: unknown, mode: ToolMode, sourceText: str
 
 export async function POST(request: NextRequest) {
   try {
+    const ipAddress = (
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      'unknown'
+    );
+
+    const rateDecision = rateLimiter.check(ipAddress);
+    if (!rateDecision.allowed) {
+      return NextResponse.json(
+        {
+          errorCode: 'RATE_LIMITED',
+          reason: 'Too many AI requests. Please retry shortly.',
+          retryAfterSeconds: rateDecision.retryAfterSeconds,
+        },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(rateDecision.retryAfterSeconds) },
+        }
+      );
+    }
+
     const body = await request.json();
     const { provider = 'openai', model, text, mode, rewriteOptions } = body as {
       provider?: Provider;
@@ -155,15 +218,21 @@ ${rewriteLine}
 
 Source text:
 ${text}`;
-    const requestedModel = model && typeof model === 'string' ? model : 'gpt-4o-mini';
+    const requestedModel = model && typeof model === 'string' ? model : DEFAULT_OPENAI_MODEL;
     const rawResponse = await callOpenAI(requestedModel, prompt);
 
     if (!rawResponse.ok) {
-      const error = await rawResponse.json();
-      return NextResponse.json(error, { status: rawResponse.status });
+      return NextResponse.json(
+        {
+          errorCode: rawResponse.errorCode,
+          reason: rawResponse.reason,
+          error: rawResponse.reason,
+        },
+        { status: rawResponse.status }
+      );
     }
 
-    const { raw } = await rawResponse.json();
+    const { raw } = rawResponse;
     const jsonText = extractJson(raw);
     if (!jsonText) {
       return NextResponse.json({ error: 'Invalid AI response' }, { status: 502 });
