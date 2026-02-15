@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ShareDialog } from '@/components/share';
+import { useSettings } from '@/providers/SettingsProvider';
 
 interface LibraryItem {
   id: string;
@@ -23,6 +24,49 @@ type LibraryMetadata = {
 };
 
 export default function LibraryPage() {
+  const { settings } = useSettings();
+  const isArabic = settings.language === 'ar';
+  const t = (key: string) => {
+    const ar: Record<string, string> = {
+      Library: 'المكتبة',
+      'Your saved study materials': 'موادك الدراسية المحفوظة',
+      'Export JSON': 'تصدير JSON',
+      'Export MD': 'تصدير MD',
+      'Export TXT': 'تصدير TXT',
+      'Clear All': 'مسح الكل',
+      'Search library...': 'ابحث في المكتبة...',
+      All: 'الكل',
+      Assignment: 'واجب',
+      Summary: 'ملخص',
+      Quiz: 'اختبار',
+      Notes: 'ملاحظات',
+      Rephrase: 'إعادة صياغة',
+      Math: 'رياضيات',
+      Exam: 'اختبار',
+      Pinned: 'مثبت',
+      'All tags': 'كل الوسوم',
+      'All collections': 'كل المجموعات',
+      'Loading...': 'جاري التحميل...',
+      'No matching items': 'لا توجد عناصر مطابقة',
+      'Library is empty': 'المكتبة فارغة',
+      'Save content from Tools to build your library': 'احفظ المحتوى من الأدوات لبناء مكتبتك',
+      Preview: 'معاينة',
+      'Use in Tool': 'استخدم في الأداة',
+      Share: 'مشاركة',
+      Copy: 'نسخ',
+      Unpin: 'إلغاء التثبيت',
+      Pin: 'تثبيت',
+      Delete: 'حذف',
+      Title: 'العنوان',
+      'Tags (comma separated)': 'الوسوم (مفصولة بفواصل)',
+      Collection: 'المجموعة',
+      Save: 'حفظ',
+      'Delete this item?': 'حذف هذا العنصر؟',
+      'Delete ALL library items? This cannot be undone.': 'حذف جميع عناصر المكتبة؟ لا يمكن التراجع عن ذلك.',
+    };
+    return isArabic ? (ar[key] || key) : key;
+  };
+
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -155,7 +199,7 @@ export default function LibraryPage() {
   }, [clearOpenItemParam, deepLinkOpenItemId, deepLinkResolved, handleOpenPreview, items, loading]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this item?')) return;
+    if (!confirm(t('Delete this item?'))) return;
     try {
       await fetch(`/api/library/${id}`, { method: 'DELETE' });
       setItems(items.filter(i => i.id !== id));
@@ -165,7 +209,7 @@ export default function LibraryPage() {
   };
 
   const handleClearAll = async () => {
-    if (!confirm('Delete ALL library items? This cannot be undone.')) return;
+    if (!confirm(t('Delete ALL library items? This cannot be undone.'))) return;
     try {
       await fetch('/api/library', { method: 'DELETE' });
       setItems([]);
@@ -274,14 +318,14 @@ export default function LibraryPage() {
 
   const formatMode = (mode: string) => {
     const modes: Record<string, string> = {
-      assignment: 'Assignment',
-      summarize: 'Summary',
+      assignment: t('Assignment'),
+      summarize: t('Summary'),
       mcq: 'MCQ',
-      quiz: 'Quiz',
-      notes: 'Notes',
-      rephrase: 'Rephrase',
-      math: 'Math',
-      exam: 'Exam',
+      quiz: t('Quiz'),
+      notes: t('Notes'),
+      rephrase: t('Rephrase'),
+      math: t('Math'),
+      exam: t('Exam'),
       srs: 'SRS',
       pop: 'Pop Quiz (legacy)',
     };
@@ -289,7 +333,7 @@ export default function LibraryPage() {
   };
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString(undefined, {
+    return new Date(date).toLocaleDateString(isArabic ? 'ar' : undefined, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -326,21 +370,21 @@ export default function LibraryPage() {
     <div className="library-page">
       <div className="library-header">
         <div>
-          <h1>Library</h1>
-          <p>Your saved study materials</p>
+          <h1>{t('Library')}</h1>
+          <p>{t('Your saved study materials')}</p>
         </div>
         <div className="library-actions">
           <button className="btn secondary" onClick={handleExport} disabled={items.length === 0}>
-            Export JSON
+            {t('Export JSON')}
           </button>
           <button className="btn secondary" onClick={handleExportMarkdown} disabled={items.length === 0}>
-            Export MD
+            {t('Export MD')}
           </button>
           <button className="btn secondary" onClick={handleExportText} disabled={items.length === 0}>
-            Export TXT
+            {t('Export TXT')}
           </button>
           <button className="btn danger" onClick={handleClearAll} disabled={items.length === 0}>
-            Clear All
+            {t('Clear All')}
           </button>
         </div>
       </div>
@@ -350,17 +394,17 @@ export default function LibraryPage() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search library..."
+          placeholder={t('Search library...')}
           className="library-search"
         />
         <div className="library-filters">
           {modes.map((mode) => (
             <button
               key={mode}
-              className={`filter-btn ${filter === mode ? 'active' : ''}`}
-              onClick={() => setFilter(mode)}
-            >
-              {mode === 'all' ? 'All' : formatMode(mode)}
+            className={`filter-btn ${filter === mode ? 'active' : ''}`}
+            onClick={() => setFilter(mode)}
+          >
+              {mode === 'all' ? t('All') : formatMode(mode)}
             </button>
           ))}
         </div>
@@ -369,14 +413,14 @@ export default function LibraryPage() {
             className={`filter-btn ${pinnedOnly ? 'active' : ''}`}
             onClick={() => setPinnedOnly(prev => !prev)}
           >
-            📌 Pinned
+            📌 {t('Pinned')}
           </button>
           <select
             className="filter-select"
             value={tagFilter}
             onChange={(e) => setTagFilter(e.target.value)}
           >
-            <option value="all">All tags</option>
+            <option value="all">{t('All tags')}</option>
             {tags.map(tag => (
               <option key={tag} value={tag}>{tag}</option>
             ))}
@@ -386,7 +430,7 @@ export default function LibraryPage() {
             value={collectionFilter}
             onChange={(e) => setCollectionFilter(e.target.value)}
           >
-            <option value="all">All collections</option>
+            <option value="all">{t('All collections')}</option>
             {collections.map(collection => (
               <option key={collection} value={collection}>{collection}</option>
             ))}
@@ -395,12 +439,12 @@ export default function LibraryPage() {
       </div>
 
       {loading ? (
-        <div className="library-loading">Loading...</div>
+        <div className="library-loading">{t('Loading...')}</div>
       ) : filteredItems.length === 0 ? (
         <div className="library-empty">
           <div className="empty-icon">📚</div>
-          <h3>{search || filter !== 'all' ? 'No matching items' : 'Library is empty'}</h3>
-          <p>Save content from Tools to build your library</p>
+          <h3>{search || filter !== 'all' ? t('No matching items') : t('Library is empty')}</h3>
+          <p>{t('Save content from Tools to build your library')}</p>
         </div>
       ) : (
         <div className="library-grid">
@@ -411,7 +455,7 @@ export default function LibraryPage() {
                   <span className={`card-badge ${item.mode}`}>
                     {formatMode(item.mode)}
                   </span>
-                  {readMetadata(item).pinned && <span className="pin-pill">📌 Pinned</span>}
+                  {readMetadata(item).pinned && <span className="pin-pill">📌 {t('Pinned')}</span>}
                 </div>
                 <span className="card-date">{formatDate(item.createdAt)}</span>
               </div>
@@ -432,22 +476,22 @@ export default function LibraryPage() {
               ) : null}
               <div className="card-actions">
                 <button className="btn ghost" onClick={() => handleOpenPreview(item)}>
-                  👁️ Preview
+                  👁️ {t('Preview')}
                 </button>
                 <button className="btn ghost" onClick={() => handleUseInTool(item)}>
-                  🛠️ Use in Tool
+                  🛠️ {t('Use in Tool')}
                 </button>
                 <button className="btn ghost" onClick={() => handleShare(item)}>
-                  🔗 Share
+                  🔗 {t('Share')}
                 </button>
                 <button className="btn ghost" onClick={() => handleCopy(item.content)}>
-                  📋 Copy
+                  📋 {t('Copy')}
                 </button>
                 <button className="btn ghost" onClick={() => handleTogglePin(item)}>
-                  {readMetadata(item).pinned ? '📌 Unpin' : '📌 Pin'}
+                  {readMetadata(item).pinned ? `📌 ${t('Unpin')}` : `📌 ${t('Pin')}`}
                 </button>
                 <button className="btn ghost danger" onClick={() => handleDelete(item.id)}>
-                  🗑️ Delete
+                  🗑️ {t('Delete')}
                 </button>
               </div>
             </div>
@@ -466,13 +510,13 @@ export default function LibraryPage() {
               <button className="close-btn" onClick={() => setPreviewItem(null)}>✕</button>
             </div>
             <div className="modal-body">
-              <label>Title</label>
+              <label>{t('Title')}</label>
               <input
                 type="text"
                 value={editingMeta.title || ''}
                 onChange={(e) => setEditingMeta(prev => ({ ...prev, title: e.target.value }))}
               />
-              <label>Tags (comma separated)</label>
+              <label>{t('Tags (comma separated)')}</label>
               <input
                 type="text"
                 value={(editingMeta.tags || []).join(', ')}
@@ -481,7 +525,7 @@ export default function LibraryPage() {
                   tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean),
                 }))}
               />
-              <label>Collection</label>
+              <label>{t('Collection')}</label>
               <input
                 type="text"
                 value={editingMeta.collection || ''}
@@ -489,11 +533,11 @@ export default function LibraryPage() {
               />
               <div className="modal-actions">
                 <button className="btn secondary" onClick={() => handleTogglePin(previewItem)}>
-                  {readMetadata(previewItem).pinned ? 'Unpin' : 'Pin'}
+                  {readMetadata(previewItem).pinned ? t('Unpin') : t('Pin')}
                 </button>
-                <button className="btn secondary" onClick={() => handleCopy(previewItem.content)}>Copy</button>
-                <button className="btn secondary" onClick={() => handleUseInTool(previewItem)}>Use in Tool</button>
-                <button className="btn" onClick={handleSaveMeta}>Save</button>
+                <button className="btn secondary" onClick={() => handleCopy(previewItem.content)}>{t('Copy')}</button>
+                <button className="btn secondary" onClick={() => handleUseInTool(previewItem)}>{t('Use in Tool')}</button>
+                <button className="btn" onClick={handleSaveMeta}>{t('Save')}</button>
               </div>
               <div className="modal-content">{previewItem.content}</div>
             </div>

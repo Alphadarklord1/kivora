@@ -10,6 +10,7 @@ import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
 import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
 import { AudioPodcast } from '@/components/tools/AudioPodcast';
 import { useToastHelpers } from '@/components/ui/Toast';
+import { useSettings } from '@/providers/SettingsProvider';
 
 type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'notes' | 'rephrase' | 'math' | 'graph' | 'visual' | 'audio';
 
@@ -35,6 +36,83 @@ interface FolderData {
 const rewriteToneOptions: RewriteTone[] = ['formal', 'informal', 'academic', 'professional', 'energetic', 'concise'];
 
 export default function ToolsPage() {
+  const { settings } = useSettings();
+  const isArabic = settings.language === 'ar';
+  const t = (key: string) => {
+    const ar: Record<string, string> = {
+      'Study Tools': 'أدوات الدراسة',
+      'Generate study materials from any content': 'ولّد مواد دراسية من أي محتوى',
+      'Paste your study material': 'ألصق المادة الدراسية',
+      'Paste your study material here... (lectures, textbook excerpts, articles, etc.)': 'ألصق المادة الدراسية هنا... (محاضرات، مقتطفات كتاب، مقالات، إلخ)',
+      'No content': 'لا يوجد محتوى',
+      'Please enter text to process': 'يرجى إدخال نص للمعالجة',
+      'Content too short': 'المحتوى قصير جدًا',
+      'Please enter at least 50 characters for better results': 'يرجى إدخال 50 حرفًا على الأقل للحصول على نتائج أفضل',
+      'Study-only AI': 'ذكاء اصطناعي مخصص للدراسة',
+      'Generated with OpenAI': 'تم التوليد عبر OpenAI',
+      'Cloud unavailable, used offline fallback': 'تعذر استخدام السحابة، تم استخدام البديل المحلي',
+      'Generated successfully': 'تم التوليد بنجاح',
+      'Generation failed': 'فشل التوليد',
+      'An error occurred while generating content': 'حدث خطأ أثناء توليد المحتوى',
+      'Failed to load folders': 'فشل تحميل المجلدات',
+      'Select folder & topic': 'اختر المجلد والموضوع',
+      'Please choose where to save': 'يرجى اختيار مكان الحفظ',
+      'Saved to folder': 'تم الحفظ في المجلد',
+      'Failed to save': 'فشل الحفظ',
+      'Saving...': 'جارٍ الحفظ...',
+      Save: 'حفظ',
+      Cancel: 'إلغاء',
+      'Generating...': 'جارٍ التوليد...',
+      'Saved to library': 'تم الحفظ في المكتبة',
+      'Could not save to library': 'تعذر الحفظ في المكتبة',
+      'Please try again': 'يرجى المحاولة مرة أخرى',
+      'Copied to clipboard': 'تم النسخ إلى الحافظة',
+      Tone: 'النبرة',
+      'Custom instruction (optional)': 'تعليمات مخصصة (اختياري)',
+      'Example: Keep it under 90 words and use bullets.': 'مثال: اجعلها أقل من 90 كلمة واستخدم نقاطًا.',
+      words: 'كلمة',
+      characters: 'حرف',
+      Generate: 'توليد',
+      'Practice Mode': 'وضع التدريب',
+      'Edit Input': 'تعديل الإدخال',
+      'Start New': 'بدء جديد',
+      Copy: 'نسخ',
+      'Save to Library': 'حفظ في المكتبة',
+      'Save to Folder': 'حفظ في المجلد',
+      'Save to Folder Title': 'حفظ في مجلد',
+      Folder: 'المجلد',
+      Topic: 'الموضوع',
+      '-- Select folder --': '-- اختر المجلد --',
+      '-- Select topic --': '-- اختر الموضوع --',
+      Assignment: 'واجب',
+      Summarize: 'تلخيص',
+      'Generate assignment questions and prompts': 'ولّد أسئلة ومطالبات للواجبات',
+      'Create concise summaries of your content': 'أنشئ ملخصات موجزة لمحتواك',
+      'Generate multiple choice questions': 'ولّد أسئلة اختيار من متعدد',
+      'Create comprehensive quizzes': 'أنشئ اختبارات شاملة',
+      'Generate Cornell-style study notes': 'ولّد ملاحظات دراسية بأسلوب كورنيل',
+      'Rewrite text in a selected tone and style': 'أعد صياغة النص بنبرة وأسلوب محددين',
+      'Solve mathematical problems step-by-step': 'حل مسائل الرياضيات خطوة بخطوة',
+      'Plot and visualize mathematical functions': 'ارسم الدوال الرياضية وتصورها',
+      'Analyze images, diagrams, and PDFs with AI vision': 'حلّل الصور والمخططات وملفات PDF عبر الرؤية الذكية',
+      'Listen to your study materials as a podcast': 'استمع إلى موادك الدراسية كبودكاست',
+      Quiz: 'اختبار',
+      Notes: 'ملاحظات',
+      Rephrase: 'إعادة صياغة',
+      Math: 'رياضيات',
+      Graph: 'رسم بياني',
+      Visual: 'تحليل بصري',
+      Audio: 'صوتي',
+      Formal: 'رسمي',
+      Informal: 'غير رسمي',
+      Academic: 'أكاديمي',
+      Professional: 'مهني',
+      Energetic: 'حيوي',
+      Concise: 'موجز',
+    };
+    return isArabic ? (ar[key] || key) : key;
+  };
+
   const toast = useToastHelpers();
   const searchParams = useSearchParams();
   const [toolTab, setToolTab] = useState<ToolTab>('assignment');
@@ -77,12 +155,12 @@ export default function ToolsPage() {
 
   const handleGenerate = async () => {
     if (!inputText.trim()) {
-      toast.warning('No content', 'Please enter text to process');
+      toast.warning(t('No content'), t('Please enter text to process'));
       return;
     }
 
     if (toolTab !== 'rephrase' && inputText.trim().length < 50) {
-      toast.warning('Content too short', 'Please enter at least 50 characters for better results');
+      toast.warning(t('Content too short'), t('Please enter at least 50 characters for better results'));
       return;
     }
 
@@ -100,7 +178,7 @@ export default function ToolsPage() {
 
       if (ai.status === 'policy_block') {
         const suggestions = ai.suggestionModes?.length ? ` Try: ${ai.suggestionModes.join(', ')}.` : '';
-        toast.warning('Study-only AI', `${ai.reason}${suggestions}`);
+        toast.warning(t('Study-only AI'), `${ai.reason}${suggestions}`);
         setGeneratedContent(null);
         setOutput('');
         setViewMode('input');
@@ -117,17 +195,17 @@ export default function ToolsPage() {
 
       if (ai.status === 'success') {
         if (ai.provider === 'openai' && !ai.fallbackUsed) {
-          toast.success('Generated with OpenAI');
+          toast.success(t('Generated with OpenAI'));
         } else if (ai.fallbackUsed) {
-          toast.warning('Cloud unavailable, used offline fallback', ai.reason || undefined);
+          toast.warning(t('Cloud unavailable, used offline fallback'), ai.reason || undefined);
         } else {
-          toast.success('Generated successfully');
+          toast.success(t('Generated successfully'));
         }
       } else {
-        toast.warning('Cloud unavailable, used offline fallback', ai.message);
+        toast.warning(t('Cloud unavailable, used offline fallback'), ai.message);
       }
     } catch {
-      toast.error('Generation failed', 'An error occurred while generating content');
+      toast.error(t('Generation failed'), t('An error occurred while generating content'));
       setGeneratedContent(null);
     } finally {
       setGenerating(false);
@@ -156,7 +234,7 @@ export default function ToolsPage() {
 
   const handleCopy = () => {
     navigator.clipboard.writeText(output);
-    toast.success('Copied to clipboard');
+    toast.success(t('Copied to clipboard'));
   };
 
   const handleOpenFolderPicker = async () => {
@@ -167,14 +245,14 @@ export default function ToolsPage() {
         setFolders(data);
       }
     } catch {
-      toast.error('Failed to load folders');
+      toast.error(t('Failed to load folders'));
     }
     setShowFolderPicker(true);
   };
 
   const handleSaveToFolder = async () => {
     if (!selectedFolderId || !selectedTopicId) {
-      toast.warning('Select folder & topic', 'Please choose where to save');
+      toast.warning(t('Select folder & topic'), t('Please choose where to save'));
       return;
     }
     setSavingToFolder(true);
@@ -192,15 +270,15 @@ export default function ToolsPage() {
         credentials: 'include',
       });
       if (res.ok) {
-        toast.success('Saved to folder');
+        toast.success(t('Saved to folder'));
         setShowFolderPicker(false);
         setSelectedFolderId('');
         setSelectedTopicId('');
       } else {
-        toast.error('Failed to save');
+        toast.error(t('Failed to save'));
       }
     } catch {
-      toast.error('Failed to save');
+      toast.error(t('Failed to save'));
     } finally {
       setSavingToFolder(false);
     }
@@ -217,23 +295,33 @@ export default function ToolsPage() {
         credentials: 'include',
       });
       if (res.ok) {
-        toast.success('Saved to library');
+        toast.success(t('Saved to library'));
       } else {
-        toast.error('Failed to save', 'Could not save to library');
+        toast.error(t('Failed to save'), t('Could not save to library'));
       }
     } catch {
-      toast.error('Failed to save', 'Please try again');
+      toast.error(t('Failed to save'), t('Please try again'));
     }
   };
 
   const currentTool = toolTabs.find(t => t.id === toolTab);
-  const getToneLabel = (tone: RewriteTone) => tone.charAt(0).toUpperCase() + tone.slice(1);
+  const getToneLabel = (tone: RewriteTone) => {
+    const labels: Record<RewriteTone, string> = {
+      formal: 'Formal',
+      informal: 'Informal',
+      academic: 'Academic',
+      professional: 'Professional',
+      energetic: 'Energetic',
+      concise: 'Concise',
+    };
+    return t(labels[tone]);
+  };
 
   return (
     <div className="tools-page">
       <div className="page-header">
-        <h1>Study Tools</h1>
-        <p>Generate study materials from any content</p>
+        <h1>{t('Study Tools')}</h1>
+        <p>{t('Generate study materials from any content')}</p>
       </div>
 
       <div className="tools-layout">
@@ -251,8 +339,8 @@ export default function ToolsPage() {
               >
                 <span className="tool-icon">{tool.icon}</span>
                 <div className="tool-info">
-                  <span className="tool-name">{tool.label}</span>
-                  <span className="tool-desc">{tool.description}</span>
+                  <span className="tool-name">{t(tool.label)}</span>
+                  <span className="tool-desc">{t(tool.description)}</span>
                 </div>
               </button>
             ))}
@@ -264,8 +352,8 @@ export default function ToolsPage() {
           <div className="tool-header">
             <span className="tool-header-icon">{currentTool?.icon}</span>
             <div>
-              <h2>{currentTool?.label}</h2>
-              <p>{currentTool?.description}</p>
+              <h2>{t(currentTool?.label || '')}</h2>
+              <p>{t(currentTool?.description || '')}</p>
             </div>
           </div>
 
@@ -283,18 +371,18 @@ export default function ToolsPage() {
               {/* Input Mode */}
               {viewMode === 'input' && (
                 <div className="input-section">
-                  <label htmlFor="content-input">Paste your study material</label>
+                  <label htmlFor="content-input">{t('Paste your study material')}</label>
                   <textarea
                     id="content-input"
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    placeholder="Paste your study material here... (lectures, textbook excerpts, articles, etc.)"
+                    placeholder={t('Paste your study material here... (lectures, textbook excerpts, articles, etc.)')}
                     rows={12}
                   />
                   {toolTab === 'rephrase' && (
                     <div className="rewrite-controls">
                       <div className="rewrite-field">
-                        <label htmlFor="tone-select">Tone</label>
+                        <label htmlFor="tone-select">{t('Tone')}</label>
                         <select
                           id="tone-select"
                           value={rewriteTone}
@@ -308,21 +396,21 @@ export default function ToolsPage() {
                         </select>
                       </div>
                       <div className="rewrite-field">
-                        <label htmlFor="custom-instruction">Custom instruction (optional)</label>
+                        <label htmlFor="custom-instruction">{t('Custom instruction (optional)')}</label>
                         <input
                           id="custom-instruction"
                           type="text"
                           value={rewriteInstruction}
                           onChange={(event) => setRewriteInstruction(event.target.value)}
-                          placeholder="Example: Keep it under 90 words and use bullets."
+                          placeholder={t('Example: Keep it under 90 words and use bullets.')}
                         />
                       </div>
                     </div>
                   )}
                   {inputText && (
                     <div className="input-stats">
-                      <span>{inputText.split(/\s+/).filter(Boolean).length} words</span>
-                      <span>{inputText.length} characters</span>
+                      <span>{inputText.split(/\s+/).filter(Boolean).length} {t('words')}</span>
+                      <span>{inputText.length} {t('characters')}</span>
                     </div>
                   )}
 
@@ -333,10 +421,10 @@ export default function ToolsPage() {
                   >
                     {generating ? (
                       <>
-                        <span className="spinner" /> Generating...
+                        <span className="spinner" /> {t('Generating...')}
                       </>
                     ) : (
-                      <>Generate {currentTool?.label}</>
+                      <>{t('Generate')} {t(currentTool?.label || '')}</>
                     )}
                   </button>
                 </div>
@@ -348,14 +436,14 @@ export default function ToolsPage() {
                   <div className="output-actions-top">
                     {generatedContent && generatedContent.questions.length > 0 && (
                       <button className="btn" onClick={handleStartInteractive}>
-                        🎯 Practice Mode
+                        🎯 {t('Practice Mode')}
                       </button>
                     )}
                     <button className="btn secondary" onClick={() => setViewMode('input')}>
-                      ✏️ Edit Input
+                      ✏️ {t('Edit Input')}
                     </button>
                     <button className="btn secondary" onClick={handleToolReset}>
-                      ↺ Start New
+                      ↺ {t('Start New')}
                     </button>
                   </div>
 
@@ -365,13 +453,13 @@ export default function ToolsPage() {
 
                   <div className="output-actions-bottom">
                     <button className="btn secondary" onClick={handleCopy}>
-                      📋 Copy
+                      📋 {t('Copy')}
                     </button>
                     <button className="btn secondary" onClick={handleSaveToLibrary}>
-                      📚 Save to Library
+                      📚 {t('Save to Library')}
                     </button>
                     <button className="btn secondary" onClick={handleOpenFolderPicker}>
-                      📁 Save to Folder
+                      📁 {t('Save to Folder')}
                     </button>
                   </div>
 
@@ -379,14 +467,14 @@ export default function ToolsPage() {
                   {showFolderPicker && (
                     <div className="folder-picker-overlay" onClick={() => setShowFolderPicker(false)}>
                       <div className="folder-picker" onClick={(e) => e.stopPropagation()}>
-                        <h3>Save to Folder</h3>
+                        <h3>{t('Save to Folder Title')}</h3>
                         <div className="picker-field">
-                          <label>Folder</label>
+                          <label>{t('Folder')}</label>
                           <select
                             value={selectedFolderId}
                             onChange={(e) => { setSelectedFolderId(e.target.value); setSelectedTopicId(''); }}
                           >
-                            <option value="">-- Select folder --</option>
+                            <option value="">{t('-- Select folder --')}</option>
                             {folders.map(f => (
                               <option key={f.id} value={f.id}>{f.name}</option>
                             ))}
@@ -394,12 +482,12 @@ export default function ToolsPage() {
                         </div>
                         {selectedFolderId && (
                           <div className="picker-field">
-                            <label>Topic</label>
+                            <label>{t('Topic')}</label>
                             <select
                               value={selectedTopicId}
                               onChange={(e) => setSelectedTopicId(e.target.value)}
                             >
-                              <option value="">-- Select topic --</option>
+                              <option value="">{t('-- Select topic --')}</option>
                               {folders.find(f => f.id === selectedFolderId)?.topics?.map(t => (
                                 <option key={t.id} value={t.id}>{t.name}</option>
                               ))}
@@ -407,13 +495,13 @@ export default function ToolsPage() {
                           </div>
                         )}
                         <div className="picker-actions">
-                          <button className="btn secondary" onClick={() => setShowFolderPicker(false)}>Cancel</button>
+                          <button className="btn secondary" onClick={() => setShowFolderPicker(false)}>{t('Cancel')}</button>
                           <button
                             className="btn"
                             onClick={handleSaveToFolder}
                             disabled={!selectedFolderId || !selectedTopicId || savingToFolder}
                           >
-                            {savingToFolder ? 'Saving...' : 'Save'}
+                            {savingToFolder ? t('Saving...') : t('Save')}
                           </button>
                         </div>
                       </div>

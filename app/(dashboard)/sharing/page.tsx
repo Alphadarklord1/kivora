@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSettings } from '@/providers/SettingsProvider';
 
 interface Share {
   id: string;
@@ -29,6 +30,40 @@ interface Owner {
 }
 
 export default function SharedWithMePage() {
+  const { settings } = useSettings();
+  const isArabic = settings.language === 'ar';
+  const t = (key: string) => {
+    const ar: Record<string, string> = {
+      Sharing: 'المشاركة',
+      'Manage content shared with you and by you': 'إدارة المحتوى الذي تمت مشاركته معك ومن طرفك',
+      'Search by name or email...': 'ابحث بالاسم أو البريد الإلكتروني...',
+      All: 'الكل',
+      File: 'ملف',
+      Folder: 'مجلد',
+      Topic: 'موضوع',
+      Library: 'المكتبة',
+      'Shared with me': 'تمت مشاركته معي',
+      'My shares': 'مشاركاتي',
+      'Loading shares...': 'جاري تحميل المشاركات...',
+      'Nothing shared with you yet': 'لا يوجد شيء تمت مشاركته معك بعد',
+      'You haven\'t shared anything yet': 'لم تشارك أي شيء بعد',
+      'When someone shares content with you, it will appear here.': 'عندما يشارك معك أحد محتوى، سيظهر هنا.',
+      'Share files, folders, or library items to see them here.': 'شارك الملفات أو المجلدات أو عناصر المكتبة لتظهر هنا.',
+      From: 'من',
+      To: 'إلى',
+      Shared: 'تمت المشاركة',
+      Expired: 'منتهي',
+      Expires: 'ينتهي',
+      Open: 'فتح',
+      'Copy Link': 'نسخ الرابط',
+      Revoke: 'إلغاء المشاركة',
+      'Can edit': 'يمكن التعديل',
+      'View only': 'عرض فقط',
+      'Revoke this share? The recipient will no longer have access.': 'إلغاء هذه المشاركة؟ لن يتمكن المستلم من الوصول بعد الآن.',
+    };
+    return isArabic ? (ar[key] || key) : key;
+  };
+
   const [shares, setShares] = useState<Share[]>([]);
   const [owners, setOwners] = useState<Record<string, Owner>>({});
   const [loading, setLoading] = useState(true);
@@ -76,7 +111,7 @@ export default function SharedWithMePage() {
   }, [activeTab]);
 
   const handleRevokeShare = async (shareId: string) => {
-    if (!confirm('Revoke this share? The recipient will no longer have access.')) return;
+    if (!confirm(t('Revoke this share? The recipient will no longer have access.'))) return;
     try {
       const res = await fetch(`/api/share?id=${shareId}`, {
         method: 'DELETE',
@@ -109,7 +144,7 @@ export default function SharedWithMePage() {
   };
 
   const getPermissionBadge = (permission: string) => {
-    return permission === 'edit' ? '✏️ Can edit' : '👁️ View only';
+    return permission === 'edit' ? `✏️ ${t('Can edit')}` : `👁️ ${t('View only')}`;
   };
 
   const isExpired = (expiresAt: string | null) => {
@@ -137,15 +172,15 @@ export default function SharedWithMePage() {
     <div className="shared-page">
       <div className="page-header">
         <div>
-          <h1>Sharing</h1>
-          <p>Manage content shared with you and by you</p>
+          <h1>{t('Sharing')}</h1>
+          <p>{t('Manage content shared with you and by you')}</p>
         </div>
       </div>
 
       <div className="share-toolbar">
         <input
           className="share-search"
-          placeholder="Search by name or email..."
+          placeholder={t('Search by name or email...')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
@@ -156,7 +191,15 @@ export default function SharedWithMePage() {
               className={`filter-pill ${typeFilter === type ? 'active' : ''}`}
               onClick={() => setTypeFilter(type)}
             >
-              {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
+              {type === 'all'
+                ? t('All')
+                : type === 'file'
+                  ? t('File')
+                  : type === 'folder'
+                    ? t('Folder')
+                    : type === 'topic'
+                      ? t('Topic')
+                      : t('Library')}
             </button>
           ))}
         </div>
@@ -167,26 +210,26 @@ export default function SharedWithMePage() {
           className={`share-tab ${activeTab === 'received' ? 'active' : ''}`}
           onClick={() => setActiveTab('received')}
         >
-          📥 Shared with me
+          📥 {t('Shared with me')}
         </button>
         <button
           className={`share-tab ${activeTab === 'sent' ? 'active' : ''}`}
           onClick={() => setActiveTab('sent')}
         >
-          📤 My shares
+          📤 {t('My shares')}
         </button>
       </div>
 
       {loading ? (
-        <div className="loading-state">Loading shares...</div>
+        <div className="loading-state">{t('Loading shares...')}</div>
       ) : filteredShares.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">{activeTab === 'received' ? '📥' : '📤'}</div>
-          <h3>{activeTab === 'received' ? 'Nothing shared with you yet' : 'You haven\'t shared anything yet'}</h3>
+          <h3>{activeTab === 'received' ? t('Nothing shared with you yet') : t('You haven\'t shared anything yet')}</h3>
           <p>
             {activeTab === 'received'
-              ? 'When someone shares content with you, it will appear here.'
-              : 'Share files, folders, or library items to see them here.'}
+              ? t('When someone shares content with you, it will appear here.')
+              : t('Share files, folders, or library items to see them here.')}
           </p>
         </div>
       ) : (
@@ -198,16 +241,16 @@ export default function SharedWithMePage() {
                 <div className="share-name">{share.resourceName}</div>
                 <div className="share-meta">
                   {activeTab === 'received' && owners[share.ownerId] && (
-                    <span>From: {owners[share.ownerId].name || owners[share.ownerId].email}</span>
+                    <span>{t('From')}: {owners[share.ownerId].name || owners[share.ownerId].email}</span>
                   )}
                   {activeTab === 'sent' && share.sharedWithEmail && (
-                    <span>To: {share.sharedWithEmail}</span>
+                    <span>{t('To')}: {share.sharedWithEmail}</span>
                   )}
                   <span>{getPermissionBadge(share.permission)}</span>
-                  <span>Shared {formatDate(share.createdAt)}</span>
+                  <span>{t('Shared')} {formatDate(share.createdAt)}</span>
                   {share.expiresAt && (
                     <span className={isExpired(share.expiresAt) ? 'expired-badge' : ''}>
-                      {isExpired(share.expiresAt) ? 'Expired' : `Expires ${formatDate(share.expiresAt)}`}
+                      {isExpired(share.expiresAt) ? t('Expired') : `${t('Expires')} ${formatDate(share.expiresAt)}`}
                     </span>
                   )}
                 </div>
@@ -216,13 +259,13 @@ export default function SharedWithMePage() {
                 {share.shareUrl && !isExpired(share.expiresAt) && (
                   <>
                     <Link href={share.shareUrl} className="btn secondary" target="_blank">
-                      Open
+                      {t('Open')}
                     </Link>
                     <button
                       className="btn ghost"
                       onClick={() => handleCopyLink(share.shareUrl!)}
                     >
-                      📋 Copy Link
+                      📋 {t('Copy Link')}
                     </button>
                   </>
                 )}
@@ -231,7 +274,7 @@ export default function SharedWithMePage() {
                     className="btn ghost danger"
                     onClick={() => handleRevokeShare(share.id)}
                   >
-                    Revoke
+                    {t('Revoke')}
                   </button>
                 )}
               </div>
