@@ -29,7 +29,7 @@ You can also use another folder by setting:
 
 These commands stage files into:
 
-`/Users/armankhan/Documents/studypilot-full-code/electron/runtime/models`
+`electron/runtime/models`
 
 ## 3) Build installer
 
@@ -40,7 +40,7 @@ These commands stage files into:
 
 Output:
 
-`/Users/armankhan/Documents/studypilot-full-code/dist-electron`
+`dist-electron`
 
 ## 4) What users get in app
 

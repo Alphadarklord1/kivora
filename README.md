@@ -24,7 +24,7 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 Use this guide for bundled local AI models and installer profiles:
 
-- `/Users/armankhan/Documents/studypilot-full-code/OFFLINE_MODEL_BUNDLE_GUIDE.md`
+- `OFFLINE_MODEL_BUNDLE_GUIDE.md`
 
 Quick commands:
 
