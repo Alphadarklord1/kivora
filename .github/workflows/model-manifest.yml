@@ -75,10 +75,24 @@ jobs:
             --manifest=electron/runtime/model-manifest.json \
             --repo=${{ steps.ctx.outputs.repo }}
 
+      - name: Generate checksums
+        run: |
+          npm run models:checksums:generate -- \
+            --models-dir=electron/runtime/models \
+            --models=mini,balanced,pro \
+            --out=electron/runtime/SHA256SUMS.txt
+
+      - name: Validate checksums
+        run: |
+          npm run models:checksums:validate -- \
+            --checksums=electron/runtime/SHA256SUMS.txt \
+            --manifest=electron/runtime/model-manifest.json \
+            --models-dir=electron/runtime/models
+
       - name: Build verification report
         run: |
           mkdir -p .artifacts
-          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('electron/runtime/model-manifest.json','utf8'));const lines=['# Model Manifest Verification','',`Version: ${m.version}`,'', '| Key | File | Size Bytes | SHA256 |', '|---|---|---:|---|']; for(const x of m.models){lines.push(`| ${x.key} | ${x.file} | ${x.sizeBytes} | ${x.sha256} |`)} fs.writeFileSync('.artifacts/model-verification.md', lines.join('\n'))"
+          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('electron/runtime/model-manifest.json','utf8'));const lines=['# Model Manifest Verification','',`Version: ${m.version}`,'', '| Key | File | Size Bytes | SHA256 |', '|---|---|---:|---|']; for(const x of m.models){lines.push(`| ${x.key} | ${x.file} | ${x.sizeBytes} | ${x.sha256} |`)} lines.push('', '## SHA256SUMS.txt', '', '```', fs.readFileSync('electron/runtime/SHA256SUMS.txt','utf8').trim(), '```'); fs.writeFileSync('.artifacts/model-verification.md', lines.join('\n'))"
 
       - name: Upload verification artifact
         uses: actions/upload-artifact@v4
@@ -86,13 +100,14 @@ jobs:
           name: model-manifest-verification-${{ steps.ctx.outputs.tag }}
           path: |
             electron/runtime/model-manifest.json
+            electron/runtime/SHA256SUMS.txt
             .artifacts/model-verification.md
 
-      - name: Upload manifest to release
+      - name: Upload manifest/checksums to release
         if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "${{ steps.ctx.outputs.tag }}" electron/runtime/model-manifest.json \
+          gh release upload "${{ steps.ctx.outputs.tag }}" electron/runtime/model-manifest.json electron/runtime/SHA256SUMS.txt \
             --repo "${{ steps.ctx.outputs.repo }}" \
             --clobber

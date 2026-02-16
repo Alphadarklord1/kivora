@@ -55,22 +55,37 @@ Output:
 For hybrid bundle mode (Mini bundled, bigger models optional):
 
 1. Build and publish app installer.
-2. Upload optional GGUF files as release assets:
+2. Publish model assets + manifest + checksums in one command:
+   - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/StudyPilot-model-store`
+3. Required release assets after publish:
+   - `qwen2.5-1.5b-instruct-q4_k_m.gguf`
    - `qwen2.5-3b-instruct-q4_k_m.gguf`
    - `qwen2.5-7b-instruct-q4_k_m.gguf`
-3. Generate release-grade manifest:
+   - `model-manifest.json`
+   - `SHA256SUMS.txt`
+4. Generate/validate manually (optional, if you do not use the publish command):
    - `npm run models:manifest:generate -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=<path-to-gguf-files>`
-4. Validate manifest:
    - `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/studypilot`
-5. Verify release naming consistency:
-   - `npm run release:verify -- --tag=vX.Y.Z --assets='StudyPilot-X.Y.Z-arm64.dmg,StudyPilot-X.Y.Z-arm64-mac.zip,model-manifest.json'`
-6. Upload matching `model-manifest.json` to the same release tag.
-7. Ensure manifest `sha256` and `sizeBytes` match uploaded assets.
-8. Smoke test on clean machine: install app, open wizard/settings, install Balanced model.
+   - `npm run models:checksums:generate -- --models-dir=<path-to-gguf-files> --out=electron/runtime/SHA256SUMS.txt`
+   - `npm run models:checksums:validate -- --checksums=electron/runtime/SHA256SUMS.txt --manifest=electron/runtime/model-manifest.json --models-dir=<path-to-gguf-files>`
+5. Verify release naming consistency (includes required model assets/checksum files):
+   - `npm run release:verify -- --tag=vX.Y.Z --assets='<comma-separated release asset list>'`
+6. Smoke test on clean machine: install app, open wizard/settings, install Balanced model.
 
 CI also enforces these checks in `.github/workflows/beta-ci.yml` and `.github/workflows/model-manifest.yml`.
 
-## 6) If something fails
+## 6) Direct download URLs template
+
+Replace `vX.Y.Z` with your release tag:
+
+- Releases page: `https://github.com/Alphadarklord1/studypilot/releases/tag/vX.Y.Z`
+- Manifest: `https://github.com/Alphadarklord1/studypilot/releases/download/vX.Y.Z/model-manifest.json`
+- Checksums: `https://github.com/Alphadarklord1/studypilot/releases/download/vX.Y.Z/SHA256SUMS.txt`
+- Mini model: `https://github.com/Alphadarklord1/studypilot/releases/download/vX.Y.Z/qwen2.5-1.5b-instruct-q4_k_m.gguf`
+- Balanced model: `https://github.com/Alphadarklord1/studypilot/releases/download/vX.Y.Z/qwen2.5-3b-instruct-q4_k_m.gguf`
+- Pro model: `https://github.com/Alphadarklord1/studypilot/releases/download/vX.Y.Z/qwen2.5-7b-instruct-q4_k_m.gguf`
+
+## 7) If something fails
 
 - Run a dry-run check:
   - `node scripts/prepare-model-bundle.js --target=balanced --dry-run`

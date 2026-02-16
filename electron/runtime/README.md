@@ -31,9 +31,12 @@ If only one model is included, StudyPilot auto-falls back to that model.
      - `npm run electron:build:mac:balanced`
      - `npm run electron:build:mac:pc`
 4. For release, upload optional models and `model-manifest.json` as GitHub release assets under the same app version tag.
-5. Validate manifest before publishing:
+5. Recommended one-command publish:
+   - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/StudyPilot-model-store`
+6. Manual validation path:
    - `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/studypilot`
-6. Verify tag/assets/version consistency:
-   - `npm run release:verify -- --tag=vX.Y.Z --assets='StudyPilot-X.Y.Z-arm64.dmg,StudyPilot-X.Y.Z-arm64-mac.zip,model-manifest.json'`
+   - `npm run models:checksums:validate -- --checksums=electron/runtime/SHA256SUMS.txt --manifest=electron/runtime/model-manifest.json --models-dir=electron/runtime/models`
+7. Verify tag/assets/version consistency:
+   - `npm run release:verify -- --tag=vX.Y.Z --assets='<comma-separated release asset list>'`
 
 `mock-ai-runtime.js` is development-only and is used when a native runtime binary is not present.

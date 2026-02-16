@@ -31,6 +31,7 @@ Quick commands:
 ```bash
 npm run models:prepare:balanced
 npm run electron:build:mac:balanced
+npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/StudyPilot-model-store
 ```
 
 ## Learn More

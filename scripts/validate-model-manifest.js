@@ -31,6 +31,7 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   const manifestPath = path.resolve(args.manifest || DEFAULT_MANIFEST);
   const repo = (args.repo || process.env.STUDYPILOT_RELEASE_REPO || DEFAULT_REPO).trim();
+  const allowPlaceholders = args['allow-placeholders'] === '1' || args['allow-placeholders'] === 'true';
 
   if (!fs.existsSync(manifestPath)) {
     fail(`Manifest not found: ${manifestPath}`);
@@ -60,20 +61,22 @@ function main() {
     if (typeof model.quantization !== 'string' || !model.quantization.trim()) {
       fail(`Missing quantization for ${model.key}`);
     }
-    if (!Number.isFinite(model.sizeBytes) || Number(model.sizeBytes) <= 0) {
+    if (!allowPlaceholders && (!Number.isFinite(model.sizeBytes) || Number(model.sizeBytes) <= 0)) {
       fail(`sizeBytes must be > 0 for ${model.key}`);
     }
-    if (typeof model.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(model.sha256)) {
+    if (!allowPlaceholders && (typeof model.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(model.sha256))) {
       fail(`sha256 must be 64 lowercase hex chars for ${model.key}`);
     }
     if (!Number.isFinite(model.minRamGb) || Number(model.minRamGb) <= 0) {
       fail(`minRamGb must be > 0 for ${model.key}`);
     }
-    if (typeof model.url !== 'string' || !model.url.startsWith(`https://github.com/${repo}/releases/download/${versionTag}/`)) {
-      fail(`url is invalid or tag/repo mismatch for ${model.key}`);
-    }
-    if (!model.url.endsWith(`/${model.file}`)) {
-      fail(`url/file mismatch for ${model.key}`);
+    if (!allowPlaceholders) {
+      if (typeof model.url !== 'string' || !model.url.startsWith(`https://github.com/${repo}/releases/download/${versionTag}/`)) {
+        fail(`url is invalid or tag/repo mismatch for ${model.key}`);
+      }
+      if (!model.url.endsWith(`/${model.file}`)) {
+        fail(`url/file mismatch for ${model.key}`);
+      }
     }
   }
 

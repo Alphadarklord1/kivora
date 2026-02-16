@@ -5,6 +5,12 @@ const path = require('node:path');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf8'));
+const MODEL_FILES = new Map([
+  ['mini', 'qwen2.5-1.5b-instruct-q4_k_m.gguf'],
+  ['balanced', 'qwen2.5-3b-instruct-q4_k_m.gguf'],
+  ['pro', 'qwen2.5-7b-instruct-q4_k_m.gguf'],
+]);
+const REQUIRED_STATIC_ASSETS = ['model-manifest.json', 'SHA256SUMS.txt'];
 
 function parseArgs(argv) {
   const args = {};
@@ -28,6 +34,10 @@ const assets = assetsCsv
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean);
+const requiredModels = (args['required-models'] || 'balanced,pro')
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean);
 
 if (!tag) fail('missing --tag');
 
@@ -47,8 +57,25 @@ if (assets.length === 0) {
   process.exit(0);
 }
 
+for (const requiredName of REQUIRED_STATIC_ASSETS) {
+  if (!assets.includes(requiredName)) {
+    fail(`missing required release asset "${requiredName}"`);
+  }
+}
+
+for (const key of requiredModels) {
+  const fileName = MODEL_FILES.get(key);
+  if (!fileName) {
+    fail(`unknown required model key "${key}". Allowed: mini, balanced, pro`);
+  }
+  if (!assets.includes(fileName)) {
+    fail(`missing required model asset "${fileName}"`);
+  }
+}
+
 const mismatched = assets.filter((name) => {
-  if (name === 'model-manifest.json') return false;
+  if (REQUIRED_STATIC_ASSETS.includes(name)) return false;
+  if (name.endsWith('.gguf')) return false;
   if (name.endsWith('.blockmap')) return false;
   return !name.includes(version);
 });
