@@ -3,12 +3,18 @@ import { db } from '@/lib/db';
 import { folders, topics } from '@/lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
+import { apiError, createRequestId } from '@/lib/api/error-response';
 
 export async function GET(request: NextRequest) {
+  const requestId = createRequestId(request);
   try {
     const userId = await getUserId(request);
     if (!userId) {
-      return NextResponse.json([]); // Return empty array instead of error
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
     }
 
     const userFolders = await db.query.folders.findMany({
@@ -23,42 +29,51 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(userFolders);
   } catch (error) {
-    console.error('Folders GET error:', error);
-    return NextResponse.json([]); // Return empty on error
+    console.error(`[Folders][${requestId}] GET failed`, error);
+    return apiError(500, {
+      errorCode: 'FOLDERS_FETCH_FAILED',
+      reason: 'Failed to fetch folders',
+      requestId,
+    });
   }
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = createRequestId(request);
   try {
-    console.log('POST /api/folders - starting');
-
     const userId = await getUserId(request);
-    console.log('POST /api/folders - userId:', userId);
-
     if (!userId) {
-      return NextResponse.json({ error: 'No user found' }, { status: 401 });
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
     }
 
     const body = await request.json();
     const { name } = body;
-    console.log('POST /api/folders - name:', name);
 
     if (!name || typeof name !== 'string' || !name.trim()) {
-      return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+      return apiError(400, {
+        errorCode: 'INVALID_FOLDER_NAME',
+        reason: 'Folder name is required',
+        requestId,
+      });
     }
-
-    console.log('POST /api/folders - inserting folder for user:', userId);
 
     const [newFolder] = await db.insert(folders).values({
       userId,
       name: name.trim(),
     }).returning();
 
-    console.log('POST /api/folders - created folder:', newFolder?.id);
     return NextResponse.json(newFolder, { status: 201 });
   } catch (error) {
-    console.error('Folders POST error:', error);
-    console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
-    return NextResponse.json({ error: 'Failed to create folder', details: String(error) }, { status: 500 });
+    console.error(`[Folders][${requestId}] POST failed`, error);
+    return apiError(500, {
+      errorCode: 'FOLDER_CREATE_FAILED',
+      reason: 'Failed to create folder',
+      details: error instanceof Error ? error.message : String(error),
+      requestId,
+    });
   }
 }

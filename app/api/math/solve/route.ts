@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { evaluateAiScope } from '@/lib/ai/policy';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
+import { apiError, createRequestId } from '@/lib/api/error-response';
 
 // Math solving API - uses AI for complex problems
 // Supports: Calculus I/II, Linear Algebra, Differential Equations, etc.
@@ -245,23 +246,31 @@ function fallbackSolver(problem: string, problemType: string): MathSolution {
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = createRequestId(request);
   try {
     const session = await auth();
     if (!session?.user?.id && !isGuestModeEnabled()) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
     }
 
     const { problem } = await request.json();
 
     if (!problem || typeof problem !== 'string') {
-      return NextResponse.json({ error: 'Problem is required' }, { status: 400 });
+      return apiError(400, {
+        errorCode: 'INVALID_PROBLEM',
+        reason: 'Problem is required',
+        requestId,
+      });
     }
 
     const scopeDecision = evaluateAiScope({ mode: 'math', text: problem, source: 'tools' });
     if (!scopeDecision.allowed) {
       return NextResponse.json(
         {
-          error: scopeDecision.reason,
           errorCode: scopeDecision.errorCode,
           reason: scopeDecision.reason,
           suggestionModes: scopeDecision.suggestionModes,
@@ -313,10 +322,12 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('Math solve error:', error);
-    return NextResponse.json(
-      { error: 'Failed to solve problem' },
-      { status: 500 }
-    );
+    console.error(`[MathSolve][${requestId}] failed`, error);
+    return apiError(500, {
+      errorCode: 'MATH_SOLVE_FAILED',
+      reason: 'Failed to solve problem',
+      details: error instanceof Error ? error.message : String(error),
+      requestId,
+    });
   }
 }

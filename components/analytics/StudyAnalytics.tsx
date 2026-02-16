@@ -81,6 +81,7 @@ export function StudyAnalytics() {
     'No AI insights yet. Complete a few more quizzes to unlock adaptive guidance.': 'لا توجد رؤى ذكاء اصطناعي بعد. أكمل بعض الاختبارات الإضافية لفتح التوجيه التكيفي.',
     'Top: {tool}': 'الأعلى: {tool}',
     'total plans': 'إجمالي الخطط',
+    'Showing fallback analytics due to a temporary data issue.': 'يتم عرض تحليلات احتياطية بسبب مشكلة مؤقتة في البيانات.',
   });
   const router = useRouter();
   const { data, loading, error, refresh, setPeriod, period } = useAnalytics(30);
@@ -349,6 +350,10 @@ export function StudyAnalytics() {
         </div>
       </section>
 
+      {data.fallback && (
+        <div className="fallback-banner">{t('Showing fallback analytics due to a temporary data issue.')}</div>
+      )}
+
       <section className="ai-hero">
         <div className="ai-hero-head">
           <h2>🧠 {t('AI Study Advisor')}</h2>
@@ -601,6 +606,15 @@ export function StudyAnalytics() {
           align-items: flex-start;
           gap: var(--space-4);
           flex-wrap: wrap;
+        }
+
+        .fallback-banner {
+          padding: var(--space-2) var(--space-3);
+          border-radius: var(--radius-md);
+          border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border-default));
+          background: var(--warning-muted);
+          color: var(--warning);
+          font-size: var(--font-meta);
         }
 
         .header-copy h1 {

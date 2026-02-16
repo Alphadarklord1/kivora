@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const scriptPath = path.join(__dirname, '..', 'scripts', 'verify-release-consistency.js');
+
+test('release consistency passes for matching tag and assets', () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      scriptPath,
+      '--tag=v1.1.0',
+      '--assets=StudyPilot-1.1.0-arm64.dmg,StudyPilot-1.1.0-arm64-mac.zip,model-manifest.json',
+    ],
+    { encoding: 'utf8' }
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('release consistency fails when tag mismatches package version', () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      scriptPath,
+      '--tag=v9.9.9',
+      '--assets=StudyPilot-1.1.0-arm64.dmg',
+    ],
+    { encoding: 'utf8' }
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /must match package\.json version/i);
+});

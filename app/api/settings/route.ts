@@ -3,18 +3,19 @@ import { db } from '@/lib/db';
 import { userSettings } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
-
-function normalizeTheme(theme: unknown): 'light' | 'blue' | 'black' | 'system' {
-  if (theme === 'dark') return 'blue';
-  if (theme === 'light' || theme === 'blue' || theme === 'black' || theme === 'system') return theme;
-  return 'light';
-}
+import { apiError, createRequestId } from '@/lib/api/error-response';
+import { normalizeTheme } from '@/lib/settings/theme';
 
 export async function GET(request: NextRequest) {
+  const requestId = createRequestId(request);
   try {
     const userId = await getUserId(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
     }
 
     const settings = await db
@@ -44,17 +45,27 @@ export async function GET(request: NextRequest) {
         theme: normalizeTheme(settings[0].theme),
       });
   } catch (error) {
-    console.error('Get settings error:', error);
-    return NextResponse.json({ error: 'Failed to get settings' }, { status: 500 });
+    console.error(`[Settings][${requestId}] GET failed`, error);
+    return apiError(500, {
+      errorCode: 'SETTINGS_FETCH_FAILED',
+      reason: 'Failed to get settings',
+      details: error instanceof Error ? error.message : String(error),
+      requestId,
+    });
   }
 }
 
 export async function PUT(request: NextRequest) {
+  const requestId = createRequestId(request);
   try {
     const userId = await getUserId(request);
 
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
     }
 
     const body = await request.json();
@@ -65,10 +76,18 @@ export async function PUT(request: NextRequest) {
     const validDensities = ['compact', 'normal', 'comfortable'];
 
     if (theme && !validThemes.includes(theme)) {
-      return NextResponse.json({ error: 'Invalid theme' }, { status: 400 });
+      return apiError(400, {
+        errorCode: 'INVALID_THEME',
+        reason: 'Invalid theme',
+        requestId,
+      });
     }
     if (density && !validDensities.includes(density)) {
-      return NextResponse.json({ error: 'Invalid density' }, { status: 400 });
+      return apiError(400, {
+        errorCode: 'INVALID_DENSITY',
+        reason: 'Invalid density',
+        requestId,
+      });
     }
 
     // Check if settings exist
@@ -109,7 +128,12 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(updated);
   } catch (error) {
-    console.error('Update settings error:', error);
-    return NextResponse.json({ error: 'Failed to update settings', details: String(error) }, { status: 500 });
+    console.error(`[Settings][${requestId}] PUT failed`, error);
+    return apiError(500, {
+      errorCode: 'SETTINGS_UPDATE_FAILED',
+      reason: 'Failed to update settings',
+      details: error instanceof Error ? error.message : String(error),
+      requestId,
+    });
   }
 }

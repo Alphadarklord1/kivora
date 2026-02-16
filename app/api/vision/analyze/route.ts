@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
+import { apiError, createRequestId } from '@/lib/api/error-response';
 
 type AnalysisMode = 'describe' | 'explain' | 'extract-text' | 'solve-math';
 
@@ -77,50 +78,62 @@ async function callVisionAI(imageDataUrl: string, mode: AnalysisMode): Promise<s
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = createRequestId(request);
   try {
     const session = await auth();
     if (!session?.user?.id && !isGuestModeEnabled()) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
     }
 
     const body = await request.json();
     const { imageDataUrl, mode } = body;
 
     if (!mode || !VALID_MODES.includes(mode)) {
-      return NextResponse.json(
-        { error: `Invalid mode. Must be one of: ${VALID_MODES.join(', ')}` },
-        { status: 400 }
-      );
+      return apiError(400, {
+        errorCode: 'INVALID_VISION_MODE',
+        reason: `Invalid mode. Must be one of: ${VALID_MODES.join(', ')}`,
+        requestId,
+      });
     }
 
     if (!imageDataUrl || typeof imageDataUrl !== 'string') {
-      return NextResponse.json(
-        { error: 'imageDataUrl is required' },
-        { status: 400 }
-      );
+      return apiError(400, {
+        errorCode: 'MISSING_IMAGE',
+        reason: 'imageDataUrl is required',
+        requestId,
+      });
     }
 
     if (!imageDataUrl.startsWith('data:image/')) {
-      return NextResponse.json(
-        { error: 'Invalid image format. Expected a data URL starting with data:image/' },
-        { status: 400 }
-      );
+      return apiError(400, {
+        errorCode: 'INVALID_IMAGE_FORMAT',
+        reason: 'Invalid image format. Expected a data URL starting with data:image/',
+        requestId,
+      });
     }
 
     if (imageDataUrl.length > MAX_IMAGE_SIZE) {
-      return NextResponse.json(
-        { error: 'Image is too large. Maximum size is 4MB.' },
-        { status: 400 }
-      );
+      return apiError(400, {
+        errorCode: 'IMAGE_TOO_LARGE',
+        reason: 'Image is too large. Maximum size is 4MB.',
+        requestId,
+      });
     }
 
     const result = await callVisionAI(imageDataUrl, mode);
 
     return NextResponse.json({ result });
   } catch (error) {
-    console.error('Vision analyze error:', error);
-    const message =
-      error instanceof Error ? error.message : 'Analysis failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error(`[Vision][${requestId}] analyze failed`, error);
+    const message = error instanceof Error ? error.message : 'Analysis failed';
+    return apiError(500, {
+      errorCode: 'VISION_ANALYZE_FAILED',
+      reason: message,
+      requestId,
+    });
   }
 }

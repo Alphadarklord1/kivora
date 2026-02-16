@@ -63,6 +63,9 @@ export interface AnalyticsData {
   activity: Activity;
   insights: string[];
   usage: UsageStats;
+  fallback?: boolean;
+  warning?: string;
+  requestId?: string;
 }
 
 interface UseAnalyticsReturn {
@@ -90,7 +93,14 @@ export function useAnalytics(initialPeriod: number = 30): UseAnalyticsReturn {
       });
 
       if (!res.ok) {
-        throw new Error('Failed to fetch analytics');
+        const payload = await res.json().catch(() => ({}));
+        const reason =
+          typeof payload.reason === 'string'
+            ? payload.reason
+            : typeof payload.error === 'string'
+              ? payload.error
+              : 'Failed to fetch analytics';
+        throw new Error(reason);
       }
 
       const analyticsData = await res.json();

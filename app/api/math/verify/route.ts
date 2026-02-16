@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
+import { apiError, createRequestId } from '@/lib/api/error-response';
 
 // Verify math answers by searching the web
 
@@ -116,19 +117,25 @@ function checkAnswerInResults(
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = createRequestId(request);
   try {
     const session = await auth();
     if (!session?.user?.id && !isGuestModeEnabled()) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
     }
 
     const { problem, answer, problemType } = await request.json();
 
     if (!problem || !answer) {
-      return NextResponse.json(
-        { error: 'Problem and answer are required' },
-        { status: 400 }
-      );
+      return apiError(400, {
+        errorCode: 'INVALID_VERIFY_INPUT',
+        reason: 'Problem and answer are required',
+        requestId,
+      });
     }
 
     // Build search queries
@@ -197,10 +204,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
 
   } catch (error) {
-    console.error('Verification error:', error);
-    return NextResponse.json(
-      { error: 'Failed to verify answer' },
-      { status: 500 }
-    );
+    console.error(`[MathVerify][${requestId}] failed`, error);
+    return apiError(500, {
+      errorCode: 'MATH_VERIFY_FAILED',
+      reason: 'Failed to verify answer',
+      details: error instanceof Error ? error.message : String(error),
+      requestId,
+    });
   }
 }

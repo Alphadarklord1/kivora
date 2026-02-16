@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { quizAttempts, studyPlans, files, libraryItems } from '@/lib/db/schema';
 import { eq, desc, and, gte } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
+import { apiError, createRequestId } from '@/lib/api/error-response';
 
 interface QuizAnswer {
   questionId: string;
@@ -20,10 +21,66 @@ type CoachAction = {
   payload: Record<string, string>;
 };
 
+function buildAnalyticsFallback(periodDays: number) {
+  return {
+    period: periodDays,
+    quizStats: {
+      totalAttempts: 0,
+      totalQuestions: 0,
+      totalCorrect: 0,
+      averageScore: 0,
+      totalTimeTaken: 0,
+      byMode: {},
+      recentScores: [],
+      scoreDistribution: { excellent: 0, good: 0, fair: 0, needsWork: 0 },
+    },
+    planStats: {
+      totalPlans: 0,
+      activePlans: 0,
+      completedPlans: 0,
+      averageProgress: 0,
+      totalStudyDays: 0,
+      completedDays: 0,
+    },
+    weakAreas: [],
+    coachActions: [
+      {
+        id: 'plan-onboarding',
+        label: 'Generate your first 20-min plan',
+        type: 'plan',
+        payload: { topic: 'General', minutes: '20', difficulty: 'easy' },
+      },
+    ] as CoachAction[],
+    activity: {
+      currentStreak: 0,
+      totalActiveDays: 0,
+      weeklyActivity: [],
+      dailyActivity: [],
+    },
+    insights: ['Analytics will appear after your first study actions.'],
+    usage: {
+      totalFiles: 0,
+      uploadedFiles: 0,
+      generatedFiles: 0,
+      libraryItems: 0,
+      toolUsage: {},
+      periodGenerated: 0,
+      periodUploads: 0,
+      periodLibraryItems: 0,
+    },
+    fallback: true,
+  };
+}
+
 export async function GET(request: NextRequest) {
+  const requestId = createRequestId(request);
   const userId = await getUserId(request);
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return apiError(401, {
+      errorCode: 'UNAUTHORIZED',
+      reason: 'Authentication required',
+      requestId,
+    });
   }
 
   const { searchParams } = new URL(request.url);
@@ -389,10 +446,21 @@ export async function GET(request: NextRequest) {
         periodUploads,
         periodLibraryItems,
       },
+      fallback: false,
     });
   } catch (error) {
-    console.error('Analytics error:', error);
-    return NextResponse.json({ error: 'Failed to fetch analytics' }, { status: 500 });
+    console.error(`[Analytics][${requestId}] failed`, error);
+    return NextResponse.json(
+      {
+        ...buildAnalyticsFallback(periodDays),
+        requestId,
+        warning: 'FALLBACK_ANALYTICS_USED',
+      },
+      {
+        status: 200,
+        headers: { 'x-studypilot-fallback': 'analytics' },
+      }
+    );
   }
 }
 

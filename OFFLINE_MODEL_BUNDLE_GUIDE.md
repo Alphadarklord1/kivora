@@ -62,9 +62,13 @@ For hybrid bundle mode (Mini bundled, bigger models optional):
    - `npm run models:manifest:generate -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=<path-to-gguf-files>`
 4. Validate manifest:
    - `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/studypilot`
-5. Upload matching `model-manifest.json` to the same release tag.
-6. Ensure manifest `sha256` and `sizeBytes` match uploaded assets.
-7. Smoke test on clean machine: install app, open wizard/settings, install Balanced model.
+5. Verify release naming consistency:
+   - `npm run release:verify -- --tag=vX.Y.Z --assets='StudyPilot-X.Y.Z-arm64.dmg,StudyPilot-X.Y.Z-arm64-mac.zip,model-manifest.json'`
+6. Upload matching `model-manifest.json` to the same release tag.
+7. Ensure manifest `sha256` and `sizeBytes` match uploaded assets.
+8. Smoke test on clean machine: install app, open wizard/settings, install Balanced model.
+
+CI also enforces these checks in `.github/workflows/beta-ci.yml` and `.github/workflows/model-manifest.yml`.
 
 ## 6) If something fails
 

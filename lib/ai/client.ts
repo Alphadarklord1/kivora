@@ -279,7 +279,23 @@ export async function generateAiContent(
     if (cloudResult.status === 'success' || cloudResult.status === 'policy_block') {
       return cloudResult;
     }
+
+    return {
+      status: 'success',
+      provider: 'offline',
+      content: getGeneratedContent(mode, text, rewriteOptions),
+      fallbackUsed: true,
+      reason: cloudResult.message || localResult.message,
+      primaryProvider: 'desktop-local',
+    };
   }
 
-  return localResult;
+  return {
+    status: 'success',
+    provider: 'offline',
+    content: getGeneratedContent(mode, text, rewriteOptions),
+    fallbackUsed: true,
+    reason: localResult.message,
+    primaryProvider: 'desktop-local',
+  };
 }

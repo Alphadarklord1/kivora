@@ -1,9 +1,9 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { normalizeTheme, type AppTheme } from '@/lib/settings/theme';
 
 type AppLanguage = 'en' | 'ar';
-type AppTheme = 'light' | 'blue' | 'black' | 'system';
 
 interface Settings {
   theme: AppTheme;
@@ -27,14 +27,8 @@ const defaultSettings: Settings = {
   language: 'en',
 };
 
-function normalizeLanguage(value: unknown): AppLanguage {
+export function normalizeLanguage(value: unknown): AppLanguage {
   return value === 'ar' ? 'ar' : 'en';
-}
-
-function normalizeTheme(value: unknown): AppTheme {
-  if (value === 'dark') return 'blue'; // Backward compatibility
-  if (value === 'blue' || value === 'black' || value === 'light' || value === 'system') return value;
-  return defaultSettings.theme;
 }
 
 function getInitialSettings(): Settings {
