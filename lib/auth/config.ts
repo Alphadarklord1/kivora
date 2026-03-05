@@ -8,8 +8,10 @@ import { users, accounts } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
+import { getAuthCapabilities, normalizeAuthEmail } from '@/lib/auth/capabilities';
 
 const isGuestMode = isGuestModeEnabled() || (!process.env.AUTH_SECRET && !process.env.NEXTAUTH_SECRET);
+const authCapabilities = getAuthCapabilities();
 
 const authSecret =
   process.env.AUTH_SECRET ||
@@ -17,6 +19,25 @@ const authSecret =
   ((process.env.NODE_ENV !== 'production' || isGuestMode)
     ? 'studypilot-local-dev-secret'
     : undefined);
+
+function logAuthDiagnosticsOnce() {
+  const marker = '__studypilotAuthDiagnosticsLogged';
+  const scope = globalThis as typeof globalThis & { [key: string]: boolean | undefined };
+  if (scope[marker]) return;
+  scope[marker] = true;
+
+  if (!authCapabilities.googleConfigured) {
+    console.warn('[auth] Google provider disabled (missing GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET).');
+  }
+  if (authCapabilities.oauthDisabled) {
+    console.warn('[auth] OAuth providers disabled for this runtime:', authCapabilities.oauthDisabledReason || 'no reason provided');
+  }
+  if (!authSecret && process.env.NODE_ENV === 'production') {
+    console.error('[auth] AUTH_SECRET/NEXTAUTH_SECRET is missing in production.');
+  }
+}
+
+logAuthDiagnosticsOnce();
 
 export const authConfig: NextAuthConfig = {
   trustHost: true,
@@ -59,7 +80,7 @@ export const authConfig: NextAuthConfig = {
         };
       },
     }),
-    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+    ...(!authCapabilities.oauthDisabled && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       ? [
           Google({
             clientId: process.env.GOOGLE_CLIENT_ID,
@@ -67,7 +88,7 @@ export const authConfig: NextAuthConfig = {
           }),
         ]
       : []),
-    ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
+    ...(!authCapabilities.oauthDisabled && process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
       ? [
           GitHub({
             clientId: process.env.GITHUB_CLIENT_ID,
@@ -84,21 +105,35 @@ export const authConfig: NextAuthConfig = {
     async signIn({ user, account, profile }) {
       // Handle OAuth sign in - create user if doesn't exist
       if (account?.provider === 'google' || account?.provider === 'github') {
-        if (!user.email) return false;
+        const normalizedEmail = normalizeAuthEmail(user.email);
+        if (!normalizedEmail) return false;
 
         try {
-          // Check if user exists
-          let existingUser = await db.query.users.findFirst({
-            where: eq(users.email, user.email),
+          const existingProviderAccount = await db.query.accounts.findFirst({
+            where: and(
+              eq(accounts.provider, account.provider),
+              eq(accounts.providerAccountId, account.providerAccountId)
+            ),
           });
+
+          let existingUser = null;
+          if (existingProviderAccount) {
+            existingUser = await db.query.users.findFirst({
+              where: eq(users.id, existingProviderAccount.userId),
+            });
+          } else {
+            existingUser = await db.query.users.findFirst({
+              where: eq(users.email, normalizedEmail),
+            });
+          }
 
           if (!existingUser) {
             // Create new user
             const userId = uuidv4();
             await db.insert(users).values({
               id: userId,
-              email: user.email,
-              name: user.name || profile?.name || user.email.split('@')[0],
+              email: normalizedEmail,
+              name: user.name || profile?.name || normalizedEmail.split('@')[0],
               image: user.image || null,
             });
             existingUser = await db.query.users.findFirst({
@@ -111,29 +146,35 @@ export const authConfig: NextAuthConfig = {
             const existingAccount = await db.query.accounts.findFirst({
               where: and(
                 eq(accounts.userId, existingUser.id),
-                eq(accounts.provider, account.provider)
+                eq(accounts.provider, account.provider),
+                eq(accounts.providerAccountId, account.providerAccountId)
               ),
             });
 
             if (!existingAccount) {
-              // Link account to user
-              await db.insert(accounts).values({
-                id: uuidv4(),
-                userId: existingUser.id,
-                type: account.type,
-                provider: account.provider,
-                providerAccountId: account.providerAccountId,
-                accessToken: account.access_token || null,
-                refreshToken: account.refresh_token || null,
-                expiresAt: account.expires_at || null,
-                tokenType: account.token_type || null,
-                scope: account.scope || null,
-                idToken: account.id_token || null,
-              });
+              try {
+                // Link account to user (idempotent, race-safe via unique indexes).
+                await db.insert(accounts).values({
+                  id: uuidv4(),
+                  userId: existingUser.id,
+                  type: account.type,
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId,
+                  accessToken: account.access_token || null,
+                  refreshToken: account.refresh_token || null,
+                  expiresAt: account.expires_at || null,
+                  tokenType: account.token_type || null,
+                  scope: account.scope || null,
+                  idToken: account.id_token || null,
+                });
+              } catch {
+                // Ignore duplicate race insert and continue.
+              }
             }
 
             // Update user.id to match our database
             user.id = existingUser.id;
+            user.email = existingUser.email;
           }
         } catch (error) {
           console.error('OAuth sign in error:', error);

@@ -70,4 +70,10 @@ npx drizzle-kit studio  # Open Drizzle Studio GUI
 DATABASE_URL=postgresql://...
 NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=your-secret
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+AUTH_SECRET=your-secret
+AUTH_GUEST_MODE=1
+AUTH_REQUIRED=0
+STUDYPILOT_DESKTOP_AUTH_PORT=3893
 ```

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, boolean, integer, jsonb, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, boolean, integer, jsonb, primaryKey, uniqueIndex } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // ============ USERS & AUTH ============
@@ -27,7 +27,10 @@ export const accounts = pgTable('accounts', {
   scope: text('scope'),
   idToken: text('id_token'),
   sessionState: text('session_state'),
-});
+}, (table) => ({
+  providerAccountIdUnique: uniqueIndex('accounts_provider_provider_account_id_uq').on(table.provider, table.providerAccountId),
+  userProviderUnique: uniqueIndex('accounts_user_provider_uq').on(table.userId, table.provider),
+}));
 
 export const sessions = pgTable('sessions', {
   id: uuid('id').defaultRandom().primaryKey(),

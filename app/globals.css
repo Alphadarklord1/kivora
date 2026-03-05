@@ -1447,6 +1447,17 @@ textarea {
   flex-shrink: 0;
 }
 
+.auth-hint {
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--warning) 40%, var(--border-subtle));
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  color: var(--text-secondary);
+  font-size: var(--font-meta);
+}
+
 .auth-divider {
   display: flex;
   align-items: center;

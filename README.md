@@ -34,6 +34,30 @@ npm run electron:build:mac:balanced
 npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/StudyPilot-model-store
 ```
 
+## Google Login Setup (Web + Desktop)
+
+Set these environment variables:
+
+```bash
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+AUTH_SECRET=...
+AUTH_GUEST_MODE=1
+AUTH_REQUIRED=0
+STUDYPILOT_DESKTOP_AUTH_PORT=3893
+```
+
+Google OAuth redirect URIs:
+
+- `https://study-alpha-three.vercel.app/api/auth/callback/google`
+- `http://localhost:3000/api/auth/callback/google`
+- `http://127.0.0.1:3893/api/auth/callback/google`
+
+Desktop note:
+
+- The desktop app uses a fixed localhost callback port (`3893` by default).
+- If that port is busy, StudyPilot falls back to guest-safe mode and disables OAuth for that run.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

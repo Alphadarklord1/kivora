@@ -92,6 +92,15 @@ interface WebAiCapabilities {
   desktopOnlyMode: boolean;
 }
 
+interface AuthCapabilities {
+  googleConfigured: boolean;
+  githubConfigured: boolean;
+  guestModeEnabled: boolean;
+  desktopAuthPort: number | null;
+  oauthDisabled: boolean;
+  oauthDisabledReason: string | null;
+}
+
 const defaultUserSettings: UserSettings = {
   theme: 'light',
   fontSize: '1',
@@ -185,6 +194,8 @@ export default function SettingsPage() {
   const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
   const [unlinkingProvider, setUnlinkingProvider] = useState<string | null>(null);
   const [providers, setProviders] = useState<Record<string, unknown> | null>(null);
+  const [authCapabilities, setAuthCapabilities] = useState<AuthCapabilities | null>(null);
+  const [loadingAuthCapabilities, setLoadingAuthCapabilities] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [ttsVoice, setTtsVoice] = useState<string>('');
   const [ttsRate, setTtsRate] = useState<number>(1);
@@ -333,6 +344,23 @@ export default function SettingsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const refreshAuthCapabilities = async () => {
+    setLoadingAuthCapabilities(true);
+    try {
+      const res = await fetch('/api/auth/capabilities', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setAuthCapabilities(data);
+      } else {
+        setAuthCapabilities(null);
+      }
+    } catch {
+      setAuthCapabilities(null);
+    } finally {
+      setLoadingAuthCapabilities(false);
+    }
+  };
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const electronRuntime = isElectronRenderer();
@@ -438,6 +466,11 @@ export default function SettingsPage() {
     } else {
       void refreshWebAiCapabilities();
     }
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab !== 'account') return;
+    void refreshAuthCapabilities();
   }, [tab]);
 
   useEffect(() => {
@@ -700,8 +733,20 @@ export default function SettingsPage() {
   const handleLinkAccount = async (provider: 'google' | 'github') => {
     setLinkingProvider(provider);
     try {
+      if (authCapabilities?.oauthDisabled) {
+        showMessage(
+          'error',
+          authCapabilities.oauthDisabledReason || (isArabic ? 'OAuth معطل حاليًا على سطح المكتب.' : 'OAuth is currently disabled in desktop mode.')
+        );
+        setLinkingProvider(null);
+        return;
+      }
       if (!providers?.[provider]) {
-        showMessage('error', isArabic ? `تسجيل الدخول عبر ${provider} غير مفعّل` : `${provider} sign-in is not configured`);
+        if (provider === 'google') {
+          showMessage('error', isArabic ? 'تسجيل الدخول عبر Google غير مضبوط من قبل المسؤول.' : 'Google login is not configured by admin.');
+        } else {
+          showMessage('error', isArabic ? 'تسجيل الدخول عبر GitHub غير مضبوط من قبل المسؤول.' : 'GitHub login is not configured by admin.');
+        }
         setLinkingProvider(null);
         return;
       }
@@ -1324,7 +1369,7 @@ export default function SettingsPage() {
                         <button
                           className="btn small google-btn"
                           onClick={() => handleLinkAccount('google')}
-                          disabled={linkingProvider === 'google' || !providers?.google}
+                          disabled={linkingProvider === 'google' || !providers?.google || Boolean(authCapabilities?.oauthDisabled)}
                         >
                           {linkingProvider === 'google' ? (isArabic ? 'جارٍ الربط...' : 'Connecting...') : (isArabic ? 'ربط' : 'Connect')}
                         </button>
@@ -1361,7 +1406,7 @@ export default function SettingsPage() {
                         <button
                           className="btn small github-btn"
                           onClick={() => handleLinkAccount('github')}
-                          disabled={linkingProvider === 'github' || !providers?.github}
+                          disabled={linkingProvider === 'github' || !providers?.github || Boolean(authCapabilities?.oauthDisabled)}
                         >
                           {linkingProvider === 'github' ? (isArabic ? 'جارٍ الربط...' : 'Connecting...') : (isArabic ? 'ربط' : 'Connect')}
                         </button>
@@ -1369,6 +1414,37 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div className="account-card">
+                <h3>{isArabic ? 'تشخيص تسجيل الدخول' : 'Auth Diagnostics'}</h3>
+                {loadingAuthCapabilities ? (
+                  <p>{isArabic ? 'جارٍ فحص مزودي تسجيل الدخول...' : 'Checking sign-in providers...'}</p>
+                ) : (
+                  <div className="account-info-list">
+                    <div className="account-info-item">
+                      <span>{isArabic ? 'Google مهيأ' : 'Google configured'}</span>
+                      <strong>{authCapabilities?.googleConfigured ? (isArabic ? 'نعم' : 'Yes') : (isArabic ? 'لا' : 'No')}</strong>
+                    </div>
+                    <div className="account-info-item">
+                      <span>{isArabic ? 'GitHub مهيأ' : 'GitHub configured'}</span>
+                      <strong>{authCapabilities?.githubConfigured ? (isArabic ? 'نعم' : 'Yes') : (isArabic ? 'لا' : 'No')}</strong>
+                    </div>
+                    <div className="account-info-item">
+                      <span>{isArabic ? 'وضع الضيف' : 'Guest mode enabled'}</span>
+                      <strong>{authCapabilities?.guestModeEnabled ? (isArabic ? 'مفعل' : 'Enabled') : (isArabic ? 'معطل' : 'Disabled')}</strong>
+                    </div>
+                    {isElectronApp && (
+                      <div className="account-info-item">
+                        <span>{isArabic ? 'منفذ OAuth لسطح المكتب' : 'Desktop OAuth port'}</span>
+                        <strong>{authCapabilities?.desktopAuthPort ?? 3893}</strong>
+                      </div>
+                    )}
+                    {authCapabilities?.oauthDisabledReason && (
+                      <div className="oauth-warning">{authCapabilities.oauthDisabledReason}</div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Member Since */}
@@ -2285,8 +2361,24 @@ export default function SettingsPage() {
           align-items: center;
         }
 
+        .account-info-list {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3);
+        }
+
         .account-info-item span {
           color: var(--text-muted);
+        }
+
+        .oauth-warning {
+          margin-top: var(--space-2);
+          padding: var(--space-3);
+          border-radius: var(--radius-md);
+          border: 1px solid color-mix(in srgb, var(--warning) 40%, var(--border-subtle));
+          background: color-mix(in srgb, var(--warning) 16%, transparent);
+          color: var(--text-secondary);
+          font-size: var(--font-meta);
         }
 
         .modal-overlay {

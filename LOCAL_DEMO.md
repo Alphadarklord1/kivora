@@ -12,6 +12,7 @@ What this does:
 - Launches Electron desktop window
 - Enables `LOCAL_DEMO_MODE=1` to bypass login gates for dashboard pages
 - Auto-creates a local demo user (`demo@local.studypilot`) if needed for API-backed flows
+- Uses fixed desktop OAuth callback port `127.0.0.1:3893` by default (`STUDYPILOT_DESKTOP_AUTH_PORT`)
 
 Notes:
 - This is intended for local demos and product walkthroughs.
@@ -21,4 +22,10 @@ Web-only guest mode (without Electron):
 
 ```bash
 AUTH_GUEST_MODE=1 npm run dev
+```
+
+Optional desktop auth port override:
+
+```bash
+STUDYPILOT_DESKTOP_AUTH_PORT=3893 npm run demo:local
 ```

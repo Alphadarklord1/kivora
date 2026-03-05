@@ -71,6 +71,7 @@ let appServerUrl = null;
 const APP_SERVER = {
   startupTimeoutMs: 45000,
 };
+const DEFAULT_DESKTOP_AUTH_PORT = 3893;
 
 let desktopAiState = {
   process: null,
@@ -833,6 +834,77 @@ function stopAppServer() {
   appServerUrl = null;
 }
 
+function parseDesktopAuthPort(rawValue) {
+  const parsed = Number(rawValue);
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) {
+    return DEFAULT_DESKTOP_AUTH_PORT;
+  }
+  return parsed;
+}
+
+function isGuestModeFromEnv() {
+  const authRequired = String(process.env.AUTH_REQUIRED || '').toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(authRequired)) {
+    return false;
+  }
+  const guestOverride = String(process.env.AUTH_GUEST_MODE || '').toLowerCase();
+  if (['0', 'false', 'no', 'off'].includes(guestOverride)) {
+    return false;
+  }
+  if (['1', 'true', 'yes', 'on'].includes(guestOverride)) {
+    return true;
+  }
+  return true;
+}
+
+function checkPortAvailability(port, host = '127.0.0.1') {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => {
+      server.close(() => resolve(true));
+    });
+    server.listen(port, host);
+  });
+}
+
+function spawnAppServer(port, oauthDisabledReason = null) {
+  const serverUrl = `http://127.0.0.1:${port}`;
+  const nextCliPath = path.join(__dirname, '../node_modules/next/dist/bin/next');
+  const appRoot = path.join(__dirname, '..');
+  const desktopAuthPort = parseDesktopAuthPort(process.env.STUDYPILOT_DESKTOP_AUTH_PORT);
+
+  appServerProcess = spawn(process.execPath, [nextCliPath, 'start', '-p', String(port), '-H', '127.0.0.1'], {
+    cwd: appRoot,
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+      STUDYPILOT_DESKTOP_ONLY: process.env.STUDYPILOT_DESKTOP_ONLY || '1',
+      AUTH_GUEST_MODE: process.env.AUTH_GUEST_MODE || '1',
+      STUDYPILOT_DESKTOP_AUTH_PORT: String(desktopAuthPort),
+      STUDYPILOT_OAUTH_DISABLED: oauthDisabledReason ? '1' : '0',
+      STUDYPILOT_OAUTH_DISABLED_REASON: oauthDisabledReason || '',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  appServerProcess.stdout?.on('data', (chunk) => {
+    const line = String(chunk || '').trim();
+    if (line) console.log(`[app-server] ${line}`);
+  });
+  appServerProcess.stderr?.on('data', (chunk) => {
+    const line = String(chunk || '').trim();
+    if (line) console.warn(`[app-server] ${line}`);
+  });
+  appServerProcess.on('exit', (code, signal) => {
+    console.warn(`[app-server] exited code=${code} signal=${signal || 'none'}`);
+    appServerProcess = null;
+    appServerUrl = null;
+  });
+
+  return serverUrl;
+}
+
 async function waitForServerUrl(url, timeoutMs = APP_SERVER.startupTimeoutMs) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -853,37 +925,36 @@ async function ensureAppServerUrl() {
   if (isDev) return 'http://localhost:3000';
   if (appServerUrl) return appServerUrl;
 
-  const port = await getFreePort();
-  const serverUrl = `http://127.0.0.1:${port}`;
-  const nextCliPath = path.join(__dirname, '../node_modules/next/dist/bin/next');
-  const appRoot = path.join(__dirname, '..');
+  const desktopAuthPort = parseDesktopAuthPort(process.env.STUDYPILOT_DESKTOP_AUTH_PORT);
+  const allowRandomFallback = process.env.STUDYPILOT_ALLOW_RANDOM_AUTH_PORT_FALLBACK === '1' || isGuestModeFromEnv();
+  let launchPort = desktopAuthPort;
+  let oauthDisabledReason = null;
 
-  appServerProcess = spawn(process.execPath, [nextCliPath, 'start', '-p', String(port), '-H', '127.0.0.1'], {
-    cwd: appRoot,
-    env: {
-      ...process.env,
-      NODE_ENV: 'production',
-      STUDYPILOT_DESKTOP_ONLY: process.env.STUDYPILOT_DESKTOP_ONLY || '1',
-      AUTH_GUEST_MODE: process.env.AUTH_GUEST_MODE || '1',
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  const fixedPortAvailable = await checkPortAvailability(desktopAuthPort);
+  if (!fixedPortAvailable) {
+    const reason = `OAuth disabled in desktop mode because required callback port 127.0.0.1:${desktopAuthPort} is already in use.`;
+    if (!allowRandomFallback) {
+      console.error(`[auth] ${reason}`);
+      throw new Error(reason);
+    }
+    launchPort = await getFreePort();
+    oauthDisabledReason = reason;
+    console.warn(`[auth] ${reason} Falling back to ${launchPort} with guest-safe mode.`);
+  }
 
-  appServerProcess.stdout?.on('data', (chunk) => {
-    const line = String(chunk || '').trim();
-    if (line) console.log(`[app-server] ${line}`);
-  });
-  appServerProcess.stderr?.on('data', (chunk) => {
-    const line = String(chunk || '').trim();
-    if (line) console.warn(`[app-server] ${line}`);
-  });
-  appServerProcess.on('exit', (code, signal) => {
-    console.warn(`[app-server] exited code=${code} signal=${signal || 'none'}`);
-    appServerProcess = null;
-    appServerUrl = null;
-  });
+  let serverUrl = spawnAppServer(launchPort, oauthDisabledReason);
+  let ready = await waitForServerUrl(serverUrl);
 
-  const ready = await waitForServerUrl(serverUrl);
+  if (!ready && launchPort === desktopAuthPort && allowRandomFallback) {
+    const reason = `OAuth disabled in desktop mode because callback port 127.0.0.1:${desktopAuthPort} could not be started.`;
+    stopAppServer();
+    launchPort = await getFreePort();
+    oauthDisabledReason = reason;
+    console.warn(`[auth] ${reason} Falling back to ${launchPort} with guest-safe mode.`);
+    serverUrl = spawnAppServer(launchPort, oauthDisabledReason);
+    ready = await waitForServerUrl(serverUrl);
+  }
+
   if (!ready) {
     stopAppServer();
     throw new Error('StudyPilot app server failed to start');
