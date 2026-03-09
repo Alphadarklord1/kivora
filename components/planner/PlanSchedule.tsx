@@ -93,6 +93,21 @@ export function PlanSchedule({
     'Plan actions': 'إجراءات الخطة',
     'Open today in timer': 'افتح اليوم في المؤقت',
     'Draft schedule': 'جدول مسودة',
+    Month: 'شهر',
+    Week: 'أسبوع',
+    Today: 'اليوم',
+    Previous: 'السابق',
+    Next: 'التالي',
+    'Quick Jump': 'انتقال سريع',
+    'Next study block': 'جلسة الدراسة التالية',
+    'Exam day marker': 'علامة يوم الاختبار',
+    'No upcoming study blocks': 'لا توجد جلسات دراسة قادمة',
+    'Visible range': 'النطاق الظاهر',
+    'Open selected day in timer': 'افتح اليوم المحدد في المؤقت',
+    'Upcoming queue': 'القائمة القادمة',
+    'Jump to today': 'انتقل إلى اليوم',
+    'Jump to first incomplete': 'انتقل إلى أول يوم غير مكتمل',
+    'Jump to exam week': 'انتقل إلى أسبوع الاختبار',
   });
 
   const schedule = plan?.schedule || generatedSchedule;
@@ -105,6 +120,9 @@ export function PlanSchedule({
   const [showExport, setShowExport] = useState(false);
   const [showCompleted, setShowCompleted] = useState(true);
   const [studyStartHour, setStudyStartHour] = useState(9);
+  const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
+  const [visibleMonthIndex, setVisibleMonthIndex] = useState(0);
+  const [visibleWeekIndex, setVisibleWeekIndex] = useState(0);
   const todayIdx = schedule ? getTodayDayIndex(schedule) : null;
 
   useEffect(() => {
@@ -114,6 +132,10 @@ export function PlanSchedule({
   }, [schedule, todayIdx]);
 
   const calendarWeeks = useMemo(() => (schedule ? buildCalendarWeeks(schedule.days) : []), [schedule]);
+  const monthSections = useMemo(
+    () => (schedule ? buildMonthSections(schedule.days, locale) : []),
+    [schedule, locale]
+  );
   const weekdayLabels = useMemo(() => [t('Mon'), t('Tue'), t('Wed'), t('Thu'), t('Fri'), t('Sat'), t('Sun')], [t]);
 
   if (!schedule) return null;
@@ -125,6 +147,39 @@ export function PlanSchedule({
 
   const selectedDay = schedule.days[Math.max(0, Math.min(selectedDayIndex, schedule.days.length - 1))];
   const weeklyAverageMinutes = Math.round(schedule.days.reduce((sum, day) => sum + day.totalMinutes, 0) / Math.max(1, calendarWeeks.length));
+  const nextIncompleteIndex = schedule.days.findIndex((day) => !day.completed);
+  const examWeekIndex = Math.max(0, calendarWeeks.findIndex((week) => week.some((day) => day?.date === schedule.endDate)));
+  const selectedWeekIndex = Math.max(0, calendarWeeks.findIndex((week) => week.some((day) => day?.dayNumber === selectedDay.dayNumber)));
+  const visibleMonth = monthSections[Math.min(visibleMonthIndex, Math.max(monthSections.length - 1, 0))];
+  const visibleWeeks = viewMode === 'month'
+    ? visibleMonth?.weeks ?? []
+    : calendarWeeks[visibleWeekIndex]
+      ? [calendarWeeks[visibleWeekIndex]]
+      : [];
+  const visibleLabel = viewMode === 'month'
+    ? visibleMonth?.label ?? formatDate(schedule.startDate, { month: 'long', year: 'numeric' })
+    : formatWeekRange(calendarWeeks[visibleWeekIndex] ?? calendarWeeks[0] ?? [], formatDate);
+  const upcomingDays = schedule.days.filter((day) => !day.completed && day.dayNumber >= selectedDay.dayNumber).slice(0, 4);
+
+  useEffect(() => {
+    if (!schedule) return;
+    const anchorIndex = todayIdx ?? (nextIncompleteIndex >= 0 ? nextIncompleteIndex : 0);
+    const anchorDay = schedule.days[Math.max(0, anchorIndex)];
+    if (!anchorDay) return;
+    const monthIndex = Math.max(0, monthSections.findIndex((section) => section.days.some((day) => day.dayNumber === anchorDay.dayNumber)));
+    const weekIndex = Math.max(0, calendarWeeks.findIndex((week) => week.some((day) => day?.dayNumber === anchorDay.dayNumber)));
+    setVisibleMonthIndex(monthIndex);
+    setVisibleWeekIndex(weekIndex);
+  }, [schedule, todayIdx, nextIncompleteIndex, monthSections, calendarWeeks]);
+
+  const syncVisibleRangeToDay = (dayIndex: number) => {
+    const target = schedule.days[dayIndex];
+    if (!target) return;
+    const monthIndex = Math.max(0, monthSections.findIndex((section) => section.days.some((day) => day.dayNumber === target.dayNumber)));
+    const weekIndex = Math.max(0, calendarWeeks.findIndex((week) => week.some((day) => day?.dayNumber === target.dayNumber)));
+    setVisibleMonthIndex(monthIndex);
+    setVisibleWeekIndex(weekIndex);
+  };
 
   const handleSaveNote = () => {
     if (editingNote === null) return;
@@ -169,10 +224,37 @@ export function PlanSchedule({
 
   const selectDay = (dayIndex: number) => {
     setSelectedDayIndex(dayIndex);
+    syncVisibleRangeToDay(dayIndex);
     if (editingNote !== null && editingNote !== dayIndex) {
       setEditingNote(null);
       setNoteText('');
     }
+  };
+
+  const moveRange = (direction: -1 | 1) => {
+    if (viewMode === 'month') {
+      const nextIndex = Math.max(0, Math.min(monthSections.length - 1, visibleMonthIndex + direction));
+      setVisibleMonthIndex(nextIndex);
+      const targetDay = monthSections[nextIndex]?.days[0];
+      if (targetDay) {
+        const targetIndex = schedule.days.findIndex((day) => day.dayNumber === targetDay.dayNumber);
+        if (targetIndex >= 0) setSelectedDayIndex(targetIndex);
+      }
+      return;
+    }
+
+    const nextIndex = Math.max(0, Math.min(calendarWeeks.length - 1, visibleWeekIndex + direction));
+    setVisibleWeekIndex(nextIndex);
+    const targetDay = calendarWeeks[nextIndex]?.find(Boolean);
+    if (targetDay) {
+      const targetIndex = schedule.days.findIndex((day) => day.dayNumber === targetDay.dayNumber);
+      if (targetIndex >= 0) setSelectedDayIndex(targetIndex);
+    }
+  };
+
+  const jumpToToday = () => {
+    const targetIndex = todayIdx ?? (nextIncompleteIndex >= 0 ? nextIncompleteIndex : 0);
+    selectDay(Math.max(0, targetIndex));
   };
 
   return (
@@ -271,6 +353,33 @@ export function PlanSchedule({
 
           <section className="rail-card">
             <div className="rail-card-header">
+              <h3>{t('Quick Jump')}</h3>
+              <span>{t('Visible range')}</span>
+            </div>
+            <div className="rail-stack">
+              <button className="rail-action" onClick={jumpToToday}>{t('Jump to today')}</button>
+              <button
+                className="rail-action"
+                onClick={() => selectDay(Math.max(0, nextIncompleteIndex >= 0 ? nextIncompleteIndex : 0))}
+              >
+                {t('Jump to first incomplete')}
+              </button>
+              <button
+                className="rail-action"
+                onClick={() => {
+                  setViewMode('week');
+                  setVisibleWeekIndex(examWeekIndex);
+                  const examIndex = schedule.days.findIndex((day) => day.date === schedule.endDate);
+                  if (examIndex >= 0) setSelectedDayIndex(examIndex);
+                }}
+              >
+                {t('Jump to exam week')}
+              </button>
+            </div>
+          </section>
+
+          <section className="rail-card">
+            <div className="rail-card-header">
               <h3>{t('Quick exports')}</h3>
               <span>.ics</span>
             </div>
@@ -286,12 +395,26 @@ export function PlanSchedule({
           <div className="calendar-panel-header">
             <div>
               <p className="eyebrow">{t('Month overview')}</p>
-              <h3>{formatDate(schedule.startDate, { month: 'long', year: 'numeric' })}</h3>
+              <h3>{visibleLabel}</h3>
             </div>
-            <label className="completed-toggle">
-              <input type="checkbox" checked={showCompleted} onChange={(event) => setShowCompleted(event.target.checked)} />
-              {t('Show completed days')}
-            </label>
+            <div className="calendar-toolbar">
+              <div className="view-toggle">
+                <button className={viewMode === 'month' ? 'active' : ''} onClick={() => setViewMode('month')}>{t('Month')}</button>
+                <button className={viewMode === 'week' ? 'active' : ''} onClick={() => {
+                  setViewMode('week');
+                  setVisibleWeekIndex(selectedWeekIndex);
+                }}>{t('Week')}</button>
+              </div>
+              <div className="range-nav">
+                <button className="icon-btn" onClick={() => moveRange(-1)} aria-label={t('Previous')}>‹</button>
+                <button className="today-btn" onClick={jumpToToday}>{t('Today')}</button>
+                <button className="icon-btn" onClick={() => moveRange(1)} aria-label={t('Next')}>›</button>
+              </div>
+              <label className="completed-toggle">
+                <input type="checkbox" checked={showCompleted} onChange={(event) => setShowCompleted(event.target.checked)} />
+                {t('Show completed days')}
+              </label>
+            </div>
           </div>
 
           <div className="weekday-row">
@@ -301,7 +424,7 @@ export function PlanSchedule({
           </div>
 
           <div className="calendar-grid">
-            {calendarWeeks.map((week, weekIndex) => (
+            {visibleWeeks.map((week, weekIndex) => (
               <div key={`week-${weekIndex}`} className="calendar-week">
                 {week.map((day, daySlotIndex) => {
                   if (!day) {
@@ -372,6 +495,20 @@ export function PlanSchedule({
               <p>{formatDate(selectedDay.date, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
             </div>
             <button className="header-btn primary compact" onClick={() => onStartTimer(selectedDayIndex)}>{t('Start Timer')}</button>
+          </div>
+
+          <div className="agenda-card summary queue">
+            <div>
+              <span>{t('Upcoming queue')}</span>
+              <p>{upcomingDays.length > 0 ? visibleLabel : t('No upcoming study blocks')}</p>
+            </div>
+            <div className="queue-list">
+              {upcomingDays.length > 0 ? upcomingDays.map((day) => (
+                <button key={day.dayNumber} className="queue-pill" onClick={() => selectDay(schedule.days.findIndex((entry) => entry.dayNumber === day.dayNumber))}>
+                  {t('Day {n}', { n: day.dayNumber })}
+                </button>
+              )) : <span className="agenda-empty">{t('No upcoming study blocks')}</span>}
+            </div>
           </div>
 
           <div className="agenda-card summary">
@@ -700,6 +837,58 @@ export function PlanSchedule({
           justify-content: space-between;
           gap: var(--space-3);
           margin-bottom: var(--space-4);
+          flex-wrap: wrap;
+        }
+        .calendar-toolbar,
+        .view-toggle,
+        .range-nav,
+        .queue-list {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          flex-wrap: wrap;
+        }
+        .view-toggle {
+          padding: 4px;
+          border: 1px solid var(--border-subtle);
+          border-radius: 999px;
+          background: var(--bg-inset);
+        }
+        .view-toggle button,
+        .today-btn,
+        .icon-btn,
+        .queue-pill {
+          border: none;
+          cursor: pointer;
+          transition: var(--transition-fast);
+        }
+        .view-toggle button {
+          padding: 8px 14px;
+          border-radius: 999px;
+          background: transparent;
+          color: var(--text-muted);
+          font-size: var(--font-meta);
+        }
+        .view-toggle button.active {
+          background: var(--bg-surface);
+          color: var(--text-primary);
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+        }
+        .today-btn,
+        .icon-btn {
+          background: var(--bg-surface);
+          color: var(--text-secondary);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+        }
+        .today-btn {
+          padding: 8px 14px;
+          font-size: var(--font-meta);
+        }
+        .icon-btn {
+          width: 34px;
+          height: 34px;
+          font-size: 18px;
         }
         .completed-toggle,
         .agenda-complete {
@@ -828,6 +1017,18 @@ export function PlanSchedule({
           flex-direction: column;
           gap: var(--space-2);
         }
+        .agenda-card.summary.queue {
+          display: grid;
+          gap: var(--space-2);
+          justify-content: stretch;
+        }
+        .queue-pill {
+          padding: 7px 12px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--primary) 12%, transparent);
+          color: var(--primary);
+          font-size: var(--font-tiny);
+        }
         .agenda-topic-card {
           padding: var(--space-3);
         }
@@ -927,7 +1128,8 @@ export function PlanSchedule({
           }
           .header-actions,
           .note-actions,
-          .export-quick {
+          .export-quick,
+          .calendar-toolbar {
             flex-direction: column;
           }
         }
@@ -976,4 +1178,46 @@ function buildCalendarWeeks(days: ScheduleDay[]): Array<Array<ScheduleDay | null
   }
 
   return weeks;
+}
+
+function buildMonthSections(days: ScheduleDay[], locale?: string) {
+  const sections: Array<{
+    key: string;
+    label: string;
+    days: ScheduleDay[];
+    weeks: Array<Array<ScheduleDay | null>>;
+  }> = [];
+
+  for (const day of days) {
+    const parsed = new Date(day.date);
+    const key = `${parsed.getFullYear()}-${parsed.getMonth()}`;
+    const existing = sections.find((section) => section.key === key);
+    if (existing) {
+      existing.days.push(day);
+      continue;
+    }
+
+    sections.push({
+      key,
+      label: parsed.toLocaleDateString(locale || 'en', { month: 'long', year: 'numeric' }),
+      days: [day],
+      weeks: [],
+    });
+  }
+
+  return sections.map((section) => ({
+    ...section,
+    weeks: buildCalendarWeeks(section.days),
+  }));
+}
+
+function formatWeekRange(
+  week: Array<ScheduleDay | null>,
+  formatDate: (value: string | Date, options?: Intl.DateTimeFormatOptions) => string
+) {
+  const visibleDays = week.filter((day): day is ScheduleDay => Boolean(day));
+  if (visibleDays.length === 0) return '';
+  const first = visibleDays[0];
+  const last = visibleDays[visibleDays.length - 1];
+  return `${formatDate(first.date, { month: 'short', day: 'numeric' })} - ${formatDate(last.date, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
