@@ -1,0 +1,46 @@
+name: Release checklist
+description: Track a beta or stable release from validation through publish
+title: "[Release] "
+labels:
+  - release
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version / tag
+      placeholder: v1.2.0-beta.2
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Release scope
+      placeholder: What is included in this release?
+    validations:
+      required: true
+  - type: checkboxes
+    id: validation
+    attributes:
+      label: Validation
+      options:
+        - label: `npm run test:beta`
+        - label: `npm run build`
+        - label: guest-mode smoke test completed
+        - label: desktop smoke test completed
+        - label: English and Arabic UI spot-check completed
+        - label: auth/sign-in checked if auth-related changes are included
+  - type: checkboxes
+    id: assets
+    attributes:
+      label: Release assets
+      options:
+        - label: macOS desktop artifact uploaded
+        - label: Windows desktop artifact uploaded
+        - label: `model-manifest.json` uploaded if model assets changed
+        - label: `SHA256SUMS.txt` uploaded if model assets changed
+        - label: optional model `.gguf` assets uploaded if applicable
+  - type: textarea
+    id: notes
+    attributes:
+      label: Release notes
+      placeholder: Summary for GitHub release body

@@ -19,6 +19,8 @@
 - `localization`
 - `security`
 
+Use the issue templates in `.github/ISSUE_TEMPLATE/` instead of free-form issues whenever possible.
+
 ## Suggested working agreement
 
 - Open an issue before large changes
@@ -33,6 +35,8 @@
 - one reviewer verifies smoke checks
 - one person verifies model assets and checksums
 
+Use the `Release checklist` issue template for every public release.
+
 ## Beta triage order
 
 1. crashes / broken routes
@@ -40,3 +44,11 @@
 3. planner / analytics / AI workflow regressions
 4. localization / design inconsistencies
 5. feature work
+
+## Maintainer references
+
+- `CONTRIBUTING.md`
+- `SECURITY.md`
+- `SUPPORT.md`
+- `docs/GITHUB_SETUP.md`
+- `ROADMAP.md`

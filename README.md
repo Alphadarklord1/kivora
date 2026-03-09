@@ -137,3 +137,5 @@ Repository collaboration files:
 - `CODE_OF_CONDUCT.md`
 - `SUPPORT.md`
 - `docs/TEAM_WORKFLOW.md`
+- `docs/GITHUB_SETUP.md`
+- `ROADMAP.md`
