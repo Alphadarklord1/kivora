@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MathRenderer, MathText } from '@/components/math/MathRenderer';
 import { solveOffline, MathSolution, MathStep } from '@/lib/math/offline-solver';
 import { useI18n } from '@/lib/i18n/useI18n';
@@ -43,10 +43,12 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
     'Enter your math problem:': 'أدخل المسألة الرياضية:',
     'Quick symbols': 'رموز سريعة',
     'Open keyboard': 'فتح لوحة الرموز',
+    'Hide keyboard': 'إخفاء لوحة الرموز',
     'Examples:': 'أمثلة:',
     'Supports MATLAB style: `.^`, `.*`, `./` and standard math (`x^2`, `sqrt()`).': 'يدعم صياغة MATLAB مثل `.^`, `.*`, `./` والرياضيات القياسية (`x^2`, `sqrt()`).',
     'Math Keyboard': 'لوحة رموز الرياضيات',
     'Close': 'إغلاق',
+    'Tap a template to insert it at the cursor, then keep typing in the main box.': 'اضغط على القالب لإدراجه عند المؤشر ثم واصل الكتابة في الحقل الرئيسي.',
     'Preview:': 'معاينة:',
     'Solving...': 'جارٍ الحل...',
     'Solve Problem': 'حل المسألة',
@@ -78,6 +80,10 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
     'Series Sum': 'مجموع متسلسلة',
     'Linear Solve': 'حل خطي',
     'Matrix Hint': 'تلميح مصفوفة',
+    'Definite Integral': 'تكامل محدد',
+    'Fraction': 'كسر',
+    'Parentheses': 'أقواس',
+    'Integral with bounds': 'تكامل بحدود',
     'Use AI mode for detailed solution': 'استخدم وضع الذكاء الاصطناعي للحصول على حل تفصيلي',
     arithmetic: 'حسابية',
     derivative: 'مشتقة',
@@ -97,33 +103,72 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
   const [useAI, setUseAI] = useState(false);
   const [matlabMode, setMatlabMode] = useState(true);
   const [showKeyboard, setShowKeyboard] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [selectionRange, setSelectionRange] = useState({ start: 0, end: 0 });
   const aiDetailFallback = t('Use AI mode for detailed solution');
 
-  const insertSymbol = (symbol: string) => {
-    setProblem((prev) => `${prev}${symbol}`);
+  const syncSelection = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    setSelectionRange({
+      start: textarea.selectionStart ?? 0,
+      end: textarea.selectionEnd ?? 0,
+    });
   };
 
-  const SYMBOLS = [
-    { label: '∫', value: '∫ ' },
-    { label: 'd/dx', value: 'd/dx ' },
-    { label: '∂/∂x', value: '∂/∂x ' },
-    { label: 'lim', value: 'lim ' },
-    { label: '√', value: 'sqrt()' },
+  type SymbolInsert = {
+    label: string;
+    value: string;
+    cursorOffset?: number;
+  };
+
+  const insertSymbol = ({ value, cursorOffset }: SymbolInsert) => {
+    const textarea = textareaRef.current;
+    const start = textarea ? textarea.selectionStart ?? selectionRange.start : selectionRange.start;
+    const end = textarea ? textarea.selectionEnd ?? selectionRange.end : selectionRange.end;
+
+    setProblem((prev) => {
+      const next = `${prev.slice(0, start)}${value}${prev.slice(end)}`;
+      const nextCursor = start + (cursorOffset ?? value.length);
+
+      window.requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+        textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+        setSelectionRange({ start: nextCursor, end: nextCursor });
+      });
+
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    syncSelection();
+  }, []);
+
+  const SYMBOLS: SymbolInsert[] = [
+    { label: '∫', value: 'integral () dx', cursorOffset: 10 },
+    { label: t('Definite Integral'), value: 'integral from 0 to 1 of () dx', cursorOffset: 25 },
+    { label: 'd/dx', value: 'd/dx ()', cursorOffset: 6 },
+    { label: '∂/∂x', value: '∂/∂x ()', cursorOffset: 7 },
+    { label: 'lim', value: 'limit x->0 ()', cursorOffset: 12 },
+    { label: t('Fraction'), value: '()/()', cursorOffset: 1 },
+    { label: t('Parentheses'), value: '()', cursorOffset: 1 },
+    { label: '√', value: 'sqrt()', cursorOffset: 5 },
     { label: 'π', value: 'pi' },
     { label: '∞', value: 'inf' },
-    { label: '∑', value: 'sum()' },
-    { label: '∏', value: 'prod()' },
+    { label: '∑', value: 'sum()', cursorOffset: 4 },
+    { label: '∏', value: 'prod()', cursorOffset: 5 },
     { label: 'θ', value: 'theta' },
-    { label: 'sin', value: 'sin()' },
-    { label: 'cos', value: 'cos()' },
-    { label: 'tan', value: 'tan()' },
-    { label: 'ln', value: 'ln()' },
-    { label: 'log', value: 'log()' },
-    { label: 'e^x', value: 'exp()' },
-    { label: '|x|', value: 'abs()' },
+    { label: 'sin', value: 'sin()', cursorOffset: 4 },
+    { label: 'cos', value: 'cos()', cursorOffset: 4 },
+    { label: 'tan', value: 'tan()', cursorOffset: 4 },
+    { label: 'ln', value: 'ln()', cursorOffset: 3 },
+    { label: 'log', value: 'log()', cursorOffset: 4 },
+    { label: 'e^x', value: 'exp()', cursorOffset: 4 },
+    { label: '|x|', value: 'abs()', cursorOffset: 4 },
     { label: 'A\\B', value: 'A\\\\B' },
-    { label: '[ ]', value: '[ ]' },
-    { label: 'x̄', value: 'mean()' },
+    { label: '[ ]', value: '[ ]', cursorOffset: 2 },
+    { label: 'x̄', value: 'mean()', cursorOffset: 5 },
   ];
 
   const normalizeMatlabSyntax = (input: string) => {
@@ -254,6 +299,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
   const exampleProblems = [
     { label: t('Derivative'), problem: 'Find the derivative of x^3 + 2x^2 - 5x + 3' },
     { label: t('Integral'), problem: 'Integrate x^2 + 3x - 2 dx' },
+    { label: t('Definite Integral'), problem: 'Integral from 0 to 2 of x^2 dx' },
     { label: t('Quadratic'), problem: 'Solve x^2 - 5x + 6 = 0' },
     { label: t('Linear'), problem: 'Solve 3x + 7 = 22' },
     { label: t('Arithmetic'), problem: 'Calculate 2^8 + 15 * 4 - 32/4' },
@@ -266,6 +312,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
   const matlabTemplates = [
     { label: t('Derivative'), value: 'd/dx (x^3 + 2*x)' },
     { label: t('Integral'), value: 'integral x^2 dx' },
+    { label: t('Integral with bounds'), value: 'integral from 0 to 1 of x^2 dx' },
     { label: t('Limit'), value: 'limit x->0 sin(x)/x' },
     { label: t('Linear Solve'), value: 'Solve 2x + 3 = 11' },
     { label: t('Matrix Hint'), value: '[1 2; 3 4] (use MATLAB Lab for matrix ops)' },
@@ -462,10 +509,13 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                 </span>
                 <button
                   className="btn"
-                  onClick={() => setShowKeyboard(true)}
+                  onClick={() => {
+                    setShowKeyboard((prev) => !prev);
+                    window.requestAnimationFrame(() => textareaRef.current?.focus());
+                  }}
                   style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1) var(--space-2)' }}
                 >
-                  {t('Open keyboard')}
+                  {showKeyboard ? t('Hide keyboard') : t('Open keyboard')}
                 </button>
               </div>
               <div style={{
@@ -477,7 +527,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                   <button
                     key={s.label}
                     className="btn ghost"
-                    onClick={() => insertSymbol(s.value)}
+                    onClick={() => insertSymbol(s)}
                     style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1) var(--space-2)' }}
                   >
                     {s.label}
@@ -486,11 +536,17 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               </div>
             </div>
             <textarea
+              ref={textareaRef}
               value={problem}
               onChange={(e) => setProblem(e.target.value)}
+              onClick={syncSelection}
+              onKeyUp={syncSelection}
+              onSelect={syncSelection}
+              onFocus={syncSelection}
               placeholder={`${t('Examples:')}
 - Find the derivative of x^3 + 2x^2 - 5x
 - Integrate x^2 + 3x dx
+- Integral from 0 to 2 of x^2 dx
 - Solve x^2 - 5x + 6 = 0
 - Calculate 2^8 + 15 * 4`}
               rows={4}
@@ -509,26 +565,18 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
           </div>
           {showKeyboard && (
             <div
-              onClick={() => setShowKeyboard(false)}
               style={{
-                position: 'fixed',
-                inset: 0,
-                background: 'rgba(0, 0, 0, 0.45)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                marginBottom: 'var(--space-4)',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-lg)',
                 padding: 'var(--space-4)',
-                zIndex: 1000,
               }}
             >
               <div
-                onClick={(e) => e.stopPropagation()}
                 style={{
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-lg)',
-                  padding: 'var(--space-4)',
-                  width: 'min(520px, 95vw)',
+                  display: 'grid',
+                  gap: 'var(--space-3)',
                 }}
               >
                 <div
@@ -542,6 +590,13 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                   <h4 style={{ margin: 0 }}>{t('Math Keyboard')}</h4>
                   <button className="btn ghost" onClick={() => setShowKeyboard(false)}>{t('Close')}</button>
                 </div>
+                <p style={{
+                  margin: 0,
+                  fontSize: 'var(--font-meta)',
+                  color: 'var(--text-muted)',
+                }}>
+                  {t('Tap a template to insert it at the cursor, then keep typing in the main box.')}
+                </p>
                 <div
                   style={{
                     display: 'grid',
@@ -550,7 +605,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                   }}
                 >
                   {SYMBOLS.map((s) => (
-                    <button key={s.label} className="btn ghost" onClick={() => insertSymbol(s.value)}>
+                    <button key={s.label} className="btn ghost" onClick={() => insertSymbol(s)}>
                       {s.label}
                     </button>
                   ))}

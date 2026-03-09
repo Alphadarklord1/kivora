@@ -516,21 +516,134 @@ const integralRules: { pattern: RegExp; integral: (m: RegExpMatchArray, v: strin
   }
 ];
 
+function parseBoundValue(raw: string): number | null {
+  const sanitized = raw
+    .trim()
+    .toLowerCase()
+    .replace(/π/g, 'pi')
+    .replace(/\binfinity\b/g, 'Infinity')
+    .replace(/\binf\b/g, 'Infinity')
+    .replace(/\bpi\b/g, `${Math.PI}`);
+
+  if (!/^[0-9+\-*/().\sInfinity]+$/.test(sanitized)) {
+    return null;
+  }
+
+  try {
+    const value = new Function(`return (${sanitized});`)();
+    return Number.isFinite(value) ? Number(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseDefiniteIntegral(problem: string): { lower: number; upper: number; integrand: string; variable: string } | null {
+  const normalized = problem.trim();
+  const patterns = [
+    /integral\s+from\s+(.+?)\s+to\s+(.+?)\s+of\s+(.+?)\s*d([a-zA-Z])$/i,
+    /integral\s*\[\s*(.+?)\s*,\s*(.+?)\s*\]\s*(.+?)\s*d([a-zA-Z])$/i,
+    /∫\s*_\{?(.+?)\}?\s*\^\{?(.+?)\}?\s*(.+?)\s*d([a-zA-Z])$/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    if (!match) continue;
+
+    const lower = parseBoundValue(match[1]);
+    const upper = parseBoundValue(match[2]);
+    if (lower === null || upper === null) return null;
+
+    return {
+      lower,
+      upper,
+      integrand: match[3].trim(),
+      variable: match[4],
+    };
+  }
+
+  return null;
+}
+
+function evaluateAntiderivativeAt(term: string, value: number, variable: string): number | null {
+  const cleanTerm = term.trim().replace(/^\+/, '');
+
+  let match = cleanTerm.match(/^(-?\d+\.?\d*)$/);
+  if (match) {
+    return parseFloat(match[1]) * value;
+  }
+
+  match = cleanTerm.match(new RegExp(`^(${variable})\\^(\\d+)$`, 'i'));
+  if (match) {
+    const n = parseInt(match[2], 10);
+    return (value ** (n + 1)) / (n + 1);
+  }
+
+  match = cleanTerm.match(new RegExp(`^(-?\\d+\\.?\\d*)(${variable})\\^(\\d+)$`, 'i'));
+  if (match) {
+    const coef = parseFloat(match[1]);
+    const n = parseInt(match[3], 10);
+    return (coef * (value ** (n + 1))) / (n + 1);
+  }
+
+  match = cleanTerm.match(new RegExp(`^(${variable})$`, 'i'));
+  if (match) {
+    return (value ** 2) / 2;
+  }
+
+  match = cleanTerm.match(new RegExp(`^(-?\\d+\\.?\\d*)(${variable})$`, 'i'));
+  if (match) {
+    return (parseFloat(match[1]) * (value ** 2)) / 2;
+  }
+
+  match = cleanTerm.match(new RegExp(`^sin\\((${variable})\\)$`, 'i'));
+  if (match) {
+    return -Math.cos(value);
+  }
+
+  match = cleanTerm.match(new RegExp(`^cos\\((${variable})\\)$`, 'i'));
+  if (match) {
+    return Math.sin(value);
+  }
+
+  match = cleanTerm.match(new RegExp(`^e\\^(${variable})$`, 'i'));
+  if (match) {
+    return Math.exp(value);
+  }
+
+  match = cleanTerm.match(new RegExp(`^1\\/(${variable})$`, 'i'));
+  if (match) {
+    return value === 0 ? null : Math.log(Math.abs(value));
+  }
+
+  match = cleanTerm.match(new RegExp(`^sec\\^2\\((${variable})\\)$`, 'i'));
+  if (match) {
+    return Math.tan(value);
+  }
+
+  return null;
+}
+
 function solveIntegral(problem: string, isDefinite: boolean = false): MathSolution {
   const steps: MathStep[] = [];
-  const expr = problem.toLowerCase()
+  const parsedDefinite = isDefinite ? parseDefiniteIntegral(problem) : null;
+  const variable = parsedDefinite?.variable || 'x';
+  const expr = (parsedDefinite?.integrand || problem).toLowerCase()
     .replace(/integrate|integral\s+of|∫/gi, '')
+    .replace(/integral\s+from\s+.+?\s+to\s+.+?\s+of/gi, '')
+    .replace(/integral\s*\[\s*.+?\s*,\s*.+?\s*\]/gi, '')
     .replace(/d[a-zA-Z]$/i, '')
     .replace(/dx|dy|dz|dt/gi, '')
     .trim();
 
-  const variable = 'x';
-
   steps.push({
     step: 1,
-    description: 'Identify the integrand',
-    expression: `\\int ${expr} \\, d${variable}`,
-    explanation: `We need to find the antiderivative of ${expr}`
+    description: isDefinite ? 'Identify the definite integral' : 'Identify the integrand',
+    expression: parsedDefinite
+      ? `\\int_{${parsedDefinite.lower}}^{${parsedDefinite.upper}} ${expr} \\, d${variable}`
+      : `\\int ${expr} \\, d${variable}`,
+    explanation: isDefinite
+      ? `We need to find the antiderivative of ${expr} and evaluate it from ${parsedDefinite?.lower} to ${parsedDefinite?.upper}`
+      : `We need to find the antiderivative of ${expr}`
   });
 
   // Check if it's a sum/difference of terms
@@ -572,13 +685,42 @@ function solveIntegral(problem: string, isDefinite: boolean = false): MathSoluti
       }
     }
 
-    const finalAnswer = integrals.join(' + ').replace(/\+ -/g, '- ') + ' + C';
+    const antiderivative = integrals.join(' + ').replace(/\+ -/g, '- ');
+    let finalAnswer = `${antiderivative} + C`;
+
+    if (isDefinite && parsedDefinite) {
+      const upperValue = terms.reduce((sum, term) => {
+        const value = evaluateAntiderivativeAt(term, parsedDefinite.upper, variable);
+        return value === null ? Number.NaN : sum + value;
+      }, 0);
+      const lowerValue = terms.reduce((sum, term) => {
+        const value = evaluateAntiderivativeAt(term, parsedDefinite.lower, variable);
+        return value === null ? Number.NaN : sum + value;
+      }, 0);
+
+      if (!Number.isNaN(upperValue) && !Number.isNaN(lowerValue)) {
+        const result = upperValue - lowerValue;
+        steps.push({
+          step: stepNum++,
+          description: 'Evaluate the bounds',
+          expression: `F(${parsedDefinite.upper}) - F(${parsedDefinite.lower}) = ${upperValue.toFixed(4)} - ${lowerValue.toFixed(4)} = ${result.toFixed(4)}`,
+          explanation: 'Substitute the upper and lower bounds into the antiderivative and subtract.'
+        });
+        finalAnswer = Number.isInteger(result) ? String(result) : result.toFixed(4);
+      } else {
+        finalAnswer = `\\left[${antiderivative}\\right]_{${parsedDefinite.lower}}^{${parsedDefinite.upper}}`;
+      }
+    }
 
     steps.push({
       step: stepNum,
-      description: 'Combine terms and add constant',
-      expression: `\\int ${expr} \\, d${variable} = ${finalAnswer}`,
-      explanation: 'Combine all antiderivatives and add the constant of integration C'
+      description: isDefinite ? 'Combine terms' : 'Combine terms and add constant',
+      expression: isDefinite
+        ? `\\int_{${parsedDefinite?.lower}}^{${parsedDefinite?.upper}} ${expr} \\, d${variable} = ${finalAnswer}`
+        : `\\int ${expr} \\, d${variable} = ${finalAnswer}`,
+      explanation: isDefinite
+        ? 'Combine the antiderivatives and apply the evaluation bounds.'
+        : 'Combine all antiderivatives and add the constant of integration C'
     });
 
     return {
@@ -602,12 +744,33 @@ function solveIntegral(problem: string, isDefinite: boolean = false): MathSoluti
         explanation: rule.explanation
       });
 
-      const finalAnswer = integ + ' + C';
+      let finalAnswer = integ + ' + C';
+
+      if (isDefinite && parsedDefinite) {
+        const upperValue = evaluateAntiderivativeAt(expr, parsedDefinite.upper, variable);
+        const lowerValue = evaluateAntiderivativeAt(expr, parsedDefinite.lower, variable);
+
+        if (upperValue !== null && lowerValue !== null) {
+          const result = upperValue - lowerValue;
+          steps.push({
+            step: 3,
+            description: 'Evaluate the bounds',
+            expression: `F(${parsedDefinite.upper}) - F(${parsedDefinite.lower}) = ${upperValue.toFixed(4)} - ${lowerValue.toFixed(4)} = ${result.toFixed(4)}`,
+            explanation: 'Substitute the upper and lower bounds into the antiderivative and subtract.'
+          });
+          finalAnswer = Number.isInteger(result) ? String(result) : result.toFixed(4);
+        } else {
+          finalAnswer = `\\left[${integ}\\right]_{${parsedDefinite.lower}}^{${parsedDefinite.upper}}`;
+        }
+      }
+
       steps.push({
-        step: 3,
-        description: 'Add constant of integration',
+        step: isDefinite ? 4 : 3,
+        description: isDefinite ? 'Final evaluation' : 'Add constant of integration',
         expression: finalAnswer,
-        explanation: 'Don\'t forget the constant of integration for indefinite integrals'
+        explanation: isDefinite
+          ? 'This is the value of the definite integral.'
+          : 'Don\'t forget the constant of integration for indefinite integrals'
       });
 
       return {
@@ -623,14 +786,18 @@ function solveIntegral(problem: string, isDefinite: boolean = false): MathSoluti
   // Fallback
   return {
     problem,
-    problemType: 'indefinite-integral',
+    problemType: isDefinite ? 'definite-integral' : 'indefinite-integral',
     steps: [{
       step: 1,
       description: 'Complex integral',
-      expression: `\\int ${expr} \\, d${variable}`,
+      expression: isDefinite && parsedDefinite
+        ? `\\int_{${parsedDefinite.lower}}^{${parsedDefinite.upper}} ${expr} \\, d${variable}`
+        : `\\int ${expr} \\, d${variable}`,
       explanation: 'This integral requires advanced techniques like u-substitution, integration by parts, or partial fractions. Please use AI mode for step-by-step solution.'
     }],
-    finalAnswer: `\\int ${expr} \\, d${variable}`,
+    finalAnswer: isDefinite && parsedDefinite
+      ? `\\int_{${parsedDefinite.lower}}^{${parsedDefinite.upper}} ${expr} \\, d${variable}`
+      : `\\int ${expr} \\, d${variable}`,
     isOffline: true
   };
 }
