@@ -1,9 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 /* ===========================================
-   STUDYPILOT — MINIMAL ACADEMIC DESIGN
-   Inspired by Apple (restraint) + Notion (clarity)
-   Structure-first, typography-driven
+   KIVORA — EDITORIAL PRODUCT LANGUAGE
+   Restrained surfaces, sharp hierarchy, less glow
    =========================================== */
 
 /* === DESIGN TOKENS === */
@@ -112,6 +111,10 @@
   --transition-fast: 160ms ease;
   --transition-base: 220ms ease;
   --panel-gradient: linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 96%, white 4%), var(--bg-surface));
+  --surface-glow: radial-gradient(circle at top left, color-mix(in srgb, var(--primary) 7%, transparent), transparent 36%);
+  --surface-stroke: inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
+  --page-grid: linear-gradient(90deg, color-mix(in srgb, var(--border-subtle) 38%, transparent) 1px, transparent 1px);
+  --hero-accent: #c084fc;
 }
 
 /* ─────────────────────────────────────
@@ -120,26 +123,26 @@
 [data-theme="blue"],
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg-base: #0b1220;
-  --bg-surface: #111827;
-  --bg-elevated: #1f2937;
-  --bg-inset: #0f172a;
-  --bg-hover: #1e293b;
-  --bg-active: #334155;
+  --bg-base: #08101c;
+  --bg-surface: #0f1828;
+  --bg-elevated: #162235;
+  --bg-inset: #0b1321;
+  --bg-hover: #18263a;
+  --bg-active: #23344d;
 
-  --border-subtle: #1f2937;
-  --border-default: #334155;
-  --border-strong: #475569;
+  --border-subtle: #1a2638;
+  --border-default: #31445d;
+  --border-strong: #49617f;
 
-  --text-primary: #e5e7eb;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --text-faint: #64748b;
+  --text-primary: #edf2fb;
+  --text-secondary: #c7d3e6;
+  --text-muted: #93a6c3;
+  --text-faint: #6d809c;
 
-  --primary: #3b82f6;
-  --primary-hover: #60a5fa;
-  --primary-muted: #172d4b;
-  --primary-text: #93c5fd;
+  --primary: #5d8cff;
+  --primary-hover: #77a0ff;
+  --primary-muted: #162947;
+  --primary-text: #a9c6ff;
 
   --danger: #ef4444;
   --danger-hover: #f87171;
@@ -164,25 +167,25 @@
 [data-theme="black"] {
   color-scheme: dark;
   --bg-base: #050505;
-  --bg-surface: #0b0b0b;
-  --bg-elevated: #101010;
-  --bg-inset: #080808;
-  --bg-hover: #161616;
-  --bg-active: #1d1d1d;
+  --bg-surface: #0b0d10;
+  --bg-elevated: #111418;
+  --bg-inset: #090b0e;
+  --bg-hover: #15191f;
+  --bg-active: #1d232c;
 
-  --border-subtle: #1a1a1a;
-  --border-default: #2a2a2a;
-  --border-strong: #3a3a3a;
+  --border-subtle: #1b2027;
+  --border-default: #2b3340;
+  --border-strong: #3c4657;
 
   --text-primary: #f5f5f5;
-  --text-secondary: #d4d4d4;
-  --text-muted: #a3a3a3;
-  --text-faint: #737373;
+  --text-secondary: #d6dde8;
+  --text-muted: #9ca8ba;
+  --text-faint: #6f7989;
 
-  --primary: #4f8cff;
-  --primary-hover: #6aa0ff;
-  --primary-muted: #12233f;
-  --primary-text: #a8c7ff;
+  --primary: #79a2ff;
+  --primary-hover: #91b3ff;
+  --primary-muted: #132033;
+  --primary-text: #b6ceff;
 
   --danger: #ef4444;
   --danger-hover: #f87171;
@@ -278,8 +281,9 @@ body {
   line-height: calc(var(--line-normal) * var(--line-scale));
   color: var(--text-primary);
   background:
-    radial-gradient(circle at top, color-mix(in srgb, var(--primary) 8%, transparent), transparent 32%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-base) 92%, var(--bg-surface)), var(--bg-base));
+    radial-gradient(circle at 14% 0%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 28%),
+    radial-gradient(circle at 82% 0%, color-mix(in srgb, var(--hero-accent) 7%, transparent), transparent 26%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-base) 94%, var(--bg-surface)), var(--bg-base));
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -356,15 +360,15 @@ textarea {
 .sp-panel {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  background: var(--panel-gradient);
-  box-shadow: var(--shadow-md);
+  background: var(--surface-glow), var(--panel-gradient);
+  box-shadow: var(--surface-stroke), var(--shadow-md);
 }
 
 .sp-eyebrow {
   font-size: var(--font-tiny);
   color: var(--text-faint);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   font-weight: var(--weight-semibold);
 }
 
@@ -385,7 +389,7 @@ textarea {
 
 .sp-button-primary {
   border: 1px solid transparent;
-  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 72%, white 28%));
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 68%, white 32%));
   color: white;
   box-shadow: var(--shadow-md);
 }
@@ -396,7 +400,7 @@ textarea {
 
 .sp-button-secondary {
   border: 1px solid var(--border-default);
-  background: var(--bg-surface);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
   color: var(--text-primary);
 }
 

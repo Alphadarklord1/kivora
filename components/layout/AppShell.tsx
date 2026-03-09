@@ -691,7 +691,8 @@ export function AppShell({ children, user }: AppShellProps) {
           display: flex;
           min-height: 100vh;
           min-height: 100dvh;
-          background: var(--bg-base);
+          background:
+            linear-gradient(180deg, color-mix(in srgb, var(--bg-base) 88%, var(--bg-surface)), var(--bg-base));
         }
 
         /* Desktop Sidebar */
@@ -701,14 +702,16 @@ export function AppShell({ children, user }: AppShellProps) {
           top: 0;
           bottom: 0;
           width: 240px;
-          background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
-          backdrop-filter: blur(18px);
+          background:
+            linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 94%, transparent), color-mix(in srgb, var(--bg-inset) 92%, transparent));
+          backdrop-filter: blur(20px);
           border-right: 1px solid var(--border-subtle);
           display: flex;
           flex-direction: column;
           transition: width var(--transition-base), background var(--transition-base);
           z-index: 100;
           min-height: 0;
+          box-shadow: inset -1px 0 0 color-mix(in srgb, white 4%, transparent);
         }
 
         .app-sidebar.collapsed {
@@ -721,6 +724,8 @@ export function AppShell({ children, user }: AppShellProps) {
           justify-content: space-between;
           padding: var(--space-4);
           border-bottom: 1px solid var(--border-subtle);
+          background:
+            linear-gradient(180deg, color-mix(in srgb, var(--primary) 7%, transparent), transparent 85%);
         }
 
         .logo {
@@ -731,18 +736,25 @@ export function AppShell({ children, user }: AppShellProps) {
           color: var(--text-primary);
           font-weight: 700;
           font-size: var(--font-lg);
+          letter-spacing: -0.03em;
         }
 
         .logo-icon {
           font-size: 24px;
         }
 
+        .logo-text {
+          font-family: "Fraunces", serif;
+          font-weight: 700;
+          letter-spacing: -0.04em;
+        }
+
         .sidebar-toggle {
           width: 32px;
           height: 32px;
           border: 1px solid var(--border-subtle);
-          background: color-mix(in srgb, var(--bg-base) 88%, var(--bg-surface));
-          border-radius: var(--radius-md);
+          background: color-mix(in srgb, var(--bg-base) 80%, var(--bg-surface));
+          border-radius: 10px;
           cursor: pointer;
           display: flex;
           align-items: center;
@@ -758,7 +770,7 @@ export function AppShell({ children, user }: AppShellProps) {
 
         .sidebar-nav {
           flex: 1;
-          padding: var(--space-3);
+          padding: var(--space-4) var(--space-3);
           display: flex;
           flex-direction: column;
           gap: var(--space-4);
@@ -774,7 +786,7 @@ export function AppShell({ children, user }: AppShellProps) {
         .nav-group {
           display: flex;
           flex-direction: column;
-          gap: var(--space-1);
+          gap: var(--space-2);
         }
 
         .nav-group-label {
@@ -791,12 +803,13 @@ export function AppShell({ children, user }: AppShellProps) {
           display: flex;
           align-items: center;
           gap: var(--space-3);
-          padding: 11px 12px;
-          border-radius: 14px;
+          padding: 12px 14px;
+          border-radius: 16px;
           text-decoration: none;
           color: var(--text-secondary);
           transition: all var(--transition-fast);
-          border: 1px solid transparent;
+          border: 1px solid color-mix(in srgb, var(--border-subtle) 36%, transparent);
+          background: color-mix(in srgb, var(--bg-surface) 38%, transparent);
         }
 
         .app-sidebar.collapsed .nav-item {
@@ -816,16 +829,20 @@ export function AppShell({ children, user }: AppShellProps) {
         }
 
         .nav-item:hover {
-          background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
-          border-color: color-mix(in srgb, var(--border-subtle) 80%, transparent);
+          background: color-mix(in srgb, var(--bg-elevated) 90%, transparent);
+          border-color: color-mix(in srgb, var(--border-default) 68%, transparent);
           color: var(--text-primary);
+          transform: translateY(-1px);
         }
 
         .nav-item.active {
-          background: color-mix(in srgb, var(--primary-muted) 42%, transparent);
-          border-color: color-mix(in srgb, var(--primary) 18%, transparent);
+          background:
+            linear-gradient(135deg, color-mix(in srgb, var(--primary-muted) 82%, transparent), color-mix(in srgb, var(--bg-elevated) 92%, transparent));
+          border-color: color-mix(in srgb, var(--primary) 28%, transparent);
           color: var(--primary);
-          box-shadow: inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
+          box-shadow:
+            inset 0 1px 0 color-mix(in srgb, white 9%, transparent),
+            0 12px 26px color-mix(in srgb, var(--bg-base) 24%, transparent);
         }
 
         .nav-item.active::before {
@@ -845,8 +862,8 @@ export function AppShell({ children, user }: AppShellProps) {
         }
 
         .nav-label {
-          font-weight: 500;
-          font-size: var(--font-meta);
+          font-weight: 600;
+          font-size: 13px;
           line-height: 1.2;
           white-space: nowrap;
         }
@@ -857,7 +874,8 @@ export function AppShell({ children, user }: AppShellProps) {
           display: flex;
           flex-direction: column;
           gap: var(--space-2);
-          background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+          background:
+            linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 82%, transparent), color-mix(in srgb, var(--bg-inset) 94%, transparent));
         }
 
         .footer-label {
@@ -886,9 +904,9 @@ export function AppShell({ children, user }: AppShellProps) {
           padding: 10px 12px;
           background: color-mix(in srgb, var(--bg-base) 90%, var(--bg-surface));
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: 16px;
           color: var(--text-secondary);
-          font-size: var(--font-meta);
+          font-size: 13px;
           font-weight: 600;
           cursor: pointer;
           transition: all var(--transition-fast);
@@ -923,9 +941,9 @@ export function AppShell({ children, user }: AppShellProps) {
           align-items: center;
           justify-content: center;
           margin-bottom: var(--space-1);
-          background: var(--bg-base);
+          background: color-mix(in srgb, var(--bg-base) 86%, var(--bg-surface));
           border: 1px solid var(--border-subtle);
-          border-radius: 14px;
+          border-radius: 16px;
           font-size: 16px;
           cursor: pointer;
           transition: all var(--transition-fast);
@@ -947,8 +965,10 @@ export function AppShell({ children, user }: AppShellProps) {
           align-items: center;
           gap: var(--space-3);
           padding: var(--space-2);
-          border-radius: 14px;
+          border-radius: 16px;
           cursor: default;
+          border: 1px solid color-mix(in srgb, var(--border-subtle) 50%, transparent);
+          background: color-mix(in srgb, var(--bg-surface) 55%, transparent);
         }
 
         .user-profile:hover {
@@ -1012,8 +1032,8 @@ export function AppShell({ children, user }: AppShellProps) {
         .user-menu {
           margin-top: var(--space-2);
           padding: var(--space-2);
-          background: var(--panel-gradient);
-          border-radius: var(--radius-lg);
+          background: var(--surface-glow), var(--panel-gradient);
+          border-radius: var(--radius-xl);
           border: 1px solid var(--border-subtle);
           box-shadow: var(--shadow-md);
         }
@@ -1100,6 +1120,8 @@ export function AppShell({ children, user }: AppShellProps) {
           flex: 1;
           overflow-y: auto;
           padding: var(--space-5);
+          background-image:
+            radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 6%, transparent), transparent 22%);
         }
 
         /* Mobile Header */
@@ -1111,7 +1133,7 @@ export function AppShell({ children, user }: AppShellProps) {
           align-items: center;
           justify-content: space-between;
           padding: calc(env(safe-area-inset-top) + var(--space-3)) var(--space-4) var(--space-3);
-          background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+          background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
           backdrop-filter: blur(18px);
           border-bottom: 1px solid var(--border-subtle);
         }
@@ -1158,10 +1180,10 @@ export function AppShell({ children, user }: AppShellProps) {
           top: 100%;
           right: var(--space-4);
           margin-top: var(--space-2);
-          background: var(--bg-surface);
+          background: var(--surface-glow), var(--panel-gradient);
           box-shadow: var(--shadow-lg);
           border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
+          border-radius: var(--radius-xl);
           box-shadow: var(--shadow-lg);
           min-width: min(240px, calc(100vw - 32px));
           z-index: 100;
@@ -1210,11 +1232,11 @@ export function AppShell({ children, user }: AppShellProps) {
           left: 0;
           right: 0;
           display: flex;
-          background: var(--bg-surface);
+          background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
           border-top: 1px solid var(--border-subtle);
           padding-bottom: env(safe-area-inset-bottom);
           z-index: 100;
-          backdrop-filter: blur(14px);
+          backdrop-filter: blur(18px);
         }
 
         .mobile-nav-item {
@@ -1234,6 +1256,7 @@ export function AppShell({ children, user }: AppShellProps) {
 
         .mobile-nav-item.active {
           color: var(--primary);
+          background: color-mix(in srgb, var(--primary-muted) 34%, transparent);
         }
 
         .mobile-nav-icon {
