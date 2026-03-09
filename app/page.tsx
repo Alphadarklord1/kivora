@@ -1,49 +1,43 @@
 import { auth } from '@/auth';
 import Link from 'next/link';
 import { isDesktopOnlyModeEnabled, isGuestModeEnabled } from '@/lib/runtime/mode';
+import styles from './page.module.css';
 
 const DOWNLOAD_URL = '/downloads';
 
-const features = [
+const pillars = [
   {
-    icon: '📁',
-    title: 'Smart Organization',
-    description: 'Create folders and topics to keep all your study materials perfectly organized in one place.',
+    eyebrow: 'Organize',
+    title: 'One workspace for files, folders, and generated study assets.',
+    body: 'Keep modules, chapters, quizzes, summaries, and notes in one system instead of scattered tabs and documents.',
   },
   {
-    icon: '🤖',
-    title: 'Desktop Local AI',
-    description: 'Run study generation tools with an offline-first desktop workflow.',
+    eyebrow: 'Generate',
+    title: 'Turn source material into quizzes, notes, rephrased drafts, and study plans.',
+    body: 'StudyHarbor keeps the workflow focused on academic work so the tools stay fast, predictable, and useful.',
   },
   {
-    icon: '📝',
-    title: 'Interactive Quizzes',
-    description: 'Test your knowledge with auto-generated MCQs and practice tests.',
-  },
-  {
-    icon: '📚',
-    title: 'Personal Library',
-    description: 'Save your favorite generated content to your library for quick access anytime.',
-  },
-  {
-    icon: '🔗',
-    title: 'Easy Sharing',
-    description: 'Share study materials with classmates via secure links with permission controls.',
-  },
-  {
-    icon: '🔒',
-    title: 'Privacy First',
-    description: 'Your files stay on your device. We only sync metadata, keeping your content private.',
+    eyebrow: 'Review',
+    title: 'Track progress through planner, analytics, and saved results.',
+    body: 'Move from raw material to scheduled study sessions with enough structure to actually use the app every day.',
   },
 ];
 
-const tools = [
-  { icon: '📝', name: 'Assignments', desc: 'Generate practice problems' },
-  { icon: '📄', name: 'Summaries', desc: 'Condense lengthy materials' },
-  { icon: '✅', name: 'MCQs', desc: 'Multiple choice questions' },
-  { icon: '🧠', name: 'Quizzes', desc: 'Comprehensive tests' },
-  { icon: '📒', name: 'Notes', desc: 'Cornell-style study notes' },
-  { icon: '✍️', name: 'Rephrase', desc: 'Rewrite text by tone and style' },
+const toolHighlights = [
+  'Summaries',
+  'MCQs',
+  'Quizzes',
+  'Notes',
+  'Rephrase',
+  'Math + MATLAB',
+  'Planner',
+  'Analytics',
+];
+
+const proofStats = [
+  { value: 'Offline-first', label: 'Desktop AI path with local fallback' },
+  { value: 'Guest-ready', label: 'Core study flows work without account setup' },
+  { value: 'EN / AR', label: 'Bilingual workspace with RTL support' },
 ];
 
 export default async function LandingPage() {
@@ -54,204 +48,224 @@ export default async function LandingPage() {
   try {
     session = await auth();
   } catch {
-    // If auth is not configured locally, keep landing page functional.
     session = null;
   }
 
   const isLoggedIn = !!session?.user;
   const canUseWithoutSignIn = isGuestMode || isLoggedIn;
-  const primaryWorkspaceLabel = isDesktopOnly ? 'Open Desktop Workspace →' : (isGuestMode ? 'Continue as Guest →' : 'Go to Workspace →');
+  const primaryHref = canUseWithoutSignIn ? '/workspace' : '/register';
+  const primaryLabel = canUseWithoutSignIn
+    ? isDesktopOnly
+      ? 'Open Desktop Workspace'
+      : isGuestMode
+        ? 'Continue as Guest'
+        : 'Open Workspace'
+    : 'Create Free Account';
 
   return (
-    <div className="landing-page">
-      {/* Navigation */}
-      <nav className="landing-nav">
-        <div className="nav-container">
-          <Link href="/" className="nav-logo">
-            <span className="logo-icon">📘</span>
-            <span className="logo-text">StudyHarbor</span>
+    <div className={styles.pageShell}>
+      <div className={styles.backdrop} />
+      <header className={styles.topbar}>
+        <Link href="/" className={styles.brand}>
+          <span className={styles.brandMark}>◢</span>
+          <span className={styles.brandText}>StudyHarbor</span>
+        </Link>
+        <nav className={styles.topbarActions}>
+          <Link href={DOWNLOAD_URL} className={styles.secondaryAction}>
+            Download
           </Link>
-          <div className="nav-links">
-            <Link href={DOWNLOAD_URL} className="nav-btn secondary">
-              Download App
-            </Link>
-            <Link href="/login" className="nav-btn secondary">
-              Log In
-            </Link>
-            {canUseWithoutSignIn ? (
-              <Link href="/workspace" className="nav-btn primary">
-                {primaryWorkspaceLabel}
-              </Link>
-            ) : (
-              <Link href="/register" className="nav-btn primary">
-                Get Started Free
-              </Link>
-            )}
-          </div>
-        </div>
-      </nav>
+          <Link href="/login" className={styles.secondaryAction}>
+            Log In
+          </Link>
+          <Link href={primaryHref} className={styles.primaryAction}>
+            {primaryLabel}
+          </Link>
+        </nav>
+      </header>
 
-      {/* Hero Section */}
-      <section className="hero">
-        <div className="hero-content">
-          <div className="hero-badge">Built for focused learning</div>
-          <h1>Study Smarter, Not Harder</h1>
-          <p className="hero-subtitle">
-            Transform your study materials into interactive quizzes, summaries, and notes with an offline-first desktop workspace.
-          </p>
-          <div className="hero-actions">
-            <Link href={DOWNLOAD_URL} className="hero-btn secondary">
-              Download for Mac/Windows
-            </Link>
-            <Link href="/login" className="hero-btn secondary">
-              I already have an account
-            </Link>
-            {canUseWithoutSignIn ? (
-              <Link href="/workspace" className="hero-btn primary">
-                {isGuestMode ? 'Continue as Guest →' : 'Open Workspace →'}
-              </Link>
-            ) : (
-              <Link href="/register" className="hero-btn primary">
-                Start Studying Free
-              </Link>
-            )}
-          </div>
-          <p className="hero-note">{canUseWithoutSignIn ? 'Local mode is available without sign-in.' : 'Create an account to sync your study data.'}</p>
-          <div className="hero-trust">
-            <span>🔒 Privacy-first</span>
-            <span>⚡ Offline-ready tools</span>
-            <span>🖥️ Desktop app</span>
-          </div>
-        </div>
-        <div className="hero-visual">
-          <div className="hero-mockup">
-            <div className="mockup-header">
-              <span className="dot red"></span>
-              <span className="dot yellow"></span>
-              <span className="dot green"></span>
+      <main className={styles.main}>
+        <section className={styles.hero}>
+          <div className={styles.heroCopy}>
+            <div className={styles.kickerRow}>
+              <span className={styles.kicker}>Desktop study system</span>
+              <span className={styles.kickerMuted}>Built for real coursework, not generic chat.</span>
             </div>
-            <div className="mockup-content">
-              <div className="mockup-sidebar">
-                <div className="mockup-folder">📁 Biology 101</div>
-                <div className="mockup-folder">📁 Chemistry</div>
-                <div className="mockup-folder active">📁 Physics</div>
+            <h1 className={styles.heroTitle}>
+              A focused study workspace for files, planning, math, and AI generation.
+            </h1>
+            <p className={styles.heroBody}>
+              StudyHarbor combines structured folders, a planner, math tools, and guarded AI workflows so you can move from source material to actual study sessions without the usual clutter.
+            </p>
+            <div className={styles.heroActions}>
+              <Link href={primaryHref} className={styles.primaryActionLarge}>
+                {primaryLabel}
+              </Link>
+              <Link href={DOWNLOAD_URL} className={styles.secondaryActionLarge}>
+                Get Desktop Build
+              </Link>
+            </div>
+            <div className={styles.heroMeta}>
+              <span>{canUseWithoutSignIn ? 'Guest mode available' : 'Account sync available'}</span>
+              <span>Optional Google / GitHub login</span>
+              <span>Local-first AI model support</span>
+            </div>
+          </div>
+
+          <div className={styles.heroPanel}>
+            <div className={styles.appFrame}>
+              <div className={styles.appFrameHeader}>
+                <span className={styles.windowDot} />
+                <span className={styles.windowDot} />
+                <span className={styles.windowDot} />
+                <div className={styles.windowTitle}>Workspace Snapshot</div>
               </div>
-              <div className="mockup-main">
-                <div className="mockup-tool">🧠 Quiz Generated!</div>
-                <div className="mockup-question">Q1: What is Newton&apos;s First Law?</div>
-                <div className="mockup-options">
-                  <div className="mockup-option">A) Law of Inertia</div>
-                  <div className="mockup-option correct">B) Objects at rest stay at rest ✓</div>
+              <div className={styles.appFrameBody}>
+                <aside className={styles.mockSidebar}>
+                  <div className={styles.mockSectionLabel}>Modules</div>
+                  <div className={styles.mockNavItem}>Security Engineering</div>
+                  <div className={`${styles.mockNavItem} ${styles.mockNavItemActive}`}>Calculus II</div>
+                  <div className={styles.mockNavItem}>Signals</div>
+                  <div className={styles.mockDivider} />
+                  <div className={styles.mockSectionLabel}>Tools</div>
+                  <div className={styles.mockTagRow}>
+                    {toolHighlights.slice(0, 4).map((tool) => (
+                      <span key={tool} className={styles.mockTag}>
+                        {tool}
+                      </span>
+                    ))}
+                  </div>
+                </aside>
+                <div className={styles.mockMain}>
+                  <div className={styles.mockCardLarge}>
+                    <div className={styles.mockCardHeader}>
+                      <span className={styles.mockEyebrow}>Planner</span>
+                      <span className={styles.mockPill}>Today</span>
+                    </div>
+                    <div className={styles.mockCalendarGrid}>
+                      <div className={styles.mockCalendarCellStrong}>Exam review</div>
+                      <div className={styles.mockCalendarCell}>MCQ drill</div>
+                      <div className={styles.mockCalendarCell}>Math lab</div>
+                      <div className={styles.mockCalendarCell}>Summary pass</div>
+                    </div>
+                  </div>
+                  <div className={styles.mockBottomRow}>
+                    <div className={styles.mockCard}>
+                      <span className={styles.mockEyebrow}>AI</span>
+                      <strong>Generate 20-min plan</strong>
+                      <p>Weak area: integration techniques</p>
+                    </div>
+                    <div className={styles.mockCard}>
+                      <span className={styles.mockEyebrow}>Math</span>
+                      <strong>Integral from 0 to 1</strong>
+                      <p>Keyboard and solver in one panel</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Features Section */}
-      <section className="features">
-        <div className="section-container">
-          <h2>Everything You Need to Excel</h2>
-          <p className="section-subtitle">
-            StudyHarbor combines smart organization with powerful AI tools to supercharge your learning.
-          </p>
-          <div className="features-grid">
-            {features.map((feature, idx) => (
-              <div key={idx} className="feature-card">
-                <span className="feature-icon">{feature.icon}</span>
-                <h3>{feature.title}</h3>
-                <p>{feature.description}</p>
-              </div>
+        <section className={styles.statRow}>
+          {proofStats.map((stat) => (
+            <div key={stat.value} className={styles.statCard}>
+              <strong>{stat.value}</strong>
+              <span>{stat.label}</span>
+            </div>
+          ))}
+        </section>
+
+        <section className={styles.sectionGrid}>
+          <div className={styles.sectionIntro}>
+            <span className={styles.sectionEyebrow}>Why it works</span>
+            <h2>Built around the actual study loop.</h2>
+            <p>
+              The product is strongest when it keeps the workflow narrow: collect material, generate the right artifact, schedule the session, then review progress.
+            </p>
+          </div>
+          <div className={styles.pillarGrid}>
+            {pillars.map((pillar) => (
+              <article key={pillar.title} className={styles.pillarCard}>
+                <span className={styles.cardEyebrow}>{pillar.eyebrow}</span>
+                <h3>{pillar.title}</h3>
+                <p>{pillar.body}</p>
+              </article>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Tools Section */}
-      <section className="tools-section">
-        <div className="section-container">
-          <h2>Powerful Study Tools</h2>
-          <p className="section-subtitle">
-            Upload your PDFs, Word docs, or PowerPoints and instantly generate study materials.
-          </p>
-          <div className="tools-grid">
-            {tools.map((tool, idx) => (
-              <div key={idx} className="tool-card">
-                <span className="tool-icon">{tool.icon}</span>
-                <h4>{tool.name}</h4>
-                <p>{tool.desc}</p>
-              </div>
-            ))}
+        <section className={styles.dualPanel}>
+          <article className={styles.featurePanel}>
+            <span className={styles.sectionEyebrow}>Tool stack</span>
+            <h2>Core tools that belong to the same system.</h2>
+            <div className={styles.toolList}>
+              {toolHighlights.map((tool) => (
+                <div key={tool} className={styles.toolChip}>
+                  {tool}
+                </div>
+              ))}
+            </div>
+            <p>
+              Workspace, tools, planner, analytics, and library are meant to feed each other instead of acting like separate mini apps.
+            </p>
+          </article>
+
+          <article className={styles.featurePanelStrong}>
+            <span className={styles.sectionEyebrow}>Desktop-first AI</span>
+            <h2>Use local models when you need them. Fall back only when configured.</h2>
+            <ul className={styles.bulletList}>
+              <li>Bundled Mini model for immediate offline use</li>
+              <li>Optional stronger local models from release assets</li>
+              <li>Web path can use cloud AI with deterministic fallback</li>
+              <li>Study-only policy keeps generation constrained to the product scope</li>
+            </ul>
+          </article>
+        </section>
+
+        <section className={styles.workflowSection}>
+          <div className={styles.sectionIntroCompact}>
+            <span className={styles.sectionEyebrow}>Workflow</span>
+            <h2>From raw material to revision plan.</h2>
           </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section className="how-it-works">
-        <div className="section-container">
-          <h2>How It Works</h2>
-          <div className="steps">
-            <div className="step">
-              <div className="step-number">1</div>
-              <h3>Upload Your Materials</h3>
-              <p>Drop your PDFs, Word docs, or PowerPoints into StudyHarbor.</p>
+          <div className={styles.workflowSteps}>
+            <div className={styles.workflowStep}>
+              <span className={styles.stepIndex}>01</span>
+              <h3>Collect</h3>
+              <p>Upload files, structure folders, and keep subjects separated.</p>
             </div>
-            <div className="step-arrow">→</div>
-            <div className="step">
-              <div className="step-number">2</div>
-              <h3>Choose a Tool</h3>
-              <p>Select what you need: quiz, summary, notes, or practice problems.</p>
+            <div className={styles.workflowStep}>
+              <span className={styles.stepIndex}>02</span>
+              <h3>Generate</h3>
+              <p>Turn content into quizzes, summaries, notes, rephrased drafts, and math work.</p>
             </div>
-            <div className="step-arrow">→</div>
-            <div className="step">
-              <div className="step-number">3</div>
-              <h3>Study Smarter</h3>
-              <p>Use your generated content to learn faster and retain more.</p>
+            <div className={styles.workflowStep}>
+              <span className={styles.stepIndex}>03</span>
+              <h3>Schedule</h3>
+              <p>Push the next action into planner and track study consistency over time.</p>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* CTA Section */}
-      <section className="cta">
-        <div className="section-container">
-          <h2>Ready to Transform Your Study Routine?</h2>
-          <p>Join thousands of students who study smarter with StudyHarbor.</p>
-          {canUseWithoutSignIn ? (
-            <Link href="/workspace" className="cta-btn">
-              Go to Your Workspace →
+        <section className={styles.finalCta}>
+          <div>
+            <span className={styles.sectionEyebrow}>Ready</span>
+            <h2>Open the workspace and start with the files you already have.</h2>
+            <p>
+              {canUseWithoutSignIn
+                ? 'You can start in guest mode immediately and add sign-in later if you want sync and linked providers.'
+                : 'Create an account if you want synced plans, analytics, and shared workspaces.'}
+            </p>
+          </div>
+          <div className={styles.finalActions}>
+            <Link href={primaryHref} className={styles.primaryActionLarge}>
+              {primaryLabel}
             </Link>
-          ) : (
-            <Link href="/register" className="cta-btn">
-              Get Started Free →
+            <Link href={DOWNLOAD_URL} className={styles.secondaryActionLarge}>
+              Downloads
             </Link>
-          )}
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="landing-footer">
-        <div className="footer-container">
-          <div className="footer-brand">
-            <span className="logo-icon">📘</span>
-            <span>StudyHarbor</span>
           </div>
-          <p>Your AI-powered study companion. Built for students, by students.</p>
-          {!canUseWithoutSignIn && (
-            <div className="footer-links">
-              <Link href="/login">Login</Link>
-              <Link href="/register">Sign Up</Link>
-            </div>
-          )}
-          {canUseWithoutSignIn && (
-            <div className="footer-links">
-              <Link href="/login">Login</Link>
-              <Link href="/workspace">Continue as Guest</Link>
-            </div>
-          )}
-        </div>
-      </footer>
+        </section>
+      </main>
     </div>
   );
 }
