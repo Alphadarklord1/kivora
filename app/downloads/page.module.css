@@ -7,40 +7,113 @@
 }
 
 .card {
-  width: min(620px, 100%);
+  width: min(980px, 100%);
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: var(--space-6);
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
+}
+
+.card h1,
+.card h2,
+.card h3,
+.card p {
+  margin: 0;
 }
 
 .card h1 {
-  margin: 0;
   font-size: var(--font-2xl);
 }
 
 .card h2 {
-  margin: 0;
   font-size: var(--font-lg);
 }
 
+.card h3 {
+  font-size: var(--font-body);
+}
+
 .card p {
-  margin: 0;
   color: var(--text-muted);
 }
 
 .section {
   display: grid;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
+  gap: var(--space-3);
+  padding-top: var(--space-2);
 }
 
-.downloadList {
+.sectionNote {
+  font-size: var(--font-meta);
+}
+
+.downloadGrid,
+.modelGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+
+.downloadCard,
+.modelCard {
+  display: grid;
+  gap: var(--space-3);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+}
+
+.modelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.modelMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.modelMeta span {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: var(--radius-full);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-size: var(--font-tiny);
+  border: 1px solid var(--border-subtle);
+}
+
+.modelBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-tiny);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bundled {
+  background: color-mix(in srgb, var(--success, #10b981) 15%, transparent);
+  color: var(--success, #10b981);
+}
+
+.optional {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+}
+
+.downloadList,
+.releaseLinks {
   display: grid;
   gap: var(--space-2);
-  margin-top: var(--space-2);
 }
 
 .downloadBtn {
@@ -70,6 +143,33 @@
   filter: brightness(1.05);
 }
 
+.unavailable {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  border: 1px dashed var(--border-default);
+  font-size: var(--font-meta);
+}
+
+.warningBox {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--warning, #f59e0b) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 35%, transparent);
+}
+
+.warningBox strong {
+  color: var(--text-primary);
+}
+
+.warningBox span {
+  color: var(--text-secondary);
+  font-size: var(--font-meta);
+}
+
 .note {
   font-size: var(--font-meta);
 }
@@ -79,4 +179,15 @@
   text-decoration: none;
   color: var(--primary);
   font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .card {
+    padding: var(--space-4);
+  }
+
+  .modelHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
