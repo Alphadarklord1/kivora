@@ -552,7 +552,7 @@ async function installDesktopModel(modelKey) {
   if (!model) {
     return { status: 'invalid_request', message: `Unknown model key: ${modelKey}` };
   }
-  if (model.isInstalled) {
+  if (model.installedSource === 'userData') {
     return { status: 'already_installed', modelKey };
   }
   if (!model.url) {

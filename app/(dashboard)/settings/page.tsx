@@ -1851,8 +1851,8 @@ export default function SettingsPage() {
                   <h3>{isArabic ? 'مدير نماذج سطح المكتب' : 'Desktop Model Manager'}</h3>
                   <p className="help-text">
                     {isArabic
-                      ? 'يبدأ StudyHarbor بنموذج Mini دون اتصال. يمكنك تثبيت نماذج أقوى واختيار النموذج النشط.'
-                      : 'StudyHarbor starts with offline Mini. Install stronger models and choose the active one.'}
+                      ? 'يبدأ StudyHarbor بنموذج Mini دون اتصال. يمكنك أيضًا تنزيل نسخة محلية منه أو تثبيت نماذج أقوى واختيار النموذج النشط.'
+                      : 'StudyHarbor starts with offline Mini. You can also download a local Mini copy or install stronger models and choose the active one.'}
                   </p>
                   {desktopAiModelInfo && (
                     <div className="help-text" style={{ marginTop: 8 }}>
@@ -1893,15 +1893,28 @@ export default function SettingsPage() {
                               </div>
                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                 {model.isInstalled ? (
-                                  <button
-                                    className="btn secondary"
-                                    disabled={isActive || switchingDesktopModel || installing || removing}
-                                    onClick={() => handleSelectDesktopModel(model.key)}
-                                  >
-                                    {isActive
-                                      ? (isArabic ? 'نشط' : 'Active')
-                                      : (isArabic ? 'تفعيل' : 'Use')}
-                                  </button>
+                                  <>
+                                    <button
+                                      className="btn secondary"
+                                      disabled={isActive || switchingDesktopModel || installing || removing}
+                                      onClick={() => handleSelectDesktopModel(model.key)}
+                                    >
+                                      {isActive
+                                        ? (isArabic ? 'نشط' : 'Active')
+                                        : (isArabic ? 'تفعيل' : 'Use')}
+                                    </button>
+                                    {model.installedSource === 'bundled' && (
+                                      <button
+                                        className="btn secondary"
+                                        disabled={installing || switchingDesktopModel || removing}
+                                        onClick={() => handleInstallDesktopModel(model.key)}
+                                      >
+                                        {installing
+                                          ? (isArabic ? 'جارِ التنزيل...' : 'Downloading...')
+                                          : (isArabic ? 'تنزيل نسخة محلية' : 'Download local copy')}
+                                      </button>
+                                    )}
+                                  </>
                                 ) : (
                                   <button
                                     className="btn secondary"
@@ -1938,6 +1951,9 @@ export default function SettingsPage() {
                                 : model.bundled
                                   ? (isArabic ? 'مضمّن في هذه النسخة' : 'Bundled in this installer')
                                   : (isArabic ? 'غير مثبت' : 'Not installed')}
+                              {model.installedSource === 'bundled'
+                                ? ` · ${isArabic ? 'يمكن تنزيل نسخة محلية من ملفات الإصدار' : 'A local downloadable copy can also be installed from release assets'}`
+                                : ''}
                             </div>
                             {model.downloadProgress && (
                               <div className="help-text" style={{ marginTop: 4 }}>

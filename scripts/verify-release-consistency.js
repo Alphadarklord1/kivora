@@ -34,7 +34,7 @@ const assets = assetsCsv
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean);
-const requiredModels = (args['required-models'] || 'balanced,pro')
+const requiredModels = (args['required-models'] || 'mini,balanced,pro')
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean);

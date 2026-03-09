@@ -110,7 +110,7 @@ export default async function DownloadsPage() {
             <span className={styles.eyebrow}>Desktop builds + local models</span>
             <h1>Download StudyHarbor</h1>
             <p>
-              Desktop builds ship through GitHub Releases. Mini is bundled in the desktop app. Balanced and Pro stay optional so users can choose the local model that matches their machine.
+              Desktop builds ship through GitHub Releases. Mini is bundled in the desktop app and can also be published as a separate download. Balanced and Pro stay optional so users can choose the local model that matches their machine.
             </p>
             <div className={styles.heroActions}>
               <a href={releaseUrl} className={styles.primaryLink} target="_blank" rel="noopener noreferrer">
@@ -180,7 +180,7 @@ export default async function DownloadsPage() {
             <span className={styles.eyebrow}>Optional local AI</span>
             <h2>Choose the model that fits the device</h2>
             <p>
-              Mini already ships with the desktop app. Balanced and Pro stay optional so users can install them later from Settings or download them manually when release assets are published.
+              Mini already ships with the desktop app, and all three models can be published as direct downloads. Balanced and Pro stay optional so users can install them later from Settings or download them manually when release assets are published.
             </p>
           </div>
           <div className={styles.modelGrid}>
