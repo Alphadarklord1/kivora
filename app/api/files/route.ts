@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { files, folders } from '@/lib/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
@@ -8,6 +8,10 @@ import { apiError, createRequestId } from '@/lib/api/error-response';
 export async function GET(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
+    if (!isDatabaseConfigured) {
+      return NextResponse.json([]);
+    }
+
     const userId = await getUserId(request);
     if (!userId) {
       return apiError(401, {
@@ -57,6 +61,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
+    if (!isDatabaseConfigured) {
+      return apiError(503, {
+        errorCode: 'DATABASE_NOT_CONFIGURED',
+        reason: 'File saving requires DATABASE_URL to be configured',
+        requestId,
+      });
+    }
+
     const userId = await getUserId(request);
     if (!userId) {
       return apiError(401, {

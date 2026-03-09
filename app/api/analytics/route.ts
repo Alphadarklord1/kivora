@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { quizAttempts, studyPlans, files, libraryItems } from '@/lib/db/schema';
 import { eq, desc, and, gte } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
@@ -74,6 +74,17 @@ function buildAnalyticsFallback(periodDays: number) {
 
 export async function GET(request: NextRequest) {
   const requestId = createRequestId(request);
+  const { searchParams } = new URL(request.url);
+  const period = searchParams.get('period') || '30'; // days
+  const parsedPeriod = parseInt(period, 10);
+  const periodDays = Number.isFinite(parsedPeriod) && parsedPeriod > 0 ? parsedPeriod : 30;
+
+  if (!isDatabaseConfigured) {
+    return NextResponse.json(buildAnalyticsFallback(periodDays), {
+      headers: { 'x-studypilot-fallback': 'analytics-no-db' },
+    });
+  }
+
   const userId = await getUserId(request);
   if (!userId) {
     return apiError(401, {
@@ -82,11 +93,6 @@ export async function GET(request: NextRequest) {
       requestId,
     });
   }
-
-  const { searchParams } = new URL(request.url);
-  const period = searchParams.get('period') || '30'; // days
-  const parsedPeriod = parseInt(period, 10);
-  const periodDays = Number.isFinite(parsedPeriod) && parsedPeriod > 0 ? parsedPeriod : 30;
 
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - periodDays);

@@ -6,6 +6,8 @@ const configuredDb = process.env.DATABASE_URL
   ? drizzle(neon(process.env.DATABASE_URL), { schema })
   : null;
 
+export const isDatabaseConfigured = Boolean(process.env.DATABASE_URL);
+
 type ConfiguredDb = NonNullable<typeof configuredDb>;
 
 const missingDb = new Proxy({} as ConfiguredDb, {
