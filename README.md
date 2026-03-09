@@ -118,3 +118,20 @@ Detailed runtime/model docs:
 
 - `OFFLINE_MODEL_BUNDLE_GUIDE.md`
 - `electron/runtime/README.md`
+
+## Team Collaboration
+
+If you want other people to edit or build with you:
+
+- Read `CONTRIBUTING.md`
+- Open bugs and feature work through GitHub Issues
+- Use pull requests for all code changes
+- Follow `SECURITY.md` for private vulnerability reports
+
+Repository collaboration files:
+
+- `CONTRIBUTING.md`
+- `.github/PULL_REQUEST_TEMPLATE.md`
+- `.github/ISSUE_TEMPLATE/`
+- `CODEOWNERS`
+- `SUPPORT.md`

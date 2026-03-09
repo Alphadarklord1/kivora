@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a reproducible bug in Kivora
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      options:
+        - Web
+        - Desktop
+        - Both
+    validations:
+      required: true
+  - type: dropdown
+    id: auth_mode
+    attributes:
+      label: Auth mode
+      options:
+        - Guest
+        - Signed in
+        - Mixed / not sure
+    validations:
+      required: true
+  - type: input
+    id: page
+    attributes:
+      label: Affected page or API route
+      placeholder: /planner or /api/analytics
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. See error ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or network responses
+      description: Paste the relevant error, screenshot, or failing response body
