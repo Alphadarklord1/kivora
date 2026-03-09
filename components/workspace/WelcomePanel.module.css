@@ -1,0 +1,230 @@
+.shell {
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+  padding: 1rem;
+}
+
+.heroCard,
+.featureCard,
+.stepCard,
+.stepCardStrong {
+  border: 1px solid rgba(121, 143, 194, 0.14);
+  background: rgba(7, 15, 28, 0.72);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.18);
+}
+
+.heroCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) 300px;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-radius: 1.8rem;
+}
+
+.heroCopy h1 {
+  margin: 0.95rem 0 0;
+  max-width: 18ch;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  color: #edf4ff;
+}
+
+.eyebrow,
+.cardEyebrow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.85rem;
+  width: fit-content;
+  padding: 0 0.78rem;
+  border-radius: 999px;
+  background: rgba(80, 117, 224, 0.14);
+  border: 1px solid rgba(133, 161, 246, 0.2);
+  color: #9ebdff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.4rem;
+}
+
+.primaryButton,
+.secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease;
+}
+
+.primaryButton {
+  border: 1px solid rgba(94, 142, 255, 0.4);
+  background: linear-gradient(135deg, #5b8cff 0%, #3568ea 100%);
+  color: #fff;
+}
+
+.secondaryButton {
+  border: 1px solid rgba(125, 148, 196, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: #eef4ff;
+}
+
+.primaryButton:hover,
+.secondaryButton:hover {
+  transform: translateY(-1px);
+}
+
+.note {
+  margin: 1rem 0 0;
+  color: #93a5c2;
+  line-height: 1.7;
+}
+
+.heroPanel {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border-radius: 1.3rem;
+  border: 1px solid rgba(125, 148, 196, 0.12);
+  background: linear-gradient(180deg, rgba(17, 29, 51, 0.9), rgba(8, 15, 27, 0.96));
+}
+
+.mockHeader {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.mockDot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: rgba(204, 214, 235, 0.3);
+}
+
+.workflowRail {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.workflowItem {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 0.9rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  color: #e4ecfb;
+}
+
+.workflowIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: rgba(91, 140, 255, 0.16);
+  color: #a9c5ff;
+  font-weight: 700;
+}
+
+.cardGrid,
+.bottomGrid {
+  display: grid;
+  gap: 1rem;
+}
+
+.cardGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.bottomGrid {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+}
+
+.featureCard,
+.stepCard,
+.stepCardStrong {
+  padding: 1.25rem;
+  border-radius: 1.35rem;
+}
+
+.featureCard p,
+.stepCard p,
+.stepCardStrong p {
+  margin: 0.8rem 0 0;
+  color: #90a2c0;
+  line-height: 1.7;
+}
+
+.stepList {
+  margin: 1rem 0 0;
+  padding-inline-start: 1.2rem;
+  color: #e1e9f8;
+}
+
+.stepList li + li {
+  margin-top: 0.7rem;
+}
+
+.stepCardStrong {
+  background: linear-gradient(180deg, rgba(23, 41, 79, 0.78), rgba(8, 14, 28, 0.9));
+}
+
+.flowChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.flowChip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 148, 196, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: #edf4ff;
+}
+
+@media (max-width: 980px) {
+  .heroCard,
+  .cardGrid,
+  .bottomGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell {
+    padding: 0.5rem;
+  }
+
+  .heroCard,
+  .featureCard,
+  .stepCard,
+  .stepCardStrong {
+    border-radius: 1.2rem;
+  }
+
+  .heroCard {
+    padding: 1.1rem;
+  }
+
+  .actionRow {
+    flex-direction: column;
+  }
+}

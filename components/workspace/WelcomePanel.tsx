@@ -1,258 +1,120 @@
 'use client';
 
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useI18n } from '@/lib/i18n/useI18n';
+import styles from './WelcomePanel.module.css';
+
 interface WelcomePanelProps {
   onGetStarted?: () => void;
 }
 
-const features = [
-  {
-    icon: '📁',
-    title: 'Organize Your Studies',
-    description: 'Create folders and topics to keep your study materials organized. Upload PDFs, Word docs, and PowerPoints.',
-  },
-  {
-    icon: '📝',
-    title: 'Generate Study Content',
-    description: 'Transform your materials into assignments, summaries, MCQs, quizzes, and study notes automatically.',
-  },
-  {
-    icon: '🧠',
-    title: 'Interactive Quizzes',
-    description: 'Test your knowledge with generated quizzes. Get instant feedback and track your progress over time.',
-  },
-  {
-    icon: '📚',
-    title: 'Build Your Library',
-    description: 'Save your favorite generated content to your personal library for quick access anytime.',
-  },
-  {
-    icon: '🔗',
-    title: 'Share & Collaborate',
-    description: 'Share your study materials and generated content with classmates via secure links.',
-  },
-  {
-    icon: '🔒',
-    title: 'Privacy First',
-    description: 'Your files stay on your device. We only sync metadata to the cloud, keeping your content private.',
-  },
-];
-
-const quickActions = [
-  { icon: '➕', label: 'Create a folder to get started', action: 'folder' },
-  { icon: '📄', label: 'Upload your first study material', action: 'upload' },
-  { icon: '🛠️', label: 'Try the Tools page for quick generation', action: 'tools' },
-];
-
 export function WelcomePanel({ onGetStarted }: WelcomePanelProps) {
+  const router = useRouter();
+  const { t, isArabic } = useI18n({
+    'Start with structure': 'ابدأ بهيكل واضح',
+    'Your workspace is empty, but the flow is already defined. Create a folder, drop in study material, then generate exactly the artifact you need.': 'مساحة العمل فارغة الآن، لكن مسار العمل جاهز. أنشئ مجلدًا، أضف المادة الدراسية، ثم أنشئ المخرجات التي تحتاجها بالضبط.',
+    'Create first folder': 'أنشئ أول مجلد',
+    'Open tools': 'افتح الأدوات',
+    'Go to planner': 'اذهب إلى المخطط',
+    'Organize by subject': 'نظّم حسب المادة',
+    'Build folders and topics so every quiz, note, and summary stays attached to the right module.': 'ابنِ مجلدات وموضوعات بحيث يبقى كل اختبار وملاحظة وملخص مرتبطًا بالمقرر الصحيح.',
+    'Generate study assets': 'أنشئ مخرجات دراسية',
+    'Use quizzes, summaries, notes, rephrase, math, and MATLAB from the same workspace.': 'استخدم الاختبارات والملخصات والملاحظات وإعادة الصياغة والرياضيات وMATLAB من نفس مساحة العمل.',
+    'Move into execution': 'انتقل إلى التنفيذ',
+    'Push work into the planner and track progress through analytics instead of leaving outputs unused.': 'ادفع العمل إلى المخطط وتتبع التقدم عبر التحليلات بدلًا من ترك المخرجات دون استخدام.',
+    'Quick start': 'بدء سريع',
+    'Create a folder and topic for your first module.': 'أنشئ مجلدًا وموضوعًا لأول مقرر لديك.',
+    'Upload a PDF, slide deck, or notes file.': 'ارفع ملف PDF أو عرض شرائح أو ملاحظات.',
+    'Generate a summary, quiz, or study plan from it.': 'أنشئ ملخصًا أو اختبارًا أو خطة دراسة منه.',
+    'Core workflow': 'مسار العمل الأساسي',
+    'Workspace': 'مساحة العمل',
+    'Tools': 'الأدوات',
+    'Planner': 'المخطط',
+    'Analytics': 'التحليلات',
+    'Nothing is blocked here. You can start in guest mode and add sign-in later if you want sync and linked providers.': 'لا يوجد شيء معطل هنا. يمكنك البدء بوضع الضيف ثم إضافة تسجيل الدخول لاحقًا إذا أردت المزامنة وربط المزوّدات.',
+  });
+
+  const workflow = [t('Workspace'), t('Tools'), t('Planner'), t('Analytics')];
+  const steps = [
+    t('Create a folder and topic for your first module.'),
+    t('Upload a PDF, slide deck, or notes file.'),
+    t('Generate a summary, quiz, or study plan from it.'),
+  ];
+
   return (
-    <div className="welcome-panel">
-      <div className="welcome-header">
-        <div className="welcome-icon">📘</div>
-        <h1>Welcome to StudyHarbor</h1>
-        <p>Your AI-powered study companion. Transform your learning materials into interactive study content.</p>
-      </div>
-
-      <div className="features-grid">
-        {features.map((feature, idx) => (
-          <div key={idx} className="feature-card">
-            <span className="feature-icon">{feature.icon}</span>
-            <h3>{feature.title}</h3>
-            <p>{feature.description}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="getting-started">
-        <h2>Getting Started</h2>
-        <div className="quick-actions">
-          {quickActions.map((action, idx) => (
-            <button
-              key={idx}
-              className="quick-action"
-              onClick={() => {
-                if (action.action === 'folder' && onGetStarted) {
-                  onGetStarted();
-                } else if (action.action === 'tools') {
-                  window.location.href = '/tools';
-                }
-              }}
-            >
-              <span className="action-icon">{action.icon}</span>
-              <span>{action.label}</span>
+    <section className={styles.shell} dir={isArabic ? 'rtl' : 'ltr'}>
+      <div className={styles.heroCard}>
+        <div className={styles.heroCopy}>
+          <span className={styles.eyebrow}>{t('Start with structure')}</span>
+          <h1>{t('Your workspace is empty, but the flow is already defined. Create a folder, drop in study material, then generate exactly the artifact you need.')}</h1>
+          <div className={styles.actionRow}>
+            <button className={styles.primaryButton} onClick={() => onGetStarted?.()}>
+              {t('Create first folder')}
             </button>
-          ))}
+            <button className={styles.secondaryButton} onClick={() => router.push('/tools')}>
+              {t('Open tools')}
+            </button>
+            <Link className={styles.secondaryButton} href="/planner">
+              {t('Go to planner')}
+            </Link>
+          </div>
+          <p className={styles.note}>{t('Nothing is blocked here. You can start in guest mode and add sign-in later if you want sync and linked providers.')}</p>
+        </div>
+
+        <div className={styles.heroPanel}>
+          <div className={styles.mockHeader}>
+            <span className={styles.mockDot} />
+            <span className={styles.mockDot} />
+            <span className={styles.mockDot} />
+          </div>
+          <div className={styles.workflowRail}>
+            {workflow.map((item, index) => (
+              <div key={item} className={styles.workflowItem}>
+                <span className={styles.workflowIndex}>0{index + 1}</span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="welcome-footer">
-        <p>Select a folder from the left panel to view and manage your files, or create a new folder to begin.</p>
+      <div className={styles.cardGrid}>
+        <article className={styles.featureCard}>
+          <span className={styles.cardEyebrow}>{t('Organize by subject')}</span>
+          <p>{t('Build folders and topics so every quiz, note, and summary stays attached to the right module.')}</p>
+        </article>
+        <article className={styles.featureCard}>
+          <span className={styles.cardEyebrow}>{t('Generate study assets')}</span>
+          <p>{t('Use quizzes, summaries, notes, rephrase, math, and MATLAB from the same workspace.')}</p>
+        </article>
+        <article className={styles.featureCard}>
+          <span className={styles.cardEyebrow}>{t('Move into execution')}</span>
+          <p>{t('Push work into the planner and track progress through analytics instead of leaving outputs unused.')}</p>
+        </article>
       </div>
 
-      <style jsx>{`
-        .welcome-panel {
-          max-width: 900px;
-          margin: 0 auto;
-          padding: var(--space-4);
-          animation: fadeIn 0.3s ease;
-        }
+      <div className={styles.bottomGrid}>
+        <article className={styles.stepCard}>
+          <span className={styles.eyebrow}>{t('Quick start')}</span>
+          <ol className={styles.stepList}>
+            {steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        </article>
 
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-
-        .welcome-header {
-          text-align: center;
-          margin-bottom: var(--space-7);
-          padding: var(--space-6);
-          background: linear-gradient(135deg, var(--primary-muted) 0%, var(--bg-surface) 100%);
-          border-radius: var(--radius-lg);
-          border: 1px solid var(--border-subtle);
-        }
-
-        .welcome-icon {
-          font-size: 64px;
-          margin-bottom: var(--space-4);
-          filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
-        }
-
-        .welcome-header h1 {
-          font-size: var(--font-2xl);
-          font-weight: 700;
-          color: var(--text-primary);
-          margin-bottom: var(--space-3);
-          letter-spacing: -0.02em;
-        }
-
-        .welcome-header p {
-          font-size: var(--font-lg);
-          color: var(--text-secondary);
-          max-width: 500px;
-          margin: 0 auto;
-          line-height: var(--line-relaxed);
-        }
-
-        .features-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-          gap: var(--space-4);
-          margin-bottom: var(--space-7);
-        }
-
-        .feature-card {
-          background: var(--bg-surface);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-md);
-          padding: var(--space-5);
-          transition: all 0.2s ease;
-        }
-
-        .feature-card:hover {
-          border-color: var(--primary);
-          transform: translateY(-2px);
-          box-shadow: var(--shadow-md);
-        }
-
-        .feature-icon {
-          font-size: 32px;
-          display: block;
-          margin-bottom: var(--space-3);
-        }
-
-        .feature-card h3 {
-          font-size: var(--font-section);
-          font-weight: 600;
-          color: var(--text-primary);
-          margin-bottom: var(--space-2);
-        }
-
-        .feature-card p {
-          font-size: var(--font-meta);
-          color: var(--text-secondary);
-          line-height: var(--line-relaxed);
-        }
-
-        .getting-started {
-          background: var(--bg-surface);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
-          padding: var(--space-6);
-          margin-bottom: var(--space-6);
-        }
-
-        .getting-started h2 {
-          font-size: var(--font-lg);
-          font-weight: 600;
-          color: var(--text-primary);
-          margin-bottom: var(--space-4);
-          text-align: center;
-        }
-
-        .quick-actions {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-3);
-        }
-
-        .quick-action {
-          display: flex;
-          align-items: center;
-          gap: var(--space-3);
-          padding: var(--space-4);
-          background: var(--bg-inset);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-md);
-          cursor: pointer;
-          transition: all 0.15s ease;
-          font-size: var(--font-body);
-          color: var(--text-primary);
-          text-align: left;
-          width: 100%;
-        }
-
-        .quick-action:hover {
-          background: var(--primary-muted);
-          border-color: var(--primary);
-          color: var(--primary-text);
-        }
-
-        .action-icon {
-          font-size: 24px;
-          width: 40px;
-          height: 40px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: var(--bg-surface);
-          border-radius: var(--radius-md);
-          flex-shrink: 0;
-        }
-
-        .welcome-footer {
-          text-align: center;
-          padding: var(--space-4);
-          color: var(--text-muted);
-          font-size: var(--font-meta);
-        }
-
-        @media (max-width: 600px) {
-          .features-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .welcome-header {
-            padding: var(--space-5);
-          }
-
-          .welcome-header h1 {
-            font-size: var(--font-xl);
-          }
-
-          .welcome-header p {
-            font-size: var(--font-body);
-          }
-        }
-      `}</style>
-    </div>
+        <article className={styles.stepCardStrong}>
+          <span className={styles.eyebrow}>{t('Core workflow')}</span>
+          <div className={styles.flowChips}>
+            {workflow.map((item) => (
+              <span key={item} className={styles.flowChip}>
+                {item}
+              </span>
+            ))}
+          </div>
+        </article>
+      </div>
+    </section>
   );
 }
