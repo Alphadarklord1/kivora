@@ -2150,21 +2150,21 @@ export default function SettingsPage() {
 
         .settings-tabs {
           display: flex;
+          flex-wrap: wrap;
           gap: var(--space-2);
           margin-bottom: var(--space-6);
           border-bottom: 1px solid var(--border-subtle);
           padding-bottom: var(--space-2);
-          overflow-x: auto;
+          overflow: visible;
           background: var(--bg-base);
-          position: sticky;
-          top: 0;
-          z-index: 5;
+          position: relative;
         }
 
         .settings-tab {
           display: flex;
           align-items: center;
           gap: var(--space-2);
+          flex: 0 0 auto;
           padding: var(--space-2) var(--space-4);
           border: none;
           background: none;
@@ -2183,6 +2183,10 @@ export default function SettingsPage() {
         .settings-tab.active {
           background: var(--primary-muted);
           color: var(--primary);
+        }
+
+        .tab-label {
+          line-height: 1.2;
         }
 
         .settings-section {

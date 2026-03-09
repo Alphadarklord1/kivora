@@ -788,7 +788,7 @@ export function AppShell({ children, user }: AppShellProps) {
           position: relative;
           display: flex;
           align-items: center;
-          gap: var(--space-2);
+          gap: var(--space-3);
           padding: 10px 12px;
           border-radius: 10px;
           text-decoration: none;
@@ -829,12 +829,20 @@ export function AppShell({ children, user }: AppShellProps) {
         .nav-icon {
           font-size: 16px;
           width: 20px;
+          min-width: 20px;
           text-align: center;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
         }
 
         .nav-label {
           font-weight: 500;
           font-size: var(--font-meta);
+          line-height: 1.2;
+          white-space: nowrap;
         }
 
         .sidebar-footer {
@@ -866,7 +874,7 @@ export function AppShell({ children, user }: AppShellProps) {
         .download-btn {
           display: flex;
           align-items: center;
-          gap: var(--space-2);
+          gap: var(--space-3);
           width: 100%;
           padding: 10px 12px;
           background: var(--bg-base);
@@ -883,6 +891,16 @@ export function AppShell({ children, user }: AppShellProps) {
           background: var(--bg-hover);
           border-color: var(--border-default);
           color: var(--text-primary);
+        }
+
+        .download-btn span:first-child {
+          width: 18px;
+          min-width: 18px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          line-height: 1;
+          flex-shrink: 0;
         }
 
         .sidebar-icon-actions {
@@ -1051,6 +1069,20 @@ export function AppShell({ children, user }: AppShellProps) {
           right: 2px;
         }
 
+        :global(html[dir='rtl']) .nav-item,
+        :global(html[dir='rtl']) .download-btn,
+        :global(html[dir='rtl']) .sidebar-header,
+        :global(html[dir='rtl']) .user-profile {
+          flex-direction: row-reverse;
+        }
+
+        :global(html[dir='rtl']) .nav-group-label,
+        :global(html[dir='rtl']) .footer-label,
+        :global(html[dir='rtl']) .user-info,
+        :global(html[dir='rtl']) .mobile-menu-header {
+          text-align: right;
+        }
+
         :global(html[dir='rtl']) .mobile-user-menu {
           right: auto;
           left: var(--space-4);
@@ -1180,7 +1212,8 @@ export function AppShell({ children, user }: AppShellProps) {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 2px;
+          justify-content: center;
+          gap: 4px;
           padding: var(--space-3) var(--space-2);
           text-decoration: none;
           color: var(--text-muted);
@@ -1195,10 +1228,13 @@ export function AppShell({ children, user }: AppShellProps) {
 
         .mobile-nav-icon {
           font-size: 20px;
+          line-height: 1;
         }
 
         .mobile-nav-label {
           font-weight: 500;
+          line-height: 1.1;
+          text-align: center;
         }
 
         /* Add padding for mobile bottom nav */

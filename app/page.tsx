@@ -60,6 +60,7 @@ export default async function LandingPage() {
 
   const isLoggedIn = !!session?.user;
   const canUseWithoutSignIn = isGuestMode || isLoggedIn;
+  const primaryWorkspaceLabel = isDesktopOnly ? 'Open Desktop Workspace →' : (isGuestMode ? 'Continue as Guest →' : 'Go to Workspace →');
 
   return (
     <div className="landing-page">
@@ -74,19 +75,17 @@ export default async function LandingPage() {
             <Link href={DOWNLOAD_URL} className="nav-btn secondary">
               Download App
             </Link>
+            <Link href="/login" className="nav-btn secondary">
+              Log In
+            </Link>
             {canUseWithoutSignIn ? (
               <Link href="/workspace" className="nav-btn primary">
-                {isDesktopOnly ? 'Open Desktop Workspace →' : 'Go to Workspace →'}
+                {primaryWorkspaceLabel}
               </Link>
             ) : (
-              <>
-                <Link href="/login" className="nav-btn secondary">
-                  Log In
-                </Link>
-                <Link href="/register" className="nav-btn primary">
-                  Get Started Free
-                </Link>
-              </>
+              <Link href="/register" className="nav-btn primary">
+                Get Started Free
+              </Link>
             )}
           </div>
         </div>
@@ -104,19 +103,17 @@ export default async function LandingPage() {
             <Link href={DOWNLOAD_URL} className="hero-btn secondary">
               Download for Mac/Windows
             </Link>
+            <Link href="/login" className="hero-btn secondary">
+              I already have an account
+            </Link>
             {canUseWithoutSignIn ? (
               <Link href="/workspace" className="hero-btn primary">
-                Open Workspace →
+                {isGuestMode ? 'Continue as Guest →' : 'Open Workspace →'}
               </Link>
             ) : (
-              <>
-                <Link href="/register" className="hero-btn primary">
-                  Start Studying Free
-                </Link>
-                <Link href="/login" className="hero-btn secondary">
-                  I already have an account
-                </Link>
-              </>
+              <Link href="/register" className="hero-btn primary">
+                Start Studying Free
+              </Link>
             )}
           </div>
           <p className="hero-note">{canUseWithoutSignIn ? 'Local mode is available without sign-in.' : 'Create an account to sync your study data.'}</p>
@@ -245,6 +242,12 @@ export default async function LandingPage() {
             <div className="footer-links">
               <Link href="/login">Login</Link>
               <Link href="/register">Sign Up</Link>
+            </div>
+          )}
+          {canUseWithoutSignIn && (
+            <div className="footer-links">
+              <Link href="/login">Login</Link>
+              <Link href="/workspace">Continue as Guest</Link>
             </div>
           )}
         </div>
