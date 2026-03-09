@@ -90,7 +90,7 @@
       ]
     },
     "win": {
-      "icon": "public/icons/icon.png",
+      "icon": "public/icons/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -117,8 +117,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "public/icons/icon.png",
-      "uninstallerIcon": "public/icons/icon.png"
+      "installerIcon": "public/icons/icon.ico",
+      "uninstallerIcon": "public/icons/icon.ico"
     }
   },
   "dependencies": {
@@ -153,6 +153,7 @@
     "electron-builder": "^26.4.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.4",
+    "png-to-ico": "^3.0.1",
     "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "typescript": "^5",
