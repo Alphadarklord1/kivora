@@ -62,6 +62,36 @@ export default function RegisterPage() {
   const [providers, setProviders] = useState<Record<string, unknown> | null>(null);
   const [authCapabilities, setAuthCapabilities] = useState<AuthCapabilities | null>(null);
   const [isArabic, setIsArabic] = useState(false);
+  const t = (key: string) => {
+    const ar: Record<string, string> = {
+      'Create your account': 'أنشئ حسابك',
+      'Email and password are required': 'البريد الإلكتروني وكلمة المرور مطلوبان',
+      'Password must be at least 6 characters': 'يجب أن تكون كلمة المرور 6 أحرف على الأقل',
+      'Passwords do not match': 'كلمتا المرور غير متطابقتين',
+      'Registration failed': 'فشل إنشاء الحساب',
+      'Something went wrong': 'حدث خطأ ما',
+      'Signing up...': 'جارٍ إنشاء الحساب...',
+      'Continue with Google': 'المتابعة باستخدام Google',
+      'Continue with GitHub': 'المتابعة باستخدام GitHub',
+      'or register with email': 'أو أنشئ حسابًا بالبريد الإلكتروني',
+      Name: 'الاسم',
+      'Your name': 'اسمك',
+      Email: 'البريد الإلكتروني',
+      Password: 'كلمة المرور',
+      'At least 6 characters': '6 أحرف على الأقل',
+      'Confirm Password': 'تأكيد كلمة المرور',
+      'Re-enter your password': 'أعد إدخال كلمة المرور',
+      'Create Account': 'إنشاء الحساب',
+      'Already have an account?': 'لديك حساب بالفعل؟',
+      'Sign in': 'تسجيل الدخول',
+      'Continue as guest': 'المتابعة كضيف',
+      'Use StudyPilot without creating an account': 'استخدم StudyPilot بدون إنشاء حساب',
+      'Google login is not configured by admin.': 'تسجيل الدخول عبر Google غير مضبوط من قبل المسؤول.',
+      'GitHub login is not configured by admin.': 'تسجيل الدخول عبر GitHub غير مضبوط من قبل المسؤول.',
+      'Failed to sign in with {provider}': 'تعذر تسجيل الدخول باستخدام {provider}',
+    };
+    return isArabic ? (ar[key] || key) : key;
+  };
 
   useEffect(() => {
     let detectedArabic = false;
@@ -89,15 +119,15 @@ export default function RegisterPage() {
     const normalizedName = name.trim();
 
     if (!normalizedEmail || !password) {
-      setError('Email and password are required');
+      setError(t('Email and password are required'));
       return;
     }
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError(t('Password must be at least 6 characters'));
       return;
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('Passwords do not match'));
       return;
     }
 
@@ -113,7 +143,7 @@ export default function RegisterPage() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(data.error || 'Registration failed');
+        setError(data.reason || data.error || t('Registration failed'));
       } else {
         const result = await signIn('credentials', {
           email: normalizedEmail,
@@ -128,7 +158,7 @@ export default function RegisterPage() {
         }
       }
     } catch {
-      setError('Something went wrong');
+      setError(t('Something went wrong'));
     } finally {
       setLoading(false);
     }
@@ -145,16 +175,16 @@ export default function RegisterPage() {
       }
       if (!providers?.[provider]) {
         if (provider === 'google') {
-          setError(isArabic ? 'تسجيل الدخول عبر Google غير مضبوط من قبل المسؤول.' : 'Google login is not configured by admin.');
+          setError(t('Google login is not configured by admin.'));
         } else {
-          setError(isArabic ? 'تسجيل الدخول عبر GitHub غير مضبوط من قبل المسؤول.' : 'GitHub login is not configured by admin.');
+          setError(t('GitHub login is not configured by admin.'));
         }
         setOauthLoading(null);
         return;
       }
       await signIn(provider, { callbackUrl: '/workspace' });
     } catch {
-      setError(`Failed to sign in with ${provider}`);
+      setError(t('Failed to sign in with {provider}').replace('{provider}', provider));
       setOauthLoading(null);
     }
   };
@@ -163,7 +193,7 @@ export default function RegisterPage() {
     <div className="auth-container">
       <div className="auth-card">
         <h1>StudyPilot</h1>
-        <p>Create your account</p>
+        <p>{t('Create your account')}</p>
 
         {error && <div className="auth-error">{error}</div>}
 
@@ -181,7 +211,7 @@ export default function RegisterPage() {
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
             </svg>
-            {oauthLoading === 'google' ? 'Signing up...' : 'Continue with Google'}
+            {oauthLoading === 'google' ? t('Signing up...') : t('Continue with Google')}
           </button>
 
           <button
@@ -193,7 +223,7 @@ export default function RegisterPage() {
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
               <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
             </svg>
-            {oauthLoading === 'github' ? 'Signing up...' : 'Continue with GitHub'}
+            {oauthLoading === 'github' ? t('Signing up...') : t('Continue with GitHub')}
           </button>
         </div>
 
@@ -202,23 +232,23 @@ export default function RegisterPage() {
         )}
 
         <div className="auth-divider">
-          <span>or register with email</span>
+          <span>{t('or register with email')}</span>
         </div>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="name">Name</label>
+            <label htmlFor="name">{t('Name')}</label>
             <input
               id="name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
+              placeholder={t('Your name')}
             />
           </div>
 
           <div>
-            <label htmlFor="email">Email</label>
+            <label htmlFor="email">{t('Email')}</label>
             <input
               id="email"
               type="email"
@@ -230,37 +260,44 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">{t('Password')}</label>
             <input
               id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
+              placeholder={t('At least 6 characters')}
               required
               minLength={6}
             />
           </div>
           <div>
-            <label htmlFor="confirmPassword">Confirm Password</label>
+            <label htmlFor="confirmPassword">{t('Confirm Password')}</label>
             <input
               id="confirmPassword"
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Re-enter your password"
+              placeholder={t('Re-enter your password')}
               required
               minLength={6}
             />
           </div>
 
           <button type="submit" className="btn" disabled={loading || oauthLoading !== null}>
-            {loading ? 'Creating account...' : 'Create Account'}
+            {loading ? t('Signing up...') : t('Create Account')}
           </button>
         </form>
 
+        {authCapabilities?.guestModeEnabled && (
+          <Link href="/workspace" className="auth-guest-link">
+            {t('Continue as guest')}
+            <span>{t('Use StudyPilot without creating an account')}</span>
+          </Link>
+        )}
+
         <div className="auth-link">
-          Already have an account? <Link href="/login">Sign in</Link>
+          {t('Already have an account?')} <Link href="/login">{t('Sign in')}</Link>
         </div>
       </div>
     </div>

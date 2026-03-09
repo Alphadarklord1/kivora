@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
         image: users.image,
         createdAt: users.createdAt,
         hasPassword: users.passwordHash,
+        twoFactorEnabled: users.twoFactorEnabled,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -68,6 +69,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ...user[0],
       hasPassword: !!user[0].hasPassword,
+      twoFactorEnabled: !!user[0].twoFactorEnabled,
       isGuest: isDemoGuestEmail(user[0].email),
       connectedAccounts: connectedAccounts.map(a => a.provider),
       stats: {

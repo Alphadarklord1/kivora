@@ -19,6 +19,7 @@ interface UserAccount {
   createdAt: string;
   hasPassword: boolean;
   isGuest?: boolean;
+  twoFactorEnabled?: boolean;
   connectedAccounts: string[];
   stats: {
     folders: number;
@@ -184,6 +185,11 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [twoFactorSetupSecret, setTwoFactorSetupSecret] = useState('');
+  const [twoFactorManualKey, setTwoFactorManualKey] = useState('');
+  const [twoFactorSetupUri, setTwoFactorSetupUri] = useState('');
+  const [twoFactorBusy, setTwoFactorBusy] = useState(false);
 
   // Delete confirmation
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
@@ -324,6 +330,21 @@ export default function SettingsPage() {
     'Delete account warning': 'عند حذف الحساب لا يمكن التراجع. يرجى التأكد.',
     'Type DELETE MY ACCOUNT to confirm:': 'اكتب DELETE MY ACCOUNT للتأكيد:',
     'Encryption is temporarily disabled for all users.': 'تم تعطيل التشفير مؤقتًا لجميع المستخدمين.',
+    'Two-Step Verification': 'التحقق بخطوتين',
+    'Add an authenticator app as an optional second sign-in step.': 'أضف تطبيق مصادقة كخطوة اختيارية ثانية عند تسجيل الدخول.',
+    'Two-step verification is on for this account.': 'التحقق بخطوتين مفعّل لهذا الحساب.',
+    'Authenticator secret': 'المفتاح السري للمصادقة',
+    'Copy setup key': 'نسخ مفتاح الإعداد',
+    'Copy app link': 'نسخ رابط التطبيق',
+    'Generate setup key': 'إنشاء مفتاح الإعداد',
+    'Confirm and enable': 'تأكيد وتفعيل',
+    'Disable 2-step verification': 'تعطيل التحقق بخطوتين',
+    'Enter 6-digit code': 'أدخل الرمز المكوّن من 6 أرقام',
+    'Two-step verification enabled': 'تم تفعيل التحقق بخطوتين',
+    'Two-step verification disabled': 'تم تعطيل التحقق بخطوتين',
+    'Failed to update two-step verification': 'تعذر تحديث التحقق بخطوتين',
+    'Guest sessions cannot enable two-step verification.': 'جلسات الضيف لا يمكنها تفعيل التحقق بخطوتين.',
+    'Code copied': 'تم النسخ',
   });
   const supportedTasks = getSupportedAiTasks(currentLanguage);
 
@@ -814,6 +835,101 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
       setShowDeleteModal(false);
+    }
+  };
+
+  const handleGenerateTwoFactorSetup = async () => {
+    setTwoFactorBusy(true);
+    try {
+      const res = await fetch('/api/auth/2fa/setup', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const payload = await res.json().catch(() => ({} as ApiErrorLike & { secret?: string; manualEntryKey?: string; otpAuthUri?: string }));
+      if (!res.ok) {
+        showMessage('error', payload.reason || payload.error || t('Failed to update two-step verification'));
+        return;
+      }
+      setTwoFactorSetupSecret(String(payload.secret || ''));
+      setTwoFactorManualKey(String(payload.manualEntryKey || ''));
+      setTwoFactorSetupUri(String(payload.otpAuthUri || ''));
+      setTwoFactorCode('');
+    } catch {
+      showMessage('error', t('Failed to update two-step verification'));
+    } finally {
+      setTwoFactorBusy(false);
+    }
+  };
+
+  const handleConfirmTwoFactor = async () => {
+    if (!twoFactorSetupSecret || twoFactorCode.length !== 6) {
+      showMessage('error', t('Enter 6-digit code'));
+      return;
+    }
+    setTwoFactorBusy(true);
+    try {
+      const res = await fetch('/api/auth/2fa/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ secret: twoFactorSetupSecret, code: twoFactorCode }),
+      });
+      const payload = await res.json().catch(() => ({} as ApiErrorLike));
+      if (!res.ok) {
+        showMessage('error', payload.reason || payload.error || t('Failed to update two-step verification'));
+        return;
+      }
+      setTwoFactorSetupSecret('');
+      setTwoFactorManualKey('');
+      setTwoFactorSetupUri('');
+      setTwoFactorCode('');
+      await fetchData();
+      showMessage('success', t('Two-step verification enabled'));
+    } catch {
+      showMessage('error', t('Failed to update two-step verification'));
+    } finally {
+      setTwoFactorBusy(false);
+    }
+  };
+
+  const handleDisableTwoFactor = async () => {
+    if (twoFactorCode.length !== 6) {
+      showMessage('error', t('Enter 6-digit code'));
+      return;
+    }
+    setTwoFactorBusy(true);
+    try {
+      const res = await fetch('/api/auth/2fa/disable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ code: twoFactorCode }),
+      });
+      const payload = await res.json().catch(() => ({} as ApiErrorLike));
+      if (!res.ok) {
+        showMessage('error', payload.reason || payload.error || t('Failed to update two-step verification'));
+        return;
+      }
+      setTwoFactorCode('');
+      setTwoFactorSetupSecret('');
+      setTwoFactorManualKey('');
+      setTwoFactorSetupUri('');
+      await fetchData();
+      showMessage('success', t('Two-step verification disabled'));
+    } catch {
+      showMessage('error', t('Failed to update two-step verification'));
+    } finally {
+      setTwoFactorBusy(false);
+    }
+  };
+
+  const handleCopyTwoFactorValue = async (value: string) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      showMessage('success', t('Code copied'));
+    } catch {
+      showMessage('error', t('Failed to update two-step verification'));
     }
   };
 
@@ -1314,6 +1430,83 @@ export default function SettingsPage() {
                 >
                   {saving ? t('Saving...') : account?.hasPassword ? t('Change Login Password') : t('Set Login Password')}
                 </button>
+              </div>
+
+              <div className="security-card">
+                <h3>{t('Two-Step Verification')}</h3>
+                <p>{t('Add an authenticator app as an optional second sign-in step.')}</p>
+                {account?.isGuest ? (
+                  <p className="section-description">{t('Guest sessions cannot enable two-step verification.')}</p>
+                ) : account?.twoFactorEnabled ? (
+                  <>
+                    <p className="helper-text">{t('Two-step verification is on for this account.')}</p>
+                    <div className="form-group">
+                      <label htmlFor="twoFactorDisableCode">{t('Enter 6-digit code')}</label>
+                      <input
+                        id="twoFactorDisableCode"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        value={twoFactorCode}
+                        onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder={t('Enter 6-digit code')}
+                      />
+                    </div>
+                    <button
+                      className="btn danger"
+                      onClick={handleDisableTwoFactor}
+                      disabled={twoFactorBusy || twoFactorCode.length !== 6}
+                    >
+                      {twoFactorBusy ? t('Saving...') : t('Disable 2-step verification')}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {!twoFactorSetupSecret ? (
+                      <button
+                        className="btn"
+                        onClick={handleGenerateTwoFactorSetup}
+                        disabled={twoFactorBusy}
+                      >
+                        {twoFactorBusy ? t('Saving...') : t('Generate setup key')}
+                      </button>
+                    ) : (
+                      <div className="two-factor-setup">
+                        <div className="two-factor-secret-card">
+                          <strong>{t('Authenticator secret')}</strong>
+                          <code>{twoFactorManualKey}</code>
+                          <div className="two-factor-copy-row">
+                            <button className="btn secondary small" onClick={() => handleCopyTwoFactorValue(twoFactorManualKey)}>
+                              {t('Copy setup key')}
+                            </button>
+                            <button className="btn secondary small" onClick={() => handleCopyTwoFactorValue(twoFactorSetupUri)}>
+                              {t('Copy app link')}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label htmlFor="twoFactorEnableCode">{t('Enter 6-digit code')}</label>
+                          <input
+                            id="twoFactorEnableCode"
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            maxLength={6}
+                            value={twoFactorCode}
+                            onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            placeholder={t('Enter 6-digit code')}
+                          />
+                        </div>
+                        <button
+                          className="btn"
+                          onClick={handleConfirmTwoFactor}
+                          disabled={twoFactorBusy || twoFactorCode.length !== 6}
+                        >
+                          {twoFactorBusy ? t('Saving...') : t('Confirm and enable')}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -2255,6 +2448,39 @@ export default function SettingsPage() {
           font-size: var(--font-meta);
           color: var(--text-muted);
           margin-bottom: var(--space-4);
+        }
+
+        .two-factor-setup {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-4);
+        }
+
+        .two-factor-secret-card {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-2);
+          padding: var(--space-4);
+          border-radius: var(--radius-md);
+          background: var(--bg-inset);
+          border: 1px solid var(--border-subtle);
+        }
+
+        .two-factor-secret-card code {
+          display: block;
+          padding: var(--space-3);
+          border-radius: var(--radius-md);
+          background: var(--bg-base);
+          border: 1px solid var(--border-subtle);
+          font-size: var(--font-body);
+          line-height: 1.6;
+          word-break: break-word;
+        }
+
+        .two-factor-copy-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--space-2);
         }
 
         .warning-text {

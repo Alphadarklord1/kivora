@@ -5,6 +5,7 @@ import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
+import { hasValidTwoFactorSession, TWO_FACTOR_COOKIE_NAME } from '@/lib/auth/two-factor';
 
 export const DEMO_USER_EMAIL = 'demo@local.studypilot';
 export const DEMO_USER_NAME = 'Local Demo';
@@ -17,15 +18,34 @@ export function isDemoGuestEmail(email: string | null | undefined): boolean {
  * Extract userId from JWT token, with guest-mode bootstrap support.
  * Shared across all API routes for consistent auth behavior.
  */
-export async function getUserId(request: NextRequest): Promise<string | null> {
+export async function getUserId(
+  request: NextRequest,
+  options?: { allowUnverifiedTwoFactor?: boolean }
+): Promise<string | null> {
   // Try JWT token first
   try {
     const token = await getToken({
       req: request,
       secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
     });
-    if (token?.id) return token.id as string;
-    if (token?.sub) return token.sub as string;
+    const tokenUserId = (token?.id || token?.sub) as string | undefined;
+    if (tokenUserId) {
+      if (options?.allowUnverifiedTwoFactor) {
+        return tokenUserId;
+      }
+
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, tokenUserId),
+      });
+
+      if (!user?.twoFactorEnabled) {
+        return tokenUserId;
+      }
+
+      const twoFactorCookie = request.cookies.get(TWO_FACTOR_COOKIE_NAME)?.value;
+      const hasVerifiedSecondStep = await hasValidTwoFactorSession(tokenUserId, twoFactorCookie);
+      return hasVerifiedSecondStep ? tokenUserId : null;
+    }
   } catch {
     // Ignore token extraction errors and continue to guest-mode resolution.
   }

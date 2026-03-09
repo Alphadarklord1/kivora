@@ -154,6 +154,10 @@ export function AppShell({ children, user }: AppShellProps) {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  useEffect(() => {
+    setShowUserMenu(false);
+  }, [pathname]);
+
   // Set mounted after initial render (hydration flag - intentional)
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMounted(true); }, []);
@@ -1066,7 +1070,7 @@ export function AppShell({ children, user }: AppShellProps) {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: var(--space-3) var(--space-4);
+          padding: calc(env(safe-area-inset-top) + var(--space-3)) var(--space-4) var(--space-3);
           background: var(--bg-surface);
           border-bottom: 1px solid var(--border-subtle);
         }
@@ -1168,6 +1172,7 @@ export function AppShell({ children, user }: AppShellProps) {
           border-top: 1px solid var(--border-subtle);
           padding-bottom: env(safe-area-inset-bottom);
           z-index: 100;
+          backdrop-filter: blur(14px);
         }
 
         .mobile-nav-item {
@@ -1200,6 +1205,7 @@ export function AppShell({ children, user }: AppShellProps) {
         @media (max-width: 1023px) {
           .app-content {
             padding-bottom: calc(60px + env(safe-area-inset-bottom) + var(--space-4));
+            overflow-x: hidden;
           }
         }
 

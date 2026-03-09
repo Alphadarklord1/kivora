@@ -9,6 +9,7 @@ import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 import { getAuthCapabilities, normalizeAuthEmail } from '@/lib/auth/capabilities';
+import { hasValidTwoFactorSession, TWO_FACTOR_COOKIE_NAME } from '@/lib/auth/two-factor';
 
 const isGuestMode = isGuestModeEnabled() || (!process.env.AUTH_SECRET && !process.env.NEXTAUTH_SECRET);
 const authCapabilities = getAuthCapabilities();
@@ -77,6 +78,7 @@ export const authConfig: NextAuthConfig = {
           email: user.email,
           name: user.name,
           image: user.image,
+          twoFactorEnabled: user.twoFactorEnabled,
         };
       },
     }),
@@ -175,6 +177,7 @@ export const authConfig: NextAuthConfig = {
             // Update user.id to match our database
             user.id = existingUser.id;
             user.email = existingUser.email;
+            (user as typeof user & { twoFactorEnabled?: boolean }).twoFactorEnabled = Boolean(existingUser.twoFactorEnabled);
           }
         } catch (error) {
           console.error('OAuth sign in error:', error);
@@ -186,22 +189,27 @@ export const authConfig: NextAuthConfig = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        token.twoFactorEnabled = Boolean((user as { twoFactorEnabled?: boolean }).twoFactorEnabled);
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user && token.id) {
         session.user.id = token.id as string;
+        (session.user as typeof session.user & { twoFactorEnabled?: boolean }).twoFactorEnabled = Boolean(token.twoFactorEnabled);
       }
       return session;
     },
-    async authorized({ auth, request: { nextUrl } }) {
-      // Demo/guest mode: bypass auth gate for protected pages.
-      if (isGuestMode) {
-        return true;
-      }
-
+    async authorized({ auth, request }) {
+      const { nextUrl } = request;
       const isLoggedIn = !!auth?.user;
+      const sessionUser = auth?.user as ({ id?: string; twoFactorEnabled?: boolean } | undefined);
+      const userId = sessionUser?.id;
+      const requiresTwoFactor = Boolean(sessionUser?.twoFactorEnabled);
+      const twoFactorCookie = request.cookies.get(TWO_FACTOR_COOKIE_NAME)?.value;
+      const hasVerifiedTwoFactor = requiresTwoFactor && userId
+        ? await hasValidTwoFactorSession(userId, twoFactorCookie)
+        : false;
       const isOnDashboard = nextUrl.pathname.startsWith('/workspace') ||
         nextUrl.pathname.startsWith('/tools') ||
         nextUrl.pathname.startsWith('/library') ||
@@ -210,15 +218,34 @@ export const authConfig: NextAuthConfig = {
         nextUrl.pathname.startsWith('/sharing') ||
         nextUrl.pathname.startsWith('/planner') ||
         nextUrl.pathname.startsWith('/podcast');
+      const isOnTwoFactor = nextUrl.pathname.startsWith('/verify-2fa');
       const isOnAuth = nextUrl.pathname.startsWith('/login') ||
         nextUrl.pathname.startsWith('/register');
 
+      if (isOnTwoFactor) {
+        if (!isLoggedIn) {
+          return Response.redirect(new URL('/login', nextUrl));
+        }
+        if (!requiresTwoFactor || hasVerifiedTwoFactor) {
+          return Response.redirect(new URL('/workspace', nextUrl));
+        }
+        return true;
+      }
+
       if (isOnDashboard) {
-        if (isLoggedIn) return true;
-        return false; // Redirect to login
+        if (!isLoggedIn) {
+          return isGuestMode ? true : false;
+        }
+        if (requiresTwoFactor && !hasVerifiedTwoFactor) {
+          return Response.redirect(new URL('/verify-2fa', nextUrl));
+        }
+        return true;
       }
 
       if (isOnAuth && isLoggedIn) {
+        if (requiresTwoFactor && !hasVerifiedTwoFactor) {
+          return Response.redirect(new URL('/verify-2fa', nextUrl));
+        }
         return Response.redirect(new URL('/workspace', nextUrl));
       }
 
