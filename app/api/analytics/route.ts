@@ -5,6 +5,7 @@ import { eq, desc, and, gte } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
 import { betaReadFallback, unauthorized } from '@/lib/api/runtime-guards';
+import { isGuestModeEnabled } from '@/lib/runtime/mode';
 
 interface QuizAnswer {
   questionId: string;
@@ -80,21 +81,21 @@ export async function GET(request: NextRequest) {
   const parsedPeriod = parseInt(period, 10);
   const periodDays = Number.isFinite(parsedPeriod) && parsedPeriod > 0 ? parsedPeriod : 30;
 
-  if (!isDatabaseConfigured) {
-    return betaReadFallback(buildAnalyticsFallback(periodDays), {
-      'x-studypilot-fallback': 'analytics-no-db',
-    });
-  }
-
-  const userId = await getUserId(request);
-  if (!userId) {
-    return unauthorized(request, requestId);
-  }
-
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - periodDays);
-
   try {
+    if (!isDatabaseConfigured) {
+      return betaReadFallback(buildAnalyticsFallback(periodDays), {
+        'x-studypilot-fallback': 'analytics-no-db',
+      });
+    }
+
+    const userId = await getUserId(request);
+    if (!userId) {
+      return unauthorized(request, requestId);
+    }
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - periodDays);
+
     let attempts: Array<{
       id: string;
       mode: string;
@@ -453,6 +454,11 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error(`[Analytics][${requestId}] failed`, error);
+    if (isGuestModeEnabled()) {
+      return betaReadFallback(buildAnalyticsFallback(periodDays), {
+        'x-studypilot-fallback': 'analytics-db-error',
+      });
+    }
     return NextResponse.json(
       {
         ...buildAnalyticsFallback(periodDays),

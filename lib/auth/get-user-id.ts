@@ -60,13 +60,13 @@ export async function getUserId(
       return 'local-demo-user';
     }
 
-    const existingDemoUser = await db.query.users.findFirst({
-      where: eq(users.email, DEMO_USER_EMAIL),
-    });
-
-    if (existingDemoUser) return existingDemoUser.id;
-
     try {
+      const existingDemoUser = await db.query.users.findFirst({
+        where: eq(users.email, DEMO_USER_EMAIL),
+      });
+
+      if (existingDemoUser) return existingDemoUser.id;
+
       const demoUserId = uuidv4();
       await db.insert(users).values({
         id: demoUserId,
@@ -76,11 +76,15 @@ export async function getUserId(
       });
       return demoUserId;
     } catch {
-      // Concurrent guest bootstrap may create the same demo user.
-      const retryDemoUser = await db.query.users.findFirst({
-        where: eq(users.email, DEMO_USER_EMAIL),
-      });
-      return retryDemoUser?.id ?? null;
+      try {
+        // Concurrent guest bootstrap may create the same demo user.
+        const retryDemoUser = await db.query.users.findFirst({
+          where: eq(users.email, DEMO_USER_EMAIL),
+        });
+        return retryDemoUser?.id ?? 'local-demo-user';
+      } catch {
+        return 'local-demo-user';
+      }
     }
   }
 
