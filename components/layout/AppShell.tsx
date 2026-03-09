@@ -701,11 +701,12 @@ export function AppShell({ children, user }: AppShellProps) {
           top: 0;
           bottom: 0;
           width: 240px;
-          background: var(--bg-surface);
+          background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+          backdrop-filter: blur(18px);
           border-right: 1px solid var(--border-subtle);
           display: flex;
           flex-direction: column;
-          transition: width 0.2s ease, background 0.2s ease;
+          transition: width var(--transition-base), background var(--transition-base);
           z-index: 100;
           min-height: 0;
         }
@@ -737,11 +738,11 @@ export function AppShell({ children, user }: AppShellProps) {
         }
 
         .sidebar-toggle {
-          width: 28px;
-          height: 28px;
+          width: 32px;
+          height: 32px;
           border: 1px solid var(--border-subtle);
-          background: var(--bg-base);
-          border-radius: var(--radius-sm);
+          background: color-mix(in srgb, var(--bg-base) 88%, var(--bg-surface));
+          border-radius: var(--radius-md);
           cursor: pointer;
           display: flex;
           align-items: center;
@@ -752,6 +753,7 @@ export function AppShell({ children, user }: AppShellProps) {
 
         .sidebar-toggle:hover {
           background: var(--bg-hover);
+          color: var(--text-primary);
         }
 
         .sidebar-nav {
@@ -789,11 +791,12 @@ export function AppShell({ children, user }: AppShellProps) {
           display: flex;
           align-items: center;
           gap: var(--space-3);
-          padding: 10px 12px;
-          border-radius: 10px;
+          padding: 11px 12px;
+          border-radius: 14px;
           text-decoration: none;
           color: var(--text-secondary);
-          transition: all 0.2s ease;
+          transition: all var(--transition-fast);
+          border: 1px solid transparent;
         }
 
         .app-sidebar.collapsed .nav-item {
@@ -814,12 +817,15 @@ export function AppShell({ children, user }: AppShellProps) {
 
         .nav-item:hover {
           background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+          border-color: color-mix(in srgb, var(--border-subtle) 80%, transparent);
           color: var(--text-primary);
         }
 
         .nav-item.active {
-          background: color-mix(in srgb, var(--primary-muted) 32%, transparent);
+          background: color-mix(in srgb, var(--primary-muted) 42%, transparent);
+          border-color: color-mix(in srgb, var(--primary) 18%, transparent);
           color: var(--primary);
+          box-shadow: inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
         }
 
         .nav-item.active::before {
@@ -851,7 +857,7 @@ export function AppShell({ children, user }: AppShellProps) {
           display: flex;
           flex-direction: column;
           gap: var(--space-2);
-          background: var(--bg-surface);
+          background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
         }
 
         .footer-label {
@@ -876,15 +882,16 @@ export function AppShell({ children, user }: AppShellProps) {
           align-items: center;
           gap: var(--space-3);
           width: 100%;
+          min-height: var(--control-height);
           padding: 10px 12px;
-          background: var(--bg-base);
+          background: color-mix(in srgb, var(--bg-base) 90%, var(--bg-surface));
           border: 1px solid var(--border-subtle);
-          border-radius: 10px;
+          border-radius: 14px;
           color: var(--text-secondary);
           font-size: var(--font-meta);
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.2s;
+          transition: all var(--transition-fast);
         }
 
         .download-btn:hover {
@@ -918,10 +925,10 @@ export function AppShell({ children, user }: AppShellProps) {
           margin-bottom: var(--space-1);
           background: var(--bg-base);
           border: 1px solid var(--border-subtle);
-          border-radius: 10px;
+          border-radius: 14px;
           font-size: 16px;
           cursor: pointer;
-          transition: all 0.2s;
+          transition: all var(--transition-fast);
         }
 
         .download-btn-icon:hover {
@@ -940,7 +947,7 @@ export function AppShell({ children, user }: AppShellProps) {
           align-items: center;
           gap: var(--space-3);
           padding: var(--space-2);
-          border-radius: var(--radius-md);
+          border-radius: 14px;
           cursor: default;
         }
 
@@ -1005,9 +1012,10 @@ export function AppShell({ children, user }: AppShellProps) {
         .user-menu {
           margin-top: var(--space-2);
           padding: var(--space-2);
-          background: var(--bg-elevated);
-          border-radius: var(--radius-md);
+          background: var(--panel-gradient);
+          border-radius: var(--radius-lg);
           border: 1px solid var(--border-subtle);
+          box-shadow: var(--shadow-md);
         }
 
         .user-menu-item {
@@ -1091,7 +1099,7 @@ export function AppShell({ children, user }: AppShellProps) {
         .app-content {
           flex: 1;
           overflow-y: auto;
-          padding: var(--space-4);
+          padding: var(--space-5);
         }
 
         /* Mobile Header */
@@ -1103,7 +1111,8 @@ export function AppShell({ children, user }: AppShellProps) {
           align-items: center;
           justify-content: space-between;
           padding: calc(env(safe-area-inset-top) + var(--space-3)) var(--space-4) var(--space-3);
-          background: var(--bg-surface);
+          background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+          backdrop-filter: blur(18px);
           border-bottom: 1px solid var(--border-subtle);
         }
 
@@ -1150,6 +1159,7 @@ export function AppShell({ children, user }: AppShellProps) {
           right: var(--space-4);
           margin-top: var(--space-2);
           background: var(--bg-surface);
+          box-shadow: var(--shadow-lg);
           border: 1px solid var(--border-subtle);
           border-radius: var(--radius-lg);
           box-shadow: var(--shadow-lg);
@@ -1240,6 +1250,7 @@ export function AppShell({ children, user }: AppShellProps) {
         /* Add padding for mobile bottom nav */
         @media (max-width: 1023px) {
           .app-content {
+            padding: var(--space-4);
             padding-bottom: calc(60px + env(safe-area-inset-bottom) + var(--space-4));
             overflow-x: hidden;
           }

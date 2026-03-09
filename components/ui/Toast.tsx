@@ -114,15 +114,17 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
         alignItems: 'flex-start',
         gap: '12px',
         padding: '14px 16px',
-        backgroundColor: colors.bg,
+        background: `linear-gradient(180deg, ${colors.bg}, color-mix(in srgb, ${colors.bg} 82%, var(--bg-surface)))`,
+        border: `1px solid color-mix(in srgb, ${colors.border} 35%, var(--border-subtle))`,
         borderLeft: `4px solid ${colors.border}`,
-        borderRadius: '8px',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+        borderRadius: '18px',
+        boxShadow: 'var(--shadow-lg)',
         minWidth: '320px',
         maxWidth: '420px',
         position: 'relative',
         overflow: 'hidden',
         animation: isExiting ? 'toastSlideOut 0.2s ease-out' : 'toastSlideIn 0.3s ease-out',
+        pointerEvents: 'auto',
       }}
       role="alert"
     >
@@ -140,6 +142,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
           fontSize: '14px',
           fontWeight: 'bold',
           flexShrink: 0,
+          boxShadow: '0 10px 20px rgba(15, 23, 42, 0.18)',
         }}
       >
         {ICONS[toast.type]}
@@ -176,13 +179,13 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
             }}
             style={{
               marginTop: '8px',
-              padding: '4px 12px',
+              padding: '7px 12px',
               fontSize: '12px',
               fontWeight: 600,
               color: colors.icon,
-              backgroundColor: 'transparent',
-              border: `1px solid ${colors.border}`,
-              borderRadius: '4px',
+              backgroundColor: 'color-mix(in srgb, var(--bg-surface) 88%, transparent)',
+              border: `1px solid color-mix(in srgb, ${colors.border} 45%, var(--border-subtle))`,
+              borderRadius: '10px',
               cursor: 'pointer',
             }}
           >
@@ -202,7 +205,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
           color: 'var(--text-secondary, #9ca3af)',
           fontSize: '18px',
           lineHeight: 1,
-          borderRadius: '4px',
+          borderRadius: '8px',
         }}
         aria-label="Dismiss"
       >
@@ -256,7 +259,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           zIndex: 9999,
           display: 'flex',
           flexDirection: 'column',
-          gap: '10px',
+          gap: '12px',
           pointerEvents: 'none',
         }}
       >

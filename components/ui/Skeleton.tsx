@@ -25,25 +25,32 @@ export function Skeleton({
           width: typeof width === 'number' ? `${width}px` : width,
           height: typeof height === 'number' ? `${height}px` : height,
           borderRadius: typeof borderRadius === 'number' ? `${borderRadius}px` : borderRadius,
-          backgroundColor: 'var(--skeleton-bg, #e5e7eb)',
-          animation: 'skeletonPulse 1.5s ease-in-out infinite',
+          background: 'linear-gradient(90deg, var(--skeleton-bg, #e5e7eb) 0%, var(--skeleton-glow, #f4f4f5) 50%, var(--skeleton-bg, #e5e7eb) 100%)',
+          backgroundSize: '200% 100%',
+          animation: 'skeletonPulse 1.4s ease-in-out infinite',
           ...style,
         }}
       />
       <style jsx global>{`
         @keyframes skeletonPulse {
-          0%, 100% {
-            opacity: 1;
+          0% {
+            background-position: 0% 50%;
           }
-          50% {
-            opacity: 0.5;
+          100% {
+            background-position: -200% 50%;
           }
+        }
+
+        :root {
+          --skeleton-bg: #e7e5e4;
+          --skeleton-glow: #f5f5f4;
         }
 
         [data-theme='dark'],
         [data-theme='blue'],
         [data-theme='black'] {
-          --skeleton-bg: #374151;
+          --skeleton-bg: #243143;
+          --skeleton-glow: #334155;
         }
       `}</style>
     </>
@@ -70,9 +77,9 @@ export function SkeletonCard() {
     <div
       style={{
         padding: '16px',
-        borderRadius: '8px',
-        border: '1px solid var(--border-color, #e5e7eb)',
-        backgroundColor: 'var(--bg-primary, white)',
+        borderRadius: '18px',
+        border: '1px solid var(--border-subtle, #e5e7eb)',
+        background: 'var(--panel-gradient, white)',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
@@ -141,8 +148,8 @@ export function SkeletonList({ items = 5 }: { items?: number }) {
             alignItems: 'center',
             gap: '12px',
             padding: '12px',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color, #e5e7eb)',
+            borderRadius: '16px',
+            border: '1px solid var(--border-subtle, #e5e7eb)',
           }}
         >
           <Skeleton width={32} height={32} borderRadius="6px" />
@@ -165,8 +172,8 @@ export function SkeletonQuiz() {
           key={i}
           style={{
             padding: '20px',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color, #e5e7eb)',
+            borderRadius: '18px',
+            border: '1px solid var(--border-subtle, #e5e7eb)',
           }}
         >
           <Skeleton width="80%" height="18px" style={{ marginBottom: '16px' }} />
