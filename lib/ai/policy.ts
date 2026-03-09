@@ -112,7 +112,7 @@ export function evaluateAiScope(input: AiScopeInput): AiScopeDecision {
     return {
       allowed: false,
       errorCode: 'INVALID_MODE',
-      reason: 'This AI tool mode is not supported in StudyPilot.',
+      reason: 'This AI tool mode is not supported in StudyHarbor.',
       suggestionModes: DEFAULT_SUGGESTIONS,
     };
   }
@@ -122,7 +122,7 @@ export function evaluateAiScope(input: AiScopeInput): AiScopeDecision {
     return {
       allowed: false,
       errorCode: 'INSUFFICIENT_STUDY_INPUT',
-      reason: 'Add more course material or assignment details so StudyPilot can generate study content.',
+      reason: 'Add more course material or assignment details so StudyHarbor can generate study content.',
       suggestionModes: suggestionsForMode(mode),
     };
   }
@@ -143,7 +143,7 @@ export function evaluateAiScope(input: AiScopeInput): AiScopeDecision {
     return {
       allowed: false,
       errorCode: 'OUT_OF_SCOPE',
-      reason: 'StudyPilot AI is restricted to academic learning and study-planning tasks.',
+      reason: 'StudyHarbor AI is restricted to academic learning and study-planning tasks.',
       suggestionModes: suggestionsForMode(mode),
     };
   }
@@ -162,7 +162,7 @@ export function evaluateAiScope(input: AiScopeInput): AiScopeDecision {
     return {
       allowed: false,
       errorCode: 'INSUFFICIENT_STUDY_INPUT',
-      reason: 'Add more course material or assignment details so StudyPilot can generate study content.',
+      reason: 'Add more course material or assignment details so StudyHarbor can generate study content.',
       suggestionModes: suggestionsForMode(mode),
     };
   }

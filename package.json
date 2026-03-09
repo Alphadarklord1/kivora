@@ -1,10 +1,10 @@
 {
-  "name": "studypilot",
+  "name": "studyharbor",
   "version": "1.2.0-beta.1",
   "description": "Desktop-first AI study workspace",
   "private": true,
   "main": "electron/main.js",
-  "author": "StudyPilot",
+  "author": "StudyHarbor",
   "license": "MIT",
   "scripts": {
     "dev": "next dev --turbopack",
@@ -42,8 +42,8 @@
     "mobile:ios": "npx cap open ios"
   },
   "build": {
-    "appId": "com.studypilot.app",
-    "productName": "StudyPilot",
+    "appId": "com.studyharbor.app",
+    "productName": "StudyHarbor",
     "asar": false,
     "directories": {
       "output": "dist-electron"

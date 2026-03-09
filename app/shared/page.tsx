@@ -45,7 +45,7 @@ export default function SharedLandingPage() {
       <header className="shared-header">
         <Link href="/" className="logo">
           <span className="logo-icon">📘</span>
-          <span className="logo-text">StudyPilot</span>
+          <span className="logo-text">StudyHarbor</span>
         </Link>
         <Link href="/login" className="btn secondary">
           Sign In
@@ -55,7 +55,7 @@ export default function SharedLandingPage() {
       <main className="shared-body">
         <section className="hero">
           <div className="hero-badge">Shared Content</div>
-          <h1>Open a StudyPilot share link</h1>
+          <h1>Open a StudyHarbor share link</h1>
           <p>
             Paste a share link or token to view the content. You can also sign in
             to create your own shareable materials.

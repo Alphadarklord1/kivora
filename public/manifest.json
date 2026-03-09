@@ -1,6 +1,6 @@
 {
-  "name": "StudyPilot",
-  "short_name": "StudyPilot",
+  "name": "StudyHarbor",
+  "short_name": "StudyHarbor",
   "description": "Your AI-powered study companion. Generate MCQs, summaries, quizzes, and study notes from any content.",
   "start_url": "/workspace",
   "id": "/workspace",
@@ -66,14 +66,14 @@
       "sizes": "1280x720",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "StudyPilot Workspace"
+      "label": "StudyHarbor Workspace"
     },
     {
       "src": "/screenshots/mobile.png",
       "sizes": "390x844",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "StudyPilot Mobile"
+      "label": "StudyHarbor Mobile"
     }
   ],
   "handle_links": "preferred",

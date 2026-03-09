@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
 // GET - Return API info and available modes
 export async function GET() {
   return NextResponse.json({
-    name: 'StudyPilot Content Generation API',
+    name: 'StudyHarbor Content Generation API',
     version: '2.0',
     description: 'Generate university-level study materials from text content',
     endpoints: {

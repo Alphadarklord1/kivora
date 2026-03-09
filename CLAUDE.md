@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-StudyPilot is a study workspace web application built with Next.js 14 (App Router), Neon PostgreSQL, and NextAuth.js. It helps students organize study materials, generate quizzes/summaries from uploaded files (PDF, Word, PowerPoint), and manage content with cloud-synced metadata.
+StudyHarbor is a study workspace web application built with Next.js 14 (App Router), Neon PostgreSQL, and NextAuth.js. It helps students organize study materials, generate quizzes/summaries from uploaded files (PDF, Word, PowerPoint), and manage content with cloud-synced metadata.
 
 ## Commands
 

@@ -7,7 +7,7 @@ import { GeneratedSchedule } from './generate';
  * Generate a unique identifier for calendar events
  */
 function generateUID(): string {
-  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}@studypilot`;
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}@studyharbor`;
 }
 
 /**
@@ -138,7 +138,7 @@ export function generateICSContent(
   const icsLines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//StudyPilot//Study Planner//EN',
+    'PRODID:-//StudyHarbor//Study Planner//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     `X-WR-CALNAME:${escapeICSText(planTitle)}`,

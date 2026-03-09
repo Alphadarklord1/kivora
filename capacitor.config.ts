@@ -1,12 +1,12 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.studypilot.app',
-  appName: 'StudyPilot',
+  appId: 'com.studyharbor.app',
+  appName: 'StudyHarbor',
   webDir: 'out',
   bundledWebRuntime: false,
   server: {
-    hostname: 'studypilot.local',
+    hostname: 'studyharbor.local',
     androidScheme: 'https',
   },
 };

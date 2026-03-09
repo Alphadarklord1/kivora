@@ -67,7 +67,7 @@ export default function RegisterPage() {
   const [authCapabilities, setAuthCapabilities] = useState<AuthCapabilities | null>(null);
   const { t, isArabic } = useI18n({
     'Create your account': 'أنشئ حسابك',
-    'Create a StudyPilot account for synced plans, analytics, and shared workspaces.': 'أنشئ حساب StudyPilot للمخططات المتزامنة والتحليلات ومساحات العمل المشتركة.',
+    'Create a StudyHarbor account for synced plans, analytics, and shared workspaces.': 'أنشئ حساب StudyHarbor للمخططات المتزامنة والتحليلات ومساحات العمل المشتركة.',
     'Email and password are required': 'البريد الإلكتروني وكلمة المرور مطلوبان',
     'Password must be at least 6 characters': 'يجب أن تكون كلمة المرور 6 أحرف على الأقل',
     'Passwords do not match': 'كلمتا المرور غير متطابقتين',
@@ -88,7 +88,7 @@ export default function RegisterPage() {
     'Already have an account?': 'لديك حساب بالفعل؟',
     'Sign in': 'تسجيل الدخول',
     'Continue as guest': 'المتابعة كضيف',
-    'Use StudyPilot without creating an account': 'استخدم StudyPilot بدون إنشاء حساب',
+    'Use StudyHarbor without creating an account': 'استخدم StudyHarbor بدون إنشاء حساب',
     'Google login is not configured by admin.': 'تسجيل الدخول عبر Google غير مضبوط من قبل المسؤول.',
     'GitHub login is not configured by admin.': 'تسجيل الدخول عبر GitHub غير مضبوط من قبل المسؤول.',
     'Failed to sign in with {provider}': 'تعذر تسجيل الدخول باستخدام {provider}',
@@ -207,9 +207,9 @@ export default function RegisterPage() {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1>StudyPilot</h1>
+        <h1>StudyHarbor</h1>
         <p>{t('Create your account')}</p>
-        <p className="auth-subtle-copy">{t('Create a StudyPilot account for synced plans, analytics, and shared workspaces.')}</p>
+        <p className="auth-subtle-copy">{t('Create a StudyHarbor account for synced plans, analytics, and shared workspaces.')}</p>
 
         {error && <div className="auth-error">{error}</div>}
         {authCapabilities?.authDisabled && (
@@ -353,7 +353,7 @@ export default function RegisterPage() {
         {authCapabilities?.guestModeEnabled && (
           <Link href="/workspace" className="auth-guest-link">
             {t('Continue as guest')}
-            <span>{t('Use StudyPilot without creating an account')}</span>
+            <span>{t('Use StudyHarbor without creating an account')}</span>
           </Link>
         )}
 

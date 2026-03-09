@@ -1,5 +1,5 @@
-// StudyPilot Service Worker
-const CACHE_NAME = 'studypilot-v2';
+// StudyHarbor Service Worker
+const CACHE_NAME = 'studyharbor-v3';
 const OFFLINE_URL = '/offline.html';
 
 // Files to cache immediately

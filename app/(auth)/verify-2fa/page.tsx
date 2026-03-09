@@ -58,7 +58,7 @@ export default function VerifyTwoFactorPage() {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1>StudyPilot</h1>
+        <h1>StudyHarbor</h1>
         <p>{t('Two-step verification')}</p>
         <p className="auth-hint">{t('Enter the 6-digit code from your authenticator app to continue.')}</p>
 

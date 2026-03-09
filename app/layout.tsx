@@ -38,26 +38,26 @@ const settingsScript = `
 `;
 
 export const metadata: Metadata = {
-  title: "StudyPilot",
+  title: "StudyHarbor",
   description: "Desktop-first study workspace with local AI tools",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "StudyPilot",
+    title: "StudyHarbor",
   },
   formatDetection: {
     telephone: false,
   },
   openGraph: {
     type: "website",
-    siteName: "StudyPilot",
-    title: "StudyPilot",
+    siteName: "StudyHarbor",
+    title: "StudyHarbor",
     description: "Desktop-first study workspace with local AI tools",
   },
   twitter: {
     card: "summary",
-    title: "StudyPilot",
+    title: "StudyHarbor",
     description: "Desktop-first study workspace with local AI tools",
   },
 };

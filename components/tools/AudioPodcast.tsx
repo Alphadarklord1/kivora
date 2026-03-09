@@ -72,14 +72,14 @@ export function AudioPodcast() {
     'Neural TTS - High quality offline voices (larger download, cached after first use)': 'تحويل عصبي TTS - أصوات عالية الجودة بدون إنترنت (تنزيل أكبر ويتم حفظها بعد الاستخدام الأول)',
     'Downloading voice model...': 'جارٍ تنزيل نموذج الصوت...',
     'Hide File Selector': 'إخفاء محدد الملفات',
-    'Select from StudyPilot': 'اختر من StudyPilot',
+    'Select from StudyHarbor': 'اختر من StudyHarbor',
     '-- Select Folder --': '-- اختر مجلدًا --',
     '-- Select Subfolder --': '-- اختر مجلدًا فرعيًا --',
     'Loading files...': 'جارٍ تحميل الملفات...',
     'No files in this subfolder': 'لا توجد ملفات في هذا المجلد الفرعي',
     'Extracting...': 'جارٍ الاستخراج...',
     'Paste your study notes or summary:': 'ألصق ملاحظاتك أو ملخصك الدراسي:',
-    'Paste your study material here, or select a file from StudyPilot above...': 'ألصق المادة الدراسية هنا، أو اختر ملفًا من StudyPilot بالأعلى...',
+    'Paste your study material here, or select a file from StudyHarbor above...': 'ألصق المادة الدراسية هنا، أو اختر ملفًا من StudyHarbor بالأعلى...',
     '{count} words': '{count} كلمة',
     'Estimated duration: {duration}': 'المدة المتوقعة: {duration}',
     'Select Voice:': 'اختر الصوت:',
@@ -636,7 +636,7 @@ export function AudioPodcast() {
           onClick={() => setShowFileSelector(!showFileSelector)}
           disabled={isPlaying}
         >
-          📁 {showFileSelector ? t('Hide File Selector') : t('Select from StudyPilot')}
+          📁 {showFileSelector ? t('Hide File Selector') : t('Select from StudyHarbor')}
         </button>
 
         {showFileSelector && (
@@ -700,7 +700,7 @@ export function AudioPodcast() {
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={t('Paste your study material here, or select a file from StudyPilot above...')}
+          placeholder={t('Paste your study material here, or select a file from StudyHarbor above...')}
           rows={8}
           disabled={isPlaying}
         />

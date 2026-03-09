@@ -1,7 +1,7 @@
 import { randomBytes, createHmac } from 'crypto';
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-const TWO_FACTOR_ISSUER = 'StudyPilot';
+const TWO_FACTOR_ISSUER = 'StudyHarbor';
 const TWO_FACTOR_PERIOD_SECONDS = 30;
 const TWO_FACTOR_DIGITS = 6;
 const TWO_FACTOR_WINDOW = 1;

@@ -271,7 +271,7 @@ export function AppShell({ children, user }: AppShellProps) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `studypilot-export-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `studyharbor-export-${new Date().toISOString().split('T')[0]}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -415,7 +415,7 @@ export function AppShell({ children, user }: AppShellProps) {
           <div className="sidebar-header">
             <Link href="/workspace" className="logo">
               <span className="logo-icon">📘</span>
-              {sidebarOpen && <span className="logo-text">StudyPilot</span>}
+              {sidebarOpen && <span className="logo-text">StudyHarbor</span>}
             </Link>
             <button
               className="sidebar-toggle"
@@ -546,7 +546,7 @@ export function AppShell({ children, user }: AppShellProps) {
           <header className="mobile-header">
             <Link href="/workspace" className="mobile-logo">
               <span>📘</span>
-              <span>StudyPilot</span>
+              <span>StudyHarbor</span>
             </Link>
             <div className="mobile-header-actions">
               <VaultStatus />

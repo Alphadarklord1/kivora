@@ -98,7 +98,7 @@ export default async function DownloadsPage() {
   return (
     <div className={styles.page}>
       <div className={styles.card}>
-        <h1>Download StudyPilot</h1>
+        <h1>Download StudyHarbor</h1>
         <p>Desktop builds are published through GitHub Releases. Mini is bundled in the desktop app. Larger Qwen offline models are optional downloads when release assets are attached.</p>
 
         <div className={styles.section}>
@@ -148,7 +148,7 @@ export default async function DownloadsPage() {
 
         <div className={styles.section}>
           <h2>Offline AI Models</h2>
-          <p className={styles.sectionNote}>Qwen models are optional. StudyPilot already includes Mini in the desktop app. Install Balanced or Pro later from Settings → AI Models or download them here once published.</p>
+          <p className={styles.sectionNote}>Qwen models are optional. StudyHarbor already includes Mini in the desktop app. Install Balanced or Pro later from Settings → AI Models or download them here once published.</p>
           <div className={styles.modelGrid}>
             {localModels.map((model) => (
               <div key={model.key} className={styles.modelCard}>
@@ -210,7 +210,7 @@ export default async function DownloadsPage() {
         )}
 
         <p className={styles.note}>
-          In StudyPilot open Settings → AI Models to install and switch local models after the release assets are published.
+          In StudyHarbor open Settings → AI Models to install and switch local models after the release assets are published.
         </p>
 
         <Link href="/" className={styles.backLink}>

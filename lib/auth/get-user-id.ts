@@ -7,11 +7,17 @@ import { v4 as uuidv4 } from 'uuid';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 import { hasValidTwoFactorSession, TWO_FACTOR_COOKIE_NAME } from '@/lib/auth/two-factor';
 
-export const DEMO_USER_EMAIL = 'demo@local.studypilot';
+export const DEMO_USER_EMAIL = 'demo@local.studyharbor';
+export const LEGACY_DEMO_USER_EMAIL = 'demo@local.studypilot';
 export const DEMO_USER_NAME = 'Local Demo';
 
 export function isDemoGuestEmail(email: string | null | undefined): boolean {
-  return typeof email === 'string' && email.trim().toLowerCase() === DEMO_USER_EMAIL;
+  if (typeof email !== 'string') {
+    return false;
+  }
+
+  const normalized = email.trim().toLowerCase();
+  return normalized === DEMO_USER_EMAIL || normalized === LEGACY_DEMO_USER_EMAIL;
 }
 
 /**
@@ -61,9 +67,13 @@ export async function getUserId(
     }
 
     try {
-      const existingDemoUser = await db.query.users.findFirst({
-        where: eq(users.email, DEMO_USER_EMAIL),
-      });
+      const existingDemoUser =
+        (await db.query.users.findFirst({
+          where: eq(users.email, DEMO_USER_EMAIL),
+        })) ??
+        (await db.query.users.findFirst({
+          where: eq(users.email, LEGACY_DEMO_USER_EMAIL),
+        }));
 
       if (existingDemoUser) return existingDemoUser.id;
 
@@ -78,9 +88,13 @@ export async function getUserId(
     } catch {
       try {
         // Concurrent guest bootstrap may create the same demo user.
-        const retryDemoUser = await db.query.users.findFirst({
-          where: eq(users.email, DEMO_USER_EMAIL),
-        });
+        const retryDemoUser =
+          (await db.query.users.findFirst({
+            where: eq(users.email, DEMO_USER_EMAIL),
+          })) ??
+          (await db.query.users.findFirst({
+            where: eq(users.email, LEGACY_DEMO_USER_EMAIL),
+          }));
         return retryDemoUser?.id ?? 'local-demo-user';
       } catch {
         return 'local-demo-user';

@@ -79,7 +79,7 @@ export default function LoginPage() {
     "Don't have an account?": 'ليس لديك حساب؟',
     'Sign up': 'إنشاء حساب',
     'Continue as guest': 'المتابعة كضيف',
-    'Use StudyPilot without creating an account': 'استخدم StudyPilot بدون إنشاء حساب',
+    'Use StudyHarbor without creating an account': 'استخدم StudyHarbor بدون إنشاء حساب',
     'Google login is not configured by admin.': 'تسجيل الدخول عبر Google غير مضبوط من قبل المسؤول.',
     'GitHub login is not configured by admin.': 'تسجيل الدخول عبر GitHub غير مضبوط من قبل المسؤول.',
     'Failed to sign in with {provider}': 'تعذر تسجيل الدخول باستخدام {provider}',
@@ -172,7 +172,7 @@ export default function LoginPage() {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1>StudyPilot</h1>
+        <h1>StudyHarbor</h1>
         <p>{t('Sign in to your account')}</p>
         <p className="auth-subtle-copy">{t('Access your study workspace, planner, and offline AI tools.')}</p>
 
@@ -294,7 +294,7 @@ export default function LoginPage() {
         {authCapabilities?.guestModeEnabled && (
           <Link href="/workspace" className="auth-guest-link">
             {t('Continue as guest')}
-            <span>{t('Use StudyPilot without creating an account')}</span>
+            <span>{t('Use StudyHarbor without creating an account')}</span>
           </Link>
         )}
 

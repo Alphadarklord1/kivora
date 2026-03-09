@@ -957,7 +957,7 @@ async function ensureAppServerUrl() {
 
   if (!ready) {
     stopAppServer();
-    throw new Error('StudyPilot app server failed to start');
+    throw new Error('StudyHarbor app server failed to start');
   }
 
   appServerUrl = serverUrl;
@@ -1138,13 +1138,13 @@ function createMenu() {
         {
           label: 'Desktop Guide',
           click: async () => {
-            await shell.openExternal('https://github.com/studypilot/app#desktop');
+            await shell.openExternal('https://github.com/Alphadarklord1/studypilot#desktop');
           },
         },
         {
           label: 'Report Issue',
           click: async () => {
-            await shell.openExternal('https://github.com/studypilot/app/issues');
+            await shell.openExternal('https://github.com/Alphadarklord1/studypilot/issues');
           },
         },
       ],

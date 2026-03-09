@@ -199,7 +199,7 @@ export function WorkspacePanel({
       'Cloud unavailable, used offline fallback': 'تعذر استخدام السحابة، تم استخدام البديل المحلي',
       'Auto-chain Exam Prep → Exam → SRS': 'ربط تلقائي: تجهيز الاختبار ← الاختبار ← SRS',
       'Study-only AI': 'ذكاء اصطناعي مخصص للدراسة',
-      'This request is outside StudyPilot scope.': 'هذا الطلب خارج نطاق StudyPilot.',
+      'This request is outside StudyHarbor scope.': 'هذا الطلب خارج نطاق StudyHarbor.',
       'Try one of these supported study tasks:': 'جرّب إحدى مهام الدراسة المدعومة:',
       'Switch to': 'الانتقال إلى',
       Tone: 'النبرة',
@@ -813,12 +813,12 @@ export function WorkspacePanel({
     if (!isArabic) return block.reason;
 
     if (block.errorCode === 'INVALID_MODE') {
-      return 'هذا النوع من الأدوات غير مدعوم في الذكاء الاصطناعي داخل StudyPilot.';
+      return 'هذا النوع من الأدوات غير مدعوم في الذكاء الاصطناعي داخل StudyHarbor.';
     }
     if (block.errorCode === 'INSUFFICIENT_STUDY_INPUT') {
       return 'أضف تفاصيل أكثر من المادة أو المحاضرة ليتم توليد محتوى دراسي مناسب.';
     }
-    return 'الذكاء الاصطناعي في StudyPilot مخصص فقط لمهام الدراسة والتخطيط الدراسي.';
+    return 'الذكاء الاصطناعي في StudyHarbor مخصص فقط لمهام الدراسة والتخطيط الدراسي.';
   };
 
   const handleCopy = (text: string) => {

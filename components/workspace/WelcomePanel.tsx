@@ -48,7 +48,7 @@ export function WelcomePanel({ onGetStarted }: WelcomePanelProps) {
     <div className="welcome-panel">
       <div className="welcome-header">
         <div className="welcome-icon">📘</div>
-        <h1>Welcome to StudyPilot</h1>
+        <h1>Welcome to StudyHarbor</h1>
         <p>Your AI-powered study companion. Transform your learning materials into interactive study content.</p>
       </div>
 

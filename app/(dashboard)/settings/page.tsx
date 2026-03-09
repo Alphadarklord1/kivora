@@ -1113,7 +1113,7 @@ export default function SettingsPage() {
           {tab === 'appearance' && settings && (
             <div className="settings-section">
               <h2>{t('Appearance')}</h2>
-              <p className="section-description">{isArabic ? 'خصص شكل StudyPilot بالطريقة التي تناسبك' : 'Customize how StudyPilot looks'}</p>
+              <p className="section-description">{isArabic ? 'خصص شكل StudyHarbor بالطريقة التي تناسبك' : 'Customize how StudyHarbor looks'}</p>
 
               {/* Theme */}
               <div className="form-group">
@@ -1604,8 +1604,8 @@ export default function SettingsPage() {
                   <h3>{isArabic ? 'جلسة ضيف' : 'Guest session'}</h3>
                   <p>
                     {isArabic
-                      ? 'أنت تستخدم StudyPilot بدون حساب. يمكنك المتابعة كضيف، لكن ربط الخدمات الخارجية أو حذف الحساب غير متاحين حتى تسجل الدخول بحساب فعلي.'
-                      : 'You are using StudyPilot without a full account. Guest mode keeps the app usable, but external account linking and account deletion stay disabled until you sign in with a real account.'}
+                      ? 'أنت تستخدم StudyHarbor بدون حساب. يمكنك المتابعة كضيف، لكن ربط الخدمات الخارجية أو حذف الحساب غير متاحين حتى تسجل الدخول بحساب فعلي.'
+                      : 'You are using StudyHarbor without a full account. Guest mode keeps the app usable, but external account linking and account deletion stay disabled until you sign in with a real account.'}
                   </p>
                 </div>
               )}
@@ -1851,8 +1851,8 @@ export default function SettingsPage() {
                   <h3>{isArabic ? 'مدير نماذج سطح المكتب' : 'Desktop Model Manager'}</h3>
                   <p className="help-text">
                     {isArabic
-                      ? 'يبدأ StudyPilot بنموذج Mini دون اتصال. يمكنك تثبيت نماذج أقوى واختيار النموذج النشط.'
-                      : 'StudyPilot starts with offline Mini. Install stronger models and choose the active one.'}
+                      ? 'يبدأ StudyHarbor بنموذج Mini دون اتصال. يمكنك تثبيت نماذج أقوى واختيار النموذج النشط.'
+                      : 'StudyHarbor starts with offline Mini. Install stronger models and choose the active one.'}
                   </p>
                   {desktopAiModelInfo && (
                     <div className="help-text" style={{ marginTop: 8 }}>
@@ -1970,8 +1970,8 @@ export default function SettingsPage() {
                   )}
                   <p className="help-text" style={{ marginTop: 6 }}>
                     {isArabic
-                      ? 'عند فشل تثبيت النماذج الاختيارية، سيستمر StudyPilot باستخدام Mini بدون إنترنت.'
-                      : 'If optional model install fails, StudyPilot keeps working with Mini offline.'}
+                      ? 'عند فشل تثبيت النماذج الاختيارية، سيستمر StudyHarbor باستخدام Mini بدون إنترنت.'
+                      : 'If optional model install fails, StudyHarbor keeps working with Mini offline.'}
                   </p>
                 </div>
               ) : (
@@ -2011,7 +2011,7 @@ export default function SettingsPage() {
               )}
 
               <div className="account-card">
-                <h3>{isArabic ? 'نطاق الذكاء الاصطناعي في StudyPilot' : 'StudyPilot AI Scope'}</h3>
+                <h3>{isArabic ? 'نطاق الذكاء الاصطناعي في StudyHarbor' : 'StudyHarbor AI Scope'}</h3>
                 <p className="help-text">
                   {isArabic
                     ? 'الذكاء الاصطناعي هنا مخصص للدراسة فقط: تلخيص، اختبارات، ملاحظات، تخطيط دراسة، وحل مسائل أكاديمية.'

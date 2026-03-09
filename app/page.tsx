@@ -69,7 +69,7 @@ export default async function LandingPage() {
         <div className="nav-container">
           <Link href="/" className="nav-logo">
             <span className="logo-icon">📘</span>
-            <span className="logo-text">StudyPilot</span>
+            <span className="logo-text">StudyHarbor</span>
           </Link>
           <div className="nav-links">
             <Link href={DOWNLOAD_URL} className="nav-btn secondary">
@@ -154,7 +154,7 @@ export default async function LandingPage() {
         <div className="section-container">
           <h2>Everything You Need to Excel</h2>
           <p className="section-subtitle">
-            StudyPilot combines smart organization with powerful AI tools to supercharge your learning.
+            StudyHarbor combines smart organization with powerful AI tools to supercharge your learning.
           </p>
           <div className="features-grid">
             {features.map((feature, idx) => (
@@ -195,7 +195,7 @@ export default async function LandingPage() {
             <div className="step">
               <div className="step-number">1</div>
               <h3>Upload Your Materials</h3>
-              <p>Drop your PDFs, Word docs, or PowerPoints into StudyPilot.</p>
+              <p>Drop your PDFs, Word docs, or PowerPoints into StudyHarbor.</p>
             </div>
             <div className="step-arrow">→</div>
             <div className="step">
@@ -217,7 +217,7 @@ export default async function LandingPage() {
       <section className="cta">
         <div className="section-container">
           <h2>Ready to Transform Your Study Routine?</h2>
-          <p>Join thousands of students who study smarter with StudyPilot.</p>
+          <p>Join thousands of students who study smarter with StudyHarbor.</p>
           {canUseWithoutSignIn ? (
             <Link href="/workspace" className="cta-btn">
               Go to Your Workspace →
@@ -235,7 +235,7 @@ export default async function LandingPage() {
         <div className="footer-container">
           <div className="footer-brand">
             <span className="logo-icon">📘</span>
-            <span>StudyPilot</span>
+            <span>StudyHarbor</span>
           </div>
           <p>Your AI-powered study companion. Built for students, by students.</p>
           {!canUseWithoutSignIn && (

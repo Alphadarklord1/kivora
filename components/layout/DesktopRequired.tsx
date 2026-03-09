@@ -24,10 +24,10 @@ export function DesktopRequired() {
           Desktop Required
         </p>
         <h1 style={{ marginTop: '0.75rem', marginBottom: '0.75rem', fontSize: '2rem', lineHeight: 1.2 }}>
-          StudyPilot runs as a desktop app
+          StudyHarbor runs as a desktop app
         </h1>
         <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.65 }}>
-          This deployment is desktop-only. Open StudyPilot in the installed app on macOS or Windows to use workspace, AI tools, and local study data.
+          This deployment is desktop-only. Open StudyHarbor in the installed app on macOS or Windows to use workspace, AI tools, and local study data.
         </p>
         <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <span

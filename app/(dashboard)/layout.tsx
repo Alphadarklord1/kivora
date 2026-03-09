@@ -2,6 +2,7 @@ import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { ClientProviders } from '@/providers/ClientProviders';
 import { AppShell } from '@/components/layout/AppShell';
+import { DEMO_USER_EMAIL, DEMO_USER_NAME } from '@/lib/auth/get-user-id';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 
 export default async function DashboardLayout({
@@ -18,8 +19,8 @@ export default async function DashboardLayout({
 
   const user = session?.user ?? {
     id: 'demo-user',
-    name: 'Local Demo',
-    email: 'demo@local.studypilot',
+    name: DEMO_USER_NAME,
+    email: DEMO_USER_EMAIL,
     image: null,
   };
 

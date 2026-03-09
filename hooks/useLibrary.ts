@@ -133,7 +133,7 @@ export function useLibrary() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `studypilot-library-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `studyharbor-library-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }, [items]);

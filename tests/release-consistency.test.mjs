@@ -14,7 +14,7 @@ test('release consistency passes for matching tag and assets', () => {
     [
       scriptPath,
       '--tag=v1.2.0-beta.1',
-      '--assets=StudyPilot-1.2.0-beta.1-arm64.dmg,StudyPilot-1.2.0-beta.1-arm64-mac.zip,model-manifest.json,SHA256SUMS.txt,qwen2.5-3b-instruct-q4_k_m.gguf,qwen2.5-7b-instruct-q4_k_m.gguf',
+      '--assets=StudyHarbor-1.2.0-beta.1-arm64.dmg,StudyHarbor-1.2.0-beta.1-arm64-mac.zip,model-manifest.json,SHA256SUMS.txt,qwen2.5-3b-instruct-q4_k_m.gguf,qwen2.5-7b-instruct-q4_k_m.gguf',
     ],
     { encoding: 'utf8' }
   );
@@ -28,7 +28,7 @@ test('release consistency fails when tag mismatches package version', () => {
     [
       scriptPath,
       '--tag=v9.9.9',
-      '--assets=StudyPilot-1.1.0-arm64.dmg,model-manifest.json,SHA256SUMS.txt,qwen2.5-3b-instruct-q4_k_m.gguf,qwen2.5-7b-instruct-q4_k_m.gguf',
+      '--assets=StudyHarbor-1.1.0-arm64.dmg,model-manifest.json,SHA256SUMS.txt,qwen2.5-3b-instruct-q4_k_m.gguf,qwen2.5-7b-instruct-q4_k_m.gguf',
     ],
     { encoding: 'utf8' }
   );
