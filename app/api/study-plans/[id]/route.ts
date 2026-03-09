@@ -4,7 +4,7 @@ import { studyPlans } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
-import { betaReadFallback, databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
+import { databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -13,7 +13,7 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = createRequestId(request);
   if (!isDatabaseConfigured) {
-    return betaReadFallback(null);
+    return databaseUnavailable(request, 'Study plan lookup requires DATABASE_URL to be configured', undefined, requestId);
   }
 
   const userId = await getUserId(request);
@@ -93,7 +93,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = createRequestId(request);
   if (!isDatabaseConfigured) {
-    return betaReadFallback({ success: true, localOnly: true });
+    return databaseUnavailable(request, 'Study plan deletion requires DATABASE_URL to be configured', undefined, requestId);
   }
 
   const userId = await getUserId(request);

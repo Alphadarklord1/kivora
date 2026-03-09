@@ -1,6 +1,6 @@
 import { randomBytes, createHash } from 'crypto';
 import type { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { verificationTokens } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import {
@@ -32,6 +32,10 @@ function hashSessionToken(token: string) {
 }
 
 export async function issueTwoFactorSession(userId: string) {
+  if (!isDatabaseConfigured) {
+    throw new Error('Two-factor sessions require DATABASE_URL to be configured.');
+  }
+
   const identifier = buildSessionIdentifier(userId);
   const rawToken = randomBytes(24).toString('hex');
   const hashedToken = hashSessionToken(rawToken);
@@ -51,6 +55,7 @@ export async function issueTwoFactorSession(userId: string) {
 }
 
 export async function hasValidTwoFactorSession(userId: string, rawToken: string | null | undefined) {
+  if (!isDatabaseConfigured) return false;
   if (!rawToken) return false;
   const identifier = buildSessionIdentifier(userId);
   const hashedToken = hashSessionToken(rawToken);
@@ -75,6 +80,7 @@ export async function hasValidTwoFactorSession(userId: string, rawToken: string 
 }
 
 export async function revokeTwoFactorSessions(userId: string) {
+  if (!isDatabaseConfigured) return;
   await db.delete(verificationTokens).where(eq(verificationTokens.identifier, buildSessionIdentifier(userId)));
 }
 

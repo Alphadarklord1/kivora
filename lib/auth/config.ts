@@ -4,7 +4,7 @@ import Credentials from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
 import GitHub from 'next-auth/providers/github';
 import bcrypt from 'bcryptjs';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { users, accounts } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
@@ -65,6 +65,10 @@ export const authConfig: NextAuthConfig = {
               password: { label: 'Password', type: 'password' },
             },
             async authorize(credentials) {
+              if (!isDatabaseConfigured) {
+                return null;
+              }
+
               if (!credentials?.email || !credentials?.password) {
                 return null;
               }
@@ -120,6 +124,10 @@ export const authConfig: NextAuthConfig = {
     async signIn({ user, account, profile }) {
       // Handle OAuth sign in - create user if doesn't exist
       if (account?.provider === 'google' || account?.provider === 'github') {
+        if (!isDatabaseConfigured) {
+          return false;
+        }
+
         const normalizedEmail = normalizeAuthEmail(user.email);
         if (!normalizedEmail) return false;
 

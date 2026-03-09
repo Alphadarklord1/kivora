@@ -134,10 +134,11 @@ export function useStudyPlans(): UseStudyPlansReturn {
         credentials: 'include',
       });
 
+      const payload = await res.json().catch(() => null);
+
       if (!res.ok) {
-        const payload = await res.json().catch(() => null);
         const errorCode = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).errorCode : null;
-        if (errorCode === 'DATABASE_NOT_CONFIGURED' || (payload && typeof payload === 'object' && (payload as Record<string, unknown>).localOnly)) {
+        if (errorCode === 'DATABASE_NOT_CONFIGURED') {
           const deleted = deleteLocalStudyPlan(id);
           if (deleted) {
             setPlans((prev) => prev.filter((plan) => plan.id !== id));
@@ -146,6 +147,10 @@ export function useStudyPlans(): UseStudyPlansReturn {
           }
         }
         throw new Error(getApiErrorReason(payload, 'Failed to delete plan'));
+      }
+
+      if (payload && typeof payload === 'object' && (payload as Record<string, unknown>).localOnly) {
+        deleteLocalStudyPlan(id);
       }
 
       setPlans((prev) => prev.filter((plan) => plan.id !== id));

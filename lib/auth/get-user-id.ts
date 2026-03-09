@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
@@ -30,6 +30,10 @@ export async function getUserId(
     });
     const tokenUserId = (token?.id || token?.sub) as string | undefined;
     if (tokenUserId) {
+      if (!isDatabaseConfigured) {
+        return tokenUserId;
+      }
+
       if (options?.allowUnverifiedTwoFactor) {
         return tokenUserId;
       }
@@ -52,6 +56,10 @@ export async function getUserId(
 
   // Local demo mode: bootstrap a deterministic demo user for API-backed flows.
   if (isGuestModeEnabled()) {
+    if (!isDatabaseConfigured) {
+      return 'local-demo-user';
+    }
+
     const existingDemoUser = await db.query.users.findFirst({
       where: eq(users.email, DEMO_USER_EMAIL),
     });
