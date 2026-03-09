@@ -86,7 +86,7 @@ export default function LoginPage() {
     "Don't have an account?": 'ليس لديك حساب؟',
     'Sign up': 'إنشاء حساب',
     'Continue as guest': 'المتابعة كضيف',
-    'Use StudyHarbor without creating an account': 'استخدم StudyHarbor بدون إنشاء حساب',
+    'Use Kivora without creating an account': 'استخدم Kivora بدون إنشاء حساب',
     'Google login is not configured by admin.': 'تسجيل الدخول عبر Google غير مضبوط من قبل المسؤول.',
     'GitHub login is not configured by admin.': 'تسجيل الدخول عبر GitHub غير مضبوط من قبل المسؤول.',
     'Failed to sign in with {provider}': 'تعذر تسجيل الدخول باستخدام {provider}',
@@ -181,7 +181,7 @@ export default function LoginPage() {
         <section className={styles.panel}>
           <Link href="/" className={styles.brand}>
             <span className={styles.brandMark}>◢</span>
-            <span className={styles.brandText}>StudyHarbor</span>
+            <span className={styles.brandText}>Kivora</span>
           </Link>
           <span className={styles.eyebrow}>{t('Study system, not just sign-in')}</span>
           <h1 className={styles.panelTitle}>{t('Sign in to your account')}</h1>
@@ -314,7 +314,7 @@ export default function LoginPage() {
                 {t('Continue as guest')}
               </Link>
             )}
-            <div className={styles.muted}>{t('Use StudyHarbor without creating an account')}</div>
+            <div className={styles.muted}>{t('Use Kivora without creating an account')}</div>
 
             <div className={styles.footerRow}>
               <span>{t("Don't have an account?")}</span>

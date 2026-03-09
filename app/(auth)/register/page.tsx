@@ -68,7 +68,7 @@ export default function RegisterPage() {
   const [authCapabilities, setAuthCapabilities] = useState<AuthCapabilities | null>(null);
   const { t, isArabic } = useI18n({
     'Create your account': 'أنشئ حسابك',
-    'Create a StudyHarbor account for synced plans, analytics, and shared workspaces.': 'أنشئ حساب StudyHarbor للمخططات المتزامنة والتحليلات ومساحات العمل المشتركة.',
+    'Create a Kivora account for synced plans, analytics, and shared workspaces.': 'أنشئ حساب Kivora للمخططات المتزامنة والتحليلات ومساحات العمل المشتركة.',
     'Set up the study workspace properly': 'جهّز مساحة الدراسة بشكل صحيح',
     'Create an account when you want synced plans, analytics, sharing, and external login providers.': 'أنشئ حسابًا عندما تريد مزامنة المخططات والتحليلات والمشاركة وربط مزودات الدخول.',
     'Guest mode stays available for quick starts': 'يبقى وضع الضيف متاحًا للبداية السريعة',
@@ -94,7 +94,7 @@ export default function RegisterPage() {
     'Already have an account?': 'لديك حساب بالفعل؟',
     'Sign in': 'تسجيل الدخول',
     'Continue as guest': 'المتابعة كضيف',
-    'Use StudyHarbor without creating an account': 'استخدم StudyHarbor بدون إنشاء حساب',
+    'Use Kivora without creating an account': 'استخدم Kivora بدون إنشاء حساب',
     'Google login is not configured by admin.': 'تسجيل الدخول عبر Google غير مضبوط من قبل المسؤول.',
     'GitHub login is not configured by admin.': 'تسجيل الدخول عبر GitHub غير مضبوط من قبل المسؤول.',
     'Failed to sign in with {provider}': 'تعذر تسجيل الدخول باستخدام {provider}',
@@ -215,7 +215,7 @@ export default function RegisterPage() {
         <section className={styles.panel}>
           <Link href="/" className={styles.brand}>
             <span className={styles.brandMark}>◢</span>
-            <span className={styles.brandText}>StudyHarbor</span>
+            <span className={styles.brandText}>Kivora</span>
           </Link>
           <span className={styles.eyebrow}>{t('Set up the study workspace properly')}</span>
           <h1 className={styles.panelTitle}>{t('Create your account')}</h1>
@@ -223,11 +223,11 @@ export default function RegisterPage() {
           <div className={styles.proofGrid}>
             <div className={styles.proofCard}>
               <strong>{t('Guest mode stays available for quick starts')}</strong>
-              <p>{t('Use StudyHarbor without creating an account')}</p>
+              <p>{t('Use Kivora without creating an account')}</p>
             </div>
             <div className={styles.proofCard}>
               <strong>{t('You can switch to a full account later')}</strong>
-              <p>{t('Create a StudyHarbor account for synced plans, analytics, and shared workspaces.')}</p>
+              <p>{t('Create a Kivora account for synced plans, analytics, and shared workspaces.')}</p>
             </div>
             <div className={styles.proofCard}>
               <strong>{t('OAuth stays optional when configured')}</strong>
@@ -244,7 +244,7 @@ export default function RegisterPage() {
         <section className={styles.card}>
           <div className={styles.cardHeader}>
             <h1>{t('Create your account')}</h1>
-            <p>{t('Create a StudyHarbor account for synced plans, analytics, and shared workspaces.')}</p>
+            <p>{t('Create a Kivora account for synced plans, analytics, and shared workspaces.')}</p>
           </div>
 
           <div className={styles.stack}>
@@ -342,7 +342,7 @@ export default function RegisterPage() {
                 {t('Continue as guest')}
               </Link>
             )}
-            <div className={styles.muted}>{t('Use StudyHarbor without creating an account')}</div>
+            <div className={styles.muted}>{t('Use Kivora without creating an account')}</div>
 
             <div className={styles.footerRow}>
               <span>{t('Already have an account?')}</span>

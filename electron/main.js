@@ -957,7 +957,7 @@ async function ensureAppServerUrl() {
 
   if (!ready) {
     stopAppServer();
-    throw new Error('StudyHarbor app server failed to start');
+    throw new Error('Kivora app server failed to start');
   }
 
   appServerUrl = serverUrl;

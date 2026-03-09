@@ -14,7 +14,7 @@ const pillars = [
   {
     eyebrow: 'Generate',
     title: 'Turn source material into quizzes, notes, rephrased drafts, and study plans.',
-    body: 'StudyHarbor keeps the workflow focused on academic work so the tools stay fast, predictable, and useful.',
+    body: 'Kivora keeps the workflow focused on academic work so the tools stay fast, predictable, and useful.',
   },
   {
     eyebrow: 'Review',
@@ -68,7 +68,7 @@ export default async function LandingPage() {
       <header className={styles.topbar}>
         <Link href="/" className={styles.brand}>
           <span className={styles.brandMark}>◢</span>
-          <span className={styles.brandText}>StudyHarbor</span>
+          <span className={styles.brandText}>Kivora</span>
         </Link>
         <nav className={styles.topbarActions}>
           <Link href={DOWNLOAD_URL} className={styles.secondaryAction}>
@@ -94,7 +94,7 @@ export default async function LandingPage() {
               A focused study workspace for files, planning, math, and AI generation.
             </h1>
             <p className={styles.heroBody}>
-              StudyHarbor combines structured folders, a planner, math tools, and guarded AI workflows so you can move from source material to actual study sessions without the usual clutter.
+              Kivora combines structured folders, a planner, math tools, and guarded AI workflows so you can move from source material to actual study sessions without the usual clutter.
             </p>
             <div className={styles.heroActions}>
               <Link href={primaryHref} className={styles.primaryActionLarge}>

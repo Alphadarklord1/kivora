@@ -7,7 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 import { hasValidTwoFactorSession, TWO_FACTOR_COOKIE_NAME } from '@/lib/auth/two-factor';
 
-export const DEMO_USER_EMAIL = 'demo@local.studyharbor';
+export const DEMO_USER_EMAIL = 'demo@local.kivora';
+export const LEGACY_STUDYHARBOR_DEMO_USER_EMAIL = 'demo@local.studyharbor';
 export const LEGACY_DEMO_USER_EMAIL = 'demo@local.studypilot';
 export const DEMO_USER_NAME = 'Local Demo';
 
@@ -17,7 +18,11 @@ export function isDemoGuestEmail(email: string | null | undefined): boolean {
   }
 
   const normalized = email.trim().toLowerCase();
-  return normalized === DEMO_USER_EMAIL || normalized === LEGACY_DEMO_USER_EMAIL;
+  return (
+    normalized === DEMO_USER_EMAIL ||
+    normalized === LEGACY_STUDYHARBOR_DEMO_USER_EMAIL ||
+    normalized === LEGACY_DEMO_USER_EMAIL
+  );
 }
 
 /**
@@ -72,6 +77,9 @@ export async function getUserId(
           where: eq(users.email, DEMO_USER_EMAIL),
         })) ??
         (await db.query.users.findFirst({
+          where: eq(users.email, LEGACY_STUDYHARBOR_DEMO_USER_EMAIL),
+        })) ??
+        (await db.query.users.findFirst({
           where: eq(users.email, LEGACY_DEMO_USER_EMAIL),
         }));
 
@@ -91,6 +99,9 @@ export async function getUserId(
         const retryDemoUser =
           (await db.query.users.findFirst({
             where: eq(users.email, DEMO_USER_EMAIL),
+          })) ??
+          (await db.query.users.findFirst({
+            where: eq(users.email, LEGACY_STUDYHARBOR_DEMO_USER_EMAIL),
           })) ??
           (await db.query.users.findFirst({
             where: eq(users.email, LEGACY_DEMO_USER_EMAIL),

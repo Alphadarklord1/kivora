@@ -1,4 +1,4 @@
-StudyHarbor is a desktop-primary AI study workspace with a supported web beta, guest-by-default access, offline-first generation, and optional cloud fallback.
+Kivora is a desktop-primary AI study workspace with a supported web beta, guest-by-default access, offline-first generation, and optional cloud fallback.
 
 ## Product Status
 
@@ -36,7 +36,7 @@ ENCRYPTION_DISABLED=1
 
 Security note:
 
-- In production, set `AUTH_SECRET` (or `NEXTAUTH_SECRET`). If it is missing, StudyHarbor now keeps guest access available but disables sign-in until the secret is configured.
+- In production, set `AUTH_SECRET` (or `NEXTAUTH_SECRET`). If it is missing, Kivora now keeps guest access available but disables sign-in until the secret is configured.
 
 Optional Google OAuth:
 
@@ -56,7 +56,7 @@ Quick commands:
 ```bash
 npm run models:prepare:balanced
 npm run electron:build:mac:balanced
-npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/StudyHarbor-model-store
+npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/Kivora-model-store
 ```
 
 ## Google Login Setup (Web + Desktop)
@@ -81,7 +81,7 @@ Google OAuth redirect URIs:
 Desktop note:
 
 - The desktop app uses a fixed localhost callback port (`3893` by default).
-- If that port is busy, StudyHarbor falls back to guest-safe mode and disables OAuth for that run.
+- If that port is busy, Kivora falls back to guest-safe mode and disables OAuth for that run.
 
 ## Core Build and Test Flow
 

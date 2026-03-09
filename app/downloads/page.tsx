@@ -108,7 +108,7 @@ export default async function DownloadsPage() {
         <header className={styles.hero}>
           <div className={styles.heroCopy}>
             <span className={styles.eyebrow}>Desktop builds + local models</span>
-            <h1>Download StudyHarbor</h1>
+            <h1>Download Kivora</h1>
             <p>
               Desktop builds ship through GitHub Releases. Mini is bundled in the desktop app and can also be published as a separate download. Balanced and Pro stay optional so users can choose the local model that matches their machine.
             </p>
@@ -240,7 +240,7 @@ export default async function DownloadsPage() {
 
             <article className={styles.utilityCardStrong}>
               <h3>Inside the app</h3>
-              <p>Open Settings → AI Models in StudyHarbor to switch the active model after installation.</p>
+              <p>Open Settings → AI Models in Kivora to switch the active model after installation.</p>
               <ul className={styles.bulletList}>
                 <li>Mini is the guaranteed offline fallback.</li>
                 <li>Balanced is the default recommendation for 16 GB devices.</li>

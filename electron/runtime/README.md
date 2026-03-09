@@ -1,6 +1,6 @@
 # Desktop AI Runtime Assets
 
-StudyHarbor desktop mode expects bundled runtime assets in this directory:
+Kivora desktop mode expects bundled runtime assets in this directory:
 
 - `model-manifest.json` (tracked fallback metadata used by the app)
 - `models/qwen2.5-1.5b-instruct-q4_k_m.gguf` (Mini, laptop-friendly)
@@ -17,11 +17,11 @@ These files are packaged into Electron `extraResources` as:
 - `resources/bin/*`
 
 The Electron installer bundles every model file present under `electron/runtime/models`.
-If only one model is included, StudyHarbor auto-falls back to that model.
+If only one model is included, Kivora auto-falls back to that model.
 
 ## Recommended bundle flow
 
-1. Put GGUF files in a local model store (default: `~/StudyHarbor-model-store`).
+1. Put GGUF files in a local model store (default: `~/Kivora-model-store`).
 2. Stage a bundle profile:
    - `npm run models:prepare:laptop`
    - `npm run models:prepare:balanced`
@@ -34,7 +34,7 @@ If only one model is included, StudyHarbor auto-falls back to that model.
      - `npm run electron:build:mac:pc`
 4. For release, upload optional models, `model-manifest.json`, and `SHA256SUMS.txt` under the same app version tag.
 5. Recommended one-command publish:
-   - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/StudyHarbor-model-store`
+   - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/Kivora-model-store`
 6. Manual validation path:
    - `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/studypilot`
    - `npm run models:checksums:validate -- --checksums=electron/runtime/SHA256SUMS.txt --manifest=electron/runtime/model-manifest.json --models-dir=electron/runtime/models`

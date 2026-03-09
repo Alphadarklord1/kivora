@@ -1,6 +1,6 @@
 {
-  "name": "StudyHarbor",
-  "short_name": "StudyHarbor",
+  "name": "Kivora",
+  "short_name": "Kivora",
   "description": "Your AI-powered study companion. Generate MCQs, summaries, quizzes, and study notes from any content.",
   "start_url": "/workspace",
   "id": "/workspace",
@@ -66,14 +66,14 @@
       "sizes": "1280x720",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "StudyHarbor Workspace"
+      "label": "Kivora Workspace"
     },
     {
       "src": "/screenshots/mobile.png",
       "sizes": "390x844",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "StudyHarbor Mobile"
+      "label": "Kivora Mobile"
     }
   ],
   "handle_links": "preferred",

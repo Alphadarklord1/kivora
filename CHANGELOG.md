@@ -2,7 +2,7 @@
 
 ## 1.1.0 - 2026-02-11
 
-- Switched StudyHarbor to desktop-first mode with production web gating.
+- Switched Kivora to desktop-first mode with production web gating.
 - Added guest/local default behavior so desktop use does not require sign-in.
 - Added bundled desktop AI runtime integration hooks for:
   - `Qwen2.5-3B-Instruct` (`Q4_K_M`)

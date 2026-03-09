@@ -38,26 +38,26 @@ const settingsScript = `
 `;
 
 export const metadata: Metadata = {
-  title: "StudyHarbor",
+  title: "Kivora",
   description: "Desktop-first study workspace with local AI tools",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "StudyHarbor",
+    title: "Kivora",
   },
   formatDetection: {
     telephone: false,
   },
   openGraph: {
     type: "website",
-    siteName: "StudyHarbor",
-    title: "StudyHarbor",
+    siteName: "Kivora",
+    title: "Kivora",
     description: "Desktop-first study workspace with local AI tools",
   },
   twitter: {
     card: "summary",
-    title: "StudyHarbor",
+    title: "Kivora",
     description: "Desktop-first study workspace with local AI tools",
   },
 };

@@ -28,7 +28,7 @@ export function Header({ user }: HeaderProps) {
     <>
       <header className="header-bar">
         <div>
-          <h1>StudyHarbor</h1>
+          <h1>Kivora</h1>
           <p>Welcome, {user.name || user.email}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

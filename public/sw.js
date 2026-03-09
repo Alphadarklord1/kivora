@@ -1,5 +1,5 @@
-// StudyHarbor Service Worker
-const CACHE_NAME = 'studyharbor-v3';
+// Kivora Service Worker
+const CACHE_NAME = 'kivora-v3';
 const OFFLINE_URL = '/offline.html';
 
 // Files to cache immediately

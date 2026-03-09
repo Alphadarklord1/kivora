@@ -1,4 +1,4 @@
-# StudyHarbor Offline Model Bundle Guide
+# Kivora Offline Model Bundle Guide
 
 This is the quickest reliable way to bundle offline AI models into the desktop app.
 
@@ -6,7 +6,7 @@ This is the quickest reliable way to bundle offline AI models into the desktop a
 
 Use a local folder (default):
 
-`~/StudyHarbor-model-store`
+`~/Kivora-model-store`
 
 Put these files there:
 
@@ -45,10 +45,10 @@ Output:
 ## 4) What users get in app
 
 - On first launch, users see a model chooser wizard (installer-like flow in app).
-- StudyHarbor auto-detects device profile (laptop/pc).
+- Kivora auto-detects device profile (laptop/pc).
 - Mini works immediately offline.
 - Balanced/Pro can be installed later from **Settings → AI Models**.
-- If a selected model is missing, StudyHarbor falls back safely.
+- If a selected model is missing, Kivora falls back safely.
 
 ## 5) Release checklist for optional downloads
 
@@ -56,7 +56,7 @@ For hybrid bundle mode (Mini bundled, bigger models optional):
 
 1. Build and publish app installer.
 2. Publish model assets + manifest + checksums in one command:
-   - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/StudyHarbor-model-store`
+   - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/Kivora-model-store`
 3. Required release assets after publish:
    - `qwen2.5-1.5b-instruct-q4_k_m.gguf`
    - `qwen2.5-3b-instruct-q4_k_m.gguf`

@@ -25,6 +25,6 @@ test('verifyTwoFactorCode accepts a current valid code', () => {
 test('buildOtpAuthUri includes issuer and account email', () => {
   const uri = mod.buildOtpAuthUri('student@example.com', 'JBSWY3DPEHPK3PXP');
   assert.match(uri, /^otpauth:\/\/totp\//);
-  assert.match(uri, /issuer=StudyHarbor/);
+  assert.match(uri, /issuer=Kivora/);
   assert.match(uri, /student%40example\.com/);
 });

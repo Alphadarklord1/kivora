@@ -49,7 +49,7 @@ export default function SharedContentPage() {
 
   useEffect(() => {
     if (!data) return;
-    document.title = `${data.contentName} · StudyHarbor Share`;
+    document.title = `${data.contentName} · Kivora Share`;
   }, [data]);
 
   const formatDate = (dateString: string) => {
@@ -135,7 +135,7 @@ export default function SharedContentPage() {
           <h1>Unable to Load Content</h1>
           <p>{error}</p>
           <Link href="/login" className="btn">
-            Sign in to StudyHarbor
+            Sign in to Kivora
           </Link>
         </div>
         <style jsx>{styles}</style>
@@ -151,7 +151,7 @@ export default function SharedContentPage() {
       <header className="shared-header">
         <Link href="/" className="logo">
           <span className="logo-icon">📘</span>
-          <span className="logo-text">StudyHarbor</span>
+          <span className="logo-text">Kivora</span>
         </Link>
         <Link href="/login" className="btn secondary">
           Sign In
@@ -236,7 +236,7 @@ export default function SharedContentPage() {
         <div className="cta-card">
           <h2>Want to create your own study materials?</h2>
           <p>
-            StudyHarbor helps you generate MCQs, summaries, quizzes, notes, and rephrased drafts from any content.
+            Kivora helps you generate MCQs, summaries, quizzes, notes, and rephrased drafts from any content.
           </p>
           <Link href="/register" className="btn">
             Get Started Free

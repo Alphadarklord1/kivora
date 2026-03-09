@@ -88,7 +88,7 @@ export function InstallPrompt() {
           </svg>
         </div>
         <div className="install-text">
-          <strong>Install StudyHarbor</strong>
+          <strong>Install Kivora</strong>
           {isIOS ? (
             <span>
               Tap <span className="share-icon">

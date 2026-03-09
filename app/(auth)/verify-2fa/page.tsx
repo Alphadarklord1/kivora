@@ -65,7 +65,7 @@ export default function VerifyTwoFactorPage() {
         <section className={styles.panel}>
           <Link href="/" className={styles.brand}>
             <span className={styles.brandMark}>◢</span>
-            <span className={styles.brandText}>StudyHarbor</span>
+            <span className={styles.brandText}>Kivora</span>
           </Link>
           <span className={styles.eyebrow}>{t('Second step before workspace access')}</span>
           <h1 className={styles.panelTitle}>{t('Two-step verification')}</h1>
