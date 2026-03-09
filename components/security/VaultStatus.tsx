@@ -10,8 +10,10 @@ export function VaultStatus() {
   const isArabic = settings.language === 'ar';
   const t = (key: string) => {
     const ar: Record<string, string> = {
-      'Encryption paused': 'التشفير متوقف مؤقتًا',
-      'Encryption Paused': 'التشفير متوقف مؤقتًا',
+      'Encryption paused': 'التشفير معطل في النسخة التجريبية',
+      'Encryption Paused': 'التشفير معطل في النسخة التجريبية',
+      'Encryption disabled for beta': 'التشفير معطل في النسخة التجريبية',
+      'Local vault password prompts are turned off until encryption returns in a later beta update.': 'تم إيقاف مطالبات كلمة مرور الخزنة المحلية حتى يعود التشفير في تحديث تجريبي لاحق.',
       'Lock vault': 'قفل الخزنة',
       'Vault locked': 'الخزنة مقفلة',
       'Not Set Up': 'غير مُعد',
@@ -123,13 +125,16 @@ export function VaultStatus() {
   if (ENCRYPTION_DISABLED) {
     return (
       <div className="vault-status">
-        <button className="vault-indicator paused" aria-label={t('Encryption paused')}>
+        <button className="vault-indicator paused" aria-label={t('Encryption disabled for beta')}>
           <span className="vault-icon">⏸️</span>
-          <span className="vault-text">{t('Encryption Paused')}</span>
+          <span className="vault-text">{t('Encryption disabled for beta')}</span>
         </button>
+        <p className="vault-disabled-note">{t('Local vault password prompts are turned off until encryption returns in a later beta update.')}</p>
         <style jsx>{`
           .vault-status {
             position: relative;
+            display: grid;
+            gap: var(--space-2);
           }
           .vault-indicator {
             display: flex;
@@ -146,6 +151,13 @@ export function VaultStatus() {
           .vault-indicator.paused {
             border-color: var(--border-default);
             color: var(--text-secondary);
+          }
+          .vault-disabled-note {
+            margin: 0;
+            max-width: 17rem;
+            font-size: var(--font-caption);
+            line-height: 1.45;
+            color: var(--text-muted);
           }
         `}</style>
       </div>

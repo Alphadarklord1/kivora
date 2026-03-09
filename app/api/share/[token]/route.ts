@@ -3,41 +3,63 @@ import { db } from '@/lib/db';
 import { shares, files, folders, topics, libraryItems, users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
+import { apiError, createRequestId } from '@/lib/api/error-response';
 
 // GET /api/share/[token] - Get shared content by token (public endpoint)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const { token } = await params;
+  const requestId = createRequestId(request);
+  try {
+    const { token } = await params;
 
-  if (!token) {
-    return NextResponse.json({ error: 'Token is required' }, { status: 400 });
-  }
+    if (!token) {
+      return apiError(400, {
+        errorCode: 'SHARE_TOKEN_REQUIRED',
+        reason: 'Token is required',
+        requestId,
+      });
+    }
 
   // Find the share by token
   const share = await db.query.shares.findFirst({
     where: eq(shares.shareToken, token),
   });
 
-  if (!share) {
-    return NextResponse.json({ error: 'Share not found or link is invalid' }, { status: 404 });
-  }
+    if (!share) {
+      return apiError(404, {
+        errorCode: 'SHARE_NOT_FOUND',
+        reason: 'Share not found or link is invalid',
+        requestId,
+      });
+    }
 
   if (share.shareType === 'user') {
     const userId = await getUserId(request);
-    if (!userId) {
-      return NextResponse.json({ error: 'Sign in required to access this share' }, { status: 401 });
+      if (!userId) {
+        return apiError(401, {
+          errorCode: 'SHARE_SIGNIN_REQUIRED',
+          reason: 'Sign in required to access this share',
+          requestId,
+        });
+      }
+      if (userId !== share.ownerId && userId !== share.sharedWithUserId) {
+        return apiError(403, {
+          errorCode: 'SHARE_ACCESS_DENIED',
+          reason: 'You do not have access to this share',
+          requestId,
+        });
+      }
     }
-    if (userId !== share.ownerId && userId !== share.sharedWithUserId) {
-      return NextResponse.json({ error: 'You do not have access to this share' }, { status: 403 });
-    }
-  }
 
-  // Check if expired
-  if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
-    return NextResponse.json({ error: 'This share link has expired' }, { status: 410 });
-  }
+    if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
+      return apiError(410, {
+        errorCode: 'SHARE_EXPIRED',
+        reason: 'This share link has expired',
+        requestId,
+      });
+    }
 
   // Get owner info
   const owner = await db.query.users.findFirst({
@@ -138,24 +160,36 @@ export async function GET(
     }
   }
 
-  if (!content) {
-    return NextResponse.json({ error: 'Shared content no longer exists' }, { status: 404 });
-  }
+    if (!content) {
+      return apiError(404, {
+        errorCode: 'SHARED_CONTENT_MISSING',
+        reason: 'Shared content no longer exists',
+        requestId,
+      });
+    }
 
-  return NextResponse.json({
-    share: {
-      id: share.id,
-      shareType: share.shareType,
-      permission: share.permission,
-      createdAt: share.createdAt,
-      expiresAt: share.expiresAt,
-    },
-    owner: {
-      name: owner?.name || 'Anonymous',
-      image: owner?.image || null,
-    },
-    contentType,
-    contentName,
-    content,
-  });
+    return NextResponse.json({
+      share: {
+        id: share.id,
+        shareType: share.shareType,
+        permission: share.permission,
+        createdAt: share.createdAt,
+        expiresAt: share.expiresAt,
+      },
+      owner: {
+        name: owner?.name || 'Anonymous',
+        image: owner?.image || null,
+      },
+      contentType,
+      contentName,
+      content,
+    });
+  } catch (error) {
+    console.error(`[ShareToken][${requestId}] GET failed`, error);
+    return apiError(500, {
+      errorCode: 'SHARE_FETCH_FAILED',
+      reason: 'Failed to load shared content',
+      requestId,
+    });
+  }
 }

@@ -47,7 +47,6 @@ const navGroups = [
     label: 'Tools',
     items: [
       { href: '/tools', label: 'Tools', icon: '🛠️', activeIcon: '🛠️' },
-      { href: '/podcast', label: 'Audio', icon: '🎧', activeIcon: '🎧' },
       { href: '/analytics', label: 'Analytics', icon: '📊', activeIcon: '📊' },
       { href: '/sharing', label: 'Sharing', icon: '🔗', activeIcon: '🔗' },
     ],
@@ -58,12 +57,12 @@ const navItems = navGroups.flatMap((group) => group.items);
 
 // Mobile bottom nav shows only the 5 most important items
 const mobileNavItems = navItems.filter(item =>
-  ['/workspace', '/planner', '/tools', '/library', '/podcast'].includes(item.href)
+  ['/workspace', '/planner', '/tools', '/library', '/analytics'].includes(item.href)
 );
 
 // Extra items go in the mobile user menu
 const mobileMenuExtras = navItems.filter(item =>
-  ['/analytics', '/sharing'].includes(item.href)
+  ['/sharing'].includes(item.href)
 );
 
 export function AppShell({ children, user }: AppShellProps) {
@@ -76,7 +75,6 @@ export function AppShell({ children, user }: AppShellProps) {
       Workspace: 'مساحة العمل',
       Planner: 'المخطط',
       Library: 'المكتبة',
-      Audio: 'الصوت',
       Analytics: 'التحليلات',
       Sharing: 'المشاركة',
       Rephrase: 'إعادة صياغة',
@@ -330,7 +328,6 @@ export function AppShell({ children, user }: AppShellProps) {
       { id: 'page-planner', type: 'page', title: t('Planner'), subtitle: '/planner', href: '/planner', icon: '📅', searchText: `${t('Planner')} planner` },
       { id: 'page-library', type: 'page', title: t('Library'), subtitle: '/library', href: '/library', icon: '📚', searchText: `${t('Library')} library` },
       { id: 'page-tools', type: 'page', title: t('Tools'), subtitle: '/tools', href: '/tools', icon: '🛠️', searchText: `${t('Tools')} tools` },
-      { id: 'page-audio', type: 'page', title: t('Audio'), subtitle: '/podcast', href: '/podcast', icon: '🎧', searchText: `${t('Audio')} audio podcast` },
       { id: 'page-analytics', type: 'page', title: t('Analytics'), subtitle: '/analytics', href: '/analytics', icon: '📊', searchText: `${t('Analytics')} analytics` },
       { id: 'page-sharing', type: 'page', title: t('Sharing'), subtitle: '/sharing', href: '/sharing', icon: '🔗', searchText: `${t('Sharing')} sharing` },
       { id: 'page-settings', type: 'page', title: t('Settings'), subtitle: '/settings', href: '/settings', icon: '⚙️', searchText: `${t('Settings')} settings` },

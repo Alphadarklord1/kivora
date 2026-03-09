@@ -378,7 +378,7 @@ export function WorkspacePanel({
   const isImageFile = (name: string) => /\.(png|jpg|jpeg|gif|webp)$/i.test(name);
   const isOfficeFile = (name: string) => /\.(doc|docx|ppt|pptx)$/i.test(name);
   const isVisualSupported = (file: FileItem) =>
-    file.type === 'upload' && (/\.(pdf)$/i.test(file.name) || isImageFile(file.name) || isOfficeFile(file.name));
+    file.type === 'upload' && (/\.(pdf)$/i.test(file.name) || isImageFile(file.name));
 
   const uploadFiles = useMemo(() => files.filter(f => f.type === 'upload'), [files]);
   const hasQuickAccess = useMemo(
@@ -388,54 +388,11 @@ export function WorkspacePanel({
 
   const openVisualForFile = async (file: FileItem) => {
     if (isOfficeFile(file.name)) {
-      if (!file.localBlobId) {
-        toast.error('File not available', 'Please re-upload the file.');
-        return;
-      }
-      try {
-        const blobData = await idbStore.get(file.localBlobId);
-        if (!blobData?.blob) {
-          toast.error('File not available', 'Please re-upload the file.');
-          return;
-        }
-
-        const form = new FormData();
-        form.append('file', blobData.blob, blobData.name || file.name);
-        const res = await fetch('/api/tools/convert', {
-          method: 'POST',
-          body: form,
-        });
-        if (!res.ok) {
-          const message = await res.text();
-          toast.error(t('Failed to save'), message || t('Please try again'));
-          return;
-        }
-        const pdfBlob = await res.blob();
-        const pdfName = file.name.replace(/\.(doc|docx|ppt|pptx)$/i, '.pdf');
-        const localBlobId = `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        await idbStore.put(localBlobId, {
-          blob: pdfBlob,
-          name: pdfName,
-          type: 'application/pdf',
-          size: pdfBlob.size,
-        });
-        const tempFile = {
-          id: `temp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          name: pdfName,
-          type: 'upload',
-          folderId: file.folderId,
-          topicId: file.topicId,
-          localBlobId,
-          createdAt: new Date().toISOString(),
-        };
-        localStorage.setItem('visual_temp_file', JSON.stringify(tempFile));
-        setMainTab('tools');
-        setToolTab('visual');
-        return;
-      } catch {
-        toast.error(t('Failed to save'), t('Please try again'));
-        return;
-      }
+      toast.warning(
+        isArabic ? 'التحليل البصري يدعم ملفات PDF والصور فقط' : 'Visual analysis supports PDFs and images only',
+        isArabic ? 'صدّر ملف Office إلى PDF أولاً ثم افتحه في المحلل البصري.' : 'Export the Office file to PDF first, then open it in the Visual Analyzer.'
+      );
+      return;
     }
 
     localStorage.setItem('visual_file_id', file.id);

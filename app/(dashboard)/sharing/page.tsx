@@ -29,6 +29,11 @@ interface Owner {
   email: string;
 }
 
+interface ApiErrorLike {
+  error?: string;
+  reason?: string;
+}
+
 export default function SharedWithMePage() {
   const { settings } = useSettings();
   const isArabic = settings.language === 'ar';
@@ -70,6 +75,7 @@ export default function SharedWithMePage() {
   const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'file' | 'folder' | 'topic' | 'library'>('all');
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   const fetchShares = async () => {
     setLoading(true);
@@ -79,6 +85,7 @@ export default function SharedWithMePage() {
       if (res.ok) {
         const data = await res.json();
         setShares(data);
+        setErrorMessage('');
 
         // Fetch owner info for received shares
         if (activeTab === 'received') {
@@ -97,9 +104,14 @@ export default function SharedWithMePage() {
           }
           setOwners(ownerInfo);
         }
+      } else {
+        const payload = (await res.json()) as ApiErrorLike;
+        setShares([]);
+        setErrorMessage(payload.reason || payload.error || (isArabic ? 'تعذر تحميل المشاركات' : 'Failed to load shares'));
       }
     } catch (error) {
       console.error('Failed to fetch shares:', error);
+      setErrorMessage(isArabic ? 'تعذر تحميل المشاركات' : 'Failed to load shares');
     } finally {
       setLoading(false);
     }
@@ -119,9 +131,14 @@ export default function SharedWithMePage() {
       });
       if (res.ok) {
         setShares(shares.filter(s => s.id !== shareId));
+        setErrorMessage('');
+      } else {
+        const payload = (await res.json()) as ApiErrorLike;
+        setErrorMessage(payload.reason || payload.error || (isArabic ? 'تعذر إلغاء المشاركة' : 'Failed to revoke share'));
       }
     } catch (error) {
       console.error('Failed to revoke share:', error);
+      setErrorMessage(isArabic ? 'تعذر إلغاء المشاركة' : 'Failed to revoke share');
     }
   };
 
@@ -176,6 +193,8 @@ export default function SharedWithMePage() {
           <p>{t('Manage content shared with you and by you')}</p>
         </div>
       </div>
+
+      {errorMessage && <div className="share-error-banner">{errorMessage}</div>}
 
       <div className="share-toolbar">
         <input
@@ -316,6 +335,15 @@ export default function SharedWithMePage() {
           flex-direction: column;
           gap: var(--space-3);
           margin-bottom: var(--space-4);
+        }
+
+        .share-error-banner {
+          margin-bottom: var(--space-4);
+          padding: var(--space-3) var(--space-4);
+          border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border-default));
+          background: color-mix(in srgb, var(--danger) 12%, var(--bg-surface));
+          color: var(--danger);
+          border-radius: var(--radius-lg);
         }
 
         .share-search {

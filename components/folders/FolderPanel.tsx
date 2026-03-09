@@ -28,6 +28,11 @@ interface FolderPanelProps {
   onToggleCollapse?: () => void;
 }
 
+interface ApiErrorLike {
+  error?: string;
+  reason?: string;
+}
+
 export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKey, collapsed = false, onToggleCollapse }: FolderPanelProps) {
   const { settings } = useSettings();
   const isArabic = settings.language === 'ar';
@@ -124,8 +129,8 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
         await fetchFolders();
         toast.success(t('Folder created'));
       } else {
-        const error = await res.json();
-        toast.error(t('Failed to create folder'), error.error || 'Unknown error');
+        const error = (await res.json()) as ApiErrorLike;
+        toast.error(t('Failed to create folder'), error.reason || error.error || t('Please try again'));
       }
     } catch (error) {
       console.error('Failed to create folder:', error);
@@ -153,8 +158,8 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
         await fetchFolders();
         toast.success(t('Subfolder created'));
       } else {
-        const error = await res.json();
-        toast.error(t('Failed to create subfolder'), error.error || 'Unknown error');
+        const error = (await res.json()) as ApiErrorLike;
+        toast.error(t('Failed to create subfolder'), error.reason || error.error || t('Please try again'));
       }
     } catch (error) {
       console.error('Failed to create topic:', error);

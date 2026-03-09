@@ -1,24 +1,45 @@
-StudyPilot is a desktop-first AI study workspace with offline model support.
+StudyPilot is a desktop-primary AI study workspace with a supported web beta, guest-by-default access, offline-first generation, and optional cloud fallback.
 
-## Getting Started
+## Product Status
 
-First, run the development server:
+- Desktop app is the primary supported runtime.
+- Web remains available as a beta prototype.
+- Guest mode is enabled by default unless `AUTH_REQUIRED=1`.
+- Encryption password flows are intentionally disabled for the current beta.
+
+## Local Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Main entry points:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Web dev: `http://localhost:3000`
+- Desktop shell: `npm run electron:dev`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Runtime Environment
+
+Core app/runtime:
+
+```bash
+AUTH_SECRET=...
+AUTH_GUEST_MODE=1
+AUTH_REQUIRED=0
+STUDYPILOT_DESKTOP_AUTH_PORT=3893
+OPENAI_API_KEY=...
+OPENAI_MODEL_DEFAULT=gpt-4o-mini
+STUDYPILOT_DESKTOP_ONLY=0
+ENCRYPTION_DISABLED=1
+```
+
+Optional Google OAuth:
+
+```bash
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+```
 
 ## Offline Model Bundles
 
@@ -58,17 +79,38 @@ Desktop note:
 - The desktop app uses a fixed localhost callback port (`3893` by default).
 - If that port is busy, StudyPilot falls back to guest-safe mode and disables OAuth for that run.
 
-## Learn More
+## Core Build and Test Flow
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run test:beta
+npm run build
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Supported Stable-Beta Surfaces
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `/workspace`
+- `/tools`
+- `/planner`
+- `/library`
+- `/analytics`
+- `/sharing`
+- `/settings`
+- `/login`
+- `/register`
+- `/downloads`
 
-## Deploy on Vercel
+Standalone audio navigation and Office-to-PDF visual conversion are intentionally cut from the beta surface until their dependencies are stable.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Release Flow
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Run `npm run test:beta`
+2. Run `npm run build`
+3. Build desktop artifacts
+4. Publish desktop release assets
+5. Publish optional model assets with `model-manifest.json` and `SHA256SUMS.txt`
+6. Run release consistency validation before announcing the tag
+
+Detailed runtime/model docs:
+
+- `OFFLINE_MODEL_BUNDLE_GUIDE.md`
+- `electron/runtime/README.md`

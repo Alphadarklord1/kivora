@@ -2,12 +2,14 @@
 
 StudyPilot desktop mode expects bundled runtime assets in this directory:
 
-- `model-manifest.json` (fallback model metadata + checksums)
+- `model-manifest.json` (tracked fallback metadata used by the app)
 - `models/qwen2.5-1.5b-instruct-q4_k_m.gguf` (Mini, laptop-friendly)
 - `models/qwen2.5-3b-instruct-q4_k_m.gguf` (Balanced default)
 - `models/qwen2.5-7b-instruct-q4_k_m.gguf` (Pro, desktop-class)
 - `bin/darwin-arm64/studypilot-ai`
 - `bin/win32-x64/studypilot-ai.exe`
+
+`SHA256SUMS.txt` is generated for releases and intentionally ignored during normal development commits.
 
 These files are packaged into Electron `extraResources` as:
 
@@ -30,7 +32,7 @@ If only one model is included, StudyPilot auto-falls back to that model.
      - `npm run electron:build:mac:laptop`
      - `npm run electron:build:mac:balanced`
      - `npm run electron:build:mac:pc`
-4. For release, upload optional models and `model-manifest.json` as GitHub release assets under the same app version tag.
+4. For release, upload optional models, `model-manifest.json`, and `SHA256SUMS.txt` under the same app version tag.
 5. Recommended one-command publish:
    - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/StudyPilot-model-store`
 6. Manual validation path:

@@ -61,6 +61,10 @@ export function VisualAnalyzer() {
     'Upload Image': 'رفع صورة',
     'Uploaded Image': 'الصورة المرفوعة',
     'Change': 'تغيير',
+    'Visual analysis currently supports PDFs and images only.': 'يدعم التحليل البصري حاليًا ملفات PDF والصور فقط.',
+    'File not found locally': 'الملف غير موجود محليًا',
+    'Could not load file from local storage': 'تعذر تحميل الملف من التخزين المحلي',
+    'Failed to load file': 'تعذر تحميل الملف',
   });
   const searchParams = useSearchParams();
   // File selection state
@@ -135,37 +139,13 @@ export function VisualAnalyzer() {
   );
 
   // Get filtered topics and files
-  const isOfficeFile = (name: string) => /\.(doc|docx|ppt|pptx)$/i.test(name);
   const folderTopics = topics.filter((t) => t.folderId === selectedFolderId);
   const topicFiles = allFiles.filter(
     (f) => f.topicId === selectedTopicId && (
       f.name.endsWith('.pdf') || f.name.endsWith('.png') || f.name.endsWith('.jpg') ||
-      f.name.endsWith('.jpeg') || f.name.endsWith('.gif') || f.name.endsWith('.webp') ||
-      isOfficeFile(f.name)
+      f.name.endsWith('.jpeg') || f.name.endsWith('.gif') || f.name.endsWith('.webp')
     )
   );
-
-  const convertOfficeFile = async (file: { name: string; localBlobId: string | null }) => {
-    if (!file.localBlobId) {
-      throw new Error('File not found in local storage');
-    }
-    const blob = await getBlob(file.localBlobId);
-    if (!blob) {
-      throw new Error('Could not load file from local storage');
-    }
-    const form = new FormData();
-    form.append('file', blob, file.name);
-    const res = await fetch('/api/tools/convert', {
-      method: 'POST',
-      body: form,
-    });
-    if (!res.ok) {
-      const message = await res.text();
-      throw new Error(message || 'Conversion failed');
-    }
-    const pdfBlob = await res.blob();
-    return { pdfBlob, pdfName: file.name.replace(/\.(doc|docx|ppt|pptx)$/i, '.pdf') };
-  };
 
   // Load PDF when file is selected
   useEffect(() => {
@@ -186,21 +166,15 @@ export function VisualAnalyzer() {
       try {
         const file = allFiles.find((f) => f.id === selectedFileId);
         if (!file?.localBlobId) {
-          throw new Error('File not found in local storage');
+          throw new Error(t('File not found locally'));
         }
 
         let blob = await getBlob(file.localBlobId);
         if (!blob) {
-          throw new Error('Could not load file from local storage');
+          throw new Error(t('Could not load file from local storage'));
         }
 
         const isImage = /\.(png|jpg|jpeg|gif|webp)$/i.test(file.name);
-        const isOffice = isOfficeFile(file.name);
-
-        if (isOffice) {
-          const converted = await convertOfficeFile({ name: file.name, localBlobId: file.localBlobId });
-          blob = converted.pdfBlob;
-        }
 
         if (isImage) {
           // For image files, read as data URL and set directly
@@ -226,7 +200,7 @@ export function VisualAnalyzer() {
         const images = await extractImagesFromPDF(blob, 20);
         setExtractedImages(images);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load file');
+        setError(err instanceof Error ? err.message : t('Failed to load file'));
       } finally {
         setLoading(false);
       }
@@ -419,6 +393,9 @@ export function VisualAnalyzer() {
         </h3>
         <p style={{ fontSize: 'var(--font-meta)', color: 'var(--text-muted)', margin: 0 }}>
           {t('Analyze diagrams, charts, equations, and images from your PDFs')}
+        </p>
+        <p style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)', margin: 'var(--space-2) 0 0' }}>
+          {t('Visual analysis currently supports PDFs and images only.')}
         </p>
       </div>
 

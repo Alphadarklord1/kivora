@@ -3,14 +3,20 @@ import { db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
-import { getUserId } from '@/lib/auth/get-user-id';
+import { getUserId, isDemoGuestEmail } from '@/lib/auth/get-user-id';
+import { apiError, createRequestId } from '@/lib/api/error-response';
 
 // PUT change password
 export async function PUT(request: NextRequest) {
+  const requestId = createRequestId(request);
   try {
     const userId = await getUserId(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
     }
 
     const body = await request.json();
@@ -18,10 +24,11 @@ export async function PUT(request: NextRequest) {
 
     // Validate new password
     if (!newPassword || newPassword.length < 6) {
-      return NextResponse.json(
-        { error: 'New password must be at least 6 characters' },
-        { status: 400 }
-      );
+      return apiError(400, {
+        errorCode: 'INVALID_PASSWORD',
+        reason: 'New password must be at least 6 characters',
+        requestId,
+      });
     }
 
     // Get user with password hash
@@ -32,24 +39,38 @@ export async function PUT(request: NextRequest) {
       .limit(1);
 
     if (user.length === 0) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return apiError(404, {
+        errorCode: 'ACCOUNT_NOT_FOUND',
+        reason: 'User not found',
+        requestId,
+      });
+    }
+
+    if (isDemoGuestEmail(user[0].email)) {
+      return apiError(403, {
+        errorCode: 'GUEST_PASSWORD_FORBIDDEN',
+        reason: 'Guest sessions cannot set or change a login password',
+        requestId,
+      });
     }
 
     // If user has a password, verify current password
     if (user[0].passwordHash) {
       if (!currentPassword) {
-        return NextResponse.json(
-          { error: 'Current password is required' },
-          { status: 400 }
-        );
+        return apiError(400, {
+          errorCode: 'CURRENT_PASSWORD_REQUIRED',
+          reason: 'Current password is required',
+          requestId,
+        });
       }
 
       const isValid = await bcrypt.compare(currentPassword, user[0].passwordHash);
       if (!isValid) {
-        return NextResponse.json(
-          { error: 'Current password is incorrect' },
-          { status: 400 }
-        );
+        return apiError(400, {
+          errorCode: 'INVALID_CURRENT_PASSWORD',
+          reason: 'Current password is incorrect',
+          requestId,
+        });
       }
     }
 
@@ -67,7 +88,11 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: 'Password updated' });
   } catch (error) {
-    console.error('Change password error:', error);
-    return NextResponse.json({ error: 'Failed to change password' }, { status: 500 });
+    console.error(`[AccountPassword][${requestId}] PUT failed`, error);
+    return apiError(500, {
+      errorCode: 'PASSWORD_UPDATE_FAILED',
+      reason: 'Failed to change password',
+      requestId,
+    });
   }
 }

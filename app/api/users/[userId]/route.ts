@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
+import { apiError, createRequestId } from '@/lib/api/error-response';
 
 // GET public user profile by ID
 // Only returns public info (name, email) for authenticated users
@@ -10,17 +11,25 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
+  const requestId = createRequestId(request);
   try {
-    // Verify the requester is authenticated
     const requesterId = await getUserId(request);
     if (!requesterId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
     }
 
     const { userId } = await params;
 
     if (!userId) {
-      return NextResponse.json({ error: 'User ID required' }, { status: 400 });
+      return apiError(400, {
+        errorCode: 'USER_ID_REQUIRED',
+        reason: 'User ID required',
+        requestId,
+      });
     }
 
     // Get the requested user's public info
@@ -36,7 +45,11 @@ export async function GET(
       .limit(1);
 
     if (user.length === 0) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return apiError(404, {
+        errorCode: 'USER_NOT_FOUND',
+        reason: 'User not found',
+        requestId,
+      });
     }
 
     // Return public profile info
@@ -47,7 +60,11 @@ export async function GET(
       image: user[0].image,
     });
   } catch (error) {
-    console.error('Get user profile error:', error);
-    return NextResponse.json({ error: 'Failed to get user profile' }, { status: 500 });
+    console.error(`[UserProfile][${requestId}] GET failed`, error);
+    return apiError(500, {
+      errorCode: 'USER_PROFILE_FETCH_FAILED',
+      reason: 'Failed to get user profile',
+      requestId,
+    });
   }
 }

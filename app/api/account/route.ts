@@ -2,14 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { users, accounts, folders, files, libraryItems } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { getUserId } from '@/lib/auth/get-user-id';
+import { getUserId, isDemoGuestEmail } from '@/lib/auth/get-user-id';
+import { apiError, createRequestId } from '@/lib/api/error-response';
 
 // GET user account info
 export async function GET(request: NextRequest) {
+  const requestId = createRequestId(request);
   try {
     const userId = await getUserId(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
     }
 
     // Get user data
@@ -27,7 +33,11 @@ export async function GET(request: NextRequest) {
       .limit(1);
 
     if (user.length === 0) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return apiError(404, {
+        errorCode: 'ACCOUNT_NOT_FOUND',
+        reason: 'User not found',
+        requestId,
+      });
     }
 
     // Get connected accounts
@@ -58,6 +68,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ...user[0],
       hasPassword: !!user[0].hasPassword,
+      isGuest: isDemoGuestEmail(user[0].email),
       connectedAccounts: connectedAccounts.map(a => a.provider),
       stats: {
         folders: folderCount.length,
@@ -66,44 +77,73 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Get account error:', error);
-    return NextResponse.json({ error: 'Failed to get account' }, { status: 500 });
+    console.error(`[Account][${requestId}] GET failed`, error);
+    return apiError(500, {
+      errorCode: 'ACCOUNT_FETCH_FAILED',
+      reason: 'Failed to get account',
+      requestId,
+    });
   }
 }
 
 // PUT update user profile
 export async function PUT(request: NextRequest) {
+  const requestId = createRequestId(request);
   try {
     const userId = await getUserId(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
     }
 
     const body = await request.json();
     const { name, email } = body;
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : email;
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    if (isDemoGuestEmail(currentUser?.email)) {
+      return apiError(403, {
+        errorCode: 'GUEST_ACCOUNT_READ_ONLY',
+        reason: 'Guest profile changes are disabled until you sign in with a real account',
+        requestId,
+      });
+    }
 
     // Validate
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
+    if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return apiError(400, {
+        errorCode: 'INVALID_EMAIL',
+        reason: 'Invalid email format',
+        requestId,
+      });
     }
 
     // Check if email is already taken by another user
-    if (email) {
+    if (normalizedEmail) {
       const existingUser = await db
         .select()
         .from(users)
-        .where(eq(users.email, email))
+        .where(eq(users.email, normalizedEmail))
         .limit(1);
 
       if (existingUser.length > 0 && existingUser[0].id !== userId) {
-        return NextResponse.json({ error: 'Email already in use' }, { status: 400 });
+        return apiError(400, {
+          errorCode: 'EMAIL_IN_USE',
+          reason: 'Email already in use',
+          requestId,
+        });
       }
     }
 
     // Update user
     const updateData: Record<string, string | Date> = { updatedAt: new Date() };
     if (name !== undefined) updateData.name = name;
-    if (email) updateData.email = email;
+    if (normalizedEmail) updateData.email = normalizedEmail;
 
     const updated = await db
       .update(users)
@@ -118,27 +158,48 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(updated[0]);
   } catch (error) {
-    console.error('Update account error:', error);
-    return NextResponse.json({ error: 'Failed to update account' }, { status: 500 });
+    console.error(`[Account][${requestId}] PUT failed`, error);
+    return apiError(500, {
+      errorCode: 'ACCOUNT_UPDATE_FAILED',
+      reason: 'Failed to update account',
+      requestId,
+    });
   }
 }
 
 // DELETE user account
 export async function DELETE(request: NextRequest) {
+  const requestId = createRequestId(request);
   try {
     const userId = await getUserId(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
     }
 
     const body = await request.json();
     const { confirmation } = body;
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    if (isDemoGuestEmail(currentUser?.email)) {
+      return apiError(403, {
+        errorCode: 'GUEST_ACCOUNT_DELETE_FORBIDDEN',
+        reason: 'Guest sessions cannot delete the demo account',
+        requestId,
+      });
+    }
 
     if (confirmation !== 'DELETE MY ACCOUNT') {
-      return NextResponse.json(
-        { error: 'Please type "DELETE MY ACCOUNT" to confirm' },
-        { status: 400 }
-      );
+      return apiError(400, {
+        errorCode: 'DELETE_CONFIRMATION_REQUIRED',
+        reason: 'Please type "DELETE MY ACCOUNT" to confirm',
+        requestId,
+      });
     }
 
     // Delete user (cascades to all related data)
@@ -146,7 +207,11 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: 'Account deleted' });
   } catch (error) {
-    console.error('Delete account error:', error);
-    return NextResponse.json({ error: 'Failed to delete account' }, { status: 500 });
+    console.error(`[Account][${requestId}] DELETE failed`, error);
+    return apiError(500, {
+      errorCode: 'ACCOUNT_DELETE_FAILED',
+      reason: 'Failed to delete account',
+      requestId,
+    });
   }
 }

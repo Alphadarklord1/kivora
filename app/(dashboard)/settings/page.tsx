@@ -18,6 +18,7 @@ interface UserAccount {
   image: string | null;
   createdAt: string;
   hasPassword: boolean;
+  isGuest?: boolean;
   connectedAccounts: string[];
   stats: {
     folders: number;
@@ -99,6 +100,11 @@ interface AuthCapabilities {
   desktopAuthPort: number | null;
   oauthDisabled: boolean;
   oauthDisabledReason: string | null;
+}
+
+interface ApiErrorLike {
+  error?: string;
+  reason?: string;
 }
 
 const defaultUserSettings: UserSettings = {
@@ -613,8 +619,8 @@ export default function SettingsPage() {
         setAccount(prev => prev ? { ...prev, ...data } : null);
         showMessage('success', t('Profile updated successfully'));
       } else {
-        const error = await res.json();
-        showMessage('error', error.error || t('Failed to update profile'));
+        const error = (await res.json()) as ApiErrorLike;
+        showMessage('error', error.reason || error.error || t('Failed to update profile'));
       }
     } catch {
       showMessage('error', t('Failed to update profile'));
@@ -685,8 +691,8 @@ export default function SettingsPage() {
         setNewPassword('');
         setConfirmPassword('');
       } else {
-        const error = await res.json();
-        showMessage('error', error.error || t('Failed to change password'));
+        const error = (await res.json()) as ApiErrorLike;
+        showMessage('error', error.reason || error.error || t('Failed to change password'));
       }
     } catch {
       showMessage('error', t('Failed to change password'));
@@ -772,8 +778,8 @@ export default function SettingsPage() {
         // Refresh account data
         fetchData();
       } else {
-        const error = await res.json();
-        showMessage('error', error.error || (isArabic ? `تعذر فصل ${provider}` : `Failed to disconnect ${provider}`));
+        const error = (await res.json()) as ApiErrorLike;
+        showMessage('error', error.reason || error.error || (isArabic ? `تعذر فصل ${provider}` : `Failed to disconnect ${provider}`));
       }
     } catch {
       showMessage('error', isArabic ? `تعذر فصل ${provider}` : `Failed to disconnect ${provider}`);
@@ -800,8 +806,8 @@ export default function SettingsPage() {
       if (res.ok) {
         await signOut({ callbackUrl: '/login' });
       } else {
-        const error = await res.json();
-        showMessage('error', error.error || (isArabic ? 'تعذر حذف الحساب' : 'Failed to delete account'));
+        const error = (await res.json()) as ApiErrorLike;
+        showMessage('error', error.reason || error.error || (isArabic ? 'تعذر حذف الحساب' : 'Failed to delete account'));
       }
     } catch {
       showMessage('error', isArabic ? 'تعذر حذف الحساب' : 'Failed to delete account');
@@ -864,6 +870,11 @@ export default function SettingsPage() {
             <div className="settings-section">
               <h2>{t('Profile Information')}</h2>
               <p className="section-description">{t('Update your personal information')}</p>
+              {account?.isGuest && (
+                <p className="section-description">
+                  {isArabic ? 'تعديل الملف الشخصي معطل أثناء جلسة الضيف.' : 'Profile editing is disabled during a guest session.'}
+                </p>
+              )}
 
               <div className="form-group">
                 <label htmlFor="name">{t('Name')}</label>
@@ -890,7 +901,7 @@ export default function SettingsPage() {
               <button
                 className="btn"
                 onClick={handleSaveProfile}
-                disabled={saving}
+                disabled={saving || Boolean(account?.isGuest)}
               >
                 {saving ? t('Saving...') : t('Save Changes')}
               </button>
@@ -1255,6 +1266,11 @@ export default function SettingsPage() {
                     ? (isArabic ? 'حدّث كلمة مرور تسجيل الدخول (منفصلة عن التشفير)' : 'Update your login password (separate from encryption)')
                     : (isArabic ? 'عيّن كلمة مرور لتسجيل الدخول بالبريد وكلمة المرور' : 'Set a password to login with email and password')}
                 </p>
+                {account?.isGuest && (
+                  <p className="section-description">
+                    {isArabic ? 'إعداد كلمة مرور غير متاح في وضع الضيف.' : 'Password setup is unavailable in guest mode.'}
+                  </p>
+                )}
 
                 {account?.hasPassword && (
                   <div className="form-group">
@@ -1294,7 +1310,7 @@ export default function SettingsPage() {
                 <button
                   className="btn"
                   onClick={handleChangePassword}
-                  disabled={saving || !newPassword || !confirmPassword}
+                  disabled={saving || !newPassword || !confirmPassword || Boolean(account?.isGuest)}
                 >
                   {saving ? t('Saving...') : account?.hasPassword ? t('Change Login Password') : t('Set Login Password')}
                 </button>
@@ -1307,6 +1323,17 @@ export default function SettingsPage() {
             <div className="settings-section">
               <h2>{t('Account')}</h2>
               <p className="section-description">{isArabic ? 'إدارة حسابك والخدمات المرتبطة' : 'Manage your account and connected services'}</p>
+
+              {account?.isGuest && (
+                <div className="account-card info">
+                  <h3>{isArabic ? 'جلسة ضيف' : 'Guest session'}</h3>
+                  <p>
+                    {isArabic
+                      ? 'أنت تستخدم StudyPilot بدون حساب. يمكنك المتابعة كضيف، لكن ربط الخدمات الخارجية أو حذف الحساب غير متاحين حتى تسجل الدخول بحساب فعلي.'
+                      : 'You are using StudyPilot without a full account. Guest mode keeps the app usable, but external account linking and account deletion stay disabled until you sign in with a real account.'}
+                  </p>
+                </div>
+              )}
 
               {/* Connected Accounts */}
               <div className="account-card">
@@ -1369,7 +1396,7 @@ export default function SettingsPage() {
                         <button
                           className="btn small google-btn"
                           onClick={() => handleLinkAccount('google')}
-                          disabled={linkingProvider === 'google' || !providers?.google || Boolean(authCapabilities?.oauthDisabled)}
+                          disabled={account?.isGuest || linkingProvider === 'google' || !providers?.google || Boolean(authCapabilities?.oauthDisabled)}
                         >
                           {linkingProvider === 'google' ? (isArabic ? 'جارٍ الربط...' : 'Connecting...') : (isArabic ? 'ربط' : 'Connect')}
                         </button>
@@ -1406,7 +1433,7 @@ export default function SettingsPage() {
                         <button
                           className="btn small github-btn"
                           onClick={() => handleLinkAccount('github')}
-                          disabled={linkingProvider === 'github' || !providers?.github || Boolean(authCapabilities?.oauthDisabled)}
+                          disabled={account?.isGuest || linkingProvider === 'github' || !providers?.github || Boolean(authCapabilities?.oauthDisabled)}
                         >
                           {linkingProvider === 'github' ? (isArabic ? 'جارٍ الربط...' : 'Connecting...') : (isArabic ? 'ربط' : 'Connect')}
                         </button>
@@ -1463,6 +1490,7 @@ export default function SettingsPage() {
                 <button
                   className="btn danger"
                   onClick={() => setShowDeleteModal(true)}
+                  disabled={Boolean(account?.isGuest)}
                 >
                   {t('Delete Account')}
                 </button>

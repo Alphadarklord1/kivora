@@ -74,6 +74,11 @@ For hybrid bundle mode (Mini bundled, bigger models optional):
 
 CI also enforces these checks in `.github/workflows/beta-ci.yml` and `.github/workflows/model-manifest.yml`.
 
+Notes:
+
+- `electron/runtime/model-manifest.json` stays tracked as the fallback manifest used by the desktop app.
+- `electron/runtime/SHA256SUMS.txt` is a generated release artifact and is intentionally ignored in normal development commits.
+
 ## 6) Direct download URLs template
 
 Replace `vX.Y.Z` with your release tag:

@@ -4,6 +4,7 @@ import { shares, files, folders, topics, libraryItems, users } from '@/lib/db/sc
 import { eq, and, or, desc } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { getUserId } from '@/lib/auth/get-user-id';
+import { apiError, createRequestId } from '@/lib/api/error-response';
 
 function generateShareToken(): string {
   return randomBytes(16).toString('hex');
@@ -11,45 +12,48 @@ function generateShareToken(): string {
 
 // GET /api/share - List all shares for the current user
 export async function GET(request: NextRequest) {
-  const userId = await getUserId(request);
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const requestId = createRequestId(request);
+  try {
+    const userId = await getUserId(request);
+    if (!userId) {
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
+    }
 
-  const { searchParams } = new URL(request.url);
-  const type = searchParams.get('type'); // 'owned' | 'shared' | null (all)
-  const origin = request.nextUrl.origin;
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type'); // 'owned' | 'shared' | null (all)
+    const origin = request.nextUrl.origin;
 
-  let userShares;
+    let userShares;
 
-  if (type === 'owned') {
-    // Shares created by the user
-    userShares = await db.query.shares.findMany({
-      where: eq(shares.ownerId, userId),
-      orderBy: [desc(shares.createdAt)],
-    });
-  } else if (type === 'shared') {
-    // Shares shared with the user
-    userShares = await db.query.shares.findMany({
-      where: eq(shares.sharedWithUserId, userId),
-      orderBy: [desc(shares.createdAt)],
-    });
-  } else {
-    // All shares (owned or shared with user)
-    userShares = await db.query.shares.findMany({
-      where: or(
-        eq(shares.ownerId, userId),
-        eq(shares.sharedWithUserId, userId)
-      ),
-      orderBy: [desc(shares.createdAt)],
-    });
-  }
+    if (type === 'owned') {
+      userShares = await db.query.shares.findMany({
+        where: eq(shares.ownerId, userId),
+        orderBy: [desc(shares.createdAt)],
+      });
+    } else if (type === 'shared') {
+      userShares = await db.query.shares.findMany({
+        where: eq(shares.sharedWithUserId, userId),
+        orderBy: [desc(shares.createdAt)],
+      });
+    } else {
+      userShares = await db.query.shares.findMany({
+        where: or(
+          eq(shares.ownerId, userId),
+          eq(shares.sharedWithUserId, userId)
+        ),
+        orderBy: [desc(shares.createdAt)],
+      });
+    }
 
   // Enrich shares with resource names
-  const enrichedShares = await Promise.all(
-    userShares.map(async (share) => {
-      let resourceName = 'Unknown';
-      let resourceType = 'unknown';
+    const enrichedShares = await Promise.all(
+      userShares.map(async (share) => {
+        let resourceName = 'Unknown';
+        let resourceType = 'unknown';
 
       if (share.fileId) {
         const file = await db.query.files.findFirst({
@@ -86,45 +90,59 @@ export async function GET(request: NextRequest) {
         sharedWithEmail = sharedUser?.email || null;
       }
 
-      return {
-        ...share,
-        resourceName,
-        resourceType,
-        sharedWithEmail,
-        shareUrl: share.shareToken ? `${origin}/shared/${share.shareToken}` : null,
-      };
-    })
-  );
+        return {
+          ...share,
+          resourceName,
+          resourceType,
+          sharedWithEmail,
+          shareUrl: share.shareToken ? `${origin}/shared/${share.shareToken}` : null,
+        };
+      })
+    );
 
-  return NextResponse.json(enrichedShares);
+    return NextResponse.json(enrichedShares);
+  } catch (error) {
+    console.error(`[Share][${requestId}] GET failed`, error);
+    return apiError(500, {
+      errorCode: 'SHARES_FETCH_FAILED',
+      reason: 'Failed to fetch shares',
+      requestId,
+    });
+  }
 }
 
 // POST /api/share - Create a new share
 export async function POST(request: NextRequest) {
-  const userId = await getUserId(request);
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const requestId = createRequestId(request);
+  try {
+    const userId = await getUserId(request);
+    if (!userId) {
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
+    }
 
-  const body = await request.json();
-  const {
-    fileId,
-    folderId,
-    topicId,
-    libraryItemId,
-    shareType = 'link',
-    sharedWithEmail,
-    permission = 'view',
-    expiresInDays
-  } = body;
+    const body = await request.json();
+    const {
+      fileId,
+      folderId,
+      topicId,
+      libraryItemId,
+      shareType = 'link',
+      sharedWithEmail,
+      permission = 'view',
+      expiresInDays
+    } = body;
 
-  // Validate that at least one resource is specified
-  if (!fileId && !folderId && !topicId && !libraryItemId) {
-    return NextResponse.json(
-      { error: 'Must specify fileId, folderId, topicId, or libraryItemId' },
-      { status: 400 }
-    );
-  }
+    if (!fileId && !folderId && !topicId && !libraryItemId) {
+      return apiError(400, {
+        errorCode: 'INVALID_SHARE_REQUEST',
+        reason: 'Must specify fileId, folderId, topicId, or libraryItemId',
+        requestId,
+      });
+    }
 
   // Verify ownership of the resource
   if (fileId) {
@@ -132,7 +150,11 @@ export async function POST(request: NextRequest) {
       where: and(eq(files.id, fileId), eq(files.userId, userId)),
     });
     if (!file) {
-      return NextResponse.json({ error: 'File not found or not owned by you' }, { status: 404 });
+      return apiError(404, {
+        errorCode: 'SHARE_FILE_NOT_FOUND',
+        reason: 'File not found or not owned by you',
+        requestId,
+      });
     }
   }
 
@@ -141,7 +163,11 @@ export async function POST(request: NextRequest) {
       where: and(eq(folders.id, folderId), eq(folders.userId, userId)),
     });
     if (!folder) {
-      return NextResponse.json({ error: 'Folder not found or not owned by you' }, { status: 404 });
+      return apiError(404, {
+        errorCode: 'SHARE_FOLDER_NOT_FOUND',
+        reason: 'Folder not found or not owned by you',
+        requestId,
+      });
     }
   }
 
@@ -150,14 +176,22 @@ export async function POST(request: NextRequest) {
       where: eq(topics.id, topicId),
     });
     if (!topic) {
-      return NextResponse.json({ error: 'Subfolder not found' }, { status: 404 });
+      return apiError(404, {
+        errorCode: 'SHARE_TOPIC_NOT_FOUND',
+        reason: 'Subfolder not found',
+        requestId,
+      });
     }
     // Verify the folder belongs to the user
     const folder = await db.query.folders.findFirst({
       where: and(eq(folders.id, topic.folderId), eq(folders.userId, userId)),
     });
     if (!folder) {
-      return NextResponse.json({ error: 'Subfolder not owned by you' }, { status: 404 });
+      return apiError(404, {
+        errorCode: 'SHARE_TOPIC_NOT_OWNED',
+        reason: 'Subfolder not owned by you',
+        requestId,
+      });
     }
   }
 
@@ -166,7 +200,11 @@ export async function POST(request: NextRequest) {
       where: and(eq(libraryItems.id, libraryItemId), eq(libraryItems.userId, userId)),
     });
     if (!item) {
-      return NextResponse.json({ error: 'Library item not found or not owned by you' }, { status: 404 });
+      return apiError(404, {
+        errorCode: 'SHARE_LIBRARY_NOT_FOUND',
+        reason: 'Library item not found or not owned by you',
+        requestId,
+      });
     }
   }
 
@@ -174,13 +212,21 @@ export async function POST(request: NextRequest) {
   let sharedWithUserId = null;
   if (shareType === 'user' && sharedWithEmail) {
     const sharedUser = await db.query.users.findFirst({
-      where: eq(users.email, sharedWithEmail.toLowerCase()),
+      where: eq(users.email, String(sharedWithEmail).toLowerCase().trim()),
     });
     if (!sharedUser) {
-      return NextResponse.json({ error: 'User not found with that email' }, { status: 404 });
+      return apiError(404, {
+        errorCode: 'SHARE_USER_NOT_FOUND',
+        reason: 'User not found with that email',
+        requestId,
+      });
     }
     if (sharedUser.id === userId) {
-      return NextResponse.json({ error: 'Cannot share with yourself' }, { status: 400 });
+      return apiError(400, {
+        errorCode: 'SHARE_SELF_FORBIDDEN',
+        reason: 'Cannot share with yourself',
+        requestId,
+      });
     }
     sharedWithUserId = sharedUser.id;
   }
@@ -211,36 +257,66 @@ export async function POST(request: NextRequest) {
     ? `${request.nextUrl.origin}/shared/${shareToken}`
     : null;
 
-  return NextResponse.json({
-    ...newShare,
-    shareUrl,
-  }, { status: 201 });
+    return NextResponse.json({
+      ...newShare,
+      shareUrl,
+    }, { status: 201 });
+  } catch (error) {
+    console.error(`[Share][${requestId}] POST failed`, error);
+    return apiError(500, {
+      errorCode: 'SHARE_CREATE_FAILED',
+      reason: 'Failed to create share',
+      requestId,
+    });
+  }
 }
 
 // DELETE /api/share - Delete a share
 export async function DELETE(request: NextRequest) {
-  const userId = await getUserId(request);
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const requestId = createRequestId(request);
+  try {
+    const userId = await getUserId(request);
+    if (!userId) {
+      return apiError(401, {
+        errorCode: 'UNAUTHORIZED',
+        reason: 'Authentication required',
+        requestId,
+      });
+    }
 
-  const { searchParams } = new URL(request.url);
-  const shareId = searchParams.get('id');
+    const { searchParams } = new URL(request.url);
+    const shareId = searchParams.get('id');
 
-  if (!shareId) {
-    return NextResponse.json({ error: 'Share ID is required' }, { status: 400 });
-  }
+    if (!shareId) {
+      return apiError(400, {
+        errorCode: 'SHARE_ID_REQUIRED',
+        reason: 'Share ID is required',
+        requestId,
+      });
+    }
 
   // Verify ownership
   const share = await db.query.shares.findFirst({
     where: and(eq(shares.id, shareId), eq(shares.ownerId, userId)),
   });
 
-  if (!share) {
-    return NextResponse.json({ error: 'Share not found or not owned by you' }, { status: 404 });
+    if (!share) {
+      return apiError(404, {
+        errorCode: 'SHARE_NOT_FOUND',
+        reason: 'Share not found or not owned by you',
+        requestId,
+      });
+    }
+
+    await db.delete(shares).where(eq(shares.id, shareId));
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error(`[Share][${requestId}] DELETE failed`, error);
+    return apiError(500, {
+      errorCode: 'SHARE_DELETE_FAILED',
+      reason: 'Failed to delete share',
+      requestId,
+    });
   }
-
-  await db.delete(shares).where(eq(shares.id, shareId));
-
-  return NextResponse.json({ success: true });
 }

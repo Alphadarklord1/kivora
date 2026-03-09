@@ -6,6 +6,13 @@ import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 
+export const DEMO_USER_EMAIL = 'demo@local.studypilot';
+export const DEMO_USER_NAME = 'Local Demo';
+
+export function isDemoGuestEmail(email: string | null | undefined): boolean {
+  return typeof email === 'string' && email.trim().toLowerCase() === DEMO_USER_EMAIL;
+}
+
 /**
  * Extract userId from JWT token, with guest-mode bootstrap support.
  * Shared across all API routes for consistent auth behavior.
@@ -25,9 +32,8 @@ export async function getUserId(request: NextRequest): Promise<string | null> {
 
   // Local demo mode: bootstrap a deterministic demo user for API-backed flows.
   if (isGuestModeEnabled()) {
-    const demoEmail = 'demo@local.studypilot';
     const existingDemoUser = await db.query.users.findFirst({
-      where: eq(users.email, demoEmail),
+      where: eq(users.email, DEMO_USER_EMAIL),
     });
 
     if (existingDemoUser) return existingDemoUser.id;
@@ -36,15 +42,15 @@ export async function getUserId(request: NextRequest): Promise<string | null> {
       const demoUserId = uuidv4();
       await db.insert(users).values({
         id: demoUserId,
-        email: demoEmail,
-        name: 'Local Demo',
+        email: DEMO_USER_EMAIL,
+        name: DEMO_USER_NAME,
         image: null,
       });
       return demoUserId;
     } catch {
       // Concurrent guest bootstrap may create the same demo user.
       const retryDemoUser = await db.query.users.findFirst({
-        where: eq(users.email, demoEmail),
+        where: eq(users.email, DEMO_USER_EMAIL),
       });
       return retryDemoUser?.id ?? null;
     }

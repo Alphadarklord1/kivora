@@ -1,24 +1,35 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { apiError, createRequestId } from '@/lib/api/error-response';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const requestId = createRequestId(request);
   const baseUrl = process.env.CONVERTER_API_BASE_URL || process.env.NEXT_PUBLIC_CONVERTER_API_BASE_URL;
   if (!baseUrl) {
-    return NextResponse.json(
-      { error: 'Converter API not configured. Set CONVERTER_API_BASE_URL.' },
-      { status: 501 }
-    );
+    return apiError(503, {
+      errorCode: 'CONVERTER_UNAVAILABLE',
+      reason: 'Document conversion is not available in this beta. Export the file to PDF first.',
+      requestId,
+    });
   }
 
   let formData: FormData;
   try {
     formData = await request.formData();
   } catch {
-    return NextResponse.json({ error: 'Invalid form data' }, { status: 400 });
+    return apiError(400, {
+      errorCode: 'INVALID_FORM_DATA',
+      reason: 'Invalid form data',
+      requestId,
+    });
   }
 
   const file = formData.get('file');
   if (!(file instanceof Blob)) {
-    return NextResponse.json({ error: 'Missing file' }, { status: 400 });
+    return apiError(400, {
+      errorCode: 'MISSING_FILE',
+      reason: 'Missing file',
+      requestId,
+    });
   }
 
   try {
@@ -29,10 +40,11 @@ export async function POST(request: Request) {
 
     if (!upstream.ok) {
       const text = await upstream.text();
-      return NextResponse.json(
-        { error: text || 'Conversion failed' },
-        { status: upstream.status }
-      );
+      return apiError(upstream.status, {
+        errorCode: 'CONVERSION_FAILED',
+        reason: text || 'Conversion failed',
+        requestId,
+      });
     }
 
     const arrayBuffer = await upstream.arrayBuffer();
@@ -43,9 +55,10 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Conversion failed' },
-      { status: 500 }
-    );
+    return apiError(500, {
+      errorCode: 'CONVERTER_RUNTIME_ERROR',
+      reason: error instanceof Error ? error.message : 'Conversion failed',
+      requestId,
+    });
   }
 }
