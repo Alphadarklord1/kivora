@@ -41,6 +41,10 @@ export function getDesktopAuthPort(): number {
   return parsePort(process.env.STUDYPILOT_DESKTOP_AUTH_PORT);
 }
 
+export function hasConfiguredAuthSecret(): boolean {
+  return Boolean(process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET);
+}
+
 export function normalizeAuthEmail(value: string | null | undefined): string | null {
   if (!value) return null;
   const normalized = value.trim().toLowerCase();
@@ -51,14 +55,26 @@ export function getAuthCapabilities() {
   const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
   const githubConfigured = Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
   const guestModeEnabled = isGuestModeEnabledForCapabilities();
-  const oauthDisabled = process.env.STUDYPILOT_OAUTH_DISABLED === '1';
-  const oauthDisabledReason = process.env.STUDYPILOT_OAUTH_DISABLED_REASON || null;
+  const authSecretConfigured = hasConfiguredAuthSecret();
+  const authDisabledByMissingSecret = process.env.NODE_ENV === 'production' && !authSecretConfigured;
+  const explicitOauthDisabled = process.env.STUDYPILOT_OAUTH_DISABLED === '1';
+  const authDisabled = authDisabledByMissingSecret;
+  const authDisabledReason = authDisabledByMissingSecret
+    ? 'Sign-in is disabled until AUTH_SECRET is configured. Guest access remains available.'
+    : null;
+  const oauthDisabled = authDisabled || explicitOauthDisabled;
+  const oauthDisabledReason = authDisabled
+    ? authDisabledReason
+    : (process.env.STUDYPILOT_OAUTH_DISABLED_REASON || null);
   const desktopAuthPort = process.env.STUDYPILOT_DESKTOP_ONLY === '1' ? getDesktopAuthPort() : null;
 
   return {
     googleConfigured,
     githubConfigured,
     guestModeEnabled,
+    authSecretConfigured,
+    authDisabled,
+    authDisabledReason,
     desktopAuthPort,
     oauthDisabled,
     oauthDisabledReason,

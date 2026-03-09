@@ -2,11 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const ORIGINAL_ENV = {
+  NODE_ENV: process.env.NODE_ENV,
   AUTH_REQUIRED: process.env.AUTH_REQUIRED,
   AUTH_GUEST_MODE: process.env.AUTH_GUEST_MODE,
   LOCAL_DEMO_MODE: process.env.LOCAL_DEMO_MODE,
   STUDYPILOT_DESKTOP_ONLY: process.env.STUDYPILOT_DESKTOP_ONLY,
   STUDYPILOT_DESKTOP_AUTH_PORT: process.env.STUDYPILOT_DESKTOP_AUTH_PORT,
+  AUTH_SECRET: process.env.AUTH_SECRET,
+  NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
   GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
@@ -33,6 +36,7 @@ test('getAuthCapabilities reflects configured providers and desktop auth port', 
   delete process.env.LOCAL_DEMO_MODE;
   process.env.STUDYPILOT_DESKTOP_ONLY = '1';
   process.env.STUDYPILOT_DESKTOP_AUTH_PORT = '3893';
+  process.env.AUTH_SECRET = 'test-secret';
   process.env.GOOGLE_CLIENT_ID = 'gid';
   process.env.GOOGLE_CLIENT_SECRET = 'gsecret';
   process.env.GITHUB_CLIENT_ID = '';
@@ -46,8 +50,26 @@ test('getAuthCapabilities reflects configured providers and desktop auth port', 
   assert.equal(caps.googleConfigured, true);
   assert.equal(caps.githubConfigured, false);
   assert.equal(caps.guestModeEnabled, true);
+  assert.equal(caps.authSecretConfigured, true);
+  assert.equal(caps.authDisabled, false);
   assert.equal(caps.desktopAuthPort, 3893);
   assert.equal(caps.oauthDisabled, false);
+});
+
+test('getAuthCapabilities disables sign-in in production when auth secret is missing', async () => {
+  process.env.NODE_ENV = 'production';
+  delete process.env.AUTH_SECRET;
+  delete process.env.NEXTAUTH_SECRET;
+  delete process.env.STUDYPILOT_OAUTH_DISABLED;
+  delete process.env.STUDYPILOT_OAUTH_DISABLED_REASON;
+
+  const mod = await loadAuthCapabilitiesModule();
+  const caps = mod.getAuthCapabilities();
+
+  assert.equal(caps.authSecretConfigured, false);
+  assert.equal(caps.authDisabled, true);
+  assert.match(caps.authDisabledReason, /AUTH_SECRET/);
+  assert.equal(caps.oauthDisabled, true);
 });
 
 test('desktop auth port falls back to default for invalid env values', async () => {

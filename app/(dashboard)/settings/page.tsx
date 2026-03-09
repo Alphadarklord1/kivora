@@ -98,6 +98,9 @@ interface AuthCapabilities {
   googleConfigured: boolean;
   githubConfigured: boolean;
   guestModeEnabled: boolean;
+  authSecretConfigured: boolean;
+  authDisabled: boolean;
+  authDisabledReason: string | null;
   desktopAuthPort: number | null;
   oauthDisabled: boolean;
   oauthDisabledReason: string | null;
@@ -223,6 +226,7 @@ export default function SettingsPage() {
   const [isElectronApp, setIsElectronApp] = useState(false);
   const [webAiCapabilities, setWebAiCapabilities] = useState<WebAiCapabilities | null>(null);
   const [loadingWebAiCapabilities, setLoadingWebAiCapabilities] = useState(false);
+  const [clearingLocalData, setClearingLocalData] = useState(false);
 
   const currentLanguage = settings?.language ?? 'en';
   const isArabic = currentLanguage === 'ar';
@@ -760,6 +764,16 @@ export default function SettingsPage() {
   const handleLinkAccount = async (provider: 'google' | 'github') => {
     setLinkingProvider(provider);
     try {
+      if (authCapabilities?.authDisabled) {
+        showMessage(
+          'error',
+          isArabic
+            ? 'تسجيل الدخول غير متاح حتى يتم ضبط AUTH_SECRET. وضع الضيف ما زال متاحًا.'
+            : 'Sign-in is unavailable until AUTH_SECRET is configured. Guest access remains available.'
+        );
+        setLinkingProvider(null);
+        return;
+      }
       if (authCapabilities?.oauthDisabled) {
         showMessage(
           'error',
@@ -920,6 +934,56 @@ export default function SettingsPage() {
       showMessage('error', t('Failed to update two-step verification'));
     } finally {
       setTwoFactorBusy(false);
+    }
+  };
+
+  const handleClearLocalDeviceData = () => {
+    if (typeof window === 'undefined') return;
+
+    const confirmed = window.confirm(
+      isArabic
+        ? 'سيؤدي هذا إلى حذف بيانات الجهاز المحلية مثل جلسة MATLAB المؤقتة وتفضيلات الذكاء الاصطناعي. هل تريد المتابعة؟'
+        : 'This will remove local device data such as temporary MATLAB session state and AI preferences. Continue?'
+    );
+    if (!confirmed) return;
+
+    setClearingLocalData(true);
+    try {
+      const localKeys = [
+        'studypilot_vault',
+        'studypilot_session_key',
+        'studypilot_compact_mode',
+        'studypilot_tts_voice',
+        'studypilot_tts_rate',
+        'studypilot_tts_pitch',
+        'studypilot_ai_provider',
+        'studypilot_ai_openai_model',
+        'studypilot_ai_cloud_fallback',
+        'studypilot-timer-state',
+        'studypilot.matlab.session.v1',
+        'visual_file_id',
+        'visual_temp_file',
+        'studypilot_model_setup_done',
+        'pwa-install-dismissed',
+      ];
+
+      for (const key of localKeys) {
+        localStorage.removeItem(key);
+      }
+
+      setAiPrefs(loadAiPreferences());
+      setTtsVoice('');
+      setTtsRate(1);
+      setTtsPitch(1);
+      setTwoFactorCode('');
+      setTwoFactorSetupSecret('');
+      setTwoFactorManualKey('');
+      setTwoFactorSetupUri('');
+      showMessage('success', isArabic ? 'تم حذف بيانات الجهاز المحلية.' : 'Local device data cleared.');
+    } catch {
+      showMessage('error', isArabic ? 'تعذر حذف بيانات الجهاز المحلية.' : 'Failed to clear local device data.');
+    } finally {
+      setClearingLocalData(false);
     }
   };
 
@@ -1374,6 +1438,24 @@ export default function SettingsPage() {
                 </div>
               )}
 
+              <div className="security-card">
+                <h3>{isArabic ? 'خصوصية الجهاز المحلي' : 'Local Device Privacy'}</h3>
+                <p>
+                  {isArabic
+                    ? 'احذف البيانات غير المتزامنة المخزنة على هذا الجهاز، مثل جلسة MATLAB المؤقتة وملفات التحليل المؤقتة وتفضيلات الذكاء الاصطناعي.'
+                    : 'Remove non-synced data stored on this device, including temporary MATLAB sessions, visual-analysis temp files, and AI preferences.'}
+                </p>
+                <button
+                  className="btn secondary"
+                  onClick={handleClearLocalDeviceData}
+                  disabled={clearingLocalData}
+                >
+                  {clearingLocalData
+                    ? (isArabic ? 'جارٍ الحذف...' : 'Clearing...')
+                    : (isArabic ? 'حذف بيانات الجهاز المحلية' : 'Clear local device data')}
+                </button>
+              </div>
+
               {/* Login Password Section */}
               <div className="security-card">
                 <h3>{account?.hasPassword ? t('Change Login Password') : t('Set Login Password')}</h3>
@@ -1654,10 +1736,25 @@ export default function SettingsPage() {
                       <span>{isArabic ? 'وضع الضيف' : 'Guest mode enabled'}</span>
                       <strong>{authCapabilities?.guestModeEnabled ? (isArabic ? 'مفعل' : 'Enabled') : (isArabic ? 'معطل' : 'Disabled')}</strong>
                     </div>
+                    <div className="account-info-item">
+                      <span>{isArabic ? 'AUTH_SECRET مهيأ' : 'AUTH_SECRET configured'}</span>
+                      <strong>{authCapabilities?.authSecretConfigured ? (isArabic ? 'نعم' : 'Yes') : (isArabic ? 'لا' : 'No')}</strong>
+                    </div>
+                    <div className="account-info-item">
+                      <span>{isArabic ? 'تسجيل الدخول متاح' : 'Sign-in available'}</span>
+                      <strong>{authCapabilities?.authDisabled ? (isArabic ? 'لا' : 'No') : (isArabic ? 'نعم' : 'Yes')}</strong>
+                    </div>
                     {isElectronApp && (
                       <div className="account-info-item">
                         <span>{isArabic ? 'منفذ OAuth لسطح المكتب' : 'Desktop OAuth port'}</span>
                         <strong>{authCapabilities?.desktopAuthPort ?? 3893}</strong>
+                      </div>
+                    )}
+                    {authCapabilities?.authDisabledReason && (
+                      <div className="oauth-warning">
+                        {isArabic
+                          ? 'تسجيل الدخول غير متاح حتى يتم ضبط AUTH_SECRET. وضع الضيف ما زال متاحًا.'
+                          : authCapabilities.authDisabledReason}
                       </div>
                     )}
                     {authCapabilities?.oauthDisabledReason && (

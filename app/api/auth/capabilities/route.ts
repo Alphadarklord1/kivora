@@ -8,9 +8,11 @@ export async function GET() {
     googleConfigured: capabilities.googleConfigured,
     githubConfigured: capabilities.githubConfigured,
     guestModeEnabled: capabilities.guestModeEnabled,
+    authSecretConfigured: capabilities.authSecretConfigured,
+    authDisabled: capabilities.authDisabled,
+    authDisabledReason: capabilities.authDisabledReason,
     desktopAuthPort: capabilities.desktopAuthPort,
     oauthDisabled: capabilities.oauthDisabled,
     oauthDisabledReason: capabilities.oauthDisabledReason,
   });
 }
-

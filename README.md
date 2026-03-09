@@ -34,6 +34,10 @@ STUDYPILOT_DESKTOP_ONLY=0
 ENCRYPTION_DISABLED=1
 ```
 
+Security note:
+
+- In production, set `AUTH_SECRET` (or `NEXTAUTH_SECRET`). If it is missing, StudyPilot now keeps guest access available but disables sign-in until the secret is configured.
+
 Optional Google OAuth:
 
 ```bash

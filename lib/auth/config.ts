@@ -1,4 +1,5 @@
 import { NextAuthConfig } from 'next-auth';
+import { randomBytes } from 'crypto';
 import Credentials from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
 import GitHub from 'next-auth/providers/github';
@@ -11,13 +12,18 @@ import { isGuestModeEnabled } from '@/lib/runtime/mode';
 import { getAuthCapabilities, normalizeAuthEmail } from '@/lib/auth/capabilities';
 import { hasValidTwoFactorSession, TWO_FACTOR_COOKIE_NAME } from '@/lib/auth/two-factor';
 
-const isGuestMode = isGuestModeEnabled() || (!process.env.AUTH_SECRET && !process.env.NEXTAUTH_SECRET);
 const authCapabilities = getAuthCapabilities();
+const isGuestMode = isGuestModeEnabled();
+const configuredAuthSecret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+const guestRuntimeSecret =
+  !configuredAuthSecret && process.env.NODE_ENV === 'production' && isGuestMode
+    ? randomBytes(32).toString('hex')
+    : undefined;
 
 const authSecret =
-  process.env.AUTH_SECRET ||
-  process.env.NEXTAUTH_SECRET ||
-  ((process.env.NODE_ENV !== 'production' || isGuestMode)
+  configuredAuthSecret ||
+  guestRuntimeSecret ||
+  ((process.env.NODE_ENV !== 'production')
     ? 'studypilot-local-dev-secret'
     : undefined);
 
@@ -33,6 +39,9 @@ function logAuthDiagnosticsOnce() {
   if (authCapabilities.oauthDisabled) {
     console.warn('[auth] OAuth providers disabled for this runtime:', authCapabilities.oauthDisabledReason || 'no reason provided');
   }
+  if (guestRuntimeSecret) {
+    console.warn('[auth] Using an ephemeral guest-only auth secret because AUTH_SECRET/NEXTAUTH_SECRET is missing in production.');
+  }
   if (!authSecret && process.env.NODE_ENV === 'production') {
     console.error('[auth] AUTH_SECRET/NEXTAUTH_SECRET is missing in production.');
   }
@@ -47,41 +56,45 @@ export const authConfig: NextAuthConfig = {
   },
   secret: authSecret,
   providers: [
-    Credentials({
-      name: 'credentials',
-      credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null;
-        }
+    ...(!authCapabilities.authDisabled
+      ? [
+          Credentials({
+            name: 'credentials',
+            credentials: {
+              email: { label: 'Email', type: 'email' },
+              password: { label: 'Password', type: 'password' },
+            },
+            async authorize(credentials) {
+              if (!credentials?.email || !credentials?.password) {
+                return null;
+              }
 
-        const email = credentials.email as string;
+              const email = credentials.email as string;
 
-        const user = await db.query.users.findFirst({
-          where: eq(users.email, email),
-        });
+              const user = await db.query.users.findFirst({
+                where: eq(users.email, email),
+              });
 
-        if (!user || !user.passwordHash) {
-          return null;
-        }
+              if (!user || !user.passwordHash) {
+                return null;
+              }
 
-        const isValid = await bcrypt.compare(credentials.password as string, user.passwordHash);
-        if (!isValid) {
-          return null;
-        }
+              const isValid = await bcrypt.compare(credentials.password as string, user.passwordHash);
+              if (!isValid) {
+                return null;
+              }
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-          twoFactorEnabled: user.twoFactorEnabled,
-        };
-      },
-    }),
+              return {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                image: user.image,
+                twoFactorEnabled: user.twoFactorEnabled,
+              };
+            },
+          }),
+        ]
+      : []),
     ...(!authCapabilities.oauthDisabled && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       ? [
           Google({
