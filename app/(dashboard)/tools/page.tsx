@@ -7,12 +7,13 @@ import { generateAiContent, loadAiPreferences } from '@/lib/ai/client';
 import { InteractiveQuiz } from '@/components/workspace/InteractiveQuiz';
 import { MathSolver } from '@/components/tools/MathSolver';
 import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
+import { MatlabLab } from '@/components/tools/MatlabLab';
 import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
 import { AudioPodcast } from '@/components/tools/AudioPodcast';
 import { useToastHelpers } from '@/components/ui/Toast';
 import { useSettings } from '@/providers/SettingsProvider';
 
-type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'notes' | 'rephrase' | 'math' | 'graph' | 'visual' | 'audio';
+type ToolTab = 'assignment' | 'summarize' | 'mcq' | 'quiz' | 'notes' | 'rephrase' | 'math' | 'graph' | 'matlab' | 'visual' | 'audio';
 
 const toolTabs: { id: ToolTab; label: string; icon: string; description: string }[] = [
   { id: 'assignment', label: 'Assignment', icon: '📝', description: 'Generate assignment questions and prompts' },
@@ -23,6 +24,7 @@ const toolTabs: { id: ToolTab; label: string; icon: string; description: string 
   { id: 'rephrase', label: 'Rephrase', icon: '✍️', description: 'Rewrite text in a selected tone and style' },
   { id: 'math', label: 'Math', icon: '🧮', description: 'Solve mathematical problems step-by-step' },
   { id: 'graph', label: 'Graph', icon: '📈', description: 'Plot and visualize mathematical functions' },
+  { id: 'matlab', label: 'MATLAB Lab', icon: '📐', description: 'Run matrix, script, and command-window workflows together' },
   { id: 'visual', label: 'Visual', icon: '🔍', description: 'Analyze images, diagrams, and PDFs with AI vision' },
   { id: 'audio', label: 'Audio', icon: '🎧', description: 'Listen to your study materials as a podcast' },
 ];
@@ -94,6 +96,7 @@ export default function ToolsPage() {
       'Rewrite text in a selected tone and style': 'أعد صياغة النص بنبرة وأسلوب محددين',
       'Solve mathematical problems step-by-step': 'حل مسائل الرياضيات خطوة بخطوة',
       'Plot and visualize mathematical functions': 'ارسم الدوال الرياضية وتصورها',
+      'Run matrix, script, and command-window workflows together': 'شغّل المصفوفات والسكربتات ونافذة الأوامر ضمن سير عمل واحد',
       'Analyze images, diagrams, and PDFs with AI vision': 'حلّل الصور والمخططات وملفات PDF عبر الرؤية الذكية',
       'Listen to your study materials as a podcast': 'استمع إلى موادك الدراسية كبودكاست',
       Quiz: 'اختبار',
@@ -101,8 +104,14 @@ export default function ToolsPage() {
       Rephrase: 'إعادة صياغة',
       Math: 'رياضيات',
       Graph: 'رسم بياني',
+      'MATLAB Lab': 'مختبر MATLAB',
       Visual: 'تحليل بصري',
       Audio: 'صوتي',
+      'Math Workspace': 'مساحة عمل الرياضيات',
+      'Move between solver, graphing, and MATLAB without leaving the page.': 'تنقّل بين المحلل والرسم وMATLAB من دون مغادرة الصفحة.',
+      Solver: 'المحلل',
+      Plotter: 'الرسام',
+      Lab: 'المختبر',
       Formal: 'رسمي',
       Informal: 'غير رسمي',
       Academic: 'أكاديمي',
@@ -127,6 +136,7 @@ export default function ToolsPage() {
 
   // Graph expression state (from Math Solver)
   const [graphExpression, setGraphExpression] = useState('');
+  const isMathWorkspace = toolTab === 'math' || toolTab === 'graph' || toolTab === 'matlab';
 
   const handleGraphFromMath = (expression: string) => {
     setGraphExpression(expression);
@@ -357,11 +367,27 @@ export default function ToolsPage() {
             </div>
           </div>
 
+          {isMathWorkspace && (
+            <div className="math-workflow-banner">
+              <div>
+                <strong>{t('Math Workspace')}</strong>
+                <p>{t('Move between solver, graphing, and MATLAB without leaving the page.')}</p>
+              </div>
+              <div className="math-workflow-actions">
+                <button className={`math-workflow-btn ${toolTab === 'math' ? 'active' : ''}`} onClick={() => setToolTab('math')}>{t('Solver')}</button>
+                <button className={`math-workflow-btn ${toolTab === 'graph' ? 'active' : ''}`} onClick={() => setToolTab('graph')}>{t('Plotter')}</button>
+                <button className={`math-workflow-btn ${toolTab === 'matlab' ? 'active' : ''}`} onClick={() => setToolTab('matlab')}>{t('Lab')}</button>
+              </div>
+            </div>
+          )}
+
           {/* Math Solver */}
           {toolTab === 'math' ? (
             <MathSolver onGraphExpression={handleGraphFromMath} />
           ) : toolTab === 'graph' ? (
             <GraphingCalculator initialExpression={graphExpression || undefined} />
+          ) : toolTab === 'matlab' ? (
+            <MatlabLab onGraphExpression={handleGraphFromMath} />
           ) : toolTab === 'visual' ? (
             <VisualAnalyzer />
           ) : toolTab === 'audio' ? (
@@ -688,6 +714,53 @@ export default function ToolsPage() {
           margin: 0;
         }
 
+        .math-workflow-banner {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-3);
+          padding: var(--space-4);
+          border-radius: var(--radius-lg);
+          border: 1px solid var(--border-subtle);
+          background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 10%, var(--bg-surface)), var(--bg-surface));
+          margin-bottom: var(--space-4);
+          flex-wrap: wrap;
+        }
+
+        .math-workflow-banner strong {
+          display: block;
+          margin-bottom: 4px;
+        }
+
+        .math-workflow-banner p {
+          margin: 0;
+          color: var(--text-muted);
+          font-size: var(--font-meta);
+        }
+
+        .math-workflow-actions {
+          display: flex;
+          gap: var(--space-2);
+          flex-wrap: wrap;
+        }
+
+        .math-workflow-btn {
+          border: 1px solid var(--border-subtle);
+          border-radius: 999px;
+          background: var(--bg-surface);
+          color: var(--text-secondary);
+          padding: var(--space-2) var(--space-3);
+          cursor: pointer;
+          font-size: var(--font-meta);
+          transition: var(--transition-fast);
+        }
+
+        .math-workflow-btn.active {
+          background: var(--primary);
+          color: white;
+          border-color: var(--primary);
+        }
+
         .tool-workspace {
           display: flex;
           flex-direction: column;
@@ -913,6 +986,10 @@ export default function ToolsPage() {
             gap: var(--space-3);
             margin-bottom: var(--space-3);
             padding-bottom: var(--space-3);
+          }
+
+          .math-workflow-actions {
+            width: 100%;
           }
         }
       `}</style>

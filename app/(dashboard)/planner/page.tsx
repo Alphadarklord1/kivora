@@ -21,13 +21,20 @@ export default function PlannerPage() {
   const { t } = useI18n({
     'Delete this study plan?': 'حذف خطة الدراسة هذه؟',
     'Study Planner': 'مخطط الدراسة',
-    'Plan your study schedule and track progress': 'خطط جدول دراستك وتابع تقدمك',
+    'Outlook-style calendar for your next exam sprint': 'تقويم دراسي بأسلوب Outlook لسباقك التالي نحو الاختبار',
     'No Study Plans Yet': 'لا توجد خطط دراسة بعد',
     'Create your first plan to organize your study schedule with smart time allocation.': 'أنشئ خطتك الأولى لتنظيم جدول دراستك بتوزيع وقت ذكي.',
     'Create Study Plan': 'إنشاء خطة دراسة',
     'Select a plan from the sidebar or create a new one': 'اختر خطة من الشريط الجانبي أو أنشئ خطة جديدة',
+    'Calendar board': 'لوحة التقويم',
+    Draft: 'مسودة',
+    Saved: 'محفوظة',
+    'Failed to load planner data': 'تعذر تحميل بيانات المخطط',
+    'Try again': 'حاول مرة أخرى',
+    'New Plan': 'خطة جديدة',
+    active: 'نشطة',
   });
-  const { plans, loading, createPlan, updatePlan, deletePlan, updateProgress } = useStudyPlans();
+  const { plans, loading, error, fetchPlans, createPlan, updatePlan, deletePlan, updateProgress } = useStudyPlans();
   const timer = useStudyTimer();
 
   const [view, setView] = useState<View>('list');
@@ -36,25 +43,29 @@ export default function PlannerPage() {
   const [pendingData, setPendingData] = useState<PendingPlan | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Auto-resume timer view on mount (intentional sync from external state)
   useEffect(() => {
     if (timer.isActive && timer.currentPlanId && plans.length > 0) {
-      const plan = plans.find(p => p.id === timer.currentPlanId);
+      const plan = plans.find((entry) => entry.id === timer.currentPlanId);
       if (plan) {
-        setSelectedPlan(plan); // eslint-disable-line react-hooks/set-state-in-effect
+        setSelectedPlan(plan);
         setView('timer');
       }
     }
   }, [timer.isActive, timer.currentPlanId, plans]);
 
-  // Keep selectedPlan in sync with plans array
   useEffect(() => {
-    setSelectedPlan(prev => { // eslint-disable-line react-hooks/set-state-in-effect
+    setSelectedPlan((prev) => {
       if (!prev) return prev;
-      const updated = plans.find(p => p.id === prev.id);
+      const updated = plans.find((plan) => plan.id === prev.id);
       return updated || prev;
     });
   }, [plans]);
+
+  useEffect(() => {
+    if (view === 'form' || view === 'timer' || selectedPlan || plans.length === 0) return;
+    setSelectedPlan(plans[0]);
+    setView('schedule');
+  }, [plans, selectedPlan, view]);
 
   const handleNewPlan = useCallback(() => {
     setSelectedPlan(null);
@@ -64,11 +75,7 @@ export default function PlannerPage() {
   }, []);
 
   const handleGenerate = useCallback((data: PendingPlan) => {
-    const schedule = generateStudySchedule(
-      new Date(data.examDate),
-      data.topics,
-      data.dailyMinutes
-    );
+    const schedule = generateStudySchedule(new Date(data.examDate), data.topics, data.dailyMinutes);
     setGeneratedSchedule(schedule);
     setPendingData(data);
     setView('schedule');
@@ -139,28 +146,48 @@ export default function PlannerPage() {
         timer.clearTimer();
       }
     }
-  }, [selectedPlan, deletePlan, timer]);
+  }, [selectedPlan, deletePlan, timer, t]);
 
   const handleBackToSchedule = useCallback(() => {
     setView('schedule');
   }, []);
 
   const handleCancel = useCallback(() => {
-    if (selectedPlan) {
+    if (selectedPlan || generatedSchedule) {
       setView('schedule');
     } else {
       setView('list');
     }
-  }, [selectedPlan]);
+  }, [generatedSchedule, selectedPlan]);
 
   const scheduleTitle = selectedPlan?.title || pendingData?.title || '';
+  const activePlanCount = plans.filter((plan) => plan.status === 'active').length;
+  const calendarModeLabel = generatedSchedule ? t('Draft') : t('Saved');
 
   return (
     <div className="planner-page">
-      <div className="page-header">
-        <h1>{t('Study Planner')}</h1>
-        <p>{t('Plan your study schedule and track progress')}</p>
+      <div className="planner-hero">
+        <div>
+          <p className="planner-eyebrow">{t('Calendar board')}</p>
+          <h1>{t('Study Planner')}</h1>
+          <p>{t('Outlook-style calendar for your next exam sprint')}</p>
+        </div>
+        <div className="planner-hero-actions">
+          <div className="planner-chip">{calendarModeLabel}</div>
+          <div className="planner-chip muted">{activePlanCount} {t('active')}</div>
+          <button className="planner-primary-btn" onClick={handleNewPlan}>{t('New Plan')}</button>
+        </div>
       </div>
+
+      {error && (
+        <div className="planner-error">
+          <div>
+            <strong>{t('Failed to load planner data')}</strong>
+            <p>{error}</p>
+          </div>
+          <button className="planner-secondary-btn" onClick={() => void fetchPlans()}>{t('Try again')}</button>
+        </div>
+      )}
 
       <div className="planner-layout">
         <aside className="planner-sidebar">
@@ -170,16 +197,14 @@ export default function PlannerPage() {
             selectedPlanId={selectedPlan?.id ?? null}
             onSelectPlan={handleSelectPlan}
             onNewPlan={handleNewPlan}
-            onDeletePlan={(id) => handleDelete(id)}
+            onDeletePlan={(id) => void handleDelete(id)}
           />
         </aside>
 
         <main className="planner-main">
-          {view === 'form' && (
-            <PlanForm onGenerate={handleGenerate} onCancel={handleCancel} />
-          )}
+          {view === 'form' && <PlanForm onGenerate={handleGenerate} onCancel={handleCancel} />}
 
-          {view === 'schedule' && (
+          {view === 'schedule' && (selectedPlan || generatedSchedule) && (
             <PlanSchedule
               plan={selectedPlan}
               generatedSchedule={generatedSchedule}
@@ -188,14 +213,12 @@ export default function PlannerPage() {
               onSaveNotes={handleSaveNotes}
               onStartTimer={handleStartTimer}
               onSave={!selectedPlan ? handleSave : undefined}
-              onDelete={selectedPlan ? () => handleDelete() : undefined}
+              onDelete={selectedPlan ? () => void handleDelete() : undefined}
               saving={saving}
             />
           )}
 
-          {view === 'timer' && (
-            <PlanTimer plan={selectedPlan} onBack={handleBackToSchedule} />
-          )}
+          {view === 'timer' && <PlanTimer plan={selectedPlan} onBack={handleBackToSchedule} />}
 
           {view === 'list' && !loading && plans.length === 0 && (
             <div className="empty-state">
@@ -209,9 +232,7 @@ export default function PlannerPage() {
               </svg>
               <h3>{t('No Study Plans Yet')}</h3>
               <p>{t('Create your first plan to organize your study schedule with smart time allocation.')}</p>
-              <button className="create-btn" onClick={handleNewPlan}>
-                {t('Create Study Plan')}
-              </button>
+              <button className="planner-primary-btn" onClick={handleNewPlan}>{t('Create Study Plan')}</button>
             </div>
           )}
 
@@ -228,78 +249,138 @@ export default function PlannerPage() {
 
       <style jsx>{`
         .planner-page {
-          max-width: 1200px;
+          max-width: 1560px;
           margin: 0 auto;
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-5);
         }
-        .page-header {
-          margin-bottom: var(--space-5);
+        .planner-hero {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: var(--space-4);
+          flex-wrap: wrap;
         }
-        .page-header h1 {
-          font-size: var(--font-2xl);
-          font-weight: 700;
-          margin-bottom: var(--space-1);
-        }
-        .page-header p {
+        .planner-eyebrow {
+          margin: 0 0 6px;
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.14em;
           color: var(--text-muted);
+        }
+        .planner-hero h1 {
+          margin: 0;
+          font-size: clamp(2rem, 3vw, 2.8rem);
+        }
+        .planner-hero p {
+          margin: var(--space-2) 0 0;
+          color: var(--text-muted);
+          max-width: 42ch;
+        }
+        .planner-hero-actions {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          flex-wrap: wrap;
+        }
+        .planner-chip {
+          display: inline-flex;
+          align-items: center;
+          padding: 6px 12px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--primary) 14%, transparent);
+          color: var(--primary);
+          font-size: var(--font-tiny);
+          font-weight: var(--weight-semibold);
+        }
+        .planner-chip.muted {
+          background: var(--bg-inset);
+          color: var(--text-muted);
+        }
+        .planner-primary-btn,
+        .planner-secondary-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: var(--radius-md);
+          cursor: pointer;
+          transition: var(--transition-fast);
+          font-size: var(--font-meta);
+          font-weight: var(--weight-semibold);
+          padding: var(--space-3) var(--space-4);
+        }
+        .planner-primary-btn {
+          border: none;
+          background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 65%, white 35%));
+          color: white;
+        }
+        .planner-secondary-btn {
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+          color: var(--text-secondary);
+        }
+        .planner-error {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-3);
+          padding: var(--space-4);
+          border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border-subtle));
+          background: color-mix(in srgb, var(--warning) 10%, transparent);
+          border-radius: 20px;
+        }
+        .planner-error p {
+          margin: 6px 0 0;
+          color: var(--text-muted);
+          font-size: var(--font-meta);
         }
         .planner-layout {
           display: grid;
-          grid-template-columns: 260px 1fr;
+          grid-template-columns: 320px minmax(0, 1fr);
           gap: var(--space-5);
           align-items: start;
         }
         .planner-sidebar {
-          background: var(--bg-surface);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
-          padding: var(--space-3);
           position: sticky;
           top: var(--space-4);
           max-height: calc(100vh - 120px);
-          overflow-y: auto;
+          overflow: hidden;
+          border: 1px solid var(--border-subtle);
+          border-radius: 28px;
+          background: linear-gradient(180deg, var(--bg-elevated), var(--bg-surface));
+          padding: var(--space-4);
         }
         .planner-main {
-          background: var(--bg-surface);
+          min-width: 0;
           border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
+          border-radius: 32px;
+          background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 92%, white 8%), var(--bg-surface));
           padding: var(--space-5);
-          min-height: 400px;
+          min-height: 720px;
         }
-        .empty-state, .select-state {
+        .empty-state,
+        .select-state {
+          min-height: 520px;
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          text-align: center;
           gap: var(--space-3);
-          padding: var(--space-8) var(--space-4);
+          text-align: center;
           color: var(--text-muted);
+          padding: var(--space-5);
         }
         .empty-state h3 {
-          font-size: var(--font-body);
-          font-weight: 600;
+          margin: 0;
           color: var(--text-primary);
+        }
+        .empty-state p,
+        .select-state p {
           margin: 0;
+          max-width: 34ch;
         }
-        .empty-state p, .select-state p {
-          font-size: var(--font-meta);
-          max-width: 320px;
-          margin: 0;
-        }
-        .create-btn {
-          padding: var(--space-2) var(--space-4);
-          border: none;
-          border-radius: var(--radius-md);
-          background: var(--primary);
-          color: white;
-          font-size: var(--font-meta);
-          font-weight: 600;
-          cursor: pointer;
-          transition: var(--transition-fast);
-        }
-        .create-btn:hover { background: var(--primary-hover); }
-
-        @media (max-width: 768px) {
+        @media (max-width: 1180px) {
           .planner-layout {
             grid-template-columns: 1fr;
           }

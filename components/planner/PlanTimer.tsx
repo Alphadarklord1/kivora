@@ -30,6 +30,9 @@ export function PlanTimer({ plan, onBack }: PlanTimerProps) {
     Duration: 'المدة',
     'Day {n}': 'اليوم {n}',
     '{count} topics': '{count} موضوعات',
+    learn: 'تعلّم',
+    practice: 'تدرّب',
+    review: 'راجع',
   });
   const timer = useStudyTimer();
 
@@ -96,11 +99,11 @@ export function PlanTimer({ plan, onBack }: PlanTimerProps) {
         <div className="day-info">
           <h4>{t('Day {n}', { n: currentDay.dayNumber })} — {t('{count} topics', { count: currentDay.topics.length })}</h4>
           <div className="day-topics-list">
-            {currentDay.topics.map((t, i) => (
+            {currentDay.topics.map((topic, i) => (
               <div key={i} className="timer-topic">
-                <span className="timer-topic-name">{t.name}</span>
-                <span className={`task-badge ${t.tasks[0]}`}>{t.tasks[0]}</span>
-                <span className="timer-topic-dur">{t.duration}m</span>
+                <span className="timer-topic-name">{topic.name}</span>
+                <span className={`task-badge ${topic.tasks[0]}`}>{t(topic.tasks[0])}</span>
+                <span className="timer-topic-dur">{topic.duration}m</span>
               </div>
             ))}
           </div>

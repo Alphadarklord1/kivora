@@ -1362,6 +1362,14 @@ textarea {
   margin-bottom: var(--space-6);
 }
 
+.auth-subtle-copy {
+  max-width: 32ch;
+  margin-inline: auto;
+  margin-top: calc(var(--space-4) * -1);
+  margin-bottom: var(--space-5);
+  line-height: 1.6;
+}
+
 .auth-form {
   display: flex;
   flex-direction: column;
@@ -1494,6 +1502,57 @@ textarea {
   background: color-mix(in srgb, var(--warning) 14%, transparent);
   color: var(--text-secondary);
   font-size: var(--font-meta);
+}
+
+.auth-status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.auth-status-card {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-inset);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.auth-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.auth-status-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-tiny);
+  line-height: 1.5;
+}
+
+.auth-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  border: 1px solid var(--border-subtle);
+}
+
+.auth-status-badge.ready {
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 30%, var(--border-subtle));
+}
+
+.auth-status-badge.setup {
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--border-subtle));
 }
 
 .auth-divider {
@@ -1639,6 +1698,10 @@ textarea {
 
   .auth-card h1 {
     font-size: var(--font-xl);
+  }
+
+  .auth-status-grid {
+    grid-template-columns: 1fr;
   }
 
   main.wrap {

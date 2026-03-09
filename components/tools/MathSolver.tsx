@@ -62,6 +62,31 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
     'Graph this': 'ارسمها',
     'Try with AI': 'جرّب بالذكاء الاصطناعي',
     'Likely Correct ({confidence} confidence)': 'غالبًا صحيحة (ثقة {confidence})',
+    'AI mode uses OpenAI for complex problems like Linear Algebra, Series, and advanced Calculus. Requires API key in settings.': 'يستخدم وضع الذكاء الاصطناعي OpenAI للمسائل المعقدة مثل الجبر الخطي والمتسلسلات والتفاضل المتقدم. يتطلب مفتاح API في الإعدادات.',
+    'Problem:': 'المسألة:',
+    'Type:': 'النوع:',
+    'Solution:': 'الحل:',
+    'Step {n}:': 'الخطوة {n}:',
+    Derivative: 'مشتقة',
+    Integral: 'تكامل',
+    Quadratic: 'تربيعية',
+    Linear: 'خطية',
+    Arithmetic: 'حسابية',
+    'Trig Derivative': 'مشتقة مثلثية',
+    Limit: 'نهاية',
+    'Polynomial Root': 'جذر متعدد حدود',
+    'Series Sum': 'مجموع متسلسلة',
+    'Linear Solve': 'حل خطي',
+    'Matrix Hint': 'تلميح مصفوفة',
+    'Use AI mode for detailed solution': 'استخدم وضع الذكاء الاصطناعي للحصول على حل تفصيلي',
+    arithmetic: 'حسابية',
+    derivative: 'مشتقة',
+    integral: 'تكامل',
+    limit: 'نهاية',
+    quadratic: 'تربيعية',
+    'linear-equation': 'معادلة خطية',
+    'polynomial-root': 'جذر متعدد حدود',
+    'series-sum': 'مجموع متسلسلة',
   });
   const [problem, setProblem] = useState('');
   const [solution, setSolution] = useState<MathSolution | null>(null);
@@ -72,6 +97,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
   const [useAI, setUseAI] = useState(false);
   const [matlabMode, setMatlabMode] = useState(true);
   const [showKeyboard, setShowKeyboard] = useState(false);
+  const aiDetailFallback = t('Use AI mode for detailed solution');
 
   const insertSymbol = (symbol: string) => {
     setProblem((prev) => `${prev}${symbol}`);
@@ -195,44 +221,54 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
   const handleCopy = () => {
     if (!solution) return;
 
-    let text = `Problem: ${solution.problem}\n\n`;
-    text += `Type: ${formatProblemType(solution.problemType)}\n\n`;
-    text += `Solution:\n`;
+    let text = `${t('Problem:')} ${solution.problem}\n\n`;
+    text += `${t('Type:')} ${formatProblemType(solution.problemType)}\n\n`;
+    text += `${t('Solution:')}\n`;
     solution.steps.forEach(step => {
-      text += `\nStep ${step.step}: ${step.description}\n`;
+      text += `\n${t('Step {n}:', { n: step.step })} ${step.description}\n`;
       if (step.expression) text += `  ${step.expression}\n`;
       text += `  ${step.explanation}\n`;
     });
-    text += `\nFinal Answer: ${solution.finalAnswer}`;
+    text += `\n${t('Final Answer')}: ${solution.finalAnswer}`;
 
     navigator.clipboard.writeText(text);
   };
 
   const formatProblemType = (type: string): string => {
-    return type
+    const map: Record<string, string> = {
+      arithmetic: t('arithmetic'),
+      derivative: t('derivative'),
+      integral: t('integral'),
+      limit: t('limit'),
+      quadratic: t('quadratic'),
+      'linear-equation': t('linear-equation'),
+      'polynomial-root': t('polynomial-root'),
+      'series-sum': t('series-sum'),
+    };
+    return map[type] || type
       .split('-')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
   };
 
   const exampleProblems = [
-    { label: 'Derivative', problem: 'Find the derivative of x^3 + 2x^2 - 5x + 3' },
-    { label: 'Integral', problem: 'Integrate x^2 + 3x - 2 dx' },
-    { label: 'Quadratic', problem: 'Solve x^2 - 5x + 6 = 0' },
-    { label: 'Linear', problem: 'Solve 3x + 7 = 22' },
-    { label: 'Arithmetic', problem: 'Calculate 2^8 + 15 * 4 - 32/4' },
-    { label: 'Trig Derivative', problem: 'Find the derivative of sin(x) + cos(x)' },
-    { label: 'Limit', problem: 'Find the limit as x->0 of sin(x)/x' },
-    { label: 'Polynomial Root', problem: 'Solve x^3 - 6x^2 + 11x - 6 = 0' },
-    { label: 'Series Sum', problem: 'Calculate sum from n=1 to 10 of n^2' },
+    { label: t('Derivative'), problem: 'Find the derivative of x^3 + 2x^2 - 5x + 3' },
+    { label: t('Integral'), problem: 'Integrate x^2 + 3x - 2 dx' },
+    { label: t('Quadratic'), problem: 'Solve x^2 - 5x + 6 = 0' },
+    { label: t('Linear'), problem: 'Solve 3x + 7 = 22' },
+    { label: t('Arithmetic'), problem: 'Calculate 2^8 + 15 * 4 - 32/4' },
+    { label: t('Trig Derivative'), problem: 'Find the derivative of sin(x) + cos(x)' },
+    { label: t('Limit'), problem: 'Find the limit as x->0 of sin(x)/x' },
+    { label: t('Polynomial Root'), problem: 'Solve x^3 - 6x^2 + 11x - 6 = 0' },
+    { label: t('Series Sum'), problem: 'Calculate sum from n=1 to 10 of n^2' },
   ];
 
   const matlabTemplates = [
-    { label: 'Derivative', value: 'd/dx (x^3 + 2*x)' },
-    { label: 'Integral', value: 'integral x^2 dx' },
-    { label: 'Limit', value: 'limit x->0 sin(x)/x' },
-    { label: 'Linear Solve', value: 'Solve 2x + 3 = 11' },
-    { label: 'Matrix Hint', value: '[1 2; 3 4] (use MATLAB Lab for matrix ops)' },
+    { label: t('Derivative'), value: 'd/dx (x^3 + 2*x)' },
+    { label: t('Integral'), value: 'integral x^2 dx' },
+    { label: t('Limit'), value: 'limit x->0 sin(x)/x' },
+    { label: t('Linear Solve'), value: 'Solve 2x + 3 = 11' },
+    { label: t('Matrix Hint'), value: '[1 2; 3 4] (use MATLAB Lab for matrix ops)' },
   ];
 
   return (
@@ -343,7 +379,7 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               fontSize: 'var(--font-meta)',
               color: 'var(--primary)'
             }}>
-              AI mode uses OpenAI for complex problems like Linear Algebra, Series, and advanced Calculus. Requires API key in settings.
+              {t('AI mode uses OpenAI for complex problems like Linear Algebra, Series, and advanced Calculus. Requires API key in settings.')}
             </div>
           )}
 
@@ -636,7 +672,9 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               {t('Final Answer')}
             </div>
             <div style={{ fontSize: 'var(--font-xl)', fontWeight: 600 }}>
-              <MathRenderer math={solution.finalAnswer} display={true} />
+              {solution.finalAnswer === 'Use AI mode for detailed solution'
+                ? aiDetailFallback
+                : <MathRenderer math={solution.finalAnswer} display={true} />}
             </div>
           </div>
 

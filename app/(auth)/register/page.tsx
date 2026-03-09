@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { signIn, getProviders } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface AuthCapabilities {
   googleConfigured: boolean;
@@ -61,44 +62,48 @@ export default function RegisterPage() {
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const [providers, setProviders] = useState<Record<string, unknown> | null>(null);
   const [authCapabilities, setAuthCapabilities] = useState<AuthCapabilities | null>(null);
-  const [isArabic, setIsArabic] = useState(false);
-  const t = (key: string) => {
-    const ar: Record<string, string> = {
-      'Create your account': 'أنشئ حسابك',
-      'Email and password are required': 'البريد الإلكتروني وكلمة المرور مطلوبان',
-      'Password must be at least 6 characters': 'يجب أن تكون كلمة المرور 6 أحرف على الأقل',
-      'Passwords do not match': 'كلمتا المرور غير متطابقتين',
-      'Registration failed': 'فشل إنشاء الحساب',
-      'Something went wrong': 'حدث خطأ ما',
-      'Signing up...': 'جارٍ إنشاء الحساب...',
-      'Continue with Google': 'المتابعة باستخدام Google',
-      'Continue with GitHub': 'المتابعة باستخدام GitHub',
-      'or register with email': 'أو أنشئ حسابًا بالبريد الإلكتروني',
-      Name: 'الاسم',
-      'Your name': 'اسمك',
-      Email: 'البريد الإلكتروني',
-      Password: 'كلمة المرور',
-      'At least 6 characters': '6 أحرف على الأقل',
-      'Confirm Password': 'تأكيد كلمة المرور',
-      'Re-enter your password': 'أعد إدخال كلمة المرور',
-      'Create Account': 'إنشاء الحساب',
-      'Already have an account?': 'لديك حساب بالفعل؟',
-      'Sign in': 'تسجيل الدخول',
-      'Continue as guest': 'المتابعة كضيف',
-      'Use StudyPilot without creating an account': 'استخدم StudyPilot بدون إنشاء حساب',
-      'Google login is not configured by admin.': 'تسجيل الدخول عبر Google غير مضبوط من قبل المسؤول.',
-      'GitHub login is not configured by admin.': 'تسجيل الدخول عبر GitHub غير مضبوط من قبل المسؤول.',
-      'Failed to sign in with {provider}': 'تعذر تسجيل الدخول باستخدام {provider}',
-    };
-    return isArabic ? (ar[key] || key) : key;
-  };
+  const { t, isArabic } = useI18n({
+    'Create your account': 'أنشئ حسابك',
+    'Create a StudyPilot account for synced plans, analytics, and shared workspaces.': 'أنشئ حساب StudyPilot للمخططات المتزامنة والتحليلات ومساحات العمل المشتركة.',
+    'Email and password are required': 'البريد الإلكتروني وكلمة المرور مطلوبان',
+    'Password must be at least 6 characters': 'يجب أن تكون كلمة المرور 6 أحرف على الأقل',
+    'Passwords do not match': 'كلمتا المرور غير متطابقتين',
+    'Registration failed': 'فشل إنشاء الحساب',
+    'Something went wrong': 'حدث خطأ ما',
+    'Signing up...': 'جارٍ إنشاء الحساب...',
+    'Continue with Google': 'المتابعة باستخدام Google',
+    'Continue with GitHub': 'المتابعة باستخدام GitHub',
+    'or register with email': 'أو أنشئ حسابًا بالبريد الإلكتروني',
+    Name: 'الاسم',
+    'Your name': 'اسمك',
+    Email: 'البريد الإلكتروني',
+    Password: 'كلمة المرور',
+    'At least 6 characters': '6 أحرف على الأقل',
+    'Confirm Password': 'تأكيد كلمة المرور',
+    'Re-enter your password': 'أعد إدخال كلمة المرور',
+    'Create Account': 'إنشاء الحساب',
+    'Already have an account?': 'لديك حساب بالفعل؟',
+    'Sign in': 'تسجيل الدخول',
+    'Continue as guest': 'المتابعة كضيف',
+    'Use StudyPilot without creating an account': 'استخدم StudyPilot بدون إنشاء حساب',
+    'Google login is not configured by admin.': 'تسجيل الدخول عبر Google غير مضبوط من قبل المسؤول.',
+    'GitHub login is not configured by admin.': 'تسجيل الدخول عبر GitHub غير مضبوط من قبل المسؤول.',
+    'Failed to sign in with {provider}': 'تعذر تسجيل الدخول باستخدام {provider}',
+    'Google login': 'تسجيل الدخول عبر Google',
+    'GitHub login': 'تسجيل الدخول عبر GitHub',
+    Ready: 'جاهز',
+    'Setup required': 'يلزم الإعداد',
+    'Desktop OAuth disabled': 'OAuth معطل على سطح المكتب',
+    'Guest access is enabled by default.': 'وضع الضيف متاح بشكل افتراضي.',
+    'Google sign-in is ready.': 'تسجيل الدخول عبر Google جاهز.',
+    'GitHub sign-in is ready.': 'تسجيل الدخول عبر GitHub جاهز.',
+    'Add Google client credentials in the deployment environment to enable it.': 'أضف بيانات اعتماد Google في بيئة النشر لتفعيله.',
+    'Add GitHub client credentials in the deployment environment to enable it.': 'أضف بيانات اعتماد GitHub في بيئة النشر لتفعيله.',
+    'Use your browser, or continue as guest if you only need local study tools.': 'استخدم المتصفح، أو تابع كضيف إذا كنت تحتاج الأدوات الدراسية المحلية فقط.',
+    'Example: you@example.com': 'مثال: you@example.com',
+  });
 
   useEffect(() => {
-    let detectedArabic = false;
-    if (typeof document !== 'undefined') {
-      detectedArabic = document.documentElement.lang === 'ar' || document.documentElement.dir === 'rtl';
-      setIsArabic(detectedArabic);
-    }
     getProviders().then(setProviders).catch(() => setProviders(null));
     fetch('/api/auth/capabilities', { credentials: 'include' })
       .then((res) => res.json())
@@ -108,9 +113,9 @@ export default function RegisterPage() {
     const params = new URLSearchParams(window.location.search);
     const oauthError = params.get('error');
     if (oauthError) {
-      setError(mapOAuthErrorMessage(oauthError, detectedArabic));
+      setError(mapOAuthErrorMessage(oauthError, isArabic));
     }
-  }, []);
+  }, [isArabic]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -194,6 +199,7 @@ export default function RegisterPage() {
       <div className="auth-card">
         <h1>StudyPilot</h1>
         <p>{t('Create your account')}</p>
+        <p className="auth-subtle-copy">{t('Create a StudyPilot account for synced plans, analytics, and shared workspaces.')}</p>
 
         {error && <div className="auth-error">{error}</div>}
 
@@ -227,8 +233,47 @@ export default function RegisterPage() {
           </button>
         </div>
 
+        <div className="auth-status-grid">
+          <div className="auth-status-card">
+            <div className="auth-status-row">
+              <strong>{t('Google login')}</strong>
+              <span className={`auth-status-badge ${providers?.google && !authCapabilities?.oauthDisabled ? 'ready' : 'setup'}`}>
+                {providers?.google && !authCapabilities?.oauthDisabled ? t('Ready') : t('Setup required')}
+              </span>
+            </div>
+            <p>
+              {providers?.google && !authCapabilities?.oauthDisabled
+                ? t('Google sign-in is ready.')
+                : t('Add Google client credentials in the deployment environment to enable it.')}
+            </p>
+          </div>
+          <div className="auth-status-card">
+            <div className="auth-status-row">
+              <strong>{t('GitHub login')}</strong>
+              <span className={`auth-status-badge ${providers?.github && !authCapabilities?.oauthDisabled ? 'ready' : 'setup'}`}>
+                {providers?.github && !authCapabilities?.oauthDisabled ? t('Ready') : t('Setup required')}
+              </span>
+            </div>
+            <p>
+              {providers?.github && !authCapabilities?.oauthDisabled
+                ? t('GitHub sign-in is ready.')
+                : t('Add GitHub client credentials in the deployment environment to enable it.')}
+            </p>
+          </div>
+        </div>
+
         {authCapabilities?.oauthDisabledReason && (
-          <div className="auth-hint">{authCapabilities.oauthDisabledReason}</div>
+          <div className="auth-hint">
+            <strong>{t('Desktop OAuth disabled')}</strong> {authCapabilities.oauthDisabledReason}
+            <br />
+            {t('Use your browser, or continue as guest if you only need local study tools.')}
+          </div>
+        )}
+
+        {authCapabilities?.guestModeEnabled && (
+          <div className="auth-hint">
+            {t('Guest access is enabled by default.')}
+          </div>
         )}
 
         <div className="auth-divider">
@@ -254,7 +299,7 @@ export default function RegisterPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder={t('Example: you@example.com')}
               required
             />
           </div>
