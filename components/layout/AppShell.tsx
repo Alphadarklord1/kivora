@@ -54,6 +54,7 @@ const navGroups = [
 ];
 
 const navItems = navGroups.flatMap((group) => group.items);
+const GITHUB_NEW_ISSUE_URL = 'https://github.com/Alphadarklord1/studypilot/issues/new?template=error_report.yml';
 
 // Mobile bottom nav shows only the 5 most important items
 const mobileNavItems = navItems.filter(item =>
@@ -117,6 +118,8 @@ export function AppShell({ children, user }: AppShellProps) {
       'Use arrows to navigate, Enter to open, Esc to close': 'استخدم الأسهم للتنقل، Enter للفتح، Esc للإغلاق',
       'Open quick search': 'فتح البحث السريع',
       'Account actions': 'إجراءات الحساب',
+      'Report Issue': 'الإبلاغ عن مشكلة',
+      Status: 'الحالة',
     };
     return isArabic ? (ar[key] || key) : key;
   }, [isArabic]);
@@ -284,6 +287,10 @@ export function AppShell({ children, user }: AppShellProps) {
     }
   }, [toast, t]);
 
+  const handleReportIssue = useCallback(() => {
+    window.open(GITHUB_NEW_ISSUE_URL, '_blank', 'noopener,noreferrer');
+  }, []);
+
   useEffect(() => {
     if (!quickSearchOpen || quickSearchLoaded || quickSearchLoading) return;
 
@@ -335,6 +342,7 @@ export function AppShell({ children, user }: AppShellProps) {
       { id: 'page-analytics', type: 'page', title: t('Analytics'), subtitle: '/analytics', href: '/analytics', icon: '📊', searchText: `${t('Analytics')} analytics` },
       { id: 'page-sharing', type: 'page', title: t('Sharing'), subtitle: '/sharing', href: '/sharing', icon: '🔗', searchText: `${t('Sharing')} sharing` },
       { id: 'page-settings', type: 'page', title: t('Settings'), subtitle: '/settings', href: '/settings', icon: '⚙️', searchText: `${t('Settings')} settings` },
+      { id: 'page-status', type: 'page', title: t('Status'), subtitle: '/status', href: '/status', icon: '🩺', searchText: `${t('Status')} status support issue` },
     ];
 
     const fileItems = quickSearchFiles.slice(0, 25).map<QuickSearchItem>((file) => ({
@@ -472,6 +480,14 @@ export function AppShell({ children, user }: AppShellProps) {
                 </button>
                 <button
                   className="download-btn"
+                  onClick={handleReportIssue}
+                  title={t('Report Issue')}
+                >
+                  <span>🩺</span>
+                  <span>{t('Report Issue')}</span>
+                </button>
+                <button
+                  className="download-btn"
                   onClick={toggleLanguage}
                   title={isArabic ? t('Switch to English') : t('Switch to Arabic')}
                 >
@@ -503,6 +519,13 @@ export function AppShell({ children, user }: AppShellProps) {
                   title={t('Export Data')}
                 >
                   ⬇️
+                </button>
+                <button
+                  className="download-btn-icon"
+                  onClick={handleReportIssue}
+                  title={t('Report Issue')}
+                >
+                  🩺
                 </button>
                 <button
                   className="download-btn-icon"
@@ -584,6 +607,12 @@ export function AppShell({ children, user }: AppShellProps) {
                     onClick={() => { handleExportData(); setShowUserMenu(false); }}
                   >
                     ⬇️ {t('Export Data')}
+                  </button>
+                  <button
+                    className="mobile-menu-item"
+                    onClick={() => { handleReportIssue(); setShowUserMenu(false); }}
+                  >
+                    🩺 {t('Report Issue')}
                   </button>
                   <button
                     className="mobile-menu-item"

@@ -51,4 +51,5 @@ Use the `Release checklist` issue template for every public release.
 - `SECURITY.md`
 - `SUPPORT.md`
 - `docs/GITHUB_SETUP.md`
+- `docs/GITHUB_PROJECTS.md`
 - `ROADMAP.md`

@@ -138,4 +138,5 @@ Repository collaboration files:
 - `SUPPORT.md`
 - `docs/TEAM_WORKFLOW.md`
 - `docs/GITHUB_SETUP.md`
+- `docs/GITHUB_PROJECTS.md`
 - `ROADMAP.md`

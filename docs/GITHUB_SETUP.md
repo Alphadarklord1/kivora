@@ -56,6 +56,8 @@ Recommended custom fields:
 - runtime
 - release target
 
+See `docs/GITHUB_PROJECTS.md` for exact label-to-column rules.
+
 ## 5. Discussions
 
 If enabled, create categories for:
