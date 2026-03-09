@@ -5,6 +5,7 @@ import { useAnalytics } from '@/hooks/useAnalytics';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { generateStudySchedule, type StudyTopic } from '@/lib/planner/generate';
 import { useI18n } from '@/lib/i18n/useI18n';
+import { createLocalStudyPlan } from '@/lib/planner/local-plans';
 
 const PERIOD_OPTIONS = [
   { value: 7, label: 'Last 7 days' },
@@ -82,6 +83,7 @@ export function StudyAnalytics() {
     'Top: {tool}': 'الأعلى: {tool}',
     'total plans': 'إجمالي الخطط',
     'Showing fallback analytics due to a temporary data issue.': 'يتم عرض تحليلات احتياطية بسبب مشكلة مؤقتة في البيانات.',
+    'Planner data is using local beta storage on this device.': 'تستخدم بيانات المخطط تخزينًا محليًا تجريبيًا على هذا الجهاز.',
   });
   const router = useRouter();
   const { data, loading, error, refresh, setPeriod, period } = useAnalytics(30);
@@ -310,9 +312,27 @@ export function StudyAnalytics() {
 
     if (res.ok) {
       router.push('/planner');
-    } else {
-      window.alert(t('Could not generate plan. Please try again.'));
+      return;
     }
+
+    const payload = await res.json().catch(() => null);
+    const errorCode = payload && typeof payload === 'object'
+      ? (payload as Record<string, unknown>).errorCode
+      : null;
+
+    if (errorCode === 'DATABASE_NOT_CONFIGURED') {
+      createLocalStudyPlan({
+        title: `Coach: ${topic} (${minutes}-min)`,
+        examDate: examDate.toISOString(),
+        dailyMinutes: minutes,
+        topics,
+        schedule,
+      });
+      router.push('/planner');
+      return;
+    }
+
+    window.alert(t('Could not generate plan. Please try again.'));
   };
 
   const onCoachAction = async () => {
@@ -361,7 +381,7 @@ export function StudyAnalytics() {
         </div>
         <ul>
           {aiInsights.slice(0, 3).map((insight, index) => (
-            <li key={index}>{insight}</li>
+            <li key={index}>{t(insight)}</li>
           ))}
         </ul>
         <div className="hero-actions">

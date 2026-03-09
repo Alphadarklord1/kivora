@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { getLocalStudyPlan, updateLocalStudyPlan } from '@/lib/planner/local-plans';
 
 const STORAGE_KEY = 'studypilot-timer-state';
 
@@ -265,8 +266,21 @@ export function useStudyTimer() {
 async function recordSession(planId: string, dayIndex: number, duration: number) {
   try {
     const res = await fetch(`/api/study-plans/${planId}`, { credentials: 'include' });
-    if (!res.ok) return;
-    const plan = await res.json();
+    let plan = null;
+
+    if (res.ok) {
+      plan = await res.json();
+    } else {
+      const payload = await res.json().catch(() => null);
+      const errorCode = payload && typeof payload === 'object'
+        ? (payload as Record<string, unknown>).errorCode
+        : null;
+      if (errorCode === 'DATABASE_NOT_CONFIGURED') {
+        plan = getLocalStudyPlan(planId);
+      }
+    }
+
+    if (!plan) return;
     const schedule = plan.schedule;
     if (!schedule?.days?.[dayIndex]) return;
 
@@ -277,11 +291,21 @@ async function recordSession(planId: string, dayIndex: number, duration: number)
       completedAt: new Date().toISOString(),
     });
 
-    await fetch(`/api/study-plans/${planId}`, {
+    const updateRes = await fetch(`/api/study-plans/${planId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ schedule }),
       credentials: 'include',
     });
+
+    if (!updateRes.ok) {
+      const payload = await updateRes.json().catch(() => null);
+      const errorCode = payload && typeof payload === 'object'
+        ? (payload as Record<string, unknown>).errorCode
+        : null;
+      if (errorCode === 'DATABASE_NOT_CONFIGURED') {
+        updateLocalStudyPlan(planId, { schedule });
+      }
+    }
   } catch { /* silently fail — session recording is best-effort */ }
 }

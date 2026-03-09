@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { buildAnalyticsFromLocalPlans } from '@/lib/planner/local-plans';
 
 export interface QuizStats {
   totalAttempts: number;
@@ -104,7 +105,7 @@ export function useAnalytics(initialPeriod: number = 30): UseAnalyticsReturn {
       }
 
       const analyticsData = await res.json();
-      setData(analyticsData);
+      setData(analyticsData?.fallback ? buildAnalyticsFromLocalPlans(analyticsData) : analyticsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
       setData(null);

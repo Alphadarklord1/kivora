@@ -1,20 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import { StudyTopic, GeneratedSchedule } from '@/lib/planner/generate';
+import { GeneratedSchedule } from '@/lib/planner/generate';
+import {
+  CreatePlanData,
+  StudyPlan,
+  UpdatePlanData,
+} from '@/lib/planner/study-plan-types';
+import {
+  createLocalStudyPlan,
+  deleteLocalStudyPlan,
+  loadLocalStudyPlans,
+  updateLocalStudyPlan,
+} from '@/lib/planner/local-plans';
 
-export interface StudyPlan {
-  id: string;
-  userId: string;
-  title: string;
-  examDate: string;
-  dailyMinutes: number;
-  folderId: string | null;
-  status: 'active' | 'completed' | 'paused';
-  topics: StudyTopic[];
-  schedule: GeneratedSchedule;
-  progress: number;
-  createdAt: string;
-  updatedAt: string;
-}
+export type { StudyPlan } from '@/lib/planner/study-plan-types';
 
 interface UseStudyPlansReturn {
   plans: StudyPlan[];
@@ -27,21 +25,13 @@ interface UseStudyPlansReturn {
   updateProgress: (id: string, schedule: GeneratedSchedule) => Promise<StudyPlan | null>;
 }
 
-interface CreatePlanData {
-  title: string;
-  examDate: string;
-  dailyMinutes: number;
-  topics: StudyTopic[];
-  schedule: GeneratedSchedule;
-  folderId?: string | null;
-}
-
-interface UpdatePlanData {
-  status?: 'active' | 'completed' | 'paused';
-  progress?: number;
-  schedule?: GeneratedSchedule;
-  topics?: StudyTopic[];
-  folderId?: string | null;
+function getApiErrorReason(payload: unknown, fallback: string) {
+  if (payload && typeof payload === 'object') {
+    const candidate = payload as Record<string, unknown>;
+    if (typeof candidate.reason === 'string') return candidate.reason;
+    if (typeof candidate.error === 'string') return candidate.error;
+  }
+  return fallback;
 }
 
 export function useStudyPlans(): UseStudyPlansReturn {
@@ -56,13 +46,16 @@ export function useStudyPlans(): UseStudyPlansReturn {
     try {
       const res = await fetch('/api/study-plans', { credentials: 'include' });
       if (!res.ok) {
-        throw new Error('Failed to fetch study plans');
+        const payload = await res.json().catch(() => null);
+        throw new Error(getApiErrorReason(payload, 'Failed to fetch study plans'));
       }
+
       const data = await res.json();
-      setPlans(Array.isArray(data) ? data : []);
+      const isLocalFallback = res.headers.get('x-studypilot-fallback') === 'study-plans-no-db';
+      setPlans(isLocalFallback ? loadLocalStudyPlans() : Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
-      setPlans([]);
+      setPlans(loadLocalStudyPlans());
     } finally {
       setLoading(false);
     }
@@ -82,12 +75,19 @@ export function useStudyPlans(): UseStudyPlansReturn {
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to create plan');
+        const payload = await res.json().catch(() => null);
+        const errorCode = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).errorCode : null;
+        if (errorCode === 'DATABASE_NOT_CONFIGURED') {
+          const localPlan = createLocalStudyPlan(data);
+          setPlans((prev) => [localPlan, ...prev.filter((plan) => plan.id !== localPlan.id)]);
+          setError(null);
+          return localPlan;
+        }
+        throw new Error(getApiErrorReason(payload, 'Failed to create plan'));
       }
 
       const newPlan = await res.json();
-      setPlans(prev => [newPlan, ...prev]);
+      setPlans((prev) => [newPlan, ...prev]);
       return newPlan;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -105,12 +105,21 @@ export function useStudyPlans(): UseStudyPlansReturn {
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to update plan');
+        const payload = await res.json().catch(() => null);
+        const errorCode = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).errorCode : null;
+        if (errorCode === 'DATABASE_NOT_CONFIGURED') {
+          const localPlan = updateLocalStudyPlan(id, data);
+          if (localPlan) {
+            setPlans((prev) => prev.map((plan) => (plan.id === id ? localPlan : plan)));
+            setError(null);
+            return localPlan;
+          }
+        }
+        throw new Error(getApiErrorReason(payload, 'Failed to update plan'));
       }
 
       const updated = await res.json();
-      setPlans(prev => prev.map(p => p.id === id ? updated : p));
+      setPlans((prev) => prev.map((plan) => (plan.id === id ? updated : plan)));
       return updated;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -126,10 +135,20 @@ export function useStudyPlans(): UseStudyPlansReturn {
       });
 
       if (!res.ok) {
-        throw new Error('Failed to delete plan');
+        const payload = await res.json().catch(() => null);
+        const errorCode = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).errorCode : null;
+        if (errorCode === 'DATABASE_NOT_CONFIGURED' || (payload && typeof payload === 'object' && (payload as Record<string, unknown>).localOnly)) {
+          const deleted = deleteLocalStudyPlan(id);
+          if (deleted) {
+            setPlans((prev) => prev.filter((plan) => plan.id !== id));
+            setError(null);
+            return true;
+          }
+        }
+        throw new Error(getApiErrorReason(payload, 'Failed to delete plan'));
       }
 
-      setPlans(prev => prev.filter(p => p.id !== id));
+      setPlans((prev) => prev.filter((plan) => plan.id !== id));
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -138,8 +157,9 @@ export function useStudyPlans(): UseStudyPlansReturn {
   }, []);
 
   const updateProgress = useCallback(async (id: string, schedule: GeneratedSchedule): Promise<StudyPlan | null> => {
-    const completedDays = schedule.days.filter(d => d.completed).length;
-    const progress = Math.round((completedDays / schedule.totalDays) * 100);
+    const totalDays = Math.max(1, schedule.totalDays || schedule.days.length || 1);
+    const completedDays = schedule.days.filter((day) => day.completed).length;
+    const progress = Math.round((completedDays / totalDays) * 100);
     const status = progress === 100 ? 'completed' : 'active';
 
     return updatePlan(id, { schedule, progress, status });

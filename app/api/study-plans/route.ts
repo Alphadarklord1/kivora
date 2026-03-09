@@ -9,7 +9,7 @@ import { betaReadFallback, databaseUnavailable, unauthorized } from '@/lib/api/r
 export async function GET(request: NextRequest) {
   const requestId = createRequestId(request);
   if (!isDatabaseConfigured) {
-    return betaReadFallback([]);
+    return betaReadFallback([], { 'x-studypilot-fallback': 'study-plans-no-db' });
   }
 
   const userId = await getUserId(request);
