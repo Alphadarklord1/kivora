@@ -106,6 +106,16 @@ interface AuthCapabilities {
   oauthDisabledReason: string | null;
 }
 
+const GITHUB_NEW_ISSUE_URL = 'https://github.com/Alphadarklord1/studypilot/issues/new';
+const TEAM_WORKFLOW_URL = 'https://github.com/Alphadarklord1/studypilot/blob/main/docs/TEAM_WORKFLOW.md';
+
+function openGitHubTemplate(template: string) {
+  if (typeof window === 'undefined') return;
+  const url = new URL(GITHUB_NEW_ISSUE_URL);
+  url.searchParams.set('template', template);
+  window.open(url.toString(), '_blank', 'noopener,noreferrer');
+}
+
 interface ApiErrorLike {
   error?: string;
   reason?: string;
@@ -349,6 +359,19 @@ export default function SettingsPage() {
     'Failed to update two-step verification': 'تعذر تحديث التحقق بخطوتين',
     'Guest sessions cannot enable two-step verification.': 'جلسات الضيف لا يمكنها تفعيل التحقق بخطوتين.',
     'Code copied': 'تم النسخ',
+    'Support & reporting': 'الدعم والإبلاغ',
+    'Send the right report so the team can reproduce the problem quickly.': 'أرسل نوع البلاغ الصحيح حتى يتمكن الفريق من إعادة إنتاج المشكلة بسرعة.',
+    'Include the page, runtime, steps, and screenshot if possible.': 'أدرج الصفحة وبيئة التشغيل والخطوات ولقطة الشاشة إن أمكن.',
+    'Use GitHub issue templates so reports stay structured.': 'استخدم قوالب GitHub حتى تبقى البلاغات منظمة.',
+    'Runtime / crash': 'تعطل / انهيار',
+    'UI / layout': 'واجهة / تخطيط',
+    'AI / generation': 'الذكاء الاصطناعي / التوليد',
+    'Open error report': 'فتح بلاغ خطأ',
+    'Open bug report': 'فتح بلاغ عطل',
+    'Report an issue': 'الإبلاغ عن مشكلة',
+    'Request a feature': 'طلب ميزة',
+    'Create a team task': 'إنشاء مهمة للفريق',
+    'Open the collaboration guide': 'افتح دليل التعاون',
   });
   const supportedTasks = getSupportedAiTasks(currentLanguage);
 
@@ -1590,6 +1613,26 @@ export default function SettingsPage() {
                   </>
                 )}
               </div>
+
+              <div className="security-card support-card">
+                <h3>{t('Support & reporting')}</h3>
+                <p>{t('Send the right report so the team can reproduce the problem quickly.')}</p>
+                <div className="support-chip-row">
+                  <span className="support-chip">{t('Runtime / crash')}</span>
+                  <span className="support-chip">{t('UI / layout')}</span>
+                  <span className="support-chip">{t('AI / generation')}</span>
+                </div>
+                <p className="helper-text">{t('Include the page, runtime, steps, and screenshot if possible.')}</p>
+                <p className="helper-text">{t('Use GitHub issue templates so reports stay structured.')}</p>
+                <div className="support-actions">
+                  <button className="btn secondary" onClick={() => openGitHubTemplate('error_report.yml')}>
+                    {t('Open error report')}
+                  </button>
+                  <button className="btn secondary" onClick={() => openGitHubTemplate('bug_report.yml')}>
+                    {t('Open bug report')}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1770,6 +1813,25 @@ export default function SettingsPage() {
                 <div className="account-info-item">
                   <span>{t('Member since')}</span>
                   <strong>{account?.createdAt ? formatDate(account.createdAt) : (isArabic ? 'غير متاح' : 'N/A')}</strong>
+                </div>
+              </div>
+
+              <div className="account-card support-card">
+                <h3>{t('Report an issue')}</h3>
+                <p>{t('Send the right report so the team can reproduce the problem quickly.')}</p>
+                <div className="support-actions">
+                  <button className="btn secondary" onClick={() => openGitHubTemplate('feature_request.yml')}>
+                    {t('Request a feature')}
+                  </button>
+                  <button className="btn secondary" onClick={() => openGitHubTemplate('team_task.yml')}>
+                    {t('Create a team task')}
+                  </button>
+                  <button
+                    className="btn secondary"
+                    onClick={() => window.open(TEAM_WORKFLOW_URL, '_blank', 'noopener,noreferrer')}
+                  >
+                    {t('Open the collaboration guide')}
+                  </button>
                 </div>
               </div>
 
@@ -2624,6 +2686,37 @@ export default function SettingsPage() {
           color: var(--text-muted);
           font-size: var(--font-meta);
           margin-bottom: var(--space-4);
+        }
+
+        .support-card {
+          background: var(--surface-glow), var(--panel-gradient);
+          box-shadow: var(--surface-stroke), var(--shadow-md);
+        }
+
+        .support-chip-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--space-2);
+          margin-bottom: var(--space-3);
+        }
+
+        .support-chip {
+          display: inline-flex;
+          align-items: center;
+          min-height: 30px;
+          padding: 0 var(--space-3);
+          border-radius: var(--radius-full);
+          border: 1px solid var(--border-default);
+          background: color-mix(in srgb, var(--bg-inset) 84%, transparent);
+          color: var(--text-secondary);
+          font-size: var(--font-tiny);
+          font-weight: 600;
+        }
+
+        .support-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--space-2);
         }
 
         .account-card.danger {

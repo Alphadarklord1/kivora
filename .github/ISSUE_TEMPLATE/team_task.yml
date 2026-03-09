@@ -1,0 +1,39 @@
+name: Team task
+description: Create a scoped implementation task for collaborators
+title: "[Task] "
+labels:
+  - task
+body:
+  - type: input
+    id: surface
+    attributes:
+      label: Surface
+      placeholder: workspace / planner / tools / analytics / settings / auth / release
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      placeholder: What should this task achieve?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      placeholder: What is explicitly in and out?
+    validations:
+      required: true
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation notes
+      placeholder: Files, APIs, UX constraints, rollout notes
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: What must be true for this task to be done?
+    validations:
+      required: true

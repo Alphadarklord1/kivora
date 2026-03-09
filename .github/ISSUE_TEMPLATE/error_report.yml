@@ -1,0 +1,73 @@
+name: Error report
+description: Report a runtime, UI, AI, or data-flow error from inside the app
+title: "[Error] "
+labels:
+  - bug
+  - error-report
+body:
+  - type: dropdown
+    id: error_type
+    attributes:
+      label: Error type
+      options:
+        - Runtime / crash
+        - UI / layout
+        - Auth / sign-in
+        - Planner / analytics
+        - AI / generation
+        - Math / tool behavior
+        - Files / library / sharing
+        - Localization / Arabic / RTL
+        - Performance
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      options:
+        - Web
+        - Desktop
+        - Mobile browser
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: route
+    attributes:
+      label: Page or route
+      placeholder: /workspace, /planner, /api/analytics
+  - type: textarea
+    id: summary
+    attributes:
+      label: What went wrong
+      placeholder: Describe the visible error as the user sees it
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshot, console error, or network response
+      description: Paste the failing response body or attach a screenshot if possible
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment details
+      placeholder: Browser or OS, guest vs signed-in, English vs Arabic, model/runtime if relevant

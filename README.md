@@ -134,4 +134,6 @@ Repository collaboration files:
 - `.github/PULL_REQUEST_TEMPLATE.md`
 - `.github/ISSUE_TEMPLATE/`
 - `CODEOWNERS`
+- `CODE_OF_CONDUCT.md`
 - `SUPPORT.md`
+- `docs/TEAM_WORKFLOW.md`

@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Team workflow guide
+    url: https://github.com/Alphadarklord1/studypilot/blob/main/docs/TEAM_WORKFLOW.md
+    about: Read the repo workflow before opening broad collaboration tasks.
   - name: Security issue
     url: https://github.com/Alphadarklord1/studypilot/security
     about: Report vulnerabilities privately instead of opening a public issue.
