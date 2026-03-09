@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { studyPlans } from '@/lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
+import { apiError, createRequestId } from '@/lib/api/error-response';
+import { betaReadFallback, databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
 
 export async function GET(request: NextRequest) {
+  const requestId = createRequestId(request);
+  if (!isDatabaseConfigured) {
+    return betaReadFallback([]);
+  }
+
   const userId = await getUserId(request);
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return unauthorized(request, requestId);
   }
 
   const { searchParams } = new URL(request.url);
@@ -26,19 +33,25 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = createRequestId(request);
+  if (!isDatabaseConfigured) {
+    return databaseUnavailable(request, 'Study plan creation requires DATABASE_URL to be configured', undefined, requestId);
+  }
+
   const userId = await getUserId(request);
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return unauthorized(request, requestId);
   }
 
   const body = await request.json();
   const { title, examDate, dailyMinutes, topics, schedule, folderId, source, coachContext } = body;
 
   if (!title || !examDate || !topics || !schedule) {
-    return NextResponse.json(
-      { error: 'Title, exam date, topics, and schedule are required' },
-      { status: 400 }
-    );
+    return apiError(400, {
+      errorCode: 'INVALID_STUDY_PLAN',
+      reason: 'Title, exam date, topics, and schedule are required',
+      requestId,
+    });
   }
 
   const scheduleWithMeta =

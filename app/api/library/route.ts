@@ -4,21 +4,18 @@ import { libraryItems } from '@/lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
+import { betaReadFallback, databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
 
 export async function GET(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
     if (!isDatabaseConfigured) {
-      return NextResponse.json([]);
+      return betaReadFallback([]);
     }
 
     const userId = await getUserId(request);
     if (!userId) {
-      return apiError(401, {
-        errorCode: 'UNAUTHORIZED',
-        reason: 'Authentication required',
-        requestId,
-      });
+      return unauthorized(request, requestId);
     }
 
   const { searchParams } = new URL(request.url);
@@ -52,20 +49,12 @@ export async function POST(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
     if (!isDatabaseConfigured) {
-      return apiError(503, {
-        errorCode: 'DATABASE_NOT_CONFIGURED',
-        reason: 'Library saving requires DATABASE_URL to be configured',
-        requestId,
-      });
+      return databaseUnavailable(request, 'Library saving requires DATABASE_URL to be configured', undefined, requestId);
     }
 
     const userId = await getUserId(request);
     if (!userId) {
-      return apiError(401, {
-        errorCode: 'UNAUTHORIZED',
-        reason: 'Authentication required',
-        requestId,
-      });
+      return unauthorized(request, requestId);
     }
 
     const body = await request.json();
@@ -101,16 +90,12 @@ export async function DELETE(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
     if (!isDatabaseConfigured) {
-      return NextResponse.json({ success: true });
+      return betaReadFallback({ success: true });
     }
 
     const userId = await getUserId(request);
     if (!userId) {
-      return apiError(401, {
-        errorCode: 'UNAUTHORIZED',
-        reason: 'Authentication required',
-        requestId,
-      });
+      return unauthorized(request, requestId);
     }
 
     await db.delete(libraryItems).where(eq(libraryItems.userId, userId));

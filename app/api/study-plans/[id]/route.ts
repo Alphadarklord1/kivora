@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { studyPlans } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
+import { apiError, createRequestId } from '@/lib/api/error-response';
+import { betaReadFallback, databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const requestId = createRequestId(request);
+  if (!isDatabaseConfigured) {
+    return betaReadFallback(null);
+  }
+
   const userId = await getUserId(request);
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return unauthorized(request, requestId);
   }
 
   const { id } = await params;
@@ -21,16 +28,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   });
 
   if (!plan) {
-    return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+    return apiError(404, {
+      errorCode: 'PLAN_NOT_FOUND',
+      reason: 'Plan not found',
+      requestId,
+    });
   }
 
   return NextResponse.json(plan);
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const requestId = createRequestId(request);
+  if (!isDatabaseConfigured) {
+    return databaseUnavailable(request, 'Study plan updates require DATABASE_URL to be configured', undefined, requestId);
+  }
+
   const userId = await getUserId(request);
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return unauthorized(request, requestId);
   }
 
   const { id } = await params;
@@ -64,16 +80,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     .returning();
 
   if (!updated) {
-    return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+    return apiError(404, {
+      errorCode: 'PLAN_NOT_FOUND',
+      reason: 'Plan not found',
+      requestId,
+    });
   }
 
   return NextResponse.json(updated);
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const requestId = createRequestId(request);
+  if (!isDatabaseConfigured) {
+    return betaReadFallback({ success: true, localOnly: true });
+  }
+
   const userId = await getUserId(request);
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return unauthorized(request, requestId);
   }
 
   const { id } = await params;
@@ -84,7 +109,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     .returning();
 
   if (!deleted) {
-    return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+    return apiError(404, {
+      errorCode: 'PLAN_NOT_FOUND',
+      reason: 'Plan not found',
+      requestId,
+    });
   }
 
   return NextResponse.json({ success: true });

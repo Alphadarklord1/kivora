@@ -4,21 +4,18 @@ import { folders, topics } from '@/lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
+import { betaReadFallback, databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
 
 export async function GET(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
     if (!isDatabaseConfigured) {
-      return NextResponse.json([]);
+      return betaReadFallback([]);
     }
 
     const userId = await getUserId(request);
     if (!userId) {
-      return apiError(401, {
-        errorCode: 'UNAUTHORIZED',
-        reason: 'Authentication required',
-        requestId,
-      });
+      return unauthorized(request, requestId);
     }
 
     const userFolders = await db.query.folders.findMany({
@@ -46,20 +43,12 @@ export async function POST(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
     if (!isDatabaseConfigured) {
-      return apiError(503, {
-        errorCode: 'DATABASE_NOT_CONFIGURED',
-        reason: 'Folder creation requires DATABASE_URL to be configured',
-        requestId,
-      });
+      return databaseUnavailable(request, 'Folder creation requires DATABASE_URL to be configured', undefined, requestId);
     }
 
     const userId = await getUserId(request);
     if (!userId) {
-      return apiError(401, {
-        errorCode: 'UNAUTHORIZED',
-        reason: 'Authentication required',
-        requestId,
-      });
+      return unauthorized(request, requestId);
     }
 
     const body = await request.json();

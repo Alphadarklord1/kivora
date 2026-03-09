@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { folders, topics } from '@/lib/db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
+import { betaReadFallback } from '@/lib/api/runtime-guards';
 
 export async function GET(request: NextRequest) {
   try {
+    if (!isDatabaseConfigured) {
+      return betaReadFallback([]);
+    }
+
     const userId = await getUserId(request);
     if (!userId) {
-      return NextResponse.json([]);
+      return betaReadFallback([]);
     }
 
     const { searchParams } = new URL(request.url);
@@ -37,6 +42,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data);
   } catch (error) {
     console.error('Topics GET error:', error);
-    return NextResponse.json([]);
+    return betaReadFallback([]);
   }
 }

@@ -4,6 +4,7 @@ import { quizAttempts, studyPlans, files, libraryItems } from '@/lib/db/schema';
 import { eq, desc, and, gte } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
+import { betaReadFallback, unauthorized } from '@/lib/api/runtime-guards';
 
 interface QuizAnswer {
   questionId: string;
@@ -80,18 +81,14 @@ export async function GET(request: NextRequest) {
   const periodDays = Number.isFinite(parsedPeriod) && parsedPeriod > 0 ? parsedPeriod : 30;
 
   if (!isDatabaseConfigured) {
-    return NextResponse.json(buildAnalyticsFallback(periodDays), {
-      headers: { 'x-studypilot-fallback': 'analytics-no-db' },
+    return betaReadFallback(buildAnalyticsFallback(periodDays), {
+      'x-studypilot-fallback': 'analytics-no-db',
     });
   }
 
   const userId = await getUserId(request);
   if (!userId) {
-    return apiError(401, {
-      errorCode: 'UNAUTHORIZED',
-      reason: 'Authentication required',
-      requestId,
-    });
+    return unauthorized(request, requestId);
   }
 
   const startDate = new Date();

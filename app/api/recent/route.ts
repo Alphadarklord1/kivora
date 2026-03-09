@@ -4,22 +4,19 @@ import { recentFiles, files } from '@/lib/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
+import { betaReadFallback, unauthorized } from '@/lib/api/runtime-guards';
 
 // GET /api/recent - Get recent files for the user
 export async function GET(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
     if (!isDatabaseConfigured) {
-      return NextResponse.json([]);
+      return betaReadFallback([]);
     }
 
     const userId = await getUserId(request);
     if (!userId) {
-      return apiError(401, {
-        errorCode: 'UNAUTHORIZED',
-        reason: 'Authentication required',
-        requestId,
-      });
+      return unauthorized(request, requestId);
     }
 
   const { searchParams } = new URL(request.url);
@@ -64,16 +61,12 @@ export async function POST(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
     if (!isDatabaseConfigured) {
-      return NextResponse.json({ success: true, localOnly: true });
+      return betaReadFallback({ success: true, localOnly: true });
     }
 
     const userId = await getUserId(request);
     if (!userId) {
-      return apiError(401, {
-        errorCode: 'UNAUTHORIZED',
-        reason: 'Authentication required',
-        requestId,
-      });
+      return unauthorized(request, requestId);
     }
 
     const body = await request.json();
@@ -155,16 +148,12 @@ export async function DELETE(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
     if (!isDatabaseConfigured) {
-      return NextResponse.json({ success: true });
+      return betaReadFallback({ success: true });
     }
 
     const userId = await getUserId(request);
     if (!userId) {
-      return apiError(401, {
-        errorCode: 'UNAUTHORIZED',
-        reason: 'Authentication required',
-        requestId,
-      });
+      return unauthorized(request, requestId);
     }
 
     await db.delete(recentFiles).where(eq(recentFiles.userId, userId));

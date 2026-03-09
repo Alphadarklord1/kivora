@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { folders, topics } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
+import { databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
 
 interface RouteParams {
   params: Promise<{ folderId: string }>;
@@ -12,13 +13,13 @@ interface RouteParams {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = createRequestId(request);
   try {
+    if (!isDatabaseConfigured) {
+      return databaseUnavailable(request, 'Subfolder creation requires DATABASE_URL to be configured', undefined, requestId);
+    }
+
     const userId = await getUserId(request);
     if (!userId) {
-      return apiError(401, {
-        errorCode: 'UNAUTHORIZED',
-        reason: 'Authentication required',
-        requestId,
-      });
+      return unauthorized(request, requestId);
     }
 
     const { folderId } = await params;

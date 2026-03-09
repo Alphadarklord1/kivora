@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { libraryItems } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
+import { apiError, createRequestId } from '@/lib/api/error-response';
+import { betaReadFallback, databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
 
 interface RouteParams {
   params: Promise<{ itemId: string }>;
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const requestId = createRequestId(request);
+  if (!isDatabaseConfigured) {
+    return betaReadFallback(null);
+  }
+
   const userId = await getUserId(request);
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return unauthorized(request, requestId);
   }
 
   const { itemId } = await params;
@@ -21,16 +28,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   });
 
   if (!item) {
-    return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+    return apiError(404, {
+      errorCode: 'LIBRARY_ITEM_NOT_FOUND',
+      reason: 'Item not found',
+      requestId,
+    });
   }
 
   return NextResponse.json(item);
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const requestId = createRequestId(request);
+  if (!isDatabaseConfigured) {
+    return betaReadFallback({ success: true, localOnly: true });
+  }
+
   const userId = await getUserId(request);
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return unauthorized(request, requestId);
   }
 
   const { itemId } = await params;
@@ -41,16 +57,25 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     .returning();
 
   if (!deleted) {
-    return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+    return apiError(404, {
+      errorCode: 'LIBRARY_ITEM_NOT_FOUND',
+      reason: 'Item not found',
+      requestId,
+    });
   }
 
   return NextResponse.json({ success: true });
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
+  const requestId = createRequestId(request);
+  if (!isDatabaseConfigured) {
+    return databaseUnavailable(request, 'Library item updates require DATABASE_URL to be configured', undefined, requestId);
+  }
+
   const userId = await getUserId(request);
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return unauthorized(request, requestId);
   }
 
   const { itemId } = await params;
@@ -67,7 +92,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     .returning();
 
   if (!updated) {
-    return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+    return apiError(404, {
+      errorCode: 'LIBRARY_ITEM_NOT_FOUND',
+      reason: 'Item not found',
+      requestId,
+    });
   }
 
   return NextResponse.json(updated);
