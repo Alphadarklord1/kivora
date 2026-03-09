@@ -30,21 +30,24 @@ type LocalManifestModel = {
   url?: string;
 };
 
-const MODEL_COPY: Record<string, { label: string; summary: string; bundled: boolean }> = {
+const MODEL_COPY: Record<string, { label: string; summary: string; bundled: boolean; fit: string }> = {
   mini: {
-    label: 'Mini Model (1.5B)',
-    summary: 'Fastest local model. Best for lighter laptops and immediate offline use.',
+    label: 'Mini Model',
+    summary: 'Fastest local model for immediate offline use on lighter hardware.',
     bundled: true,
+    fit: '8 GB RAM',
   },
   balanced: {
-    label: 'Balanced Model (3B)',
-    summary: 'Better quality for summaries, quizzes, and planning. Good default on 16 GB devices.',
+    label: 'Balanced Model',
+    summary: 'Best default for stronger summaries, quizzes, and study planning on mainstream laptops.',
     bundled: false,
+    fit: '16 GB RAM',
   },
   pro: {
-    label: 'Pro Model (7B)',
-    summary: 'Largest optional local model for stronger quality on capable PCs.',
+    label: 'Pro Model',
+    summary: 'Largest optional model for users who want better quality on higher-memory machines.',
     bundled: false,
+    fit: '24 GB RAM',
   },
 };
 
@@ -83,6 +86,7 @@ export default async function DownloadsPage() {
   const windowsPortable = findAsset(assets, (asset) => asset.name.toLowerCase().endsWith('.exe') && !asset.name.toLowerCase().includes('setup'));
   const manifestAsset = findAsset(assets, (asset) => asset.name === 'model-manifest.json');
   const checksumsAsset = findAsset(assets, (asset) => asset.name === 'SHA256SUMS.txt');
+
   const localModels = ((localManifest.models || []) as LocalManifestModel[]).map((model) => {
     const publishedAsset = findAsset(assets, (asset) => asset.name === model.file);
     return {
@@ -90,68 +94,98 @@ export default async function DownloadsPage() {
       label: MODEL_COPY[model.key]?.label || model.modelId,
       summary: MODEL_COPY[model.key]?.summary || 'Offline study model.',
       bundled: MODEL_COPY[model.key]?.bundled ?? false,
+      fit: MODEL_COPY[model.key]?.fit || `${model.minRamGb} GB RAM`,
       publishedAsset,
     };
   });
+
   const hasPublishedModelAssets = localModels.some((model) => Boolean(model.publishedAsset));
 
   return (
     <div className={styles.page}>
-      <div className={styles.card}>
-        <h1>Download StudyHarbor</h1>
-        <p>Desktop builds are published through GitHub Releases. Mini is bundled in the desktop app. Larger Qwen offline models are optional downloads when release assets are attached.</p>
+      <div className={styles.backdrop} />
+      <div className={styles.shell}>
+        <header className={styles.hero}>
+          <div className={styles.heroCopy}>
+            <span className={styles.eyebrow}>Desktop builds + local models</span>
+            <h1>Download StudyHarbor</h1>
+            <p>
+              Desktop builds ship through GitHub Releases. Mini is bundled in the desktop app. Balanced and Pro stay optional so users can choose the local model that matches their machine.
+            </p>
+            <div className={styles.heroActions}>
+              <a href={releaseUrl} className={styles.primaryLink} target="_blank" rel="noopener noreferrer">
+                Open release {releaseTag}
+              </a>
+              <a href={REPO_RELEASES_URL} className={styles.secondaryLink} target="_blank" rel="noopener noreferrer">
+                Browse all releases
+              </a>
+              <Link href="/" className={styles.secondaryLink}>
+                Back home
+              </Link>
+            </div>
+          </div>
+          <div className={styles.heroCard}>
+            <div className={styles.heroStat}><strong>macOS</strong><span>{macAsset ? 'Ready now' : 'Waiting on asset'}</span></div>
+            <div className={styles.heroStat}><strong>Windows</strong><span>{windowsInstaller || windowsPortable ? 'Ready now' : 'Waiting on asset'}</span></div>
+            <div className={styles.heroStat}><strong>Mini</strong><span>Bundled by default</span></div>
+            <div className={styles.heroStat}><strong>Balanced / Pro</strong><span>{hasPublishedModelAssets ? 'Published on release' : 'Optional assets pending'}</span></div>
+          </div>
+        </header>
 
-        <div className={styles.section}>
-          <h2>Desktop App</h2>
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.eyebrow}>Installers</span>
+            <h2>Desktop downloads</h2>
+          </div>
           <div className={styles.downloadGrid}>
-            <div className={styles.downloadCard}>
-              <h3>macOS</h3>
-              <p>Apple Silicon DMG installer.</p>
+            <article className={styles.downloadCard}>
+              <div>
+                <h3>macOS Apple Silicon</h3>
+                <p>Primary desktop target with local model support and offline-first AI.</p>
+              </div>
               {macAsset ? (
-                <a href={macAsset.browser_download_url} className={`${styles.downloadBtn} ${styles.primary}`} target="_blank" rel="noopener noreferrer">
+                <a href={macAsset.browser_download_url} className={styles.primaryLink} target="_blank" rel="noopener noreferrer">
                   Download {macAsset.name}
                 </a>
               ) : (
-                <div className={styles.unavailable}>macOS build not attached to the latest release yet.</div>
+                <div className={styles.unavailable}>The latest release does not include the macOS DMG yet.</div>
               )}
-            </div>
+            </article>
 
-            <div className={styles.downloadCard}>
-              <h3>Windows</h3>
-              <p>Installer and portable executable when published.</p>
-              <div className={styles.downloadList}>
+            <article className={styles.downloadCard}>
+              <div>
+                <h3>Windows x64</h3>
+                <p>Installer and portable build when both assets are published to the same release.</p>
+              </div>
+              <div className={styles.cardActions}>
                 {windowsInstaller ? (
-                  <a href={windowsInstaller.browser_download_url} className={styles.downloadBtn} target="_blank" rel="noopener noreferrer">
-                    Download Installer
+                  <a href={windowsInstaller.browser_download_url} className={styles.primaryLink} target="_blank" rel="noopener noreferrer">
+                    Download installer
                   </a>
                 ) : (
-                  <div className={styles.unavailable}>Windows installer not attached yet.</div>
+                  <div className={styles.unavailable}>The latest release does not include the Windows installer yet.</div>
                 )}
                 {windowsPortable ? (
-                  <a href={windowsPortable.browser_download_url} className={styles.downloadBtn} target="_blank" rel="noopener noreferrer">
-                    Download Portable EXE
+                  <a href={windowsPortable.browser_download_url} className={styles.secondaryLink} target="_blank" rel="noopener noreferrer">
+                    Download portable EXE
                   </a>
                 ) : null}
               </div>
-            </div>
+            </article>
           </div>
+        </section>
 
-          <div className={styles.releaseLinks}>
-            <a href={releaseUrl} className={styles.downloadBtn} target="_blank" rel="noopener noreferrer">
-              Open Release {releaseTag}
-            </a>
-            <a href={REPO_RELEASES_URL} className={styles.downloadBtn} target="_blank" rel="noopener noreferrer">
-              Browse all releases
-            </a>
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.eyebrow}>Optional local AI</span>
+            <h2>Choose the model that fits the device</h2>
+            <p>
+              Mini already ships with the desktop app. Balanced and Pro stay optional so users can install them later from Settings or download them manually when release assets are published.
+            </p>
           </div>
-        </div>
-
-        <div className={styles.section}>
-          <h2>Offline AI Models</h2>
-          <p className={styles.sectionNote}>Qwen models are optional. StudyHarbor already includes Mini in the desktop app. Install Balanced or Pro later from Settings → AI Models or download them here once published.</p>
           <div className={styles.modelGrid}>
             {localModels.map((model) => (
-              <div key={model.key} className={styles.modelCard}>
+              <article key={model.key} className={styles.modelCard}>
                 <div className={styles.modelHeader}>
                   <div>
                     <h3>{model.label}</h3>
@@ -161,61 +195,67 @@ export default async function DownloadsPage() {
                     {model.bundled ? 'Bundled' : 'Optional'}
                   </span>
                 </div>
-
                 <div className={styles.modelMeta}>
                   <span>{model.modelId}</span>
                   <span>{model.quantization}</span>
                   <span>{formatSize(model.sizeBytes)}</span>
-                  <span>{model.minRamGb} GB RAM</span>
+                  <span>{model.fit}</span>
                 </div>
-
                 {model.publishedAsset ? (
-                  <a href={model.publishedAsset.browser_download_url} className={styles.downloadBtn} target="_blank" rel="noopener noreferrer">
+                  <a href={model.publishedAsset.browser_download_url} className={styles.primaryLink} target="_blank" rel="noopener noreferrer">
                     Download {model.file}
                   </a>
                 ) : (
                   <div className={styles.unavailable}>
                     {model.bundled
-                      ? 'Included in the desktop app. No separate download needed.'
-                      : 'Not attached to the latest release yet.'}
+                      ? 'Included in the desktop app. No separate download is required.'
+                      : 'This model is not attached to the latest release yet.'}
                   </div>
                 )}
-              </div>
+              </article>
             ))}
           </div>
 
-          <div className={styles.downloadList}>
-            {manifestAsset ? (
-              <a href={manifestAsset.browser_download_url} className={styles.downloadBtn} target="_blank" rel="noopener noreferrer">
-                Download model-manifest.json
-              </a>
-            ) : (
-              <div className={styles.unavailable}>model-manifest.json is not attached to the latest release yet.</div>
-            )}
-            {checksumsAsset ? (
-              <a href={checksumsAsset.browser_download_url} className={styles.downloadBtn} target="_blank" rel="noopener noreferrer">
-                Download SHA256SUMS.txt
-              </a>
-            ) : (
-              <div className={styles.unavailable}>SHA256SUMS.txt is not attached to the latest release yet.</div>
-            )}
+          <div className={styles.utilityGrid}>
+            <article className={styles.utilityCard}>
+              <h3>Integrity files</h3>
+              <p>Use these if you want to verify release integrity before installing optional models.</p>
+              <div className={styles.cardActions}>
+                {manifestAsset ? (
+                  <a href={manifestAsset.browser_download_url} className={styles.secondaryLink} target="_blank" rel="noopener noreferrer">
+                    model-manifest.json
+                  </a>
+                ) : (
+                  <div className={styles.unavailable}>Manifest not attached yet.</div>
+                )}
+                {checksumsAsset ? (
+                  <a href={checksumsAsset.browser_download_url} className={styles.secondaryLink} target="_blank" rel="noopener noreferrer">
+                    SHA256SUMS.txt
+                  </a>
+                ) : (
+                  <div className={styles.unavailable}>Checksums not attached yet.</div>
+                )}
+              </div>
+            </article>
+
+            <article className={styles.utilityCardStrong}>
+              <h3>Inside the app</h3>
+              <p>Open Settings → AI Models in StudyHarbor to switch the active model after installation.</p>
+              <ul className={styles.bulletList}>
+                <li>Mini is the guaranteed offline fallback.</li>
+                <li>Balanced is the default recommendation for 16 GB devices.</li>
+                <li>Pro only makes sense on higher-memory machines.</li>
+              </ul>
+            </article>
           </div>
-        </div>
+        </section>
 
         {!hasPublishedModelAssets && (
           <div className={styles.warningBox}>
-            <strong>Offline model assets are not published on the latest release yet.</strong>
-            <span>Mini still works inside the desktop app. If you need Balanced or Pro, attach the `.gguf`, `model-manifest.json`, and `SHA256SUMS.txt` assets to the release first.</span>
+            <strong>Optional model assets are not published on the latest release yet.</strong>
+            <span>Mini still works inside the desktop build. Balanced and Pro become installable once the `.gguf`, `model-manifest.json`, and `SHA256SUMS.txt` files are attached to the matching release tag.</span>
           </div>
         )}
-
-        <p className={styles.note}>
-          In StudyHarbor open Settings → AI Models to install and switch local models after the release assets are published.
-        </p>
-
-        <Link href="/" className={styles.backLink}>
-          ← Back to home
-        </Link>
       </div>
     </div>
   );
