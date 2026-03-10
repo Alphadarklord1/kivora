@@ -137,6 +137,7 @@
     "mathlive": "^0.108.3",
     "next": "16.1.4",
     "next-auth": "^5.0.0-beta.30",
+    "pdfjs-dist": "^5.5.207",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "uuid": "^13.0.0"

@@ -1,12 +1,8 @@
 // File text extraction for PDF, Word, and PowerPoint
+import { getPdfJs } from '@/lib/pdf/pdfjs';
 
 interface PDFTextItem {
   str: string;
-}
-
-interface PDFJsLib {
-  getDocument: (params: { data: ArrayBuffer }) => { promise: Promise<PDFDocument> };
-  GlobalWorkerOptions: { workerSrc: string };
 }
 
 interface PDFDocument {
@@ -18,14 +14,6 @@ interface PDFPage {
   getTextContent: () => Promise<{ items: PDFTextItem[] }>;
 }
 
-declare global {
-  interface Window {
-    pdfjsLib: PDFJsLib;
-  }
-}
-
-let pdfJsLoaded = false;
-
 function normalizeExtractedDocumentText(text: string): string {
   return String(text || '')
     .replace(/\r/g, '\n')
@@ -36,40 +24,10 @@ function normalizeExtractedDocumentText(text: string): string {
     .trim();
 }
 
-async function loadPdfJs(): Promise<void> {
-  if (pdfJsLoaded || typeof window === 'undefined') return;
-
-  return new Promise((resolve, reject) => {
-    // Check if already loaded
-    if (window.pdfjsLib) {
-      pdfJsLoaded = true;
-      resolve();
-      return;
-    }
-
-    // Try to load from CDN
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-    script.onload = () => {
-      if (window.pdfjsLib) {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        pdfJsLoaded = true;
-        resolve();
-      } else {
-        reject(new Error('PDF.js failed to load'));
-      }
-    };
-    script.onerror = () => reject(new Error('Failed to load PDF.js'));
-    document.head.appendChild(script);
-  });
-}
-
 async function extractTextFromPDF(blob: Blob): Promise<string> {
-  await loadPdfJs();
-
+  const pdfjs = await getPdfJs();
   const arrayBuffer = await blob.arrayBuffer();
-  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise as PDFDocument;
 
   const textParts: string[] = [];
 

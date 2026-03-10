@@ -1,4 +1,5 @@
 // Image extraction from PDF files using PDF.js
+import { getPdfJs } from '@/lib/pdf/pdfjs';
 
 export interface ExtractedImage {
   id: string;
@@ -14,11 +15,6 @@ export interface PDFPageRender {
   imageDataUrl: string;
   width: number;
   height: number;
-}
-
-interface PDFJsLib {
-  getDocument: (params: { data: ArrayBuffer }) => { promise: Promise<PDFDocument> };
-  GlobalWorkerOptions: { workerSrc: string };
 }
 
 interface PDFDocument {
@@ -49,10 +45,6 @@ interface PDFImageData {
   kind?: number;
 }
 
-// Use type assertion for pdfjsLib (global type declared in extract.ts)
-const getPdfJsLib = (): PDFJsLib | undefined =>
-  (window as unknown as { pdfjsLib?: PDFJsLib }).pdfjsLib;
-
 // PDF.js operator codes for images
 const OPS = {
   paintImageXObject: 85,
@@ -60,45 +52,15 @@ const OPS = {
   paintImageXObjectRepeat: 87,
 };
 
-let pdfJsLoaded = false;
-
-async function ensurePdfJs(): Promise<void> {
-  if (pdfJsLoaded || typeof window === 'undefined') return;
-
-  return new Promise((resolve, reject) => {
-    if (getPdfJsLib()) {
-      pdfJsLoaded = true;
-      resolve();
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-    script.onload = () => {
-      if (getPdfJsLib()) {
-        getPdfJsLib()!.GlobalWorkerOptions.workerSrc =
-          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        pdfJsLoaded = true;
-        resolve();
-      } else {
-        reject(new Error('PDF.js failed to load'));
-      }
-    };
-    script.onerror = () => reject(new Error('Failed to load PDF.js'));
-    document.head.appendChild(script);
-  });
-}
-
 // Render a PDF page to an image (for visual preview)
 export async function renderPDFPageToImage(
   blob: Blob,
   pageNumber: number,
   scale: number = 2
 ): Promise<PDFPageRender> {
-  await ensurePdfJs();
-
+  const pdfjs = await getPdfJs();
   const arrayBuffer = await blob.arrayBuffer();
-  const pdf = await getPdfJsLib()!.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise as PDFDocument;
 
   if (pageNumber < 1 || pageNumber > pdf.numPages) {
     throw new Error(`Invalid page number: ${pageNumber}. PDF has ${pdf.numPages} pages.`);
@@ -133,10 +95,9 @@ export async function renderAllPDFPages(
   scale: number = 1.5,
   maxPages: number = 20
 ): Promise<PDFPageRender[]> {
-  await ensurePdfJs();
-
+  const pdfjs = await getPdfJs();
   const arrayBuffer = await blob.arrayBuffer();
-  const pdf = await getPdfJsLib()!.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise as PDFDocument;
 
   const pagesToRender = Math.min(pdf.numPages, maxPages);
   const renders: PDFPageRender[] = [];
@@ -173,10 +134,9 @@ export async function extractImagesFromPDF(
   blob: Blob,
   maxImages: number = 50
 ): Promise<ExtractedImage[]> {
-  await ensurePdfJs();
-
+  const pdfjs = await getPdfJs();
   const arrayBuffer = await blob.arrayBuffer();
-  const pdf = await getPdfJsLib()!.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise as PDFDocument;
 
   const images: ExtractedImage[] = [];
   let imageCount = 0;
