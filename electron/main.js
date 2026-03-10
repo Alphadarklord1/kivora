@@ -17,6 +17,45 @@ const DESKTOP_AI = {
   manifestRetryMs: 5 * 60 * 1000,
 };
 
+const DESKTOP_AI_SYSTEM_PROMPT = `You are Kivora's offline local study model.
+Stay strictly inside academic study and study-planning tasks.
+Return valid JSON only.
+Use this shape:
+{
+  "mode": string,
+  "displayText": string,
+  "questions": [],
+  "flashcards": [],
+  "sourceText": string,
+  "keyTopics": string[],
+  "subjectArea": "science"|"humanities"|"social-science"|"business"|"technical"|"general",
+  "learningObjectives": string[],
+  "rewriteMeta": { "tone": "formal"|"informal"|"academic"|"professional"|"energetic"|"concise", "customInstruction": string }
+}`;
+
+const DESKTOP_AI_MODE_GUIDANCE = {
+  assignment: 'Provide a structured academic response with clear steps and deliverables.',
+  summarize: 'Provide a concise academic summary with key points and takeaways.',
+  mcq: 'Create 6 to 10 multiple-choice questions with answers based only on the source text.',
+  quiz: 'Create 6 to 10 short study questions with concise answers.',
+  notes: 'Produce study notes with headings, bullets, and key concepts.',
+  math: 'Explain the math solution clearly and provide the final answer.',
+  flashcards: 'Create 8 to 12 flashcards with direct front/back pairs.',
+  essay: 'Provide an essay outline, thesis, and core arguments.',
+  planner: 'Create a realistic study plan with actionable time blocks.',
+  rephrase: 'Rewrite the text with the requested tone while preserving meaning and facts.',
+};
+
+const DESKTOP_AI_RUNTIME_CANDIDATES = process.platform === 'win32'
+  ? [
+      { engine: 'llama.cpp', protocol: 'openai', binaryName: 'llama-server.exe' },
+      { engine: 'legacy', protocol: 'legacy', binaryName: 'studypilot-ai.exe' },
+    ]
+  : [
+      { engine: 'llama.cpp', protocol: 'openai', binaryName: 'llama-server' },
+      { engine: 'legacy', protocol: 'legacy', binaryName: 'studypilot-ai' },
+    ];
+
 const DESKTOP_AI_MODELS = [
   {
     key: 'mini',
@@ -77,6 +116,8 @@ let desktopAiState = {
   process: null,
   port: null,
   runtimePath: null,
+  runtimeEngine: null,
+  runtimeProtocol: null,
   modelPath: null,
   activeModelKey: null,
   startPromise: null,
@@ -97,14 +138,38 @@ function getPlatformArchTag() {
   return `${process.platform}-${process.arch}`;
 }
 
-function getRuntimeBinaryPath() {
-  const binaryName = process.platform === 'win32' ? 'studypilot-ai.exe' : 'studypilot-ai';
+function getRuntimeBinaryBasePath() {
   const platformTag = getPlatformArchTag();
-  const relativeParts = ['bin', platformTag, binaryName];
-  const runtimePath = app.isPackaged
-    ? path.join(process.resourcesPath, ...relativeParts)
-    : path.join(__dirname, 'runtime', ...relativeParts);
-  return runtimePath;
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'bin', platformTag)
+    : path.join(__dirname, 'runtime', 'bin', platformTag);
+}
+
+function resolveDesktopAiRuntime() {
+  const runtimeBasePath = getRuntimeBinaryBasePath();
+
+  for (const candidate of DESKTOP_AI_RUNTIME_CANDIDATES) {
+    const runtimePath = path.join(runtimeBasePath, candidate.binaryName);
+    if (fs.existsSync(runtimePath)) {
+      return {
+        ...candidate,
+        runtimePath,
+        command: runtimePath,
+      };
+    }
+  }
+
+  const mockRuntimePath = getMockRuntimePath();
+  if (!app.isPackaged && fs.existsSync(mockRuntimePath)) {
+    return {
+      engine: 'mock',
+      protocol: 'legacy',
+      runtimePath: mockRuntimePath,
+      command: process.execPath,
+    };
+  }
+
+  return null;
 }
 
 function getBundledModelPath(modelFile) {
@@ -138,6 +203,10 @@ function getReleaseAssetUrl(fileName, version = app.getVersion()) {
 
 function getMockRuntimePath() {
   return path.join(__dirname, 'runtime', 'mock-ai-runtime.js');
+}
+
+function getPreferredRuntimePath() {
+  return resolveDesktopAiRuntime()?.runtimePath;
 }
 
 function getDefaultDesktopAiConfig() {
@@ -459,8 +528,224 @@ async function fetchJson(url, options = {}, timeoutMs = DESKTOP_AI.requestTimeou
   }
 }
 
+async function fetchResponse(url, options = {}, timeoutMs = DESKTOP_AI.requestTimeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function extractJsonObject(text) {
+  const source = String(text || '').trim();
+  const start = source.indexOf('{');
+  const end = source.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) return null;
+  return source.slice(start, end + 1);
+}
+
+function sanitizeStringList(value, limit = 12) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const output = [];
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    const key = trimmed.toLowerCase();
+    if (!trimmed || seen.has(key)) continue;
+    seen.add(key);
+    output.push(trimmed);
+    if (output.length >= limit) break;
+  }
+  return output;
+}
+
+function inferSubjectArea(text) {
+  const source = String(text || '').toLowerCase();
+  if (/\b(function|algorithm|database|network|protocol|equation|integral|matrix|derivative)\b/.test(source)) return 'technical';
+  if (/\b(market|finance|revenue|profit|strategy|management)\b/.test(source)) return 'business';
+  if (/\b(philosophy|history|literature|ethics|theme|narrative)\b/.test(source)) return 'humanities';
+  if (/\b(psychology|society|economics|behavior|culture|political)\b/.test(source)) return 'social-science';
+  if (/\b(experiment|molecule|cell|physics|chemistry|biology|reaction)\b/.test(source)) return 'science';
+  return 'general';
+}
+
+function inferKeyTopics(sourceText) {
+  const matches = String(sourceText || '').match(/\b[A-Za-z][A-Za-z0-9-]{3,}\b/g) || [];
+  const skip = new Set(['this', 'that', 'with', 'from', 'into', 'your', 'their', 'about', 'have', 'will', 'they', 'them', 'then', 'study', 'notes', 'quiz']);
+  const counts = new Map();
+  for (const word of matches) {
+    const normalized = word.toLowerCase();
+    if (skip.has(normalized)) continue;
+    counts.set(normalized, (counts.get(normalized) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([word]) => word.charAt(0).toUpperCase() + word.slice(1));
+}
+
+function buildDesktopGeneratedContent(mode, text, displayText, rewriteOptions, parsed = {}) {
+  return {
+    mode,
+    displayText: String(displayText || '').trim(),
+    questions: Array.isArray(parsed.questions) ? parsed.questions : [],
+    flashcards: Array.isArray(parsed.flashcards) ? parsed.flashcards : [],
+    sourceText: typeof parsed.sourceText === 'string' ? parsed.sourceText : text,
+    keyTopics: sanitizeStringList(parsed.keyTopics).length > 0 ? sanitizeStringList(parsed.keyTopics) : inferKeyTopics(text),
+    subjectArea: typeof parsed.subjectArea === 'string' ? parsed.subjectArea : inferSubjectArea(text),
+    learningObjectives: sanitizeStringList(parsed.learningObjectives).length > 0
+      ? sanitizeStringList(parsed.learningObjectives)
+      : ['Review source material', 'Practice key concepts'],
+    ...(mode === 'rephrase'
+      ? {
+          rewriteMeta: {
+            tone: rewriteOptions?.tone || 'professional',
+            ...(rewriteOptions?.customInstruction ? { customInstruction: rewriteOptions.customInstruction } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function buildDesktopPrompt(mode, text, rewriteOptions) {
+  const guidance = DESKTOP_AI_MODE_GUIDANCE[mode] || 'Generate helpful study material.';
+  const rewriteLine = mode === 'rephrase'
+    ? `Rewrite options: ${JSON.stringify(rewriteOptions || { tone: 'professional' })}`
+    : '';
+  return `Mode: ${mode}
+Guidance: ${guidance}
+${rewriteLine}
+
+Source text:
+${text}`;
+}
+
+async function isLlamaRuntimeHealthy(port) {
+  try {
+    const response = await fetchResponse(`http://127.0.0.1:${port}/health`, {}, 3000);
+    if (response.ok) return true;
+  } catch {
+    // keep probing
+  }
+
+  try {
+    const { response, data } = await fetchJson(`http://127.0.0.1:${port}/v1/models`, {}, 3000);
+    return response.ok && Array.isArray(data?.data);
+  } catch {
+    return false;
+  }
+}
+
+async function requestLegacyDesktopGeneration(port, mode, text, rewriteOptions) {
+  const { response, data } = await fetchJson(
+    `http://127.0.0.1:${port}/generate`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, text, rewriteOptions }),
+    },
+    DESKTOP_AI.requestTimeoutMs
+  );
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      errorCode: data.errorCode || 'RUNTIME_UNAVAILABLE',
+      message: data.message || data.error || `Desktop AI runtime returned ${response.status}`,
+      reason: data.reason,
+      suggestionModes: data.suggestionModes,
+    };
+  }
+
+  if (!data.content || typeof data.content.displayText !== 'string') {
+    return {
+      ok: false,
+      errorCode: 'RUNTIME_UNAVAILABLE',
+      message: 'Desktop AI runtime returned invalid content',
+    };
+  }
+
+  return {
+    ok: true,
+    content: data.content,
+  };
+}
+
+async function requestLlamaDesktopGeneration(port, mode, text, rewriteOptions, modelPath) {
+  const llamaModel = path.basename(modelPath || '') || 'local-model';
+  const response = await fetchResponse(
+    `http://127.0.0.1:${port}/v1/chat/completions`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: llamaModel,
+        temperature: 0.3,
+        messages: [
+          { role: 'system', content: DESKTOP_AI_SYSTEM_PROMPT },
+          { role: 'user', content: buildDesktopPrompt(mode, text, rewriteOptions) },
+        ],
+      }),
+    },
+    DESKTOP_AI.requestTimeoutMs
+  );
+
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      errorCode: data.errorCode || 'RUNTIME_UNAVAILABLE',
+      message: data.error?.message || data.message || `Desktop AI runtime returned ${response.status}`,
+    };
+  }
+
+  const rawContent = data?.choices?.[0]?.message?.content;
+  const contentText = Array.isArray(rawContent)
+    ? rawContent.map((part) => part?.text || '').join('\n').trim()
+    : String(rawContent || '').trim();
+
+  if (!contentText) {
+    return {
+      ok: false,
+      errorCode: 'RUNTIME_UNAVAILABLE',
+      message: 'Desktop AI runtime returned empty content',
+    };
+  }
+
+  const jsonText = extractJsonObject(contentText);
+  if (jsonText) {
+    try {
+      const parsed = JSON.parse(jsonText);
+      const displayText = typeof parsed.displayText === 'string' ? parsed.displayText : contentText;
+      return {
+        ok: true,
+        content: buildDesktopGeneratedContent(mode, text, displayText, rewriteOptions, parsed),
+      };
+    } catch {
+      // fall through to plain-text coercion
+    }
+  }
+
+  return {
+    ok: true,
+    content: buildDesktopGeneratedContent(mode, text, contentText, rewriteOptions),
+  };
+}
+
 async function isRuntimeHealthy() {
   if (!desktopAiState.port) return false;
+  if (desktopAiState.runtimeProtocol === 'openai') {
+    return isLlamaRuntimeHealthy(desktopAiState.port);
+  }
   try {
     const { response, data } = await fetchJson(`http://127.0.0.1:${desktopAiState.port}/health`, {}, 3000);
     return response.ok && !!data.ok;
@@ -486,6 +771,8 @@ function clearDesktopAiState() {
   desktopAiState.startPromise = null;
   desktopAiState.port = null;
   desktopAiState.runtimePath = null;
+  desktopAiState.runtimeEngine = null;
+  desktopAiState.runtimeProtocol = null;
   desktopAiState.modelPath = null;
 }
 
@@ -702,13 +989,9 @@ async function startDesktopAiRuntime() {
 
   desktopAiState.startPromise = (async () => {
     const selectedModel = resolveActiveModel();
-    const runtimePath = getRuntimeBinaryPath();
-    const mockRuntimePath = getMockRuntimePath();
-    const runtimeExists = fs.existsSync(runtimePath);
-    const mockExists = fs.existsSync(mockRuntimePath);
-    const canUseMockRuntime = !app.isPackaged && mockExists;
+    const runtimeSpec = resolveDesktopAiRuntime();
 
-    if (!runtimeExists && !canUseMockRuntime) {
+    if (!runtimeSpec) {
       desktopAiState.lastError = 'Desktop AI runtime binary is missing';
       clearDesktopAiState();
       return;
@@ -723,19 +1006,20 @@ async function startDesktopAiRuntime() {
     const { modelPath } = selectedModel;
 
     const port = await getFreePort();
-    const command = runtimeExists ? runtimePath : process.execPath;
-    const args = runtimeExists
-      ? ['--host', '127.0.0.1', '--port', String(port), '--model', modelPath]
-      : [mockRuntimePath, '--host', '127.0.0.1', '--port', String(port), '--model', modelPath];
+    const args = runtimeSpec.engine === 'mock'
+      ? [runtimeSpec.runtimePath, '--host', '127.0.0.1', '--port', String(port), '--model', modelPath]
+      : ['--host', '127.0.0.1', '--port', String(port), '--model', modelPath];
 
     desktopAiState.manualStop = false;
     desktopAiState.activeModelKey = selectedModel.key;
     patchDesktopAiConfig({ selectedModelKey: selectedModel.key });
     desktopAiState.modelPath = modelPath;
-    desktopAiState.runtimePath = command;
+    desktopAiState.runtimePath = runtimeSpec.runtimePath;
+    desktopAiState.runtimeEngine = runtimeSpec.engine;
+    desktopAiState.runtimeProtocol = runtimeSpec.protocol;
     desktopAiState.port = port;
 
-    const child = spawn(command, args, {
+    const child = spawn(runtimeSpec.command, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
@@ -1203,10 +1487,11 @@ ipcMain.handle('get-platform', () => process.platform);
 ipcMain.handle('get-app-version', () => app.getVersion());
 
 ipcMain.handle('desktop-ai-health', async () => {
-  const runtimePath = getRuntimeBinaryPath();
+  const runtimeSpec = resolveDesktopAiRuntime();
+  const runtimePath = getPreferredRuntimePath();
   const selectedModel = resolveActiveModel();
   const modelPath = selectedModel?.modelPath;
-  const runtimeAvailable = fs.existsSync(runtimePath) || (!app.isPackaged && fs.existsSync(getMockRuntimePath()));
+  const runtimeAvailable = Boolean(runtimeSpec);
   const modelAvailable = Boolean(selectedModel?.isInstalled);
   const modelLabel = selectedModel
     ? `${selectedModel.modelId} (${selectedModel.quantization})`
@@ -1219,6 +1504,7 @@ ipcMain.handle('desktop-ai-health', async () => {
       provider: 'desktop-local',
       model: modelLabel,
       runtimePath,
+      runtimeEngine: desktopAiState.runtimeEngine || runtimeSpec?.engine,
       modelPath,
       details: 'Desktop AI runtime is warming up',
     };
@@ -1233,6 +1519,7 @@ ipcMain.handle('desktop-ai-health', async () => {
         provider: 'desktop-local',
         model: modelLabel,
         runtimePath: desktopAiState.runtimePath || runtimePath,
+        runtimeEngine: desktopAiState.runtimeEngine || runtimeSpec?.engine,
         modelPath,
       };
     }
@@ -1244,6 +1531,7 @@ ipcMain.handle('desktop-ai-health', async () => {
     provider: 'desktop-local',
     model: modelLabel,
     runtimePath,
+    runtimeEngine: desktopAiState.runtimeEngine || runtimeSpec?.engine,
     modelPath,
     details: desktopAiState.lastError || (!modelAvailable ? 'Model file missing' : 'Runtime unavailable'),
   };
@@ -1256,8 +1544,9 @@ ipcMain.handle('desktop-ai-model-info', async () => {
   const recommendedModelKey = getRecommendedModelKey();
   const deviceProfile = getDeviceProfile();
   const config = getDesktopAiConfig();
-  const runtimePath = getRuntimeBinaryPath();
-  const runtimeAvailable = fs.existsSync(runtimePath) || (!app.isPackaged && fs.existsSync(getMockRuntimePath()));
+  const runtimeSpec = resolveDesktopAiRuntime();
+  const runtimePath = runtimeSpec?.runtimePath;
+  const runtimeAvailable = Boolean(runtimeSpec);
 
   return {
     modelId: selectedModel?.modelId || '',
@@ -1289,6 +1578,7 @@ ipcMain.handle('desktop-ai-model-info', async () => {
       modelPath: model.modelPath,
     })),
     runtimeAvailable,
+    runtimeEngine: desktopAiState.runtimeEngine || runtimeSpec?.engine,
     runtimePath,
     modelPath: selectedModel?.modelPath,
   };
@@ -1484,38 +1774,22 @@ ipcMain.handle('desktop-ai-generate', async (_, payload) => {
   }
 
   try {
-    const { response, data } = await fetchJson(
-      `http://127.0.0.1:${desktopAiState.port}/generate`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, text, rewriteOptions }),
-      },
-      DESKTOP_AI.requestTimeoutMs
+    if (desktopAiState.runtimeProtocol === 'openai') {
+      return await requestLlamaDesktopGeneration(
+        desktopAiState.port,
+        mode,
+        text,
+        rewriteOptions,
+        desktopAiState.modelPath
+      );
+    }
+
+    return await requestLegacyDesktopGeneration(
+      desktopAiState.port,
+      mode,
+      text,
+      rewriteOptions
     );
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        errorCode: data.errorCode || 'RUNTIME_UNAVAILABLE',
-        message: data.message || data.error || `Desktop AI runtime returned ${response.status}`,
-        reason: data.reason,
-        suggestionModes: data.suggestionModes,
-      };
-    }
-
-    if (!data.content || typeof data.content.displayText !== 'string') {
-      return {
-        ok: false,
-        errorCode: 'RUNTIME_UNAVAILABLE',
-        message: 'Desktop AI runtime returned invalid content',
-      };
-    }
-
-    return {
-      ok: true,
-      content: data.content,
-    };
   } catch (error) {
     return {
       ok: false,

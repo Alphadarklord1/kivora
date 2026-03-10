@@ -118,6 +118,7 @@ Detailed runtime/model docs:
 
 - `OFFLINE_MODEL_BUNDLE_GUIDE.md`
 - `electron/runtime/README.md`
+- `docs/OPEN_SOURCE_REPLACEMENTS.md`
 
 ## Team Collaboration
 
