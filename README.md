@@ -139,4 +139,5 @@ Repository collaboration files:
 - `docs/TEAM_WORKFLOW.md`
 - `docs/GITHUB_SETUP.md`
 - `docs/GITHUB_PROJECTS.md`
+- `docs/MAINTAINER_TRIAGE_CHECKLIST.md`
 - `ROADMAP.md`
