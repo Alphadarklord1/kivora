@@ -56,7 +56,7 @@ For hybrid bundle mode (Mini bundled, bigger models optional):
 
 1. Build and publish app installer.
 2. Publish model assets + manifest + checksums in one command:
-   - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/Kivora-model-store`
+   - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/kivora --models-dir=~/Kivora-model-store`
 3. Required release assets after publish:
    - `qwen2.5-1.5b-instruct-q4_k_m.gguf`
    - `qwen2.5-3b-instruct-q4_k_m.gguf`
@@ -64,8 +64,8 @@ For hybrid bundle mode (Mini bundled, bigger models optional):
    - `model-manifest.json`
    - `SHA256SUMS.txt`
 4. Generate/validate manually (optional, if you do not use the publish command):
-   - `npm run models:manifest:generate -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=<path-to-gguf-files>`
-   - `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/studypilot`
+   - `npm run models:manifest:generate -- --tag=vX.Y.Z --repo=Alphadarklord1/kivora --models-dir=<path-to-gguf-files>`
+   - `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/kivora`
    - `npm run models:checksums:generate -- --models-dir=<path-to-gguf-files> --out=electron/runtime/SHA256SUMS.txt`
    - `npm run models:checksums:validate -- --checksums=electron/runtime/SHA256SUMS.txt --manifest=electron/runtime/model-manifest.json --models-dir=<path-to-gguf-files>`
 5. Verify release naming consistency (includes required model assets/checksum files):
@@ -83,12 +83,12 @@ Notes:
 
 Replace `vX.Y.Z` with your release tag:
 
-- Releases page: `https://github.com/Alphadarklord1/studypilot/releases/tag/vX.Y.Z`
-- Manifest: `https://github.com/Alphadarklord1/studypilot/releases/download/vX.Y.Z/model-manifest.json`
-- Checksums: `https://github.com/Alphadarklord1/studypilot/releases/download/vX.Y.Z/SHA256SUMS.txt`
-- Mini model: `https://github.com/Alphadarklord1/studypilot/releases/download/vX.Y.Z/qwen2.5-1.5b-instruct-q4_k_m.gguf`
-- Balanced model: `https://github.com/Alphadarklord1/studypilot/releases/download/vX.Y.Z/qwen2.5-3b-instruct-q4_k_m.gguf`
-- Pro model: `https://github.com/Alphadarklord1/studypilot/releases/download/vX.Y.Z/qwen2.5-7b-instruct-q4_k_m.gguf`
+- Releases page: `https://github.com/Alphadarklord1/kivora/releases/tag/vX.Y.Z`
+- Manifest: `https://github.com/Alphadarklord1/kivora/releases/download/vX.Y.Z/model-manifest.json`
+- Checksums: `https://github.com/Alphadarklord1/kivora/releases/download/vX.Y.Z/SHA256SUMS.txt`
+- Mini model: `https://github.com/Alphadarklord1/kivora/releases/download/vX.Y.Z/qwen2.5-1.5b-instruct-q4_k_m.gguf`
+- Balanced model: `https://github.com/Alphadarklord1/kivora/releases/download/vX.Y.Z/qwen2.5-3b-instruct-q4_k_m.gguf`
+- Pro model: `https://github.com/Alphadarklord1/kivora/releases/download/vX.Y.Z/qwen2.5-7b-instruct-q4_k_m.gguf`
 
 ## 7) If something fails
 

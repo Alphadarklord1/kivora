@@ -5,7 +5,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const DEFAULT_REPO = process.env.STUDYPILOT_RELEASE_REPO || 'Alphadarklord1/studypilot';
+const DEFAULT_REPO = process.env.STUDYPILOT_RELEASE_REPO || 'Alphadarklord1/kivora';
 const DEFAULT_MODELS_DIR = process.env.STUDYPILOT_MODELS_DIR || path.join(process.env.HOME || '', 'Kivora-model-store');
 const DEFAULT_MANIFEST = path.join(PROJECT_ROOT, 'electron', 'runtime', 'model-manifest.json');
 const DEFAULT_CHECKSUMS = path.join(PROJECT_ROOT, 'electron', 'runtime', 'SHA256SUMS.txt');

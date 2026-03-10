@@ -54,7 +54,7 @@ const navGroups = [
 ];
 
 const navItems = navGroups.flatMap((group) => group.items);
-const GITHUB_NEW_ISSUE_URL = 'https://github.com/Alphadarklord1/studypilot/issues/new?template=error_report.yml';
+const GITHUB_NEW_ISSUE_URL = 'https://github.com/Alphadarklord1/kivora/issues/new?template=error_report.yml';
 
 // Mobile bottom nav shows only the 5 most important items
 const mobileNavItems = navItems.filter(item =>

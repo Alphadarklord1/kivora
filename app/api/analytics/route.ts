@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
   try {
     if (!isDatabaseConfigured) {
       return betaReadFallback(buildAnalyticsFallback(periodDays), {
-        'x-studypilot-fallback': 'analytics-no-db',
+        'x-kivora-fallback': 'analytics-no-db',
       });
     }
 
@@ -456,7 +456,7 @@ export async function GET(request: NextRequest) {
     console.error(`[Analytics][${requestId}] failed`, error);
     if (isGuestModeEnabled()) {
       return betaReadFallback(buildAnalyticsFallback(periodDays), {
-        'x-studypilot-fallback': 'analytics-db-error',
+        'x-kivora-fallback': 'analytics-db-error',
       });
     }
     return NextResponse.json(
@@ -467,7 +467,7 @@ export async function GET(request: NextRequest) {
       },
       {
         status: 200,
-        headers: { 'x-studypilot-fallback': 'analytics' },
+        headers: { 'x-kivora-fallback': 'analytics' },
       }
     );
   }

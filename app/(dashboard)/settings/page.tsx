@@ -106,8 +106,8 @@ interface AuthCapabilities {
   oauthDisabledReason: string | null;
 }
 
-const GITHUB_NEW_ISSUE_URL = 'https://github.com/Alphadarklord1/studypilot/issues/new';
-const TEAM_WORKFLOW_URL = 'https://github.com/Alphadarklord1/studypilot/blob/main/docs/TEAM_WORKFLOW.md';
+const GITHUB_NEW_ISSUE_URL = 'https://github.com/Alphadarklord1/kivora/issues/new';
+const TEAM_WORKFLOW_URL = 'https://github.com/Alphadarklord1/kivora/blob/main/docs/TEAM_WORKFLOW.md';
 
 function openGitHubTemplate(template: string) {
   if (typeof window === 'undefined') return;

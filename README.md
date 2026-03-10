@@ -56,7 +56,7 @@ Quick commands:
 ```bash
 npm run models:prepare:balanced
 npm run electron:build:mac:balanced
-npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/Kivora-model-store
+npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/kivora --models-dir=~/Kivora-model-store
 ```
 
 ## Google Login Setup (Web + Desktop)

@@ -43,7 +43,7 @@ Run this checklist before creating a beta release tag.
 
 - [ ] `npm run build`
 - [ ] `npm run test:beta`
-- [ ] `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/studypilot --allow-placeholders=1`
-- [ ] `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/Kivora-model-store`
+- [ ] `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/kivora --allow-placeholders=1`
+- [ ] `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/kivora --models-dir=~/Kivora-model-store`
 - [ ] `npm run release:verify -- --tag=vX.Y.Z --assets='<comma-separated asset names>'`
 - [ ] `beta-ci` and `model-manifest` GitHub workflows are green.

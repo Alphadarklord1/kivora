@@ -5,7 +5,7 @@ const path = require('path');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 const DEFAULT_MANIFEST = path.join(PROJECT_ROOT, 'electron', 'runtime', 'model-manifest.json');
-const DEFAULT_REPO = process.env.STUDYPILOT_MODEL_REPO || 'Alphadarklord1/studypilot';
+const DEFAULT_REPO = process.env.STUDYPILOT_MODEL_REPO || 'Alphadarklord1/kivora';
 const ALLOWED_KEYS = new Set(['mini', 'balanced', 'pro']);
 
 function parseArgs(argv) {

@@ -26,6 +26,16 @@ declare global {
 
 let pdfJsLoaded = false;
 
+function normalizeExtractedDocumentText(text: string): string {
+  return String(text || '')
+    .replace(/\r/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 async function loadPdfJs(): Promise<void> {
   if (pdfJsLoaded || typeof window === 'undefined') return;
 
@@ -76,8 +86,19 @@ async function extractTextFromPDF(blob: Blob): Promise<string> {
 }
 
 async function extractTextFromDocx(blob: Blob): Promise<string> {
-  // For Word documents, we'll use a simple XML parsing approach
-  // This works because .docx files are ZIP archives containing XML
+  try {
+    const mammoth = await import('mammoth/mammoth.browser');
+    const arrayBuffer = await blob.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    const extracted = normalizeExtractedDocumentText(result.value || '');
+
+    if (extracted) {
+      return extracted;
+    }
+  } catch (error) {
+    console.warn('Mammoth DOCX extraction fell back to XML parsing:', error);
+  }
+
   try {
     const JSZip = (await import('jszip')).default;
     const zip = await JSZip.loadAsync(blob);
@@ -100,10 +121,10 @@ async function extractTextFromDocx(blob: Blob): Promise<string> {
       if (text) textParts.push(text);
     }
 
-    return textParts.join(' ');
+    return normalizeExtractedDocumentText(textParts.join(' '));
   } catch (error) {
     console.error('Failed to extract text from Word file:', error);
-    throw new Error('Failed to extract text from Word document. Please copy-paste the text instead.');
+    throw new Error('Failed to extract text from Word document. DOCX files are supported, including Arabic text, but this file could not be parsed.');
   }
 }
 

@@ -17,15 +17,15 @@ const RATE_LIMIT_WINDOW_MS = parsePositiveInt(process.env.WEB_AI_RATE_LIMIT_WIND
 const RATE_LIMIT_MAX = parsePositiveInt(process.env.WEB_AI_RATE_LIMIT_MAX, 20);
 
 type GlobalWithRateLimiter = typeof globalThis & {
-  __studypilotWebAiLimiter?: InMemoryRateLimiter;
+  __kivoraWebAiLimiter?: InMemoryRateLimiter;
 };
 
 const globalForRateLimiter = globalThis as GlobalWithRateLimiter;
-const rateLimiter = globalForRateLimiter.__studypilotWebAiLimiter || new InMemoryRateLimiter({
+const rateLimiter = globalForRateLimiter.__kivoraWebAiLimiter || new InMemoryRateLimiter({
   windowMs: RATE_LIMIT_WINDOW_MS,
   maxRequests: RATE_LIMIT_MAX,
 });
-globalForRateLimiter.__studypilotWebAiLimiter = rateLimiter;
+globalForRateLimiter.__kivoraWebAiLimiter = rateLimiter;
 
 const MODE_GUIDANCE: Record<string, string> = {
   assignment: 'Provide a structured plan, key requirements, and suggested approach.',

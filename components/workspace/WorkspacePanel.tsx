@@ -164,6 +164,7 @@ export function WorkspacePanel({
       Folder: 'المجلد',
       Uploading: 'جارِ الرفع...',
       'Upload File': 'رفع ملف',
+      'Arabic DOCX is supported for reading and rephrasing.': 'ملفات DOCX العربية مدعومة للقراءة وإعادة الصياغة.',
       'Welcome to your Workspace': 'مرحبًا بك في مساحة العمل',
       'Select a folder and subfolder to view files, or pin/like files for quick access.': 'اختر مجلدًا ومجلدًا فرعيًا لعرض الملفات، أو ثبّت/أعجب بالملفات للوصول السريع.',
       Share: 'مشاركة',
@@ -1044,16 +1045,19 @@ export function WorkspacePanel({
           <>
             {/* Upload Button */}
             {selectedTopic && (
-              <label className="upload-btn">
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp"
-                  onChange={handleFileUpload}
-                  disabled={uploading}
-                  style={{ display: 'none' }}
-                />
-                {uploading ? `${t('Uploading')}...` : `+ ${t('Upload File')}`}
-              </label>
+              <div className="upload-block">
+                <label className="upload-btn">
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp"
+                    onChange={handleFileUpload}
+                    disabled={uploading}
+                    style={{ display: 'none' }}
+                  />
+                  {uploading ? `${t('Uploading')}...` : `+ ${t('Upload File')}`}
+                </label>
+                <p className="upload-note">{t('Arabic DOCX is supported for reading and rephrasing.')}</p>
+              </div>
             )}
 
             {/* Pinned, Liked & Recent */}
@@ -1672,6 +1676,9 @@ export function WorkspacePanel({
           position: relative;
         }
 
+        .upload-block {
+          margin-bottom: var(--space-4);
+        }
         .upload-btn {
           display: block;
           width: 100%;
@@ -1682,9 +1689,15 @@ export function WorkspacePanel({
           text-align: center;
           font-weight: 500;
           cursor: pointer;
-          margin-bottom: var(--space-4);
+          margin-bottom: var(--space-2);
         }
         .upload-btn:hover { background: var(--primary-hover); }
+        .upload-note {
+          margin: 0;
+          color: var(--text-muted);
+          font-size: var(--font-meta);
+          text-align: start;
+        }
 
         .quick-access { margin-bottom: var(--space-4); }
         .quick-section { margin-bottom: var(--space-4); }

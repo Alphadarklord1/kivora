@@ -39,7 +39,7 @@ test('checksum generation + validation passes for manifest models', () => {
     [
       path.join(scriptsDir, 'generate-model-manifest.js'),
       '--tag=v1.1.0',
-      '--repo=Alphadarklord1/studypilot',
+      '--repo=Alphadarklord1/kivora',
       `--models-dir=${fixture.modelsDir}`,
       `--out=${fixture.manifestPath}`,
     ],
@@ -81,7 +81,7 @@ test('checksum validation fails when checksums are tampered', () => {
     [
       path.join(scriptsDir, 'generate-model-manifest.js'),
       '--tag=v1.1.0',
-      '--repo=Alphadarklord1/studypilot',
+      '--repo=Alphadarklord1/kivora',
       `--models-dir=${fixture.modelsDir}`,
       `--out=${fixture.manifestPath}`,
     ],

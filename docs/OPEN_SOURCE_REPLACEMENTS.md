@@ -8,9 +8,7 @@ The goal is not to replace everything. The goal is to replace the parts that are
 
 ### Current
 
-- custom desktop runtime binary name:
-  - `studypilot-ai`
-  - `studypilot-ai.exe`
+- custom legacy desktop runtime binary
 - integration points:
   - `electron/main.js`
   - `electron/preload.js`
@@ -311,7 +309,7 @@ That combination would materially improve:
 
 Do these in order:
 
-1. Replace `studypilot-ai` runtime with `llama.cpp`
+1. Replace the legacy custom runtime with `llama.cpp`
 2. Downgrade `lib/offline/generate.ts` to fallback-only behavior
 3. Add `MathLive` to the math input surface
 4. Add `mathjs` for stronger expression parsing/evaluation
@@ -321,7 +319,7 @@ Do these in order:
 The first runtime slice is now in place:
 
 - Electron now prefers `llama-server` under `electron/runtime/bin/<platform>/`
-- legacy `studypilot-ai` binaries are still accepted as a fallback
+- legacy custom binaries are still accepted as a fallback
 - local dev still falls back to `mock-ai-runtime.js`
 - the renderer `desktopAI` IPC contract is unchanged
 
