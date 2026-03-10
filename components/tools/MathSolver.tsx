@@ -47,6 +47,8 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
     'Use the built-in math keyboard for fractions, roots, exponents, and integrals.': 'استخدم لوحة الرياضيات المدمجة للكسور والجذور والأسس والتكاملات.',
     'Type with MathLive': 'اكتب باستخدام MathLive',
     'Type a math problem': 'اكتب مسألة رياضية',
+    'MathLive failed to load. Using plain text input instead.': 'تعذر تحميل MathLive. سيتم استخدام الإدخال النصي العادي بدلًا منه.',
+    'Plain text fallback': 'إدخال نصي احتياطي',
     'Preview:': 'معاينة:',
     'Solving...': 'جارٍ الحل...',
     'Solve Problem': 'حل المسألة',
@@ -100,9 +102,9 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
   const [error, setError] = useState('');
   const [useAI, setUseAI] = useState(false);
   const [matlabMode, setMatlabMode] = useState(true);
+  const [mathInputMode, setMathInputMode] = useState<'loading' | 'mathlive' | 'fallback'>('loading');
   const mathfieldHostRef = useRef<HTMLDivElement | null>(null);
   const mathfieldRef = useRef<any>(null);
-  const syncingMathfieldRef = useRef(false);
   const aiDetailFallback = t('Use AI mode for detailed solution');
 
   const normalizeMatlabSyntax = (input: string) => {
@@ -171,39 +173,44 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
     let disposed = false;
     let cleanup: (() => void) | null = null;
 
-    void import('mathlive').then(({ MathfieldElement }) => {
-      if (disposed || !mathfieldHostRef.current) return;
+    void import('mathlive')
+      .then(({ MathfieldElement }) => {
+        if (disposed || !mathfieldHostRef.current) return;
 
-      const mf = new MathfieldElement();
-      mf.setAttribute('style', 'display:block; width:100%; min-height:84px;');
-      mf.setAttribute('aria-label', t('Type with MathLive'));
-      mf.mathVirtualKeyboardPolicy = 'auto';
-      mf.placeholder = t('Type a math problem');
-      mf.setValue(solverSyntaxToLatex(problem || ''));
+        const mf = new MathfieldElement();
+        mf.setAttribute('style', 'display:block; width:100%; min-height:84px;');
+        mf.setAttribute('aria-label', t('Type with MathLive'));
+        mf.mathVirtualKeyboardPolicy = 'auto';
+        mf.placeholder = t('Type a math problem');
+        mf.setValue(solverSyntaxToLatex(problem || ''));
 
-      const syncFromField = () => {
-        syncingMathfieldRef.current = true;
-        setProblem(normalizeMathLiveAscii(mf.getValue('ascii-math')));
-        window.requestAnimationFrame(() => {
-          syncingMathfieldRef.current = false;
-        });
-      };
+        const syncFromField = () => {
+          const normalized = normalizeMathLiveAscii(mf.getValue('ascii-math'));
+          setProblem((current) => (current === normalized ? current : normalized));
+        };
 
-      mf.addEventListener('input', syncFromField);
-      mathfieldHostRef.current.innerHTML = '';
-      mathfieldHostRef.current.appendChild(mf);
-      mathfieldRef.current = mf;
+        mf.addEventListener('input', syncFromField);
+        mathfieldHostRef.current.innerHTML = '';
+        mathfieldHostRef.current.appendChild(mf);
+        mathfieldRef.current = mf;
+        setMathInputMode('mathlive');
 
-      cleanup = () => {
-        mf.removeEventListener('input', syncFromField);
-        if (mathfieldHostRef.current?.contains(mf)) {
-          mathfieldHostRef.current.removeChild(mf);
+        cleanup = () => {
+          mf.removeEventListener('input', syncFromField);
+          if (mathfieldHostRef.current?.contains(mf)) {
+            mathfieldHostRef.current.removeChild(mf);
+          }
+          if (mathfieldRef.current === mf) {
+            mathfieldRef.current = null;
+          }
+        };
+      })
+      .catch((loadError) => {
+        console.error('MathLive failed to initialize:', loadError);
+        if (!disposed) {
+          setMathInputMode('fallback');
         }
-        if (mathfieldRef.current === mf) {
-          mathfieldRef.current = null;
-        }
-      };
-    });
+      });
 
     return () => {
       disposed = true;
@@ -214,7 +221,9 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
 
   useEffect(() => {
     const mf = mathfieldRef.current;
-    if (!mf || syncingMathfieldRef.current) return;
+    if (!mf) return;
+    const currentNormalized = normalizeMathLiveAscii(mf.getValue('ascii-math'));
+    if (currentNormalized === problem.trim()) return;
     const latex = solverSyntaxToLatex(problem);
     if (mf.getValue('latex') !== latex) {
       mf.setValue(latex);
@@ -559,8 +568,36 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
                   {t('Use the built-in math keyboard for fractions, roots, exponents, and integrals.')}
                 </span>
               </div>
-              <div ref={mathfieldHostRef} className="mathlive-host" />
+              {mathInputMode === 'mathlive' || mathInputMode === 'loading' ? (
+                <div ref={mathfieldHostRef} className="mathlive-host" />
+              ) : (
+                <textarea
+                  value={problem}
+                  onChange={(event) => setProblem(event.target.value)}
+                  placeholder={t('Type a math problem')}
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    minHeight: '84px',
+                    padding: 'var(--space-3)',
+                    background: 'var(--bg-base)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    resize: 'vertical',
+                  }}
+                />
+              )}
             </div>
+            {mathInputMode === 'fallback' ? (
+              <p style={{
+                fontSize: 'var(--font-tiny)',
+                color: 'var(--warning-foreground, #f4c96b)',
+                marginTop: 'var(--space-2)'
+              }}>
+                {t('MathLive failed to load. Using plain text input instead.')}
+              </p>
+            ) : null}
             <p style={{
               fontSize: 'var(--font-tiny)',
               color: 'var(--text-muted)',
