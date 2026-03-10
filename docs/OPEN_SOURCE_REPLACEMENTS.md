@@ -138,6 +138,45 @@ The goal is not to replace everything. The goal is to replace the parts that are
 - use `pdf.js` for preview/render consistency
 - keep Office conversion disabled unless a stable native chain is adopted
 
+## 5A. Word `.docx` semantic extraction
+
+### Replace or augment with
+
+- `mammoth.js`
+  - repo: `https://github.com/mwilliamson/mammoth.js`
+
+### Why
+
+- strong `.docx` to semantic HTML conversion
+- better for study-content extraction than trying to preserve Word styling
+- useful for summaries, notes, quiz generation, and indexing into RAG
+
+### Recommendation
+
+- use `mammoth.js` when the goal is:
+  - extracting readable structure
+  - indexing headings/paragraphs/lists
+  - converting Word uploads into study-ready text
+- do not use it when pixel-accurate visual rendering is required
+
+## 5B. Word `.docx` preview rendering
+
+### Replace or augment with
+
+- `docx-preview` / `docxjs`
+  - repo: `https://github.com/VolodymyrBaydalka/docxjs`
+
+### Why
+
+- better browser-side `.docx` preview support
+- keeps a visible reading surface without forcing PDF conversion first
+
+### Recommendation
+
+- use `mammoth.js` for extraction
+- use `docx-preview` for preview
+- keep these as separate concerns instead of forcing one library to do both
+
 ## 6. Speech / listen mode
 
 ### Current
@@ -164,15 +203,109 @@ The goal is not to replace everything. The goal is to replace the parts that are
 
 - `Tesseract.js`
   - repo: `https://github.com/naptha/tesseract.js`
+- `Scribe.js`
+  - repo: `https://github.com/scribeocr/scribe.js`
+- `OpenCV`
+  - repo: `https://github.com/opencv/opencv`
 
 ### Why
 
 - better offline OCR path for image-based academic material
+- stronger PDF OCR path than plain `Tesseract.js`
+- image preprocessing can significantly improve OCR quality on noisy scans
 
 ### Recommendation
 
-- use only if OCR quality is the actual bottleneck
-- do not mix OCR replacement with the local LLM runtime migration
+- use `Tesseract.js` for simple browser OCR on images
+- use `Scribe.js` if Kivora needs:
+  - OCR on images and PDFs
+  - searchable PDF text-layer workflows
+  - stronger extraction from scanned academic documents
+- use `OpenCV` preprocessing before OCR for:
+  - thresholding
+  - deskew
+  - contrast cleanup
+  - region cropping
+- do not mix a full OCR stack migration with the local LLM runtime migration in one PR
+
+### License note
+
+- `Scribe.js` is AGPL-3.0, so review license fit before shipping it inside the product
+
+## 8. Complex math engine
+
+### Current
+
+- partial in-app solving
+- custom offline solver logic
+
+### Replace or augment with
+
+- `SymPy`
+  - repo: `https://github.com/sympy/sympy`
+
+### Why
+
+- much stronger symbolic algebra
+- better support for:
+  - integrals
+  - derivatives
+  - limits
+  - matrices
+  - simplification
+  - equation solving
+- the current custom math layer will not scale to serious university math
+
+### Recommendation
+
+- keep `mathjs` for in-process numeric evaluation and parser support
+- add a local `SymPy` sidecar only for advanced symbolic solving
+- use it behind a narrow math adapter rather than leaking Python concerns into UI code
+
+## 9. Priority adoption order
+
+If the goal is maximum improvement with minimal wasted work, adopt in this order:
+
+1. `llama.cpp` for offline local AI runtime
+2. `pdf.js` for PDF rendering/extraction consistency
+3. `mammoth.js` for `.docx` extraction
+4. `docx-preview` for `.docx` preview
+5. `MathLive` for structured math input
+6. `mathjs` for numeric parsing/evaluation
+7. `SymPy` sidecar for advanced symbolic math
+8. `Tesseract.js` or `Scribe.js` only after document OCR is a real bottleneck
+
+## 10. Best high-impact stack for Kivora
+
+If Kivora were cleaned up around the strongest open-source base, the stack should look like this:
+
+- local LLM runtime:
+  - `llama.cpp`
+- PDF reading:
+  - `pdf.js`
+- Word extraction:
+  - `mammoth.js`
+- Word preview:
+  - `docx-preview`
+- image/PDF OCR:
+  - `Tesseract.js` or `Scribe.js`
+- OCR preprocessing:
+  - `OpenCV`
+- math input:
+  - `MathLive`
+- numeric math:
+  - `mathjs`
+- symbolic math:
+  - `SymPy`
+
+That combination would materially improve:
+
+- PDF reading
+- Word reading
+- scanned document handling
+- image text extraction
+- structured math input
+- complex symbolic math
 
 ## Recommended first implementation slice
 
