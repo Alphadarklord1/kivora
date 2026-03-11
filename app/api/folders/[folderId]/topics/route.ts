@@ -2,62 +2,34 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { folders, topics } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { getUserId } from '@/lib/auth/get-user-id';
-import { apiError, createRequestId } from '@/lib/api/error-response';
-import { databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
+import { getUserId } from '@/lib/auth/session';
+import { v4 as uuidv4 } from 'uuid';
 
-interface RouteParams {
-  params: Promise<{ folderId: string }>;
-}
+// POST /api/folders/[folderId]/topics — create a topic (subfolder)
+export async function POST(req: NextRequest, { params }: { params: Promise<{ folderId: string }> }) {
+  if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
-export async function POST(request: NextRequest, { params }: RouteParams) {
-  const requestId = createRequestId(request);
-  try {
-    if (!isDatabaseConfigured) {
-      return databaseUnavailable(request, 'Subfolder creation requires DATABASE_URL to be configured', undefined, requestId);
-    }
+  const { folderId } = await params;
 
-    const userId = await getUserId(request);
-    if (!userId) {
-      return unauthorized(request, requestId);
-    }
+  // Verify the folder belongs to this user
+  const folder = await db.query.folders.findFirst({
+    where: and(eq(folders.id, folderId), eq(folders.userId, userId)),
+  });
+  if (!folder) return NextResponse.json({ error: 'Folder not found.' }, { status: 404 });
 
-    const { folderId } = await params;
-    const body = await request.json();
-    const { name } = body;
-
-    if (!name || typeof name !== 'string' || !name.trim()) {
-      return apiError(400, {
-        errorCode: 'INVALID_TOPIC_NAME',
-        reason: 'Name is required',
-        requestId,
-      });
-    }
-
-    const folder = await db.query.folders.findFirst({
-      where: and(eq(folders.id, folderId), eq(folders.userId, userId)),
-    });
-
-    if (!folder) {
-      return apiError(404, {
-        errorCode: 'FOLDER_NOT_FOUND',
-        reason: 'Folder not found',
-        requestId,
-      });
-    }
-
-    const [newTopic] = await db.insert(topics).values({
-      folderId,
-      name: name.trim(),
-    }).returning();
-
-    return NextResponse.json(newTopic, { status: 201 });
-  } catch (error) {
-    console.error(`[Topics][${requestId}] POST failed`, error);
-    return apiError(500, {
-      errorCode: 'TOPIC_CREATE_FAILED',
-      reason: 'Failed to create subfolder',
-      requestId,
-    });
+  const { name } = await req.json().catch(() => ({}));
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return NextResponse.json({ error: 'Topic name is required.' }, { status: 400 });
   }
+
+  const [topic] = await db.insert(topics).values({
+    id: uuidv4(),
+    folderId,
+    name: name.trim(),
+    sortOrder: 0,
+  }).returning();
+
+  return NextResponse.json(topic, { status: 201 });
 }

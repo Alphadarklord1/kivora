@@ -2,105 +2,55 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { files } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { getUserId } from '@/lib/auth/get-user-id';
-import { apiError, createRequestId } from '@/lib/api/error-response';
-import { betaReadFallback, databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
+import { getUserId } from '@/lib/auth/session';
 
-interface RouteParams {
-  params: Promise<{ fileId: string }>;
-}
-
-export async function GET(request: NextRequest, { params }: RouteParams) {
-  const requestId = createRequestId(request);
-  if (!isDatabaseConfigured) {
-    return betaReadFallback(null);
-  }
-
-  const userId = await getUserId(request);
-  if (!userId) {
-    return unauthorized(request, requestId);
-  }
+// GET /api/files/[fileId]
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
+  if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { fileId } = await params;
-
   const file = await db.query.files.findFirst({
     where: and(eq(files.id, fileId), eq(files.userId, userId)),
   });
-
-  if (!file) {
-    return apiError(404, {
-      errorCode: 'FILE_NOT_FOUND',
-      reason: 'File not found',
-      requestId,
-    });
-  }
-
+  if (!file) return NextResponse.json({ error: 'File not found.' }, { status: 404 });
   return NextResponse.json(file);
 }
 
-export async function PUT(request: NextRequest, { params }: RouteParams) {
-  const requestId = createRequestId(request);
-  if (!isDatabaseConfigured) {
-    return databaseUnavailable(request, 'File updates require DATABASE_URL to be configured', undefined, requestId);
-  }
-
-  const userId = await getUserId(request);
-  if (!userId) {
-    return unauthorized(request, requestId);
-  }
+// PATCH /api/files/[fileId] — update content/name
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
+  if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { fileId } = await params;
-  const body = await request.json();
-  const { name, liked, pinned, content } = body;
+  const body = await req.json().catch(() => ({}));
+  const updates: Partial<typeof files.$inferInsert> = {};
+  if (typeof body.name === 'string' && body.name.trim()) updates.name = body.name.trim();
+  if (typeof body.content === 'string') updates.content = body.content;
+  if (typeof body.liked === 'boolean') updates.liked = body.liked;
+  if (typeof body.pinned === 'boolean') updates.pinned = body.pinned;
+
+  if (!Object.keys(updates).length) return NextResponse.json({ error: 'Nothing to update.' }, { status: 400 });
 
   const [updated] = await db
     .update(files)
-    .set({
-      ...(name !== undefined && { name }),
-      ...(liked !== undefined && { liked }),
-      ...(pinned !== undefined && { pinned }),
-      ...(content !== undefined && { content }),
-      updatedAt: new Date(),
-    })
+    .set(updates)
     .where(and(eq(files.id, fileId), eq(files.userId, userId)))
     .returning();
 
-  if (!updated) {
-    return apiError(404, {
-      errorCode: 'FILE_NOT_FOUND',
-      reason: 'File not found',
-      requestId,
-    });
-  }
-
+  if (!updated) return NextResponse.json({ error: 'File not found.' }, { status: 404 });
   return NextResponse.json(updated);
 }
 
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  const requestId = createRequestId(request);
-  if (!isDatabaseConfigured) {
-    return betaReadFallback({ success: true, localOnly: true });
-  }
-
-  const userId = await getUserId(request);
-  if (!userId) {
-    return unauthorized(request, requestId);
-  }
+// DELETE /api/files/[fileId]
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
+  if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { fileId } = await params;
-
-  const [deleted] = await db
-    .delete(files)
-    .where(and(eq(files.id, fileId), eq(files.userId, userId)))
-    .returning();
-
-  if (!deleted) {
-    return apiError(404, {
-      errorCode: 'FILE_NOT_FOUND',
-      reason: 'File not found',
-      requestId,
-    });
-  }
-
-  return NextResponse.json({ success: true, localBlobId: deleted.localBlobId });
+  await db.delete(files).where(and(eq(files.id, fileId), eq(files.userId, userId)));
+  return NextResponse.json({ ok: true });
 }

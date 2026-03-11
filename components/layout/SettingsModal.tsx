@@ -8,7 +8,10 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSetting } = useSettings();
+  const updateSettings = (patch: Partial<typeof settings>) => {
+    (Object.keys(patch) as (keyof typeof settings)[]).forEach(k => updateSetting(k, patch[k]!));
+  };
   const { t } = useI18n({
     Settings: 'الإعدادات',
     Appearance: 'المظهر',
@@ -45,11 +48,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
           <div style={{ marginBottom: '12px' }}>
             <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px' }}>{t('Theme')}</label>
-            <select value={settings.theme} onChange={(e) => updateSettings({ theme: e.target.value as 'light' | 'blue' | 'black' | 'system' })}>
+            <select value={settings.theme} onChange={(e) => updateSettings({ theme: e.target.value as 'light' | 'dark' | 'black' })}>
               <option value="light">{t('Light')}</option>
-              <option value="blue">{t('Blue Mode')}</option>
+              <option value="dark">{t('Blue Mode')}</option>
               <option value="black">{t('Black Mode')}</option>
-              <option value="system">{t('System')}</option>
             </select>
           </div>
 
@@ -73,7 +75,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
           <div>
             <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px' }}>{t('Density')}</label>
-            <select value={settings.density} onChange={(e) => updateSettings({ density: e.target.value })}>
+            <select value={settings.density} onChange={(e) => updateSettings({ density: e.target.value as 'compact' | 'normal' | 'comfortable' })}>
               <option value="compact">{t('Compact')}</option>
               <option value="normal">{t('Normal')}</option>
               <option value="comfortable">{t('Comfortable')}</option>

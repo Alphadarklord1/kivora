@@ -1,170 +1,136 @@
-// File text extraction for PDF, Word, and PowerPoint
-import { getPdfJs } from '@/lib/pdf/pdfjs';
+/**
+ * Client-side text extraction for PDFs, Word docs, and plain text files.
+ * Runs in the browser — uses pdf.js and mammoth.js.
+ */
 
-interface PDFTextItem {
-  str: string;
-}
+// ── PDF (pdf.js) ──────────────────────────────────────────────────────────
 
-interface PDFDocument {
-  numPages: number;
-  getPage: (pageNum: number) => Promise<PDFPage>;
-}
+async function extractPdf(blob: Blob): Promise<string> {
+  const pdfjs = await import('pdfjs-dist');
+  // Use CDN worker to avoid bundling issues
+  if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+  }
 
-interface PDFPage {
-  getTextContent: () => Promise<{ items: PDFTextItem[] }>;
-}
-
-function normalizeExtractedDocumentText(text: string): string {
-  return String(text || '')
-    .replace(/\r/g, '\n')
-    .replace(/\u00a0/g, ' ')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/[ \t]{2,}/g, ' ')
-    .trim();
-}
-
-async function extractTextFromPDF(blob: Blob): Promise<string> {
-  const pdfjs = await getPdfJs();
   const arrayBuffer = await blob.arrayBuffer();
-  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise as PDFDocument;
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
 
-  const textParts: string[] = [];
-
+  const pages: string[] = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map((item) => item.str)
+    const content = await page.getTextContent();
+    const text = content.items
+      .filter((item) => 'str' in item && typeof (item as { str?: unknown }).str === 'string')
+      .map(item => (item as { str: string }).str)
       .join(' ');
-    textParts.push(pageText);
+    pages.push(text);
   }
 
-  return textParts.join('\n\n');
+  return pages.join('\n\n').trim();
 }
 
-async function extractTextFromDocx(blob: Blob): Promise<string> {
-  try {
-    const mammoth = await import('mammoth/mammoth.browser');
-    const arrayBuffer = await blob.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer });
-    const extracted = normalizeExtractedDocumentText(result.value || '');
+// ── Word .docx (mammoth) ──────────────────────────────────────────────────
 
-    if (extracted) {
-      return extracted;
-    }
-  } catch (error) {
-    console.warn('Mammoth DOCX extraction fell back to XML parsing:', error);
-  }
-
-  try {
-    const JSZip = (await import('jszip')).default;
-    const zip = await JSZip.loadAsync(blob);
-    const docXml = await zip.file('word/document.xml')?.async('string');
-
-    if (!docXml) {
-      throw new Error('Could not find document.xml in Word file');
-    }
-
-    // Extract text from XML
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(docXml, 'application/xml');
-
-    // Get all text nodes
-    const textNodes = doc.getElementsByTagName('w:t');
-    const textParts: string[] = [];
-
-    for (let i = 0; i < textNodes.length; i++) {
-      const text = textNodes[i].textContent;
-      if (text) textParts.push(text);
-    }
-
-    return normalizeExtractedDocumentText(textParts.join(' '));
-  } catch (error) {
-    console.error('Failed to extract text from Word file:', error);
-    throw new Error('Failed to extract text from Word document. DOCX files are supported, including Arabic text, but this file could not be parsed.');
-  }
+async function extractDocx(blob: Blob): Promise<string> {
+  const mammoth = await import('mammoth');
+  const arrayBuffer = await blob.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer });
+  return result.value.trim();
 }
 
-async function extractTextFromPptx(blob: Blob): Promise<string> {
-  // PowerPoint files are also ZIP archives with XML
-  try {
-    const JSZip = (await import('jszip')).default;
-    const zip = await JSZip.loadAsync(blob);
+// ── PowerPoint / other ────────────────────────────────────────────────────
 
-    const textParts: string[] = [];
+async function extractPptx(blob: Blob): Promise<string> {
+  const JSZip = (await import('jszip')).default;
+  const arrayBuffer = await blob.arrayBuffer();
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  const texts: string[] = [];
 
-    // Get all slide files
-    const slideFiles = Object.keys(zip.files).filter(
-      (name) => name.startsWith('ppt/slides/slide') && name.endsWith('.xml')
-    );
-
-    // Sort slides by number
-    slideFiles.sort((a, b) => {
-      const numA = parseInt(a.match(/slide(\d+)/)?.[1] || '0');
-      const numB = parseInt(b.match(/slide(\d+)/)?.[1] || '0');
-      return numA - numB;
+  const slideFiles = Object.keys(zip.files)
+    .filter(n => n.match(/ppt\/slides\/slide\d+\.xml/))
+    .sort((a, b) => {
+      const na = parseInt(a.match(/(\d+)/)?.[1] ?? '0');
+      const nb = parseInt(b.match(/(\d+)/)?.[1] ?? '0');
+      return na - nb;
     });
 
-    for (const slideFile of slideFiles) {
-      const slideXml = await zip.file(slideFile)?.async('string');
-      if (!slideXml) continue;
+  for (const name of slideFiles) {
+    const xml = await zip.files[name].async('text');
+    // Strip XML tags and decode basic entities
+    const raw = xml
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (raw) texts.push(raw);
+  }
 
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(slideXml, 'application/xml');
+  return texts.join('\n\n');
+}
 
-      // Get text from a:t elements
-      const textNodes = doc.getElementsByTagName('a:t');
-      const slideTexts: string[] = [];
+// ── Plain text ────────────────────────────────────────────────────────────
 
-      for (let i = 0; i < textNodes.length; i++) {
-        const text = textNodes[i].textContent;
-        if (text) slideTexts.push(text);
-      }
+async function extractText(blob: Blob): Promise<string> {
+  return blob.text();
+}
 
-      if (slideTexts.length > 0) {
-        textParts.push(slideTexts.join(' '));
-      }
+// ── Public API ────────────────────────────────────────────────────────────
+
+export type ExtractionResult = {
+  text: string;
+  wordCount: number;
+  error?: string;
+};
+
+/**
+ * Extract text from a file blob based on its MIME type or filename extension.
+ */
+export async function extractTextFromBlob(
+  blob: Blob,
+  filename: string,
+): Promise<ExtractionResult> {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  const mime = blob.type.toLowerCase();
+
+  try {
+    let text = '';
+
+    if (mime === 'application/pdf' || ext === 'pdf') {
+      text = await extractPdf(blob);
+    } else if (
+      mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      ext === 'docx'
+    ) {
+      text = await extractDocx(blob);
+    } else if (
+      mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+      ext === 'pptx'
+    ) {
+      text = await extractPptx(blob);
+    } else if (
+      mime.startsWith('text/') ||
+      ['txt', 'md', 'csv', 'json', 'xml', 'html'].includes(ext)
+    ) {
+      text = await extractText(blob);
+    } else {
+      return { text: '', wordCount: 0, error: `Unsupported file type: .${ext}` };
     }
 
-    return textParts.join('\n\n');
-  } catch (error) {
-    console.error('Failed to extract text from PowerPoint file:', error);
-    throw new Error('Failed to extract text from PowerPoint. Please copy-paste the text instead.');
+    const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+    return { text, wordCount };
+  } catch (err) {
+    console.error('[extract]', err);
+    return {
+      text: '',
+      wordCount: 0,
+      error: err instanceof Error ? err.message : 'Extraction failed.',
+    };
   }
 }
 
-async function extractTextFromTxt(blob: Blob): Promise<string> {
-  return await blob.text();
-}
-
-export async function extractTextFromFile(blob: Blob, filename: string): Promise<string> {
-  const ext = filename.split('.').pop()?.toLowerCase();
-
-  switch (ext) {
-    case 'pdf':
-      return extractTextFromPDF(blob);
-    case 'docx':
-    case 'doc':
-      if (ext === 'doc') {
-        throw new Error('Old .doc format not supported. Please save as .docx or copy-paste text.');
-      }
-      return extractTextFromDocx(blob);
-    case 'pptx':
-    case 'ppt':
-      if (ext === 'ppt') {
-        throw new Error('Old .ppt format not supported. Please save as .pptx or copy-paste text.');
-      }
-      return extractTextFromPptx(blob);
-    case 'txt':
-      return extractTextFromTxt(blob);
-    case 'png':
-    case 'jpg':
-    case 'jpeg':
-    case 'gif':
-    case 'webp':
-      return '[Image file] Use the Visual Analyzer tool to analyze images, extract text, or solve math from this image.';
-    default:
-      throw new Error(`Unsupported file type: ${ext}`);
-  }
-}
+/** @deprecated Use extractTextFromBlob */
+export const extractTextFromFile = extractTextFromBlob;

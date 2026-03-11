@@ -1,27 +1,17 @@
 'use client';
 
-import { ReactNode } from 'react';
-import { SessionProvider } from '@/providers/SessionProvider';
-import { SettingsProvider } from '@/providers/SettingsProvider';
-import { VaultProvider, VaultGate } from '@/providers/VaultProvider';
-import { ToastProvider } from '@/components/ui/Toast';
+import { SessionProvider as NextAuthSessionProvider } from 'next-auth/react';
+import { SettingsProvider } from './SettingsProvider';
+import { ToastProvider } from './ToastProvider';
 
-interface ClientProvidersProps {
-  children: ReactNode;
-}
-
-export function ClientProviders({ children }: ClientProvidersProps) {
+export function ClientProviders({ children }: { children: React.ReactNode }) {
   return (
-    <SessionProvider>
+    <NextAuthSessionProvider>
       <SettingsProvider>
         <ToastProvider>
-          <VaultProvider>
-            <VaultGate>
-              {children}
-            </VaultGate>
-          </VaultProvider>
+          {children}
         </ToastProvider>
       </SettingsProvider>
-    </SessionProvider>
+    </NextAuthSessionProvider>
   );
 }
