@@ -11,6 +11,7 @@ Kivora is a desktop-primary AI study workspace with a supported web beta, guest-
 
 ```bash
 npm install
+cp .env.example .env.local
 npm run dev
 ```
 
@@ -18,6 +19,42 @@ Main entry points:
 
 - Web dev: `http://localhost:3000`
 - Desktop shell: `npm run electron:dev`
+
+## Database Setup
+
+Kivora now supports both:
+
+- Neon PostgreSQL in deployed/serverless environments
+- local PostgreSQL for development on your machine
+
+Fast local setup:
+
+```bash
+npm run db:start
+npm run db:push
+```
+
+Default local database URL:
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/kivora
+```
+
+Useful commands:
+
+```bash
+npm run db:start
+npm run db:stop
+npm run db:down
+npm run db:push
+npm run db:studio
+```
+
+Notes:
+
+- `docker-compose.yml` provides a local Postgres 16 instance
+- `drizzle-kit push` applies the current schema directly
+- if you use Neon in production, keep `DATABASE_URL` pointed at Neon there
 
 ## Runtime Environment
 
