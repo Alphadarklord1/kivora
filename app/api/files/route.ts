@@ -1,115 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
-import { files, folders } from '@/lib/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
-import { getUserId } from '@/lib/auth/get-user-id';
-import { apiError, createRequestId } from '@/lib/api/error-response';
-import { betaReadFallback, databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
+import { files } from '@/lib/db/schema';
+import { eq, and, asc, desc } from 'drizzle-orm';
+import { getUserId } from '@/lib/auth/session';
+import { v4 as uuidv4 } from 'uuid';
 
-export async function GET(request: NextRequest) {
-  const requestId = createRequestId(request);
-  try {
-    if (!isDatabaseConfigured) {
-      return betaReadFallback([]);
-    }
+// GET /api/files?folderId=&topicId=  (topicId optional)
+export async function GET(req: NextRequest) {
+  if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
-    const userId = await getUserId(request);
-    if (!userId) {
-      return unauthorized(request, requestId);
-    }
-
-  const { searchParams } = new URL(request.url);
+  const { searchParams } = new URL(req.url);
   const folderId = searchParams.get('folderId');
-  const topicId = searchParams.get('topicId');
-  const liked = searchParams.get('liked');
-  const pinned = searchParams.get('pinned');
+  const topicId  = searchParams.get('topicId');
 
-  const conditions = [eq(files.userId, userId)];
+  if (!folderId) return NextResponse.json({ error: 'folderId is required.' }, { status: 400 });
 
-  if (folderId) {
-    conditions.push(eq(files.folderId, folderId));
-  }
-  if (topicId) {
-    conditions.push(eq(files.topicId, topicId));
-  }
-  if (liked === 'true') {
-    conditions.push(eq(files.liked, true));
-  }
-  if (pinned === 'true') {
-    conditions.push(eq(files.pinned, true));
-  }
+  const conditions = [
+    eq(files.userId,   userId),
+    eq(files.folderId, folderId),
+    ...(topicId ? [eq(files.topicId!, topicId)] : []),
+  ];
 
-    const userFiles = await db.query.files.findMany({
-      where: and(...conditions),
-      orderBy: [desc(files.createdAt)],
-    });
-
-    return NextResponse.json(userFiles);
-  } catch (error) {
-    console.error(`[Files][${requestId}] GET failed`, error);
-    return apiError(500, {
-      errorCode: 'FILES_FETCH_FAILED',
-      reason: 'Failed to fetch files',
-      requestId,
-    });
-  }
-}
-
-export async function POST(request: NextRequest) {
-  const requestId = createRequestId(request);
-  try {
-    if (!isDatabaseConfigured) {
-      return databaseUnavailable(request, 'File saving requires DATABASE_URL to be configured', undefined, requestId);
-    }
-
-    const userId = await getUserId(request);
-    if (!userId) {
-      return unauthorized(request, requestId);
-    }
-
-    const body = await request.json();
-    const { name, type, content, folderId, topicId, localBlobId, mimeType, fileSize } = body;
-
-    if (!name || !type || !folderId) {
-      return apiError(400, {
-        errorCode: 'INVALID_FILE_REQUEST',
-        reason: 'Name, type, and folderId are required',
-        requestId,
-      });
-    }
-
-  // Verify folder belongs to user
-  const folder = await db.query.folders.findFirst({
-    where: and(eq(folders.id, folderId), eq(folders.userId, userId)),
+  const rows = await db.query.files.findMany({
+    where: and(...conditions),
+    orderBy: [desc(files.createdAt)],
   });
 
-    if (!folder) {
-      return apiError(404, {
-        errorCode: 'FILE_FOLDER_NOT_FOUND',
-        reason: 'Folder not found',
-        requestId,
-      });
-    }
+  return NextResponse.json(rows);
+}
 
-    const [newFile] = await db.insert(files).values({
-      userId,
-      folderId,
-      topicId: topicId || null,
-      name,
-      type,
-      content: content || null,
-      localBlobId: localBlobId || null,
-      mimeType: mimeType || null,
-      fileSize: fileSize || null,
-    }).returning();
+// POST /api/files — create a file record (blob stored in IndexedDB by client)
+export async function POST(req: NextRequest) {
+  if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
-    return NextResponse.json(newFile, { status: 201 });
-  } catch (error) {
-    console.error(`[Files][${requestId}] POST failed`, error);
-    return apiError(500, {
-      errorCode: 'FILE_CREATE_FAILED',
-      reason: 'Failed to create file',
-      requestId,
-    });
+  const body = await req.json().catch(() => ({}));
+  const {
+    folderId, topicId, name, type, content,
+    localBlobId, mimeType, fileSize,
+  } = body as Record<string, string | number | undefined>;
+
+  if (!folderId || !name || !type) {
+    return NextResponse.json({ error: 'folderId, name, and type are required.' }, { status: 400 });
   }
+
+  const [file] = await db.insert(files).values({
+    id: uuidv4(),
+    userId,
+    folderId: folderId as string,
+    topicId: (topicId as string | undefined) ?? null,
+    name: (name as string).trim(),
+    type: type as string,
+    content: (content as string | undefined) ?? null,
+    localBlobId: (localBlobId as string | undefined) ?? null,
+    mimeType: (mimeType as string | undefined) ?? null,
+    fileSize: (fileSize as number | undefined) ?? null,
+  }).returning();
+
+  return NextResponse.json(file, { status: 201 });
 }

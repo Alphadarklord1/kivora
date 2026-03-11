@@ -8,6 +8,7 @@ import {
   evaluateAiScope,
   type AiScopeBlocked,
   type AiScopeErrorCode,
+  type StudyAiMode,
 } from '@/lib/ai/policy';
 import { isElectronRenderer } from '@/lib/runtime/mode';
 import { readCompatStorage, removeCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
@@ -33,7 +34,7 @@ export type AiGenerationPolicyBlock = {
   status: 'policy_block';
   errorCode: AiScopeErrorCode;
   reason: string;
-  suggestionModes: ToolMode[];
+  suggestionModes: StudyAiMode[];
 };
 
 export type AiGenerationRuntimeError = {

@@ -233,7 +233,8 @@ export function AudioPodcast() {
       if (file.type === 'upload' && file.localBlobId) {
         const blobData = await idbStore.get(file.localBlobId);
         if (blobData) {
-          content = await extractTextFromFile(blobData.blob, blobData.name);
+          const extracted = await extractTextFromFile(blobData.blob, blobData.name);
+          content = extracted.text;
         } else {
           setError('File not found locally. It may have been uploaded on another device.');
           setExtractingFile(false);
