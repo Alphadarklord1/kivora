@@ -24,6 +24,7 @@ export const storageKeys = {
   matlabSession: { current: 'kivora.matlab.session.v1', legacy: ['studypilot.matlab.session.v1'] },
   modelSetupDone: { current: 'kivora_model_setup_done', legacy: ['studypilot_model_setup_done'] },
   localStudyPlans: { current: 'kivora_local_study_plans', legacy: ['studypilot_local_study_plans'] },
+  localFolders: { current: 'kivora_local_folders', legacy: ['studypilot_local_folders'] },
 } satisfies Record<string, CompatStorageKey>;
 
 function resolveLegacyKeys(key: CompatStorageKey) {

@@ -1,17 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { folders, topics } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
+import { apiError, createRequestId } from '@/lib/api/error-response';
+import { databaseUnavailable } from '@/lib/api/runtime-guards';
 
 interface RouteParams {
   params: Promise<{ folderId: string; topicId: string }>;
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
+  const requestId = createRequestId(request);
+  if (!isDatabaseConfigured) {
+    return databaseUnavailable(request, 'Subfolder updates require DATABASE_URL to be configured', undefined, requestId);
+  }
+
   const userId = await getUserId(request);
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return apiError(401, {
+      errorCode: 'UNAUTHORIZED',
+      reason: 'Authentication required',
+      requestId,
+    });
   }
 
   const { folderId, topicId } = await params;
@@ -24,7 +35,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   });
 
   if (!folder) {
-    return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
+    return apiError(404, {
+      errorCode: 'FOLDER_NOT_FOUND',
+      reason: 'Folder not found',
+      requestId,
+    });
   }
 
   const [updated] = await db
@@ -38,16 +53,29 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     .returning();
 
   if (!updated) {
-    return NextResponse.json({ error: 'Topic not found' }, { status: 404 });
+    return apiError(404, {
+      errorCode: 'TOPIC_NOT_FOUND',
+      reason: 'Topic not found',
+      requestId,
+    });
   }
 
   return NextResponse.json(updated);
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const requestId = createRequestId(request);
+  if (!isDatabaseConfigured) {
+    return databaseUnavailable(request, 'Subfolder deletion requires DATABASE_URL to be configured', undefined, requestId);
+  }
+
   const userId = await getUserId(request);
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return apiError(401, {
+      errorCode: 'UNAUTHORIZED',
+      reason: 'Authentication required',
+      requestId,
+    });
   }
 
   const { folderId, topicId } = await params;
@@ -58,7 +86,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   });
 
   if (!folder) {
-    return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
+    return apiError(404, {
+      errorCode: 'FOLDER_NOT_FOUND',
+      reason: 'Folder not found',
+      requestId,
+    });
   }
 
   const [deleted] = await db
@@ -67,7 +99,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     .returning();
 
   if (!deleted) {
-    return NextResponse.json({ error: 'Topic not found' }, { status: 404 });
+    return apiError(404, {
+      errorCode: 'TOPIC_NOT_FOUND',
+      reason: 'Topic not found',
+      requestId,
+    });
   }
 
   return NextResponse.json({ success: true });

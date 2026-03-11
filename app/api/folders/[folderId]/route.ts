@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { folders, topics } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
+import { databaseUnavailable } from '@/lib/api/runtime-guards';
 
 interface RouteParams {
   params: Promise<{ folderId: string }>;
@@ -12,6 +13,10 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = createRequestId(request);
   try {
+    if (!isDatabaseConfigured) {
+      return databaseUnavailable(request, 'Folder lookup requires DATABASE_URL to be configured', undefined, requestId);
+    }
+
     const userId = await getUserId(request);
     if (!userId) {
       return apiError(401, {
@@ -54,6 +59,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   const requestId = createRequestId(request);
   try {
+    if (!isDatabaseConfigured) {
+      return databaseUnavailable(request, 'Folder updates require DATABASE_URL to be configured', undefined, requestId);
+    }
+
     const userId = await getUserId(request);
     if (!userId) {
       return apiError(401, {
@@ -100,6 +109,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = createRequestId(request);
   try {
+    if (!isDatabaseConfigured) {
+      return databaseUnavailable(request, 'Folder deletion requires DATABASE_URL to be configured', undefined, requestId);
+    }
+
     const userId = await getUserId(request);
     if (!userId) {
       return apiError(401, {
