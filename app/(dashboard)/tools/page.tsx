@@ -112,6 +112,14 @@ export default function ToolsPage() {
       Solver: 'المحلل',
       Plotter: 'الرسام',
       Lab: 'المختبر',
+      'Structured study operations': 'عمليات دراسية منظمة',
+      'AI tool stack': 'مجموعة أدوات الذكاء الاصطناعي',
+      'Run focused generation, math, visual analysis, and audio workflows inside one controlled tool surface.': 'شغّل التوليد المركز والرياضيات والتحليل البصري والصوت داخل مساحة أدوات واحدة منظمة.',
+      'Reusable outputs': 'مخرجات قابلة لإعادة الاستخدام',
+      'Math + visual': 'رياضيات + بصري',
+      'Save to library': 'حفظ في المكتبة',
+      'Tool system': 'نظام الأدوات',
+      'Switch between generation modes, keep outputs structured, and move results back into your study workspace.': 'بدّل بين أوضاع التوليد، واحتفظ بالمخرجات منظمة، ثم أعد النتائج إلى مساحة الدراسة.',
       Formal: 'رسمي',
       Informal: 'غير رسمي',
       Academic: 'أكاديمي',
@@ -329,57 +337,83 @@ export default function ToolsPage() {
 
   return (
     <div className="tools-page">
-      <div className="page-header">
-        <h1>{t('Study Tools')}</h1>
-        <p>{t('Generate study materials from any content')}</p>
+      <div className="tools-backdrop" />
+
+      <div className="tools-hero">
+        <div className="hero-copy">
+          <div className="hero-kicker-row">
+            <span className="hero-kicker">{t('Structured study operations')}</span>
+            <span className="hero-kicker-muted">{t('AI tool stack')}</span>
+          </div>
+          <h1>{t('Study Tools')}</h1>
+          <p>{t('Run focused generation, math, visual analysis, and audio workflows inside one controlled tool surface.')}</p>
+          <div className="hero-meta">
+            <span>{t('Guest-ready')}</span>
+            <span>{t('Reusable outputs')}</span>
+            <span>{t('Math + visual')}</span>
+            <span>{t('Save to library')}</span>
+          </div>
+        </div>
+
+        <div className="hero-sidecard">
+          <span className="hero-sidecard-eyebrow">{t('Tool system')}</span>
+          <strong>{t('Study Tools')}</strong>
+          <p>{t('Switch between generation modes, keep outputs structured, and move results back into your study workspace.')}</p>
+        </div>
       </div>
 
-      <div className="tools-layout">
+      <div className="tools-frame">
+        <div className="page-header">
+          <h1>{t('Study Tools')}</h1>
+          <p>{t('Generate study materials from any content')}</p>
+        </div>
+
+        <div className="tools-layout">
         {/* Tool Sidebar */}
-        <aside className="tools-sidebar">
-          <nav className="tool-nav">
-            {toolTabs.map((tool) => (
-              <button
-                key={tool.id}
-                className={`tool-nav-item ${toolTab === tool.id ? 'active' : ''}`}
-                onClick={() => {
-                  setToolTab(tool.id);
-                  handleToolReset();
-                }}
-              >
-                <span className="tool-icon">{tool.icon}</span>
-                <div className="tool-info">
-                  <span className="tool-name">{t(tool.label)}</span>
-                  <span className="tool-desc">{t(tool.description)}</span>
-                </div>
-              </button>
-            ))}
-          </nav>
-        </aside>
+          <aside className="tools-sidebar">
+            <nav className="tool-nav">
+              {toolTabs.map((tool) => (
+                <button
+                  key={tool.id}
+                  className={`tool-nav-item ${toolTab === tool.id ? 'active' : ''}`}
+                  onClick={() => {
+                    setToolTab(tool.id);
+                    handleToolReset();
+                  }}
+                >
+                  <span className="tool-icon">{tool.icon}</span>
+                  <div className="tool-info">
+                    <span className="tool-name">{t(tool.label)}</span>
+                    <span className="tool-desc">{t(tool.description)}</span>
+                  </div>
+                </button>
+              ))}
+            </nav>
+          </aside>
 
-        {/* Tool Content */}
-        <main className="tools-content">
-          <div className="tool-header">
-            <span className="tool-header-icon">{currentTool?.icon}</span>
-            <div>
-              <h2>{t(currentTool?.label || '')}</h2>
-              <p>{t(currentTool?.description || '')}</p>
-            </div>
-          </div>
-
-          {isMathWorkspace && (
-            <div className="math-workflow-banner">
+          {/* Tool Content */}
+          <main className="tools-content">
+            <div className="tool-header">
+              <span className="tool-header-icon">{currentTool?.icon}</span>
               <div>
-                <strong>{t('Math Workspace')}</strong>
-                <p>{t('Move between solver, graphing, and MATLAB without leaving the page.')}</p>
-              </div>
-              <div className="math-workflow-actions">
-                <button className={`math-workflow-btn ${toolTab === 'math' ? 'active' : ''}`} onClick={() => setToolTab('math')}>{t('Solver')}</button>
-                <button className={`math-workflow-btn ${toolTab === 'graph' ? 'active' : ''}`} onClick={() => setToolTab('graph')}>{t('Plotter')}</button>
-                <button className={`math-workflow-btn ${toolTab === 'matlab' ? 'active' : ''}`} onClick={() => setToolTab('matlab')}>{t('Lab')}</button>
+                <h2>{t(currentTool?.label || '')}</h2>
+                <p>{t(currentTool?.description || '')}</p>
               </div>
             </div>
-          )}
+
+            {isMathWorkspace && (
+              <div className="math-workflow-banner">
+                <div>
+                  <strong>{t('Math Workspace')}</strong>
+                  <p>{t('Move between solver, graphing, and MATLAB without leaving the page.')}</p>
+                </div>
+                <div className="math-workflow-actions">
+                  <button className={`math-workflow-btn ${toolTab === 'math' ? 'active' : ''}`} onClick={() => setToolTab('math')}>{t('Solver')}</button>
+                  <button className={`math-workflow-btn ${toolTab === 'graph' ? 'active' : ''}`} onClick={() => setToolTab('graph')}>{t('Plotter')}</button>
+                  <button className={`math-workflow-btn ${toolTab === 'matlab' ? 'active' : ''}`} onClick={() => setToolTab('matlab')}>{t('Lab')}</button>
+                </div>
+              </div>
+            )}
 
           {/* Math Solver */}
           {toolTab === 'math' ? (
@@ -542,27 +576,148 @@ export default function ToolsPage() {
               )}
             </div>
           )}
-        </main>
+          </main>
+        </div>
       </div>
 
       <style jsx>{`
         .tools-page {
+          position: relative;
           max-width: 1400px;
           margin: 0 auto;
+          padding: var(--space-4);
+          overflow: hidden;
+          background: linear-gradient(180deg, #06101f 0%, #071223 36%, #040914 100%);
+          border: 1px solid rgba(121, 143, 194, 0.16);
+          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+          border-radius: 32px;
+        }
+
+        .tools-backdrop {
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(circle at top left, rgba(53, 112, 255, 0.22), transparent 26%),
+            radial-gradient(circle at 85% 12%, rgba(96, 165, 250, 0.14), transparent 24%),
+            linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+          background-size: auto, auto, 32px 32px, 32px 32px;
+          mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.95), transparent 88%);
+          pointer-events: none;
+        }
+
+        .tools-hero,
+        .tools-frame {
+          position: relative;
+          z-index: 1;
+        }
+
+        .tools-hero {
+          display: grid;
+          grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.65fr);
+          gap: var(--space-4);
+          margin-bottom: var(--space-5);
+        }
+
+        .hero-copy,
+        .hero-sidecard,
+        .tools-frame {
+          border: 1px solid rgba(121, 143, 194, 0.18);
+          background: rgba(7, 15, 28, 0.72);
+          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+          backdrop-filter: blur(16px);
+        }
+
+        .hero-copy {
+          padding: clamp(1.5rem, 2vw, 2rem);
+          border-radius: 2rem;
+        }
+
+        .hero-kicker-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 0.75rem;
+          margin-bottom: 1rem;
+        }
+
+        .hero-kicker,
+        .hero-sidecard-eyebrow {
+          display: inline-flex;
+          align-items: center;
+          min-height: 1.9rem;
+          padding: 0 0.8rem;
+          border-radius: 999px;
+          background: rgba(79, 115, 222, 0.16);
+          border: 1px solid rgba(125, 157, 255, 0.22);
+          color: #9bb9ff;
+          font-size: 0.76rem;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .hero-kicker-muted {
+          color: #8f9db7;
+          font-size: 0.95rem;
+        }
+
+        .hero-copy h1 {
+          margin: 0;
+          font-size: clamp(2.5rem, 4vw, 4.25rem);
+          line-height: 0.98;
+          letter-spacing: -0.04em;
+          color: #e7eefc;
+        }
+
+        .hero-copy p,
+        .hero-sidecard p {
+          margin: 1rem 0 0;
+          color: #a8b5cf;
+          line-height: 1.7;
+        }
+
+        .hero-meta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.75rem 1rem;
+          margin-top: 1.25rem;
+          color: #8e9bb4;
+          font-size: 0.92rem;
+        }
+
+        .hero-sidecard {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          padding: 1.35rem;
+          border-radius: 2rem;
+        }
+
+        .hero-sidecard strong {
+          margin-top: 0.9rem;
+          font-size: 1.2rem;
+          color: #f3f7ff;
+        }
+
+        .tools-frame {
+          border-radius: 2rem;
+          padding: var(--space-5);
         }
 
         .page-header {
-          margin-bottom: var(--space-6);
+          margin-bottom: var(--space-5);
         }
 
         .page-header h1 {
-          font-size: var(--font-2xl);
+          font-size: clamp(1.8rem, 2vw, 2.35rem);
           font-weight: 700;
           margin-bottom: var(--space-1);
+          color: #f3f7ff;
         }
 
         .page-header p {
-          color: var(--text-muted);
+          color: #9aa9c5;
         }
 
         .tools-layout {
@@ -572,6 +727,19 @@ export default function ToolsPage() {
         }
 
         @media (max-width: 900px) {
+          .tools-page {
+            padding: var(--space-3);
+            border-radius: 24px;
+          }
+
+          .tools-hero {
+            grid-template-columns: 1fr;
+          }
+
+          .tools-frame {
+            padding: var(--space-4);
+          }
+
           .tools-layout {
             grid-template-columns: 1fr;
           }
@@ -617,9 +785,9 @@ export default function ToolsPage() {
         }
 
         .tools-sidebar {
-          background: var(--bg-surface);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
+          background: linear-gradient(180deg, rgba(14, 24, 40, 0.95), rgba(8, 16, 30, 0.9));
+          border: 1px solid rgba(121, 143, 194, 0.16);
+          border-radius: 1.5rem;
           padding: var(--space-3);
           height: fit-content;
           position: sticky;
@@ -637,21 +805,24 @@ export default function ToolsPage() {
           align-items: flex-start;
           gap: var(--space-3);
           padding: var(--space-3);
-          border: none;
+          border: 1px solid transparent;
           background: transparent;
-          border-radius: var(--radius-md);
+          border-radius: 1rem;
           cursor: pointer;
           text-align: left;
-          transition: all 0.15s;
+          transition: var(--transition-base);
           width: 100%;
         }
 
         .tool-nav-item:hover {
-          background: var(--bg-inset);
+          background: rgba(255, 255, 255, 0.03);
+          border-color: rgba(121, 143, 194, 0.12);
         }
 
         .tool-nav-item.active {
-          background: var(--primary-muted);
+          background: linear-gradient(135deg, rgba(53, 104, 234, 0.2), rgba(20, 35, 68, 0.82));
+          border-color: rgba(109, 152, 255, 0.24);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
         }
 
         .tool-icon {
@@ -668,23 +839,23 @@ export default function ToolsPage() {
 
         .tool-name {
           font-weight: 600;
-          color: var(--text-primary);
+          color: #edf3ff;
         }
 
         .tool-nav-item.active .tool-name {
-          color: var(--primary);
+          color: #b8ceff;
         }
 
         .tool-desc {
           font-size: var(--font-tiny);
-          color: var(--text-muted);
+          color: #8f9db7;
           line-height: 1.3;
         }
 
         .tools-content {
-          background: var(--bg-surface);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
+          background: linear-gradient(180deg, rgba(14, 24, 40, 0.98), rgba(8, 16, 30, 0.96));
+          border: 1px solid rgba(121, 143, 194, 0.16);
+          border-radius: 1.5rem;
           padding: var(--space-5);
           min-height: 500px;
         }
@@ -695,7 +866,7 @@ export default function ToolsPage() {
           gap: var(--space-4);
           margin-bottom: var(--space-5);
           padding-bottom: var(--space-4);
-          border-bottom: 1px solid var(--border-subtle);
+          border-bottom: 1px solid rgba(121, 143, 194, 0.12);
         }
 
         .tool-header-icon {
@@ -706,11 +877,12 @@ export default function ToolsPage() {
           font-size: var(--font-lg);
           font-weight: 600;
           margin: 0;
+          color: #f3f7ff;
         }
 
         .tool-header p {
           font-size: var(--font-meta);
-          color: var(--text-muted);
+          color: #9aa9c5;
           margin: 0;
         }
 
@@ -720,9 +892,9 @@ export default function ToolsPage() {
           justify-content: space-between;
           gap: var(--space-3);
           padding: var(--space-4);
-          border-radius: var(--radius-lg);
-          border: 1px solid var(--border-subtle);
-          background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 10%, var(--bg-surface)), var(--bg-surface));
+          border-radius: 1.25rem;
+          border: 1px solid rgba(121, 143, 194, 0.16);
+          background: linear-gradient(135deg, rgba(53, 104, 234, 0.14), rgba(11, 23, 43, 0.94));
           margin-bottom: var(--space-4);
           flex-wrap: wrap;
         }
@@ -734,7 +906,7 @@ export default function ToolsPage() {
 
         .math-workflow-banner p {
           margin: 0;
-          color: var(--text-muted);
+          color: #9aa9c5;
           font-size: var(--font-meta);
         }
 
@@ -745,14 +917,14 @@ export default function ToolsPage() {
         }
 
         .math-workflow-btn {
-          border: 1px solid var(--border-subtle);
+          border: 1px solid rgba(121, 143, 194, 0.16);
           border-radius: 999px;
-          background: var(--bg-surface);
-          color: var(--text-secondary);
+          background: rgba(8, 15, 29, 0.58);
+          color: #c9d6ee;
           padding: var(--space-2) var(--space-3);
           cursor: pointer;
           font-size: var(--font-meta);
-          transition: var(--transition-fast);
+          transition: var(--transition-base);
         }
 
         .math-workflow-btn.active {
