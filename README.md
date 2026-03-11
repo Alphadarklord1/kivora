@@ -74,7 +74,7 @@ STUDYPILOT_DESKTOP_AUTH_PORT=3893
 
 Google OAuth redirect URIs:
 
-- `https://study-alpha-three.vercel.app/api/auth/callback/google`
+- `https://kivora-app.vercel.app/api/auth/callback/google`
 - `http://localhost:3000/api/auth/callback/google`
 - `http://127.0.0.1:3893/api/auth/callback/google`
 

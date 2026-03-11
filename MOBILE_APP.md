@@ -9,7 +9,7 @@ This project supports an iOS/Android wrapper using Capacitor. The wrapper can ei
 
 1. Make sure the web app is deployed (Vercel).
 2. Edit `capacitor.config.ts` and set:
-   - `server.url` to your deployed URL (example: `https://study-alpha-three.vercel.app`)
+   - `server.url` to your deployed URL (example: `https://kivora-app.vercel.app`)
 3. Run:
    ```bash
    npm install

@@ -19,7 +19,7 @@ Run this checklist before creating a beta release tag.
   - [ ] `GOOGLE_CLIENT_ID`
   - [ ] `GOOGLE_CLIENT_SECRET`
   - [ ] `AUTH_SECRET`
-  - [ ] redirect URI `https://study-alpha-three.vercel.app/api/auth/callback/google`
+  - [ ] redirect URI `https://kivora-app.vercel.app/api/auth/callback/google`
 - [ ] Desktop OAuth still works on `127.0.0.1:3893` or shows a clear disabled reason.
 
 ## Appearance + themes
