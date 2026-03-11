@@ -4,7 +4,6 @@ import { useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import { VaultStatus } from '@/components/security/VaultStatus';
 import { useKeyboardShortcuts, formatShortcut } from '@/hooks/useKeyboardShortcuts';
 import { useToastHelpers } from '@/components/ui/Toast';
 import { useSettings } from '@/providers/SettingsProvider';
@@ -465,9 +464,6 @@ export function AppShell({ children, user }: AppShellProps) {
             {sidebarOpen && (
               <>
                 <div className="footer-label">{t('System')}</div>
-                <div className="vault-pill">
-                  <VaultStatus />
-                </div>
                 <div className="system-actions">
                   <button
                     className="system-trigger"
@@ -543,7 +539,12 @@ export function AppShell({ children, user }: AppShellProps) {
                 </button>
               </div>
             )}
-            <div className="user-profile" aria-label={t('Account actions')}>
+            <button
+              type="button"
+              className="user-profile"
+              aria-label={t('Account actions')}
+              onClick={() => router.push('/settings?tab=account')}
+            >
               <div className="user-avatar">
                 {user.image ? (
                   <img src={user.image} alt="" />
@@ -552,12 +553,12 @@ export function AppShell({ children, user }: AppShellProps) {
                 )}
               </div>
               {sidebarOpen && (
-                <div className="user-info">
+                  <div className="user-info">
                   <span className="user-name">{user.name || t('User')}</span>
                   <span className="user-email">{user.email}</span>
                 </div>
               )}
-            </div>
+            </button>
           </div>
         </aside>
       )}
@@ -572,17 +573,18 @@ export function AppShell({ children, user }: AppShellProps) {
               <span>Kivora</span>
             </Link>
             <div className="mobile-header-actions">
-              <VaultStatus />
-              <div
+              <button
+                type="button"
                 className="mobile-user-avatar"
                 onClick={() => setShowUserMenu(!showUserMenu)}
+                aria-label={t('Account actions')}
               >
                 {user.image ? (
                   <img src={user.image} alt="" />
                 ) : (
                   <span>{getInitials(user.name, user.email)}</span>
                 )}
-              </div>
+              </button>
             </div>
 
             {showUserMenu && (
@@ -599,7 +601,7 @@ export function AppShell({ children, user }: AppShellProps) {
                     </Link>
                   ))}
                   <div className="mobile-menu-divider" />
-                  <Link href="/settings" className="mobile-menu-item" onClick={() => setShowUserMenu(false)}>
+                  <Link href="/settings?tab=account" className="mobile-menu-item" onClick={() => setShowUserMenu(false)}>
                     ⚙️ {t('Settings')}
                   </Link>
                   <button
@@ -916,17 +918,9 @@ export function AppShell({ children, user }: AppShellProps) {
           padding: 0 var(--space-1);
         }
 
-        .vault-pill {
-          display: flex;
-          align-items: center;
-          width: fit-content;
-          max-width: 100%;
-        }
-
         .system-actions {
           position: relative;
         }
-
         .system-trigger {
           display: flex;
           align-items: center;
@@ -1031,9 +1025,13 @@ export function AppShell({ children, user }: AppShellProps) {
           gap: var(--space-3);
           padding: var(--space-2);
           border-radius: 16px;
-          cursor: default;
+          cursor: pointer;
+          width: 100%;
           border: 1px solid color-mix(in srgb, var(--border-subtle) 50%, transparent);
           background: color-mix(in srgb, var(--bg-surface) 55%, transparent);
+          text-align: inherit;
+          color: inherit;
+          appearance: none;
         }
 
         .user-profile:hover {
@@ -1226,6 +1224,7 @@ export function AppShell({ children, user }: AppShellProps) {
           font-weight: 600;
           overflow: hidden;
           cursor: pointer;
+          border: none;
         }
 
         .mobile-user-avatar img {
