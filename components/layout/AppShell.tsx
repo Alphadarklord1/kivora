@@ -11,6 +11,7 @@ const NAV = [
   { href: '/planner',   label: 'Planner',   icon: '📅' },
   { href: '/library',   label: 'Library',   icon: '🗂️' },
   { href: '/analytics', label: 'Analytics', icon: '📊' },
+  { href: '/sharing',   label: 'Sharing',   icon: '🔗' },
   { href: '/settings',  label: 'Settings',  icon: '⚙️' },
 ];
 
