@@ -85,8 +85,8 @@ const DESKTOP_AI_MODELS = [
 
 const DEFAULT_MODEL_KEY = 'mini';
 const MODEL_MANIFEST_FILENAME = 'model-manifest.json';
-const MODEL_RELEASE_REPO = process.env.STUDYPILOT_MODEL_REPO || 'Alphadarklord1/kivora';
-const MODEL_WIZARD_ENABLED = (process.env.STUDYPILOT_MODEL_WIZARD || '1') !== '0';
+const MODEL_RELEASE_REPO = process.env.KIVORA_MODEL_REPO || process.env.STUDYPILOT_MODEL_REPO || 'Alphadarklord1/kivora';
+const MODEL_WIZARD_ENABLED = (process.env.KIVORA_MODEL_WIZARD || process.env.STUDYPILOT_MODEL_WIZARD || '1') !== '0';
 const DOWNLOAD_EVENT = 'desktop-ai-download-progress';
 const DOWNLOAD_STATE_IDLE = 'idle';
 

@@ -17,7 +17,7 @@ const MODEL_FILES = [
 ];
 
 function makeFixtureDir() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'studypilot-models-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kivora-models-'));
   const modelsDir = path.join(root, 'models');
   fs.mkdirSync(modelsDir, { recursive: true });
   for (const file of MODEL_FILES) {
