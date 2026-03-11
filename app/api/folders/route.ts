@@ -10,7 +10,10 @@ export async function GET(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
     if (!isDatabaseConfigured) {
-      return betaReadFallback([]);
+      return betaReadFallback([], {
+        'x-kivora-fallback': 'folders-no-db',
+        'x-studypilot-fallback': 'folders-no-db',
+      });
     }
 
     const userId = await getUserId(request);

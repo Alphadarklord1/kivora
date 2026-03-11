@@ -6,6 +6,11 @@ Kivora desktop mode expects bundled runtime assets in this directory:
 - `models/qwen2.5-1.5b-instruct-q4_k_m.gguf` (Mini, laptop-friendly)
 - `models/qwen2.5-3b-instruct-q4_k_m.gguf` (Balanced default)
 - `models/qwen2.5-7b-instruct-q4_k_m.gguf` (Pro, desktop-class)
+- `bin/darwin-arm64/llama-server`
+- `bin/win32-x64/llama-server.exe`
+
+Legacy fallback binaries from older builds are still recognized if present:
+
 - `bin/darwin-arm64/studypilot-ai`
 - `bin/win32-x64/studypilot-ai.exe`
 
@@ -34,11 +39,11 @@ If only one model is included, Kivora auto-falls back to that model.
      - `npm run electron:build:mac:pc`
 4. For release, upload optional models, `model-manifest.json`, and `SHA256SUMS.txt` under the same app version tag.
 5. Recommended one-command publish:
-   - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/Kivora-model-store`
+   - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/kivora --models-dir=~/Kivora-model-store`
 6. Manual validation path:
-   - `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/studypilot`
+   - `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/kivora`
    - `npm run models:checksums:validate -- --checksums=electron/runtime/SHA256SUMS.txt --manifest=electron/runtime/model-manifest.json --models-dir=electron/runtime/models`
 7. Verify tag/assets/version consistency:
    - `npm run release:verify -- --tag=vX.Y.Z --assets='<comma-separated release asset list>'`
 
-`mock-ai-runtime.js` is development-only and is used when a native runtime binary is not present.
+`llama-server` is now the preferred desktop runtime. `mock-ai-runtime.js` remains development-only and is used when no native runtime binary is present in local dev.

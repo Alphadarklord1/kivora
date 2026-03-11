@@ -1,6 +1,6 @@
 import { CreatePlanData, StudyPlan, UpdatePlanData } from '@/lib/planner/study-plan-types';
+import { readCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
-const LOCAL_STUDY_PLANS_KEY = 'studypilot_local_study_plans';
 const LOCAL_USER_ID = 'local-demo-user';
 
 function sortPlans(plans: StudyPlan[]) {
@@ -15,7 +15,7 @@ export function loadLocalStudyPlans(): StudyPlan[] {
   if (typeof window === 'undefined') return [];
 
   try {
-    const raw = localStorage.getItem(LOCAL_STUDY_PLANS_KEY);
+    const raw = readCompatStorage(localStorage, storageKeys.localStudyPlans);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? sortPlans(parsed) : [];
@@ -26,7 +26,7 @@ export function loadLocalStudyPlans(): StudyPlan[] {
 
 function persistLocalStudyPlans(plans: StudyPlan[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(LOCAL_STUDY_PLANS_KEY, JSON.stringify(sortPlans(plans)));
+  writeCompatStorage(localStorage, storageKeys.localStudyPlans, JSON.stringify(sortPlans(plans)));
 }
 
 export function createLocalStudyPlan(data: CreatePlanData): StudyPlan {

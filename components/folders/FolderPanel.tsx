@@ -6,6 +6,14 @@ import { SkeletonFolderTree } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ShareDialog } from '@/components/share';
 import { useSettings } from '@/providers/SettingsProvider';
+import {
+  createLocalFolder,
+  createLocalTopic,
+  deleteLocalFolder,
+  deleteLocalTopic,
+  loadLocalFolders,
+  toggleLocalFolderExpanded,
+} from '@/lib/folders/local-folders';
 
 interface Topic {
   id: string;
@@ -31,6 +39,7 @@ interface FolderPanelProps {
 interface ApiErrorLike {
   error?: string;
   reason?: string;
+  errorCode?: string;
 }
 
 export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKey, collapsed = false, onToggleCollapse }: FolderPanelProps) {
@@ -72,6 +81,7 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
   const [newTopicName, setNewTopicName] = useState('');
   const [addingFolder, setAddingFolder] = useState(false);
   const [addingTopic, setAddingTopic] = useState(false);
+  const [usingLocalFallback, setUsingLocalFallback] = useState(false);
 
   // Share dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -94,14 +104,19 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
       const res = await fetch('/api/folders', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
-        setFolders(Array.isArray(data) ? data : []);
+        const fallbackHeader = res.headers.get('x-kivora-fallback') || res.headers.get('x-studypilot-fallback');
+        const isLocal = fallbackHeader === 'folders-no-db';
+        setUsingLocalFallback(isLocal);
+        setFolders(isLocal ? loadLocalFolders() as Folder[] : Array.isArray(data) ? data : []);
       } else {
         console.error('Failed to fetch folders:', res.status);
-        setFolders([]);
+        setUsingLocalFallback(true);
+        setFolders(loadLocalFolders() as Folder[]);
       }
     } catch (error) {
       console.error('Failed to fetch folders:', error);
-      setFolders([]);
+      setUsingLocalFallback(true);
+      setFolders(loadLocalFolders() as Folder[]);
     } finally {
       setLoading(false);
     }
@@ -130,11 +145,23 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
         toast.success(t('Folder created'));
       } else {
         const error = (await res.json()) as ApiErrorLike;
-        toast.error(t('Failed to create folder'), error.reason || error.error || t('Please try again'));
+        if (error.errorCode === 'DATABASE_NOT_CONFIGURED') {
+          createLocalFolder(newFolderName.trim());
+          setNewFolderName('');
+          setUsingLocalFallback(true);
+          await fetchFolders();
+          toast.success(t('Folder created'));
+        } else {
+          toast.error(t('Failed to create folder'), error.reason || error.error || t('Please try again'));
+        }
       }
     } catch (error) {
       console.error('Failed to create folder:', error);
-      toast.error(t('Failed to create folder'), t('Please try again'));
+      createLocalFolder(newFolderName.trim());
+      setNewFolderName('');
+      setUsingLocalFallback(true);
+      await fetchFolders();
+      toast.success(t('Folder created'));
     } finally {
       setAddingFolder(false);
     }
@@ -159,17 +186,35 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
         toast.success(t('Subfolder created'));
       } else {
         const error = (await res.json()) as ApiErrorLike;
-        toast.error(t('Failed to create subfolder'), error.reason || error.error || t('Please try again'));
+        if (error.errorCode === 'DATABASE_NOT_CONFIGURED') {
+          createLocalTopic(selectedFolder, newTopicName.trim());
+          setNewTopicName('');
+          setUsingLocalFallback(true);
+          await fetchFolders();
+          toast.success(t('Subfolder created'));
+        } else {
+          toast.error(t('Failed to create subfolder'), error.reason || error.error || t('Please try again'));
+        }
       }
     } catch (error) {
       console.error('Failed to create topic:', error);
-      toast.error(t('Failed to create subfolder'), t('Please try again'));
+      createLocalTopic(selectedFolder, newTopicName.trim());
+      setNewTopicName('');
+      setUsingLocalFallback(true);
+      await fetchFolders();
+      toast.success(t('Subfolder created'));
     } finally {
       setAddingTopic(false);
     }
   };
 
   const toggleFolder = async (folder: Folder) => {
+    if (usingLocalFallback) {
+      toggleLocalFolderExpanded(folder.id);
+      setFolders(loadLocalFolders() as Folder[]);
+      return;
+    }
+
     // Optimistic update
     setFolders(prev => prev.map(f =>
       f.id === folder.id ? { ...f, expanded: !f.expanded } : f
@@ -184,15 +229,23 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
       });
     } catch (error) {
       console.error('Failed to toggle folder:', error);
-      // Revert on error
-      setFolders(prev => prev.map(f =>
-        f.id === folder.id ? { ...f, expanded: folder.expanded } : f
-      ));
+      toggleLocalFolderExpanded(folder.id);
+      setUsingLocalFallback(true);
+      setFolders(loadLocalFolders() as Folder[]);
     }
   };
 
   const deleteFolder = async (folderId: string) => {
     if (!confirm(t('Delete this folder and all its contents?'))) return;
+
+    if (usingLocalFallback) {
+      deleteLocalFolder(folderId);
+      if (selectedFolder === folderId) {
+        onSelect(null, '', null, '');
+      }
+      await fetchFolders();
+      return;
+    }
 
     try {
       const res = await fetch(`/api/folders/${folderId}`, {
@@ -205,14 +258,40 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
           onSelect(null, '', null, '');
         }
         await fetchFolders();
+      } else {
+        const error = (await res.json().catch(() => null)) as ApiErrorLike | null;
+        if (error?.errorCode === 'DATABASE_NOT_CONFIGURED') {
+          deleteLocalFolder(folderId);
+          setUsingLocalFallback(true);
+          if (selectedFolder === folderId) {
+            onSelect(null, '', null, '');
+          }
+          await fetchFolders();
+        }
       }
     } catch (error) {
       console.error('Failed to delete folder:', error);
+      deleteLocalFolder(folderId);
+      setUsingLocalFallback(true);
+      if (selectedFolder === folderId) {
+        onSelect(null, '', null, '');
+      }
+      await fetchFolders();
     }
   };
 
   const deleteTopic = async (folderId: string, topicId: string) => {
     if (!confirm(t('Delete this subfolder?'))) return;
+
+    if (usingLocalFallback) {
+      deleteLocalTopic(folderId, topicId);
+      if (selectedTopic === topicId) {
+        const folder = folders.find(f => f.id === folderId);
+        onSelect(folderId, folder?.name || '', null, '');
+      }
+      await fetchFolders();
+      return;
+    }
 
     try {
       const res = await fetch(`/api/folders/${folderId}/topics/${topicId}`, {
@@ -226,9 +305,27 @@ export function FolderPanel({ onSelect, selectedFolder, selectedTopic, refreshKe
           onSelect(folderId, folder?.name || '', null, '');
         }
         await fetchFolders();
+      } else {
+        const error = (await res.json().catch(() => null)) as ApiErrorLike | null;
+        if (error?.errorCode === 'DATABASE_NOT_CONFIGURED') {
+          deleteLocalTopic(folderId, topicId);
+          setUsingLocalFallback(true);
+          if (selectedTopic === topicId) {
+            const folder = folders.find(f => f.id === folderId);
+            onSelect(folderId, folder?.name || '', null, '');
+          }
+          await fetchFolders();
+        }
       }
     } catch (error) {
       console.error('Failed to delete topic:', error);
+      deleteLocalTopic(folderId, topicId);
+      setUsingLocalFallback(true);
+      if (selectedTopic === topicId) {
+        const folder = folders.find(f => f.id === folderId);
+        onSelect(folderId, folder?.name || '', null, '');
+      }
+      await fetchFolders();
     }
   };
 

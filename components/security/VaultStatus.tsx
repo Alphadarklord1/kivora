@@ -125,16 +125,25 @@ export function VaultStatus() {
   if (ENCRYPTION_DISABLED) {
     return (
       <div className="vault-status">
-        <button className="vault-indicator paused" aria-label={t('Encryption disabled for beta')}>
+        <button
+          ref={indicatorRef}
+          className="vault-indicator paused"
+          aria-label={t('Encryption disabled for beta')}
+          onClick={() => setShowTooltip((prev) => !prev)}
+          onFocus={() => setShowTooltip(true)}
+        >
           <span className="vault-icon">⏸️</span>
-          <span className="vault-text">{t('Encryption disabled for beta')}</span>
+          <span className="vault-text">{t('Encryption Paused')}</span>
         </button>
-        <p className="vault-disabled-note">{t('Local vault password prompts are turned off until encryption returns in a later beta update.')}</p>
+        {showTooltip && (
+          <div ref={tooltipRef} className="vault-tooltip beta-tooltip" style={tooltipStyle}>
+            <div className="tooltip-header">{t('Encryption disabled for beta')}</div>
+            <p className="tooltip-content">{t('Local vault password prompts are turned off until encryption returns in a later beta update.')}</p>
+          </div>
+        )}
         <style jsx>{`
           .vault-status {
             position: relative;
-            display: grid;
-            gap: var(--space-2);
           }
           .vault-indicator {
             display: flex;
@@ -152,12 +161,26 @@ export function VaultStatus() {
             border-color: var(--border-default);
             color: var(--text-secondary);
           }
-          .vault-disabled-note {
+
+          .beta-tooltip {
+            padding: var(--space-3);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-subtle);
+            background: color-mix(in srgb, var(--bg-elevated) 96%, var(--bg-base));
+            box-shadow: var(--shadow-lg);
+          }
+
+          .tooltip-header {
+            font-weight: 600;
+            margin-bottom: var(--space-2);
+            color: var(--text-primary);
+          }
+
+          .tooltip-content {
             margin: 0;
-            max-width: 17rem;
-            font-size: var(--font-caption);
-            line-height: 1.45;
             color: var(--text-muted);
+            line-height: 1.5;
+            font-size: var(--font-caption);
           }
         `}</style>
       </div>

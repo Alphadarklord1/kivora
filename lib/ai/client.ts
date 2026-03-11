@@ -10,6 +10,7 @@ import {
   type AiScopeErrorCode,
 } from '@/lib/ai/policy';
 import { isElectronRenderer } from '@/lib/runtime/mode';
+import { readCompatStorage, removeCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
 export type AiProvider = 'desktop-local' | 'openai' | 'offline';
 
@@ -79,21 +80,21 @@ export function loadAiPreferences(): AiPreferences {
   if (typeof window === 'undefined') return DEFAULT_PREFS;
 
   return {
-    provider: normalizeProvider(localStorage.getItem('studypilot_ai_provider')),
-    openaiModel: localStorage.getItem('studypilot_ai_openai_model') || DEFAULT_PREFS.openaiModel,
-    enableCloudFallback: normalizeBoolean(localStorage.getItem('studypilot_ai_cloud_fallback'), DEFAULT_PREFS.enableCloudFallback),
+    provider: normalizeProvider(readCompatStorage(localStorage, storageKeys.aiProvider)),
+    openaiModel: readCompatStorage(localStorage, storageKeys.aiOpenAiModel) || DEFAULT_PREFS.openaiModel,
+    enableCloudFallback: normalizeBoolean(readCompatStorage(localStorage, storageKeys.aiCloudFallback), DEFAULT_PREFS.enableCloudFallback),
   };
 }
 
 export function saveAiPreferences(prefs: AiPreferences) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem('studypilot_ai_provider', prefs.provider);
-  localStorage.setItem('studypilot_ai_openai_model', prefs.openaiModel);
-  localStorage.setItem('studypilot_ai_cloud_fallback', String(prefs.enableCloudFallback));
+  writeCompatStorage(localStorage, storageKeys.aiProvider, prefs.provider);
+  writeCompatStorage(localStorage, storageKeys.aiOpenAiModel, prefs.openaiModel);
+  writeCompatStorage(localStorage, storageKeys.aiCloudFallback, String(prefs.enableCloudFallback));
 
   // Cleanup legacy keys to keep stored state consistent.
-  localStorage.removeItem('studypilot_ai_ollama_model');
-  localStorage.removeItem('studypilot_ai_ollama_base');
+  removeCompatStorage(localStorage, storageKeys.aiLegacyOllamaModel);
+  removeCompatStorage(localStorage, storageKeys.aiLegacyOllamaBase);
 }
 
 function toPolicyBlock(decision: AiScopeBlocked): AiGenerationPolicyBlock {
@@ -240,6 +241,38 @@ export async function generateAiContent(
   const scopeDecision = evaluateAiScope({ mode, text, source: 'workspace' });
   if (!scopeDecision.allowed) {
     return toPolicyBlock(scopeDecision);
+  }
+
+  const preferDesktopOpenSource = isElectronRenderer() && prefs.provider !== 'offline';
+
+  if (preferDesktopOpenSource) {
+    const localResult = await requestDesktopLocal(text, mode, rewriteOptions);
+    if (localResult.status === 'success' || localResult.status === 'policy_block') {
+      return localResult;
+    }
+
+    if (prefs.enableCloudFallback || prefs.provider === 'openai') {
+      const cloudResult = await requestOpenAI(prefs.openaiModel, text, mode, rewriteOptions);
+      if (cloudResult.status === 'success' || cloudResult.status === 'policy_block') {
+        return cloudResult.status === 'success'
+          ? {
+              ...cloudResult,
+              fallbackUsed: true,
+              reason: localResult.message,
+              primaryProvider: 'desktop-local',
+            }
+          : cloudResult;
+      }
+    }
+
+    return {
+      status: 'success',
+      provider: 'offline',
+      content: getGeneratedContent(mode, text, rewriteOptions),
+      fallbackUsed: true,
+      reason: localResult.message || 'Desktop open-source model unavailable',
+      primaryProvider: 'desktop-local',
+    };
   }
 
   if (prefs.provider === 'offline') {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useSettings } from '@/providers/SettingsProvider';
+import { readCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
 interface MatlabLabProps {
   onGraphExpression?: (expression: string) => void;
@@ -45,12 +46,10 @@ interface MatlabSession {
   command: string;
 }
 
-const MATLAB_SESSION_STORAGE_KEY = 'studypilot.matlab.session.v1';
-
 function loadStoredSession(): MatlabSession | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(MATLAB_SESSION_STORAGE_KEY);
+    const raw = readCompatStorage(localStorage, storageKeys.matlabSession);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as MatlabSession;
     if (!parsed || typeof parsed !== 'object') return null;
@@ -458,7 +457,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
         script: scriptText,
         command,
       };
-      localStorage.setItem(MATLAB_SESSION_STORAGE_KEY, JSON.stringify(session));
+      writeCompatStorage(localStorage, storageKeys.matlabSession, JSON.stringify(session));
     } catch {
       // Ignore storage write failures (quota/private mode).
     }

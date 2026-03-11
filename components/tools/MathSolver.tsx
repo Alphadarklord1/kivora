@@ -41,14 +41,14 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
     'Try an example:': 'جرّب مثالًا:',
     'MATLAB-ready templates:': 'قوالب جاهزة لـ MATLAB:',
     'Enter your math problem:': 'أدخل المسألة الرياضية:',
-    'Quick symbols': 'رموز سريعة',
-    'Open keyboard': 'فتح لوحة الرموز',
-    'Hide keyboard': 'إخفاء لوحة الرموز',
     'Examples:': 'أمثلة:',
     'Supports MATLAB style: `.^`, `.*`, `./` and standard math (`x^2`, `sqrt()`).': 'يدعم صياغة MATLAB مثل `.^`, `.*`, `./` والرياضيات القياسية (`x^2`, `sqrt()`).',
-    'Math Keyboard': 'لوحة رموز الرياضيات',
-    'Close': 'إغلاق',
-    'Tap a template to insert it at the cursor, then keep typing in the main box.': 'اضغط على القالب لإدراجه عند المؤشر ثم واصل الكتابة في الحقل الرئيسي.',
+    'Structured input': 'إدخال منظم',
+    'Use the built-in math keyboard for fractions, roots, exponents, and integrals.': 'استخدم لوحة الرياضيات المدمجة للكسور والجذور والأسس والتكاملات.',
+    'Type with MathLive': 'اكتب باستخدام MathLive',
+    'Type a math problem': 'اكتب مسألة رياضية',
+    'MathLive failed to load. Using plain text input instead.': 'تعذر تحميل MathLive. سيتم استخدام الإدخال النصي العادي بدلًا منه.',
+    'Plain text fallback': 'إدخال نصي احتياطي',
     'Preview:': 'معاينة:',
     'Solving...': 'جارٍ الحل...',
     'Solve Problem': 'حل المسألة',
@@ -102,74 +102,10 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
   const [error, setError] = useState('');
   const [useAI, setUseAI] = useState(false);
   const [matlabMode, setMatlabMode] = useState(true);
-  const [showKeyboard, setShowKeyboard] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [selectionRange, setSelectionRange] = useState({ start: 0, end: 0 });
+  const [mathInputMode, setMathInputMode] = useState<'loading' | 'mathlive' | 'fallback'>('loading');
+  const mathfieldHostRef = useRef<HTMLDivElement | null>(null);
+  const mathfieldRef = useRef<any>(null);
   const aiDetailFallback = t('Use AI mode for detailed solution');
-
-  const syncSelection = () => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    setSelectionRange({
-      start: textarea.selectionStart ?? 0,
-      end: textarea.selectionEnd ?? 0,
-    });
-  };
-
-  type SymbolInsert = {
-    label: string;
-    value: string;
-    cursorOffset?: number;
-  };
-
-  const insertSymbol = ({ value, cursorOffset }: SymbolInsert) => {
-    const textarea = textareaRef.current;
-    const start = textarea ? textarea.selectionStart ?? selectionRange.start : selectionRange.start;
-    const end = textarea ? textarea.selectionEnd ?? selectionRange.end : selectionRange.end;
-
-    setProblem((prev) => {
-      const next = `${prev.slice(0, start)}${value}${prev.slice(end)}`;
-      const nextCursor = start + (cursorOffset ?? value.length);
-
-      window.requestAnimationFrame(() => {
-        textareaRef.current?.focus();
-        textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
-        setSelectionRange({ start: nextCursor, end: nextCursor });
-      });
-
-      return next;
-    });
-  };
-
-  useEffect(() => {
-    syncSelection();
-  }, []);
-
-  const SYMBOLS: SymbolInsert[] = [
-    { label: '∫', value: 'integral () dx', cursorOffset: 10 },
-    { label: t('Definite Integral'), value: 'integral from 0 to 1 of () dx', cursorOffset: 25 },
-    { label: 'd/dx', value: 'd/dx ()', cursorOffset: 6 },
-    { label: '∂/∂x', value: '∂/∂x ()', cursorOffset: 7 },
-    { label: 'lim', value: 'limit x->0 ()', cursorOffset: 12 },
-    { label: t('Fraction'), value: '()/()', cursorOffset: 1 },
-    { label: t('Parentheses'), value: '()', cursorOffset: 1 },
-    { label: '√', value: 'sqrt()', cursorOffset: 5 },
-    { label: 'π', value: 'pi' },
-    { label: '∞', value: 'inf' },
-    { label: '∑', value: 'sum()', cursorOffset: 4 },
-    { label: '∏', value: 'prod()', cursorOffset: 5 },
-    { label: 'θ', value: 'theta' },
-    { label: 'sin', value: 'sin()', cursorOffset: 4 },
-    { label: 'cos', value: 'cos()', cursorOffset: 4 },
-    { label: 'tan', value: 'tan()', cursorOffset: 4 },
-    { label: 'ln', value: 'ln()', cursorOffset: 3 },
-    { label: 'log', value: 'log()', cursorOffset: 4 },
-    { label: 'e^x', value: 'exp()', cursorOffset: 4 },
-    { label: '|x|', value: 'abs()', cursorOffset: 4 },
-    { label: 'A\\B', value: 'A\\\\B' },
-    { label: '[ ]', value: '[ ]', cursorOffset: 2 },
-    { label: 'x̄', value: 'mean()', cursorOffset: 5 },
-  ];
 
   const normalizeMatlabSyntax = (input: string) => {
     let out = input;
@@ -178,6 +114,127 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
     out = out.replace(/(\d)\s+(\d)/g, '$1*$2');
     return out;
   };
+
+  const normalizeMathLiveAscii = (input: string) => {
+    let out = String(input || '').trim();
+    if (!out) return '';
+
+    out = out.replace(/∞/g, 'inf');
+    out = out.replace(/\s+/g, ' ');
+    out = out.replace(/int_\(([^)]+)\)\^\(([^)]+)\)\s*/gi, 'integral from $1 to $2 of ');
+    out = out.replace(/int_([^ ^]+)\^([^ ]+)\s*/gi, 'integral from $1 to $2 of ');
+    out = out.replace(/\bint\s*/gi, 'integral ');
+    out = out.replace(/lim_\(([^)]+)\)\s*/gi, 'limit $1 ');
+    out = out.replace(/lim_([^ ]+)\s*/gi, 'limit $1 ');
+    out = out.replace(/->/g, '->');
+    out = out.replace(/sum_\(([^)]+)\)\^\(([^)]+)\)\s*/gi, 'sum from $1 to $2 of ');
+    out = out.replace(/sqrt\(([^)]+)\)/gi, 'sqrt($1)');
+    out = out.replace(/\{([^{}]+)\}/g, '$1');
+    out = out.replace(/\s+dx\b/gi, ' dx');
+    out = out.replace(/\s+/g, ' ');
+    return out.trim();
+  };
+
+  const solverSyntaxToLatex = (input: string) => {
+    const source = String(input || '').trim();
+    if (!source) return '';
+
+    const definiteIntegral = source.match(/^integral from (.+?) to (.+?) of (.+?) dx$/i);
+    if (definiteIntegral) {
+      return `\\int_{${definiteIntegral[1]}}^{${definiteIntegral[2]}} ${definiteIntegral[3]}\\,dx`;
+    }
+
+    const plainIntegral = source.match(/^integral (.+?) dx$/i);
+    if (plainIntegral) {
+      return `\\int ${plainIntegral[1]}\\,dx`;
+    }
+
+    const derivative = source.match(/^d\/dx\s*\((.+)\)$/i);
+    if (derivative) {
+      return `\\frac{d}{dx}\\left(${derivative[1]}\\right)`;
+    }
+
+    const limit = source.match(/^limit\s+(.+?)\s+(.+)$/i);
+    if (limit) {
+      return `\\lim_{${limit[1].replace(/->/g, '\\to ')}} ${limit[2]}`;
+    }
+
+    const series = source.match(/^sum from (.+?) to (.+?) of (.+)$/i);
+    if (series) {
+      return `\\sum_{${series[1]}}^{${series[2]}} ${series[3]}`;
+    }
+
+    return source
+      .replace(/\bpi\b/gi, '\\pi')
+      .replace(/\binf\b/gi, '\\infty');
+  };
+
+  useEffect(() => {
+    let disposed = false;
+    let cleanup: (() => void) | null = null;
+
+    void import('mathlive')
+      .then(({ MathfieldElement }) => {
+        if (disposed || !mathfieldHostRef.current) return;
+
+        const mf = new MathfieldElement();
+        mf.setAttribute('style', 'display:block; width:100%; min-height:84px;');
+        mf.setAttribute('aria-label', t('Type with MathLive'));
+        mf.mathVirtualKeyboardPolicy = 'auto';
+        mf.placeholder = t('Type a math problem');
+        mf.setValue(solverSyntaxToLatex(problem || ''));
+
+        const syncFromField = () => {
+          const normalized = normalizeMathLiveAscii(mf.getValue('ascii-math'));
+          setProblem((current) => (current === normalized ? current : normalized));
+        };
+
+        mf.addEventListener('input', syncFromField);
+        mathfieldHostRef.current.innerHTML = '';
+        mathfieldHostRef.current.appendChild(mf);
+        mathfieldRef.current = mf;
+        setMathInputMode('mathlive');
+
+        cleanup = () => {
+          mf.removeEventListener('input', syncFromField);
+          if (mathfieldHostRef.current?.contains(mf)) {
+            mathfieldHostRef.current.removeChild(mf);
+          }
+          if (mathfieldRef.current === mf) {
+            mathfieldRef.current = null;
+          }
+        };
+      })
+      .catch((loadError) => {
+        console.error('MathLive failed to initialize:', loadError);
+        if (!disposed) {
+          setMathInputMode('fallback');
+        }
+      });
+
+    return () => {
+      disposed = true;
+      cleanup?.();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const mf = mathfieldRef.current;
+    if (!mf) return;
+    const currentNormalized = normalizeMathLiveAscii(mf.getValue('ascii-math'));
+    if (currentNormalized === problem.trim()) return;
+    const latex = solverSyntaxToLatex(problem);
+    if (mf.getValue('latex') !== latex) {
+      mf.setValue(latex);
+    }
+  }, [problem]);
+
+  useEffect(() => {
+    const mf = mathfieldRef.current;
+    if (!mf) return;
+    mf.placeholder = t('Type a math problem');
+  }, [t]);
 
   const handleSolve = async () => {
     if (!problem.trim()) {
@@ -490,71 +547,57 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
             }}>
               {t('Enter your math problem:')}
             </label>
-            {/* Inline Symbol Bar */}
             <div style={{
-              padding: 'var(--space-2)',
+              padding: 'var(--space-3)',
               border: '1px solid var(--border-subtle)',
               borderRadius: 'var(--radius-md)',
               background: 'var(--bg-inset)',
-              marginBottom: 'var(--space-2)'
             }}>
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                marginBottom: 'var(--space-2)'
+                gap: 'var(--space-3)',
+                marginBottom: 'var(--space-2)',
+                flexWrap: 'wrap',
               }}>
                 <span style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)' }}>
-                  {t('Quick symbols')}
+                  {t('Structured input')}
                 </span>
-                <button
-                  className="btn"
-                  onClick={() => {
-                    setShowKeyboard((prev) => !prev);
-                    window.requestAnimationFrame(() => textareaRef.current?.focus());
+                <span style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)' }}>
+                  {t('Use the built-in math keyboard for fractions, roots, exponents, and integrals.')}
+                </span>
+              </div>
+              {mathInputMode === 'mathlive' || mathInputMode === 'loading' ? (
+                <div ref={mathfieldHostRef} className="mathlive-host" />
+              ) : (
+                <textarea
+                  value={problem}
+                  onChange={(event) => setProblem(event.target.value)}
+                  placeholder={t('Type a math problem')}
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    minHeight: '84px',
+                    padding: 'var(--space-3)',
+                    background: 'var(--bg-base)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    resize: 'vertical',
                   }}
-                  style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1) var(--space-2)' }}
-                >
-                  {showKeyboard ? t('Hide keyboard') : t('Open keyboard')}
-                </button>
-              </div>
-              <div style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 'var(--space-2)'
-              }}>
-                {SYMBOLS.map((s) => (
-                  <button
-                    key={s.label}
-                    className="btn ghost"
-                    onClick={() => insertSymbol(s)}
-                    style={{ fontSize: 'var(--font-tiny)', padding: 'var(--space-1) var(--space-2)' }}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
+                />
+              )}
             </div>
-            <textarea
-              ref={textareaRef}
-              value={problem}
-              onChange={(e) => setProblem(e.target.value)}
-              onClick={syncSelection}
-              onKeyUp={syncSelection}
-              onSelect={syncSelection}
-              onFocus={syncSelection}
-              placeholder={`${t('Examples:')}
-- Find the derivative of x^3 + 2x^2 - 5x
-- Integrate x^2 + 3x dx
-- Integral from 0 to 2 of x^2 dx
-- Solve x^2 - 5x + 6 = 0
-- Calculate 2^8 + 15 * 4`}
-              rows={4}
-              style={{
-                fontSize: 'var(--font-body)',
-                fontFamily: 'var(--font-mono, monospace)'
-              }}
-            />
+            {mathInputMode === 'fallback' ? (
+              <p style={{
+                fontSize: 'var(--font-tiny)',
+                color: 'var(--warning-foreground, #f4c96b)',
+                marginTop: 'var(--space-2)'
+              }}>
+                {t('MathLive failed to load. Using plain text input instead.')}
+              </p>
+            ) : null}
             <p style={{
               fontSize: 'var(--font-tiny)',
               color: 'var(--text-muted)',
@@ -563,56 +606,6 @@ export function MathSolver({ onGraphExpression }: MathSolverProps = {}) {
               {t('Supports MATLAB style: `.^`, `.*`, `./` and standard math (`x^2`, `sqrt()`).')}
             </p>
           </div>
-          {showKeyboard && (
-            <div
-              style={{
-                marginBottom: 'var(--space-4)',
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-lg)',
-                padding: 'var(--space-4)',
-              }}
-            >
-              <div
-                style={{
-                  display: 'grid',
-                  gap: 'var(--space-3)',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 'var(--space-3)',
-                  }}
-                >
-                  <h4 style={{ margin: 0 }}>{t('Math Keyboard')}</h4>
-                  <button className="btn ghost" onClick={() => setShowKeyboard(false)}>{t('Close')}</button>
-                </div>
-                <p style={{
-                  margin: 0,
-                  fontSize: 'var(--font-meta)',
-                  color: 'var(--text-muted)',
-                }}>
-                  {t('Tap a template to insert it at the cursor, then keep typing in the main box.')}
-                </p>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))',
-                    gap: 'var(--space-2)',
-                  }}
-                >
-                  {SYMBOLS.map((s) => (
-                    <button key={s.label} className="btn ghost" onClick={() => insertSymbol(s)}>
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Live Preview */}
           {problem && (

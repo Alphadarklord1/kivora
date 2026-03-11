@@ -10,6 +10,7 @@ import { useToastHelpers } from '@/components/ui/Toast';
 import { useSettings } from '@/providers/SettingsProvider';
 import { QuickSearchPalette, type QuickSearchItem } from '@/components/layout/QuickSearchPalette';
 import { ModelSetupWizard } from '@/components/layout/ModelSetupWizard';
+import { readCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
 interface AppShellProps {
   children: ReactNode;
@@ -54,7 +55,7 @@ const navGroups = [
 ];
 
 const navItems = navGroups.flatMap((group) => group.items);
-const GITHUB_NEW_ISSUE_URL = 'https://github.com/Alphadarklord1/studypilot/issues/new?template=error_report.yml';
+const GITHUB_NEW_ISSUE_URL = 'https://github.com/Alphadarklord1/kivora/issues/new?template=error_report.yml';
 
 // Mobile bottom nav shows only the 5 most important items
 const mobileNavItems = navItems.filter(item =>
@@ -142,6 +143,7 @@ export function AppShell({ children, user }: AppShellProps) {
   const [quickSearchFiles, setQuickSearchFiles] = useState<QuickSearchFile[]>([]);
   const [quickSearchLibrary, setQuickSearchLibrary] = useState<QuickSearchLibraryItem[]>([]);
   const [showModelSetupWizard, setShowModelSetupWizard] = useState(false);
+  const [showSystemMenu, setShowSystemMenu] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -159,6 +161,7 @@ export function AppShell({ children, user }: AppShellProps) {
 
   useEffect(() => {
     setShowUserMenu(false);
+    setShowSystemMenu(false);
   }, [pathname]);
 
   // Set mounted after initial render (hydration flag - intentional)
@@ -174,9 +177,9 @@ export function AppShell({ children, user }: AppShellProps) {
       try {
         const selection = await window.electronAPI?.desktopAI?.getSelection();
         if (!selection || cancelled) return;
-        const localCompleted = localStorage.getItem('studypilot_model_setup_done') === 'true';
+        const localCompleted = readCompatStorage(localStorage, storageKeys.modelSetupDone) === 'true';
         if (selection.setupCompleted && !localCompleted) {
-          localStorage.setItem('studypilot_model_setup_done', 'true');
+          writeCompatStorage(localStorage, storageKeys.modelSetupDone, 'true');
         }
         if (selection.wizardEnabled && !selection.setupCompleted && !localCompleted) {
           setShowModelSetupWizard(true);
@@ -193,7 +196,7 @@ export function AppShell({ children, user }: AppShellProps) {
   }, [mounted]);
 
   const handleModelWizardComplete = useCallback(() => {
-    localStorage.setItem('studypilot_model_setup_done', 'true');
+    writeCompatStorage(localStorage, storageKeys.modelSetupDone, 'true');
     setShowModelSetupWizard(false);
   }, []);
 
@@ -228,10 +231,13 @@ export function AppShell({ children, user }: AppShellProps) {
     if (showUserMenu) {
       setShowUserMenu(false);
     }
+    if (showSystemMenu) {
+      setShowSystemMenu(false);
+    }
     if (showShortcutsHelp) {
       setShowShortcutsHelp(false);
     }
-  }, [handleCloseQuickSearch, quickSearchOpen, showShortcutsHelp, showUserMenu]);
+  }, [handleCloseQuickSearch, quickSearchOpen, showShortcutsHelp, showSystemMenu, showUserMenu]);
 
   const handleShowHelp = useCallback(() => {
     setShowShortcutsHelp(prev => !prev);
@@ -462,46 +468,40 @@ export function AppShell({ children, user }: AppShellProps) {
                 <div className="vault-pill">
                   <VaultStatus />
                 </div>
-                <button
-                  className="download-btn"
-                  onClick={handleGoToSettings}
-                  title={t('Settings')}
-                >
-                  <span>⚙️</span>
-                  <span>{t('Settings')}</span>
-                </button>
-                <button
-                  className="download-btn"
-                  onClick={handleExportData}
-                  title={t('Export Data')}
-                >
-                  <span>⬇️</span>
-                  <span>{t('Export Data')}</span>
-                </button>
-                <button
-                  className="download-btn"
-                  onClick={handleReportIssue}
-                  title={t('Report Issue')}
-                >
-                  <span>🩺</span>
-                  <span>{t('Report Issue')}</span>
-                </button>
-                <button
-                  className="download-btn"
-                  onClick={toggleLanguage}
-                  title={isArabic ? t('Switch to English') : t('Switch to Arabic')}
-                >
-                  <span>🌐</span>
-                  <span>{isArabic ? 'EN' : 'AR'}</span>
-                </button>
-                <button
-                  className="download-btn"
-                  onClick={handleSignOut}
-                  title={t('Sign Out')}
-                >
-                  <span>🚪</span>
-                  <span>{t('Sign Out')}</span>
-                </button>
+                <div className="system-actions">
+                  <button
+                    className="system-trigger"
+                    onClick={() => setShowSystemMenu((prev) => !prev)}
+                    title={t('System')}
+                  >
+                    <span>⋯</span>
+                    <span>{t('System')}</span>
+                  </button>
+                  {showSystemMenu && (
+                    <div className="system-menu">
+                      <button className="system-menu-item" onClick={handleGoToSettings} title={t('Settings')}>
+                        <span>⚙️</span>
+                        <span>{t('Settings')}</span>
+                      </button>
+                      <button className="system-menu-item" onClick={handleExportData} title={t('Export Data')}>
+                        <span>⬇️</span>
+                        <span>{t('Export Data')}</span>
+                      </button>
+                      <button className="system-menu-item" onClick={handleReportIssue} title={t('Report Issue')}>
+                        <span>🩺</span>
+                        <span>{t('Report Issue')}</span>
+                      </button>
+                      <button className="system-menu-item" onClick={toggleLanguage} title={isArabic ? t('Switch to English') : t('Switch to Arabic')}>
+                        <span>🌐</span>
+                        <span>{isArabic ? 'EN' : 'AR'}</span>
+                      </button>
+                      <button className="system-menu-item" onClick={handleSignOut} title={t('Sign Out')}>
+                        <span>🚪</span>
+                        <span>{t('Sign Out')}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </>
             )}
             {!sidebarOpen && (
@@ -917,37 +917,39 @@ export function AppShell({ children, user }: AppShellProps) {
         }
 
         .vault-pill {
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-full);
-          padding: 2px 8px;
+          display: flex;
+          align-items: center;
           width: fit-content;
           max-width: 100%;
         }
 
-        .download-btn {
+        .system-actions {
+          position: relative;
+        }
+
+        .system-trigger {
           display: flex;
           align-items: center;
           gap: var(--space-3);
-          width: 100%;
-          min-height: var(--control-height);
-          padding: 10px 12px;
-          background: color-mix(in srgb, var(--bg-base) 90%, var(--bg-surface));
-          border: 1px solid var(--border-subtle);
-          border-radius: 16px;
+          min-height: 38px;
+          padding: 8px 12px;
+          background: transparent;
+          border: 1px dashed color-mix(in srgb, var(--border-subtle) 85%, transparent);
+          border-radius: 999px;
           color: var(--text-secondary);
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 600;
           cursor: pointer;
           transition: all var(--transition-fast);
         }
 
-        .download-btn:hover {
-          background: var(--bg-hover);
+        .system-trigger:hover {
+          background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
           border-color: var(--border-default);
           color: var(--text-primary);
         }
 
-        .download-btn span:first-child {
+        .system-trigger span:first-child {
           width: 18px;
           min-width: 18px;
           display: inline-flex;
@@ -955,6 +957,40 @@ export function AppShell({ children, user }: AppShellProps) {
           justify-content: center;
           line-height: 1;
           flex-shrink: 0;
+        }
+
+        .system-menu {
+          margin-top: var(--space-2);
+          display: grid;
+          gap: 6px;
+          padding: 8px;
+          border-radius: 18px;
+          border: 1px solid var(--border-subtle);
+          background: color-mix(in srgb, var(--bg-elevated) 94%, var(--bg-base));
+          box-shadow: var(--shadow-md);
+        }
+
+        .system-menu-item {
+          display: flex;
+          align-items: center;
+          gap: var(--space-3);
+          width: 100%;
+          min-height: 36px;
+          padding: 8px 10px;
+          background: transparent;
+          border: 1px solid transparent;
+          border-radius: 12px;
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: var(--transition-fast);
+        }
+
+        .system-menu-item:hover {
+          background: color-mix(in srgb, var(--bg-hover) 82%, transparent);
+          border-color: color-mix(in srgb, var(--border-subtle) 70%, transparent);
+          color: var(--text-primary);
         }
 
         .sidebar-icon-actions {
@@ -1005,7 +1041,8 @@ export function AppShell({ children, user }: AppShellProps) {
         }
 
         .nav-item:focus-visible,
-        .download-btn:focus-visible,
+        .system-trigger:focus-visible,
+        .system-menu-item:focus-visible,
         .download-btn-icon:focus-visible,
         .user-profile:focus-visible,
         .mobile-nav-item:focus-visible,

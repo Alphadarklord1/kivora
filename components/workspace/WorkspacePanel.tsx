@@ -20,6 +20,7 @@ import { NoFilesState, EmptyState } from '@/components/ui/EmptyState';
 import { ShareDialog } from '@/components/share';
 import { FocusTimer } from '@/components/workspace/FocusTimer';
 import { useSettings } from '@/providers/SettingsProvider';
+import { readCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
 interface FileItem {
   id: string;
@@ -164,6 +165,7 @@ export function WorkspacePanel({
       Folder: 'المجلد',
       Uploading: 'جارِ الرفع...',
       'Upload File': 'رفع ملف',
+      'Arabic DOCX is supported for reading and rephrasing.': 'ملفات DOCX العربية مدعومة للقراءة وإعادة الصياغة.',
       'Welcome to your Workspace': 'مرحبًا بك في مساحة العمل',
       'Select a folder and subfolder to view files, or pin/like files for quick access.': 'اختر مجلدًا ومجلدًا فرعيًا لعرض الملفات، أو ثبّت/أعجب بالملفات للوصول السريع.',
       Share: 'مشاركة',
@@ -254,7 +256,7 @@ export function WorkspacePanel({
   const autoOpeningFileIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const storedCompact = typeof window !== 'undefined' ? localStorage.getItem('studypilot_compact_mode') : null;
+    const storedCompact = typeof window !== 'undefined' ? readCompatStorage(localStorage, storageKeys.compactMode) : null;
     if (storedCompact) {
       setCompactMode(storedCompact === 'true');
     }
@@ -262,7 +264,7 @@ export function WorkspacePanel({
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    localStorage.setItem('studypilot_compact_mode', String(compactMode));
+    writeCompatStorage(localStorage, storageKeys.compactMode, String(compactMode));
   }, [compactMode]);
 
   useEffect(() => {
@@ -834,9 +836,9 @@ export function WorkspacePanel({
       return;
     }
     const utterance = new SpeechSynthesisUtterance(text.slice(0, 5000));
-    const preferredVoice = localStorage.getItem('studypilot_tts_voice') || '';
-    const preferredRate = Number(localStorage.getItem('studypilot_tts_rate') || 1);
-    const preferredPitch = Number(localStorage.getItem('studypilot_tts_pitch') || 1);
+    const preferredVoice = readCompatStorage(localStorage, storageKeys.ttsVoice) || '';
+    const preferredRate = Number(readCompatStorage(localStorage, storageKeys.ttsRate) || 1);
+    const preferredPitch = Number(readCompatStorage(localStorage, storageKeys.ttsPitch) || 1);
     const voices = window.speechSynthesis.getVoices();
     if (preferredVoice) {
       const match = voices.find(v => v.name === preferredVoice);
@@ -1044,16 +1046,19 @@ export function WorkspacePanel({
           <>
             {/* Upload Button */}
             {selectedTopic && (
-              <label className="upload-btn">
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp"
-                  onChange={handleFileUpload}
-                  disabled={uploading}
-                  style={{ display: 'none' }}
-                />
-                {uploading ? `${t('Uploading')}...` : `+ ${t('Upload File')}`}
-              </label>
+              <div className="upload-block">
+                <label className="upload-btn">
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp"
+                    onChange={handleFileUpload}
+                    disabled={uploading}
+                    style={{ display: 'none' }}
+                  />
+                  {uploading ? `${t('Uploading')}...` : `+ ${t('Upload File')}`}
+                </label>
+                <p className="upload-note">{t('Arabic DOCX is supported for reading and rephrasing.')}</p>
+              </div>
             )}
 
             {/* Pinned, Liked & Recent */}
@@ -1672,6 +1677,9 @@ export function WorkspacePanel({
           position: relative;
         }
 
+        .upload-block {
+          margin-bottom: var(--space-4);
+        }
         .upload-btn {
           display: block;
           width: 100%;
@@ -1682,9 +1690,15 @@ export function WorkspacePanel({
           text-align: center;
           font-weight: 500;
           cursor: pointer;
-          margin-bottom: var(--space-4);
+          margin-bottom: var(--space-2);
         }
         .upload-btn:hover { background: var(--primary-hover); }
+        .upload-note {
+          margin: 0;
+          color: var(--text-muted);
+          font-size: var(--font-meta);
+          text-align: start;
+        }
 
         .quick-access { margin-bottom: var(--space-4); }
         .quick-section { margin-bottom: var(--space-4); }

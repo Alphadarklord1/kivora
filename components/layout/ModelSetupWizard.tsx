@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
 interface ModelSetupWizardProps {
   isArabic: boolean;
@@ -118,7 +119,7 @@ export function ModelSetupWizard({ isArabic, onComplete }: ModelSetupWizardProps
 
   const complete = async (modelKey: string) => {
     if (!window.electronAPI?.desktopAI) return;
-    localStorage.setItem('studypilot_model_setup_done', 'true');
+    writeCompatStorage(localStorage, storageKeys.modelSetupDone, 'true');
     await window.electronAPI.desktopAI.completeSetup({ selectedModelKey: modelKey });
     onComplete();
   };

@@ -25,6 +25,7 @@ interface DesktopAiHealth {
   provider: 'desktop-local';
   model: string;
   runtimePath?: string;
+  runtimeEngine?: 'llama.cpp' | 'legacy' | 'mock';
   modelPath?: string;
   details?: string;
 }
@@ -59,6 +60,7 @@ interface DesktopAiModelInfo {
     modelPath?: string;
   }>;
   runtimeAvailable: boolean;
+  runtimeEngine?: 'llama.cpp' | 'legacy' | 'mock';
   runtimePath?: string;
   modelPath?: string;
 }

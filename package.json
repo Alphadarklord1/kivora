@@ -133,8 +133,11 @@
     "function-plot": "^1.25.3",
     "jszip": "^3.10.1",
     "katex": "^0.16.27",
+    "mammoth": "^1.11.0",
+    "mathlive": "^0.108.3",
     "next": "16.1.4",
     "next-auth": "^5.0.0-beta.30",
+    "pdfjs-dist": "^5.5.207",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "uuid": "^13.0.0"

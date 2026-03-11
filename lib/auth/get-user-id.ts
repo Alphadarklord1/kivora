@@ -5,7 +5,7 @@ import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
-import { hasValidTwoFactorSession, TWO_FACTOR_COOKIE_NAME } from '@/lib/auth/two-factor';
+import { hasValidTwoFactorSession, LEGACY_TWO_FACTOR_COOKIE_NAME, TWO_FACTOR_COOKIE_NAME } from '@/lib/auth/two-factor';
 
 export const DEMO_USER_EMAIL = 'demo@local.kivora';
 export const LEGACY_STUDYHARBOR_DEMO_USER_EMAIL = 'demo@local.studyharbor';
@@ -57,7 +57,9 @@ export async function getUserId(
         return tokenUserId;
       }
 
-      const twoFactorCookie = request.cookies.get(TWO_FACTOR_COOKIE_NAME)?.value;
+      const twoFactorCookie =
+        request.cookies.get(TWO_FACTOR_COOKIE_NAME)?.value ||
+        request.cookies.get(LEGACY_TWO_FACTOR_COOKIE_NAME)?.value;
       const hasVerifiedSecondStep = await hasValidTwoFactorSession(tokenUserId, twoFactorCookie);
       return hasVerifiedSecondStep ? tokenUserId : null;
     }

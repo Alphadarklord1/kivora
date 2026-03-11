@@ -56,7 +56,7 @@ Quick commands:
 ```bash
 npm run models:prepare:balanced
 npm run electron:build:mac:balanced
-npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/studypilot --models-dir=~/Kivora-model-store
+npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/kivora --models-dir=~/Kivora-model-store
 ```
 
 ## Google Login Setup (Web + Desktop)
@@ -74,7 +74,7 @@ STUDYPILOT_DESKTOP_AUTH_PORT=3893
 
 Google OAuth redirect URIs:
 
-- `https://study-alpha-three.vercel.app/api/auth/callback/google`
+- `https://kivora-app.vercel.app/api/auth/callback/google`
 - `http://localhost:3000/api/auth/callback/google`
 - `http://127.0.0.1:3893/api/auth/callback/google`
 
@@ -118,6 +118,7 @@ Detailed runtime/model docs:
 
 - `OFFLINE_MODEL_BUNDLE_GUIDE.md`
 - `electron/runtime/README.md`
+- `docs/OPEN_SOURCE_REPLACEMENTS.md`
 
 ## Team Collaboration
 
@@ -139,4 +140,5 @@ Repository collaboration files:
 - `docs/TEAM_WORKFLOW.md`
 - `docs/GITHUB_SETUP.md`
 - `docs/GITHUB_PROJECTS.md`
+- `docs/MAINTAINER_TRIAGE_CHECKLIST.md`
 - `ROADMAP.md`

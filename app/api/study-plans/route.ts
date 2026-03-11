@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
     if (!isDatabaseConfigured) {
-      return betaReadFallback([], { 'x-studypilot-fallback': 'study-plans-no-db' });
+      return betaReadFallback([], { 'x-kivora-fallback': 'study-plans-no-db' });
     }
 
     const userId = await getUserId(request);
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error(`[StudyPlans][${requestId}] GET failed`, error);
     if (isGuestModeEnabled()) {
-      return betaReadFallback([], { 'x-studypilot-fallback': 'study-plans-db-error' });
+      return betaReadFallback([], { 'x-kivora-fallback': 'study-plans-db-error' });
     }
     return apiError(500, {
       errorCode: 'STUDY_PLANS_FETCH_FAILED',

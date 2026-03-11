@@ -8,6 +8,7 @@ import { getSupportedAiTasks } from '@/lib/ai/policy';
 import { isElectronRenderer } from '@/lib/runtime/mode';
 import { useI18n } from '@/lib/i18n/useI18n';
 import { ENCRYPTION_DISABLED } from '@/lib/crypto/vault';
+import { readCompatStorage, removeCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
 type SettingsTab = 'profile' | 'appearance' | 'security' | 'account' | 'ai';
 
@@ -106,8 +107,8 @@ interface AuthCapabilities {
   oauthDisabledReason: string | null;
 }
 
-const GITHUB_NEW_ISSUE_URL = 'https://github.com/Alphadarklord1/studypilot/issues/new';
-const TEAM_WORKFLOW_URL = 'https://github.com/Alphadarklord1/studypilot/blob/main/docs/TEAM_WORKFLOW.md';
+const GITHUB_NEW_ISSUE_URL = 'https://github.com/Alphadarklord1/kivora/issues/new';
+const TEAM_WORKFLOW_URL = 'https://github.com/Alphadarklord1/kivora/blob/main/docs/TEAM_WORKFLOW.md';
 
 function openGitHubTemplate(template: string) {
   if (typeof window === 'undefined') return;
@@ -141,7 +142,7 @@ function normalizeTheme(value: unknown): UserSettings['theme'] {
 
 function normalizeUserSettings(raw: Partial<UserSettings> | null | undefined): UserSettings {
   const storedLanguage = typeof window !== 'undefined'
-    ? localStorage.getItem('studypilot_language')
+    ? readCompatStorage(localStorage, storageKeys.language)
     : null;
 
   return {
@@ -421,7 +422,7 @@ export default function SettingsPage() {
     setIsElectronApp(electronRuntime);
 
     if (!electronRuntime) {
-      const storedProvider = localStorage.getItem('studypilot_ai_provider');
+      const storedProvider = readCompatStorage(localStorage, storageKeys.aiProvider);
       if (!storedProvider || storedProvider === 'desktop-local') {
         setAiPrefs(prev => ({
           ...prev,
@@ -439,9 +440,9 @@ export default function SettingsPage() {
     const syncVoices = () => {
       const list = window.speechSynthesis.getVoices();
       setVoices(list);
-      const storedVoice = localStorage.getItem('studypilot_tts_voice') || '';
-      const storedRate = Number(localStorage.getItem('studypilot_tts_rate') || 1);
-      const storedPitch = Number(localStorage.getItem('studypilot_tts_pitch') || 1);
+      const storedVoice = readCompatStorage(localStorage, storageKeys.ttsVoice) || '';
+      const storedRate = Number(readCompatStorage(localStorage, storageKeys.ttsRate) || 1);
+      const storedPitch = Number(readCompatStorage(localStorage, storageKeys.ttsPitch) || 1);
       setTtsVoice(storedVoice);
       setTtsRate(storedRate);
       setTtsPitch(storedPitch);
@@ -627,24 +628,24 @@ export default function SettingsPage() {
     // Apply theme (resolve system to actual theme)
     const resolvedTheme = resolveTheme(s.theme);
     document.documentElement.setAttribute('data-theme', resolvedTheme);
-    localStorage.setItem('studypilot_theme', s.theme);
+    writeCompatStorage(localStorage, storageKeys.theme, s.theme);
 
     // Apply font size
     document.documentElement.style.setProperty('--font-scale', s.fontSize);
-    localStorage.setItem('studypilot_fontSize', s.fontSize);
+    writeCompatStorage(localStorage, storageKeys.fontSize, s.fontSize);
 
     // Apply line height scale
     document.documentElement.style.setProperty('--line-scale', s.lineHeight);
-    localStorage.setItem('studypilot_lineHeight', s.lineHeight);
+    writeCompatStorage(localStorage, storageKeys.lineHeight, s.lineHeight);
 
     // Apply density
     document.documentElement.setAttribute('data-density', s.density);
-    localStorage.setItem('studypilot_density', s.density);
+    writeCompatStorage(localStorage, storageKeys.density, s.density);
 
     // Apply language and direction
     document.documentElement.setAttribute('lang', s.language);
     document.documentElement.setAttribute('dir', s.language === 'ar' ? 'rtl' : 'ltr');
-    localStorage.setItem('studypilot_language', s.language);
+    writeCompatStorage(localStorage, storageKeys.language, s.language);
   };
 
   const showMessage = (type: 'success' | 'error', text: string) => {
@@ -973,26 +974,28 @@ export default function SettingsPage() {
     setClearingLocalData(true);
     try {
       const localKeys = [
-        'studypilot_vault',
-        'studypilot_session_key',
-        'studypilot_compact_mode',
-        'studypilot_tts_voice',
-        'studypilot_tts_rate',
-        'studypilot_tts_pitch',
-        'studypilot_ai_provider',
-        'studypilot_ai_openai_model',
-        'studypilot_ai_cloud_fallback',
-        'studypilot-timer-state',
-        'studypilot.matlab.session.v1',
         'visual_file_id',
         'visual_temp_file',
-        'studypilot_model_setup_done',
         'pwa-install-dismissed',
       ];
 
       for (const key of localKeys) {
         localStorage.removeItem(key);
       }
+      [
+        storageKeys.vault,
+        storageKeys.vaultSession,
+        storageKeys.compactMode,
+        storageKeys.ttsVoice,
+        storageKeys.ttsRate,
+        storageKeys.ttsPitch,
+        storageKeys.aiProvider,
+        storageKeys.aiOpenAiModel,
+        storageKeys.aiCloudFallback,
+        storageKeys.timerState,
+        storageKeys.matlabSession,
+        storageKeys.modelSetupDone,
+      ].forEach((key) => removeCompatStorage(localStorage, key));
 
       setAiPrefs(loadAiPreferences());
       setTtsVoice('');
@@ -1264,7 +1267,7 @@ export default function SettingsPage() {
                   onChange={(e) => {
                     const value = e.target.value;
                     setTtsVoice(value);
-                    localStorage.setItem('studypilot_tts_voice', value);
+                    writeCompatStorage(localStorage, storageKeys.ttsVoice, value);
                   }}
                 >
                   <option value="">{t('System Default')}</option>
@@ -1286,7 +1289,7 @@ export default function SettingsPage() {
                       onChange={(e) => {
                         const value = Number(e.target.value);
                         setTtsRate(value);
-                        localStorage.setItem('studypilot_tts_rate', String(value));
+                        writeCompatStorage(localStorage, storageKeys.ttsRate, String(value));
                       }}
                     />
                   </label>
@@ -1301,7 +1304,7 @@ export default function SettingsPage() {
                       onChange={(e) => {
                         const value = Number(e.target.value);
                         setTtsPitch(value);
-                        localStorage.setItem('studypilot_tts_pitch', String(value));
+                        writeCompatStorage(localStorage, storageKeys.ttsPitch, String(value));
                       }}
                     />
                   </label>
@@ -1857,8 +1860,8 @@ export default function SettingsPage() {
               <p className="section-description">
                 {isElectronApp
                   ? (isArabic
-                    ? 'وضع سطح المكتب محلي أولاً مع قيود مخصصة للدراسة فقط.'
-                    : 'Desktop-first AI with offline local runtime and study-only guardrails.')
+                    ? 'سطح المكتب يستخدم النموذج المحلي المفتوح المصدر أولاً، مع رجوع سحابي اختياري فقط عند التفعيل.'
+                    : 'Desktop uses the local open-source model first. Cloud is optional fallback only when enabled.')
                   : (isArabic
                     ? 'الويب يستخدم OpenAI افتراضيًا مع بديل محلي عند تعذر الخدمة.'
                     : 'Web uses OpenAI by default with deterministic offline fallback if cloud fails.')}
@@ -1874,11 +1877,18 @@ export default function SettingsPage() {
                     onChange={(e) => setAiPrefs(prev => ({ ...prev, provider: e.target.value as AiPreferences['provider'] }))}
                   >
                     {isElectronApp && (
-                      <option value="desktop-local">{isArabic ? 'محلي على الجهاز (مفضل)' : 'Desktop Local (Recommended)'}</option>
+                      <option value="desktop-local">{isArabic ? 'محلي مفتوح المصدر (مفضل)' : 'Open-source local model (Preferred)'}</option>
                     )}
                     <option value="openai">{isArabic ? 'OpenAI (سحابي)' : 'OpenAI (Cloud)'}</option>
                     <option value="offline">{isArabic ? 'وضع بدون سحابة' : 'Offline deterministic only'}</option>
                   </select>
+                  {isElectronApp && (
+                    <p className="help-text">
+                      {isArabic
+                        ? 'في سطح المكتب، يحاول Kivora استخدام النموذج المحلي المفتوح المصدر أولاً في جميع مهام الدراسة. OpenAI يُستخدم فقط كبديل عند تفعيل الرجوع السحابي.'
+                        : 'On desktop, Kivora tries the local open-source model first for study tasks. OpenAI is only used as fallback when cloud fallback is enabled.'}
+                    </p>
+                  )}
                 </div>
                 {isElectronApp && (
                   <div className="form-group">

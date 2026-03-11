@@ -4,12 +4,12 @@ import Link from 'next/link';
 import { useI18n } from '@/lib/i18n/useI18n';
 import styles from './status.module.css';
 
-const ERROR_REPORT_URL = 'https://github.com/Alphadarklord1/studypilot/issues/new?template=error_report.yml';
-const BUG_REPORT_URL = 'https://github.com/Alphadarklord1/studypilot/issues/new?template=bug_report.yml';
-const FEATURE_REQUEST_URL = 'https://github.com/Alphadarklord1/studypilot/issues/new?template=feature_request.yml';
-const TEAM_TASK_URL = 'https://github.com/Alphadarklord1/studypilot/issues/new?template=team_task.yml';
-const TEAM_WORKFLOW_URL = 'https://github.com/Alphadarklord1/studypilot/blob/main/docs/TEAM_WORKFLOW.md';
-const ROADMAP_URL = 'https://github.com/Alphadarklord1/studypilot/blob/main/ROADMAP.md';
+const ERROR_REPORT_URL = 'https://github.com/Alphadarklord1/kivora/issues/new?template=error_report.yml';
+const BUG_REPORT_URL = 'https://github.com/Alphadarklord1/kivora/issues/new?template=bug_report.yml';
+const FEATURE_REQUEST_URL = 'https://github.com/Alphadarklord1/kivora/issues/new?template=feature_request.yml';
+const TEAM_TASK_URL = 'https://github.com/Alphadarklord1/kivora/issues/new?template=team_task.yml';
+const TEAM_WORKFLOW_URL = 'https://github.com/Alphadarklord1/kivora/blob/main/docs/TEAM_WORKFLOW.md';
+const ROADMAP_URL = 'https://github.com/Alphadarklord1/kivora/blob/main/ROADMAP.md';
 
 export default function StatusPage() {
   const { t, isArabic } = useI18n({
@@ -109,7 +109,7 @@ export default function StatusPage() {
           <div className={styles.actions}>
             <a className="sp-button-secondary" href={TEAM_WORKFLOW_URL} target="_blank" rel="noreferrer">{t('Open team workflow')}</a>
             <a className="sp-button-secondary" href={ROADMAP_URL} target="_blank" rel="noreferrer">{t('Open roadmap')}</a>
-            <a className="sp-button-secondary" href="https://github.com/Alphadarklord1/studypilot" target="_blank" rel="noreferrer">{t('Open GitHub repo')}</a>
+            <a className="sp-button-secondary" href="https://github.com/Alphadarklord1/kivora" target="_blank" rel="noreferrer">{t('Open GitHub repo')}</a>
           </div>
         </article>
       </div>

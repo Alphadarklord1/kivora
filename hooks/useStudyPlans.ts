@@ -51,7 +51,8 @@ export function useStudyPlans(): UseStudyPlansReturn {
       }
 
       const data = await res.json();
-      const isLocalFallback = res.headers.get('x-studypilot-fallback') === 'study-plans-no-db';
+      const fallbackHeader = res.headers.get('x-kivora-fallback') || res.headers.get('x-studypilot-fallback');
+      const isLocalFallback = fallbackHeader === 'study-plans-no-db';
       setPlans(isLocalFallback ? loadLocalStudyPlans() : Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');

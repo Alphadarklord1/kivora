@@ -11,7 +11,8 @@ import {
   normalizeTwoFactorCode,
   verifyTwoFactorCode,
 } from '@/lib/auth/two-factor-core';
-export const TWO_FACTOR_COOKIE_NAME = 'studypilot_2fa_session';
+export const TWO_FACTOR_COOKIE_NAME = 'kivora_2fa_session';
+export const LEGACY_TWO_FACTOR_COOKIE_NAME = 'studypilot_2fa_session';
 const TWO_FACTOR_SESSION_HOURS = 12;
 
 export {

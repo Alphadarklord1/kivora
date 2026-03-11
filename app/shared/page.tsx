@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+const PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://kivora-app.vercel.app';
+
 function extractToken(input: string) {
   const trimmed = input.trim();
   if (!trimmed) return '';
@@ -74,7 +76,7 @@ export default function SharedLandingPage() {
           </form>
           {error && <p className="form-error">{error}</p>}
           <p className="helper">
-            Example: https://study-alpha-three.vercel.app/shared/abc123
+            Example: {PUBLIC_APP_URL}/shared/abc123
           </p>
         </section>
 

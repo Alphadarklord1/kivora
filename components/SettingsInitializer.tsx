@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect } from 'react';
+import { readCompatStorage, storageKeys } from '@/lib/storage/keys';
 
 export function SettingsInitializer() {
   useEffect(() => {
     // Apply saved settings from localStorage
-    const theme = localStorage.getItem('studypilot_theme');
-    const fontSize = localStorage.getItem('studypilot_fontSize');
-    const density = localStorage.getItem('studypilot_density');
-    const lineHeight = localStorage.getItem('studypilot_lineHeight');
-    const language = localStorage.getItem('studypilot_language') || 'en';
+    const theme = readCompatStorage(localStorage, storageKeys.theme);
+    const fontSize = readCompatStorage(localStorage, storageKeys.fontSize);
+    const density = readCompatStorage(localStorage, storageKeys.density);
+    const lineHeight = readCompatStorage(localStorage, storageKeys.lineHeight);
+    const language = readCompatStorage(localStorage, storageKeys.language) || 'en';
 
     // Apply language + direction
     document.documentElement.setAttribute('lang', language === 'ar' ? 'ar' : 'en');
@@ -50,7 +51,7 @@ export function SettingsInitializer() {
     // Listen for system theme changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e: MediaQueryListEvent) => {
-      const savedTheme = localStorage.getItem('studypilot_theme');
+      const savedTheme = readCompatStorage(localStorage, storageKeys.theme);
       if (savedTheme === 'system' || !savedTheme) {
         document.documentElement.setAttribute('data-theme', e.matches ? 'blue' : 'light');
       }

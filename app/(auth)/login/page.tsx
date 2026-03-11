@@ -73,6 +73,9 @@ export default function LoginPage() {
     'Use guest mode immediately': 'استخدم وضع الضيف فورًا',
     'Google and GitHub stay optional': 'يبقى Google وGitHub اختياريين',
     'Desktop and web share the same study workspace': 'يشترك سطح المكتب والويب في نفس مساحة الدراسة',
+    'Offline-first AI': 'ذكاء اصطناعي يعمل محليًا أولًا',
+    'Planner + analytics': 'المخطط + التحليلات',
+    'EN / AR workspace': 'مساحة عمل بالإنجليزية / العربية',
     'Invalid email or password': 'البريد الإلكتروني أو كلمة المرور غير صحيحين',
     'Something went wrong': 'حدث خطأ ما',
     'Signing in...': 'جارٍ تسجيل الدخول...',
@@ -201,9 +204,9 @@ export default function LoginPage() {
             </div>
           </div>
           <div className={styles.panelFooter}>
-            <span>Offline-first AI</span>
-            <span>Planner + analytics</span>
-            <span>EN / AR workspace</span>
+            <span>{t('Offline-first AI')}</span>
+            <span>{t('Planner + analytics')}</span>
+            <span>{t('EN / AR workspace')}</span>
           </div>
         </section>
 

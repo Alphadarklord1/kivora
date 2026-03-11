@@ -10,7 +10,7 @@ import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 import { getAuthCapabilities, normalizeAuthEmail } from '@/lib/auth/capabilities';
-import { hasValidTwoFactorSession, TWO_FACTOR_COOKIE_NAME } from '@/lib/auth/two-factor';
+import { hasValidTwoFactorSession, LEGACY_TWO_FACTOR_COOKIE_NAME, TWO_FACTOR_COOKIE_NAME } from '@/lib/auth/two-factor';
 
 const authCapabilities = getAuthCapabilities();
 const isGuestMode = isGuestModeEnabled();
@@ -24,11 +24,11 @@ const authSecret =
   configuredAuthSecret ||
   guestRuntimeSecret ||
   ((process.env.NODE_ENV !== 'production')
-    ? 'studypilot-local-dev-secret'
+    ? 'kivora-local-dev-secret'
     : undefined);
 
 function logAuthDiagnosticsOnce() {
-  const marker = '__studypilotAuthDiagnosticsLogged';
+  const marker = '__kivoraAuthDiagnosticsLogged';
   const scope = globalThis as typeof globalThis & { [key: string]: boolean | undefined };
   if (scope[marker]) return;
   scope[marker] = true;
@@ -227,7 +227,9 @@ export const authConfig: NextAuthConfig = {
       const sessionUser = auth?.user as ({ id?: string; twoFactorEnabled?: boolean } | undefined);
       const userId = sessionUser?.id;
       const requiresTwoFactor = Boolean(sessionUser?.twoFactorEnabled);
-      const twoFactorCookie = request.cookies.get(TWO_FACTOR_COOKIE_NAME)?.value;
+      const twoFactorCookie =
+        request.cookies.get(TWO_FACTOR_COOKIE_NAME)?.value ||
+        request.cookies.get(LEGACY_TWO_FACTOR_COOKIE_NAME)?.value;
       const hasVerifiedTwoFactor = requiresTwoFactor && userId
         ? await hasValidTwoFactorSession(userId, twoFactorCookie)
         : false;

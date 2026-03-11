@@ -2,10 +2,10 @@ import Link from 'next/link';
 import localManifest from '@/electron/runtime/model-manifest.json';
 import styles from './page.module.css';
 
-const REPO_RELEASES_URL = 'https://github.com/Alphadarklord1/studypilot/releases';
+const REPO_RELEASES_URL = 'https://github.com/Alphadarklord1/kivora/releases';
 const FALLBACK_TAG = process.env.NEXT_PUBLIC_STUDYPILOT_RELEASE_TAG || 'v1.2.0-beta.1';
-const FALLBACK_RELEASE_URL = `https://github.com/Alphadarklord1/studypilot/releases/tag/${FALLBACK_TAG}`;
-const GITHUB_API_LATEST_RELEASE = 'https://api.github.com/repos/Alphadarklord1/studypilot/releases/latest';
+const FALLBACK_RELEASE_URL = `https://github.com/Alphadarklord1/kivora/releases/tag/${FALLBACK_TAG}`;
+const GITHUB_API_LATEST_RELEASE = 'https://api.github.com/repos/Alphadarklord1/kivora/releases/latest';
 
 type ReleaseAsset = {
   name: string;

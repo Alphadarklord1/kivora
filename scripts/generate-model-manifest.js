@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const PROJECT_ROOT = path.join(__dirname, '..');
 const DEFAULT_OUTPUT = path.join(PROJECT_ROOT, 'electron', 'runtime', 'model-manifest.json');
 const DEFAULT_MODELS_DIR = path.join(PROJECT_ROOT, 'electron', 'runtime', 'models');
-const DEFAULT_REPO = process.env.STUDYPILOT_MODEL_REPO || 'Alphadarklord1/studypilot';
+const DEFAULT_REPO = process.env.STUDYPILOT_MODEL_REPO || 'Alphadarklord1/kivora';
 
 const MODEL_DEFS = [
   { key: 'mini', modelId: 'Qwen2.5-1.5B-Instruct', quantization: 'Q4_K_M', file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', minRamGb: 8 },

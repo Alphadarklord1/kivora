@@ -9,10 +9,19 @@ import "./globals.css";
 const settingsScript = `
 (function() {
   try {
-    var theme = localStorage.getItem('studypilot_theme');
-    var fontSize = localStorage.getItem('studypilot_fontSize');
-    var density = localStorage.getItem('studypilot_density');
-    var language = localStorage.getItem('studypilot_language') || 'en';
+    var readCompat = function(currentKey, legacyKey) {
+      var currentValue = localStorage.getItem(currentKey);
+      if (currentValue !== null) return currentValue;
+      var legacyValue = localStorage.getItem(legacyKey);
+      if (legacyValue !== null) {
+        localStorage.setItem(currentKey, legacyValue);
+      }
+      return legacyValue;
+    };
+    var theme = readCompat('kivora_theme', 'studypilot_theme');
+    var fontSize = readCompat('kivora_fontSize', 'studypilot_fontSize');
+    var density = readCompat('kivora_density', 'studypilot_density');
+    var language = readCompat('kivora_language', 'studypilot_language') || 'en';
 
     // Apply language + direction first
     document.documentElement.setAttribute('lang', language === 'ar' ? 'ar' : 'en');
