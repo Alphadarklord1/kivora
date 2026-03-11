@@ -921,7 +921,6 @@ export function AppShell({ children, user }: AppShellProps) {
         .system-actions {
           position: relative;
         }
-
         .system-trigger {
           display: flex;
           align-items: center;
