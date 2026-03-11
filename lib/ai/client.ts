@@ -48,8 +48,6 @@ export type AiGenerationResult =
   | AiGenerationPolicyBlock
   | AiGenerationRuntimeError;
 
-const OPEN_SOURCE_PREFERRED_MODES = new Set<ToolMode>(['summarize', 'rephrase']);
-
 function getDefaultProvider(): AiProvider {
   return isElectronRenderer() ? 'desktop-local' : 'openai';
 }
@@ -245,7 +243,7 @@ export async function generateAiContent(
     return toPolicyBlock(scopeDecision);
   }
 
-  const preferDesktopOpenSource = isElectronRenderer() && OPEN_SOURCE_PREFERRED_MODES.has(mode);
+  const preferDesktopOpenSource = isElectronRenderer() && prefs.provider !== 'offline';
 
   if (preferDesktopOpenSource) {
     const localResult = await requestDesktopLocal(text, mode, rewriteOptions);
@@ -253,7 +251,7 @@ export async function generateAiContent(
       return localResult;
     }
 
-    if (prefs.provider === 'openai' || prefs.enableCloudFallback) {
+    if (prefs.enableCloudFallback || prefs.provider === 'openai') {
       const cloudResult = await requestOpenAI(prefs.openaiModel, text, mode, rewriteOptions);
       if (cloudResult.status === 'success' || cloudResult.status === 'policy_block') {
         return cloudResult.status === 'success'

@@ -1860,8 +1860,8 @@ export default function SettingsPage() {
               <p className="section-description">
                 {isElectronApp
                   ? (isArabic
-                    ? 'وضع سطح المكتب محلي أولاً مع قيود مخصصة للدراسة فقط.'
-                    : 'Desktop-first AI with offline local runtime and study-only guardrails.')
+                    ? 'سطح المكتب يستخدم النموذج المحلي المفتوح المصدر أولاً، مع رجوع سحابي اختياري فقط عند التفعيل.'
+                    : 'Desktop uses the local open-source model first. Cloud is optional fallback only when enabled.')
                   : (isArabic
                     ? 'الويب يستخدم OpenAI افتراضيًا مع بديل محلي عند تعذر الخدمة.'
                     : 'Web uses OpenAI by default with deterministic offline fallback if cloud fails.')}
@@ -1877,11 +1877,18 @@ export default function SettingsPage() {
                     onChange={(e) => setAiPrefs(prev => ({ ...prev, provider: e.target.value as AiPreferences['provider'] }))}
                   >
                     {isElectronApp && (
-                      <option value="desktop-local">{isArabic ? 'محلي على الجهاز (مفضل)' : 'Desktop Local (Recommended)'}</option>
+                      <option value="desktop-local">{isArabic ? 'محلي مفتوح المصدر (مفضل)' : 'Open-source local model (Preferred)'}</option>
                     )}
                     <option value="openai">{isArabic ? 'OpenAI (سحابي)' : 'OpenAI (Cloud)'}</option>
                     <option value="offline">{isArabic ? 'وضع بدون سحابة' : 'Offline deterministic only'}</option>
                   </select>
+                  {isElectronApp && (
+                    <p className="help-text">
+                      {isArabic
+                        ? 'في سطح المكتب، يحاول Kivora استخدام النموذج المحلي المفتوح المصدر أولاً في جميع مهام الدراسة. OpenAI يُستخدم فقط كبديل عند تفعيل الرجوع السحابي.'
+                        : 'On desktop, Kivora tries the local open-source model first for study tasks. OpenAI is only used as fallback when cloud fallback is enabled.'}
+                    </p>
+                  )}
                 </div>
                 {isElectronApp && (
                   <div className="form-group">
