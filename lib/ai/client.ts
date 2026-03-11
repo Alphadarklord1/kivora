@@ -48,6 +48,8 @@ export type AiGenerationResult =
   | AiGenerationPolicyBlock
   | AiGenerationRuntimeError;
 
+const OPEN_SOURCE_PREFERRED_MODES = new Set<ToolMode>(['summarize', 'rephrase']);
+
 function getDefaultProvider(): AiProvider {
   return isElectronRenderer() ? 'desktop-local' : 'openai';
 }
@@ -241,6 +243,38 @@ export async function generateAiContent(
   const scopeDecision = evaluateAiScope({ mode, text, source: 'workspace' });
   if (!scopeDecision.allowed) {
     return toPolicyBlock(scopeDecision);
+  }
+
+  const preferDesktopOpenSource = isElectronRenderer() && OPEN_SOURCE_PREFERRED_MODES.has(mode);
+
+  if (preferDesktopOpenSource) {
+    const localResult = await requestDesktopLocal(text, mode, rewriteOptions);
+    if (localResult.status === 'success' || localResult.status === 'policy_block') {
+      return localResult;
+    }
+
+    if (prefs.provider === 'openai' || prefs.enableCloudFallback) {
+      const cloudResult = await requestOpenAI(prefs.openaiModel, text, mode, rewriteOptions);
+      if (cloudResult.status === 'success' || cloudResult.status === 'policy_block') {
+        return cloudResult.status === 'success'
+          ? {
+              ...cloudResult,
+              fallbackUsed: true,
+              reason: localResult.message,
+              primaryProvider: 'desktop-local',
+            }
+          : cloudResult;
+      }
+    }
+
+    return {
+      status: 'success',
+      provider: 'offline',
+      content: getGeneratedContent(mode, text, rewriteOptions),
+      fallbackUsed: true,
+      reason: localResult.message || 'Desktop open-source model unavailable',
+      primaryProvider: 'desktop-local',
+    };
   }
 
   if (prefs.provider === 'offline') {

@@ -29,7 +29,7 @@ globalForRateLimiter.__kivoraWebAiLimiter = rateLimiter;
 
 const MODE_GUIDANCE: Record<string, string> = {
   assignment: 'Provide a structured plan, key requirements, and suggested approach.',
-  summarize: 'Provide a clear academic summary with key points.',
+  summarize: 'Provide a genuinely useful academic summary with: 1) a brief overview, 2) key concepts, 3) important details or formulas, and 4) a short review checklist.',
   mcq: 'Create 6-10 multiple choice questions with 4 options each and correct answers.',
   quiz: 'Create 6-10 short questions with concise answers.',
   notes: 'Produce Cornell-style study notes.',
@@ -37,7 +37,7 @@ const MODE_GUIDANCE: Record<string, string> = {
   flashcards: 'Create 8-12 flashcards with front/back pairs.',
   essay: 'Create an outline and thesis with key arguments.',
   planner: 'Create a realistic study plan with actionable session blocks.',
-  rephrase: 'Rewrite the text with the requested tone while preserving meaning and facts.',
+  rephrase: 'Rewrite the text so it sounds natural and polished while preserving meaning, facts, names, numbers, and technical terms.',
 };
 
 const SYSTEM_PROMPT = `You generate study materials. Output ONLY valid JSON.
@@ -212,9 +212,15 @@ export async function POST(request: NextRequest) {
     const rewriteLine = mode === 'rephrase'
       ? `Rewrite options: ${JSON.stringify(rewriteOptions || { tone: 'professional' })}`
       : '';
+    const outputHints = mode === 'summarize'
+      ? 'Output hints: Use compact section headers and bullets when they improve study readability.'
+      : mode === 'rephrase'
+        ? 'Output hints: Return one final rewrite only. Do not explain the rewrite.'
+        : '';
     const prompt = `Mode: ${mode}
 Guidance: ${guidance}
 ${rewriteLine}
+${outputHints}
 
 Source text:
 ${text}`;

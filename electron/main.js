@@ -35,7 +35,7 @@ Use this shape:
 
 const DESKTOP_AI_MODE_GUIDANCE = {
   assignment: 'Provide a structured academic response with clear steps and deliverables.',
-  summarize: 'Provide a concise academic summary with key points and takeaways.',
+  summarize: 'Provide an actually useful study summary with: 1) a two-sentence overview, 2) key concepts, 3) critical details or formulas, and 4) a short review checklist. Stay grounded in the source text.',
   mcq: 'Create 6 to 10 multiple-choice questions with answers based only on the source text.',
   quiz: 'Create 6 to 10 short study questions with concise answers.',
   notes: 'Produce study notes with headings, bullets, and key concepts.',
@@ -43,7 +43,7 @@ const DESKTOP_AI_MODE_GUIDANCE = {
   flashcards: 'Create 8 to 12 flashcards with direct front/back pairs.',
   essay: 'Provide an essay outline, thesis, and core arguments.',
   planner: 'Create a realistic study plan with actionable time blocks.',
-  rephrase: 'Rewrite the text with the requested tone while preserving meaning and facts.',
+  rephrase: 'Rewrite the text so it reads naturally and intelligently. Preserve meaning, facts, names, numbers, and technical terms. Improve clarity, flow, and structure while applying the requested tone.',
 };
 
 const DESKTOP_AI_RUNTIME_CANDIDATES = process.platform === 'win32'
@@ -615,9 +615,15 @@ function buildDesktopPrompt(mode, text, rewriteOptions) {
   const rewriteLine = mode === 'rephrase'
     ? `Rewrite options: ${JSON.stringify(rewriteOptions || { tone: 'professional' })}`
     : '';
+  const outputHints = mode === 'summarize'
+    ? 'For summarize mode, prefer short section headers and compact bullet points when that improves readability.'
+    : mode === 'rephrase'
+      ? 'For rephrase mode, return one strong final rewrite only. Do not explain your changes.'
+      : '';
   return `Mode: ${mode}
 Guidance: ${guidance}
 ${rewriteLine}
+${outputHints}
 
 Source text:
 ${text}`;
