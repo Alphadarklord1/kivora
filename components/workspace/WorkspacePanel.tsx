@@ -20,6 +20,7 @@ import { NoFilesState, EmptyState } from '@/components/ui/EmptyState';
 import { ShareDialog } from '@/components/share';
 import { FocusTimer } from '@/components/workspace/FocusTimer';
 import { useSettings } from '@/providers/SettingsProvider';
+import { readCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
 interface FileItem {
   id: string;
@@ -255,7 +256,7 @@ export function WorkspacePanel({
   const autoOpeningFileIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const storedCompact = typeof window !== 'undefined' ? localStorage.getItem('studypilot_compact_mode') : null;
+    const storedCompact = typeof window !== 'undefined' ? readCompatStorage(localStorage, storageKeys.compactMode) : null;
     if (storedCompact) {
       setCompactMode(storedCompact === 'true');
     }
@@ -263,7 +264,7 @@ export function WorkspacePanel({
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    localStorage.setItem('studypilot_compact_mode', String(compactMode));
+    writeCompatStorage(localStorage, storageKeys.compactMode, String(compactMode));
   }, [compactMode]);
 
   useEffect(() => {
@@ -835,9 +836,9 @@ export function WorkspacePanel({
       return;
     }
     const utterance = new SpeechSynthesisUtterance(text.slice(0, 5000));
-    const preferredVoice = localStorage.getItem('studypilot_tts_voice') || '';
-    const preferredRate = Number(localStorage.getItem('studypilot_tts_rate') || 1);
-    const preferredPitch = Number(localStorage.getItem('studypilot_tts_pitch') || 1);
+    const preferredVoice = readCompatStorage(localStorage, storageKeys.ttsVoice) || '';
+    const preferredRate = Number(readCompatStorage(localStorage, storageKeys.ttsRate) || 1);
+    const preferredPitch = Number(readCompatStorage(localStorage, storageKeys.ttsPitch) || 1);
     const voices = window.speechSynthesis.getVoices();
     if (preferredVoice) {
       const match = voices.find(v => v.name === preferredVoice);

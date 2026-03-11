@@ -18,11 +18,9 @@ import {
   generateSecureToken,
   generateSalt,
 } from './encryption';
+import { readCompatStorage, removeCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
 export const ENCRYPTION_DISABLED = true;
-
-const VAULT_KEY = 'studypilot_vault';
-const SESSION_KEY = 'studypilot_session_key';
 
 interface VaultData {
   // Encrypted Data Encryption Key (encrypted with master key)
@@ -51,7 +49,7 @@ let unlockedVault: UnlockedVault | null = null;
 export function hasVault(): boolean {
   if (typeof window === 'undefined') return false;
   if (ENCRYPTION_DISABLED) return false;
-  return localStorage.getItem(VAULT_KEY) !== null;
+  return readCompatStorage(localStorage, storageKeys.vault) !== null;
 }
 
 /**
@@ -93,13 +91,13 @@ export async function createVault(password: string): Promise<void> {
     checksum,
   };
 
-  localStorage.setItem(VAULT_KEY, JSON.stringify(vaultData));
+  writeCompatStorage(localStorage, storageKeys.vault, JSON.stringify(vaultData));
 
   // Unlock the vault
   unlockedVault = { dek, indexKey };
 
   // Store session key in sessionStorage (cleared on browser close)
-  sessionStorage.setItem(SESSION_KEY, dek);
+  writeCompatStorage(sessionStorage, storageKeys.vaultSession, dek);
 }
 
 /**
@@ -107,7 +105,7 @@ export async function createVault(password: string): Promise<void> {
  */
 export async function unlockVault(password: string): Promise<boolean> {
   if (ENCRYPTION_DISABLED) return true;
-  const vaultJson = localStorage.getItem(VAULT_KEY);
+  const vaultJson = readCompatStorage(localStorage, storageKeys.vault);
   if (!vaultJson) {
     throw new Error('No vault found');
   }
@@ -131,7 +129,7 @@ export async function unlockVault(password: string): Promise<boolean> {
     unlockedVault = { dek, indexKey };
 
     // Store session key
-    sessionStorage.setItem(SESSION_KEY, dek);
+    writeCompatStorage(sessionStorage, storageKeys.vaultSession, dek);
 
     return true;
   } catch (error) {
@@ -146,7 +144,7 @@ export async function unlockVault(password: string): Promise<boolean> {
 export function lockVault(): void {
   if (ENCRYPTION_DISABLED) return;
   unlockedVault = null;
-  sessionStorage.removeItem(SESSION_KEY);
+  removeCompatStorage(sessionStorage, storageKeys.vaultSession);
 }
 
 /**
@@ -154,10 +152,10 @@ export function lockVault(): void {
  */
 export async function restoreVaultFromSession(): Promise<boolean> {
   if (ENCRYPTION_DISABLED) return true;
-  const sessionDek = sessionStorage.getItem(SESSION_KEY);
+  const sessionDek = readCompatStorage(sessionStorage, storageKeys.vaultSession);
   if (!sessionDek) return false;
 
-  const vaultJson = localStorage.getItem(VAULT_KEY);
+  const vaultJson = readCompatStorage(localStorage, storageKeys.vault);
   if (!vaultJson) return false;
 
   const vaultData: VaultData = JSON.parse(vaultJson);
@@ -166,7 +164,7 @@ export async function restoreVaultFromSession(): Promise<boolean> {
     // Verify the DEK is correct
     const checksum = await blindIndex('vault_check', sessionDek);
     if (checksum !== vaultData.checksum) {
-      sessionStorage.removeItem(SESSION_KEY);
+      removeCompatStorage(sessionStorage, storageKeys.vaultSession);
       return false;
     }
 
@@ -178,7 +176,7 @@ export async function restoreVaultFromSession(): Promise<boolean> {
 
     return true;
   } catch {
-    sessionStorage.removeItem(SESSION_KEY);
+    removeCompatStorage(sessionStorage, storageKeys.vaultSession);
     return false;
   }
 }
@@ -198,7 +196,7 @@ export async function changeVaultPassword(
     throw new Error('Current password is incorrect');
   }
 
-  const vaultJson = localStorage.getItem(VAULT_KEY);
+  const vaultJson = readCompatStorage(localStorage, storageKeys.vault);
   if (!vaultJson) throw new Error('No vault found');
 
   const vaultData: VaultData = JSON.parse(vaultJson);
@@ -211,7 +209,7 @@ export async function changeVaultPassword(
 
   // Update vault
   vaultData.encryptedDEK = newEncryptedDEK;
-  localStorage.setItem(VAULT_KEY, JSON.stringify(vaultData));
+  writeCompatStorage(localStorage, storageKeys.vault, JSON.stringify(vaultData));
 
   // Update unlocked vault
   unlockedVault.indexKey = newIndexKey;
@@ -315,8 +313,8 @@ export async function decryptFields<T extends Record<string, unknown>>(
  */
 export function deleteVault(): void {
   if (ENCRYPTION_DISABLED) return;
-  localStorage.removeItem(VAULT_KEY);
-  sessionStorage.removeItem(SESSION_KEY);
+  removeCompatStorage(localStorage, storageKeys.vault);
+  removeCompatStorage(sessionStorage, storageKeys.vaultSession);
   unlockedVault = null;
 }
 

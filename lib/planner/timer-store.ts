@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getLocalStudyPlan, updateLocalStudyPlan } from '@/lib/planner/local-plans';
-
-const STORAGE_KEY = 'studypilot-timer-state';
+import { readCompatStorage, removeCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
 interface TimerState {
   timerSeconds: number;
@@ -32,7 +31,7 @@ const DEFAULT_STATE: TimerState = {
 function loadState(): TimerState {
   if (typeof window === 'undefined') return DEFAULT_STATE;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = readCompatStorage(localStorage, storageKeys.timerState);
     if (!raw) return DEFAULT_STATE;
     return { ...DEFAULT_STATE, ...JSON.parse(raw) };
   } catch {
@@ -43,13 +42,13 @@ function loadState(): TimerState {
 function saveState(state: TimerState) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    writeCompatStorage(localStorage, storageKeys.timerState, JSON.stringify(state));
   } catch { /* quota exceeded — ignore */ }
 }
 
 function clearState() {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem(STORAGE_KEY);
+  removeCompatStorage(localStorage, storageKeys.timerState);
 }
 
 function computeRemaining(state: TimerState): number {
@@ -102,7 +101,7 @@ export function useStudyTimer() {
   // Listen for storage changes from other tabs
   useEffect(() => {
     const handler = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) {
+      if (e.key === storageKeys.timerState.current || e.key === storageKeys.timerState.legacy?.[0]) {
         const loaded = loadState();
         setState(loaded);
         setSeconds(computeRemaining(loaded));

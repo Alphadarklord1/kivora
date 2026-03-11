@@ -10,6 +10,7 @@ import {
   type AiScopeErrorCode,
 } from '@/lib/ai/policy';
 import { isElectronRenderer } from '@/lib/runtime/mode';
+import { readCompatStorage, removeCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
 export type AiProvider = 'desktop-local' | 'openai' | 'offline';
 
@@ -79,21 +80,21 @@ export function loadAiPreferences(): AiPreferences {
   if (typeof window === 'undefined') return DEFAULT_PREFS;
 
   return {
-    provider: normalizeProvider(localStorage.getItem('studypilot_ai_provider')),
-    openaiModel: localStorage.getItem('studypilot_ai_openai_model') || DEFAULT_PREFS.openaiModel,
-    enableCloudFallback: normalizeBoolean(localStorage.getItem('studypilot_ai_cloud_fallback'), DEFAULT_PREFS.enableCloudFallback),
+    provider: normalizeProvider(readCompatStorage(localStorage, storageKeys.aiProvider)),
+    openaiModel: readCompatStorage(localStorage, storageKeys.aiOpenAiModel) || DEFAULT_PREFS.openaiModel,
+    enableCloudFallback: normalizeBoolean(readCompatStorage(localStorage, storageKeys.aiCloudFallback), DEFAULT_PREFS.enableCloudFallback),
   };
 }
 
 export function saveAiPreferences(prefs: AiPreferences) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem('studypilot_ai_provider', prefs.provider);
-  localStorage.setItem('studypilot_ai_openai_model', prefs.openaiModel);
-  localStorage.setItem('studypilot_ai_cloud_fallback', String(prefs.enableCloudFallback));
+  writeCompatStorage(localStorage, storageKeys.aiProvider, prefs.provider);
+  writeCompatStorage(localStorage, storageKeys.aiOpenAiModel, prefs.openaiModel);
+  writeCompatStorage(localStorage, storageKeys.aiCloudFallback, String(prefs.enableCloudFallback));
 
   // Cleanup legacy keys to keep stored state consistent.
-  localStorage.removeItem('studypilot_ai_ollama_model');
-  localStorage.removeItem('studypilot_ai_ollama_base');
+  removeCompatStorage(localStorage, storageKeys.aiLegacyOllamaModel);
+  removeCompatStorage(localStorage, storageKeys.aiLegacyOllamaBase);
 }
 
 function toPolicyBlock(decision: AiScopeBlocked): AiGenerationPolicyBlock {

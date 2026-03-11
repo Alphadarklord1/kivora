@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { normalizeTheme, type AppTheme } from '@/lib/settings/theme';
+import { readCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
 type AppLanguage = 'en' | 'ar';
 
@@ -35,11 +36,11 @@ function getInitialSettings(): Settings {
   if (typeof window === 'undefined') return defaultSettings;
 
   return {
-    theme: normalizeTheme(localStorage.getItem('studypilot_theme') || defaultSettings.theme),
-    fontSize: localStorage.getItem('studypilot_fontSize') || defaultSettings.fontSize,
-    lineHeight: localStorage.getItem('studypilot_lineHeight') || defaultSettings.lineHeight,
-    density: localStorage.getItem('studypilot_density') || defaultSettings.density,
-    language: normalizeLanguage(localStorage.getItem('studypilot_language')),
+    theme: normalizeTheme(readCompatStorage(localStorage, storageKeys.theme) || defaultSettings.theme),
+    fontSize: readCompatStorage(localStorage, storageKeys.fontSize) || defaultSettings.fontSize,
+    lineHeight: readCompatStorage(localStorage, storageKeys.lineHeight) || defaultSettings.lineHeight,
+    density: readCompatStorage(localStorage, storageKeys.density) || defaultSettings.density,
+    language: normalizeLanguage(readCompatStorage(localStorage, storageKeys.language)),
   };
 }
 
@@ -92,11 +93,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     document.documentElement.setAttribute('dir', s.language === 'ar' ? 'rtl' : 'ltr');
 
     // Save to localStorage for quick load on next visit
-    localStorage.setItem('studypilot_theme', s.theme);
-    localStorage.setItem('studypilot_fontSize', s.fontSize);
-    localStorage.setItem('studypilot_lineHeight', s.lineHeight);
-    localStorage.setItem('studypilot_density', s.density);
-    localStorage.setItem('studypilot_language', s.language);
+    writeCompatStorage(localStorage, storageKeys.theme, s.theme);
+    writeCompatStorage(localStorage, storageKeys.fontSize, s.fontSize);
+    writeCompatStorage(localStorage, storageKeys.lineHeight, s.lineHeight);
+    writeCompatStorage(localStorage, storageKeys.density, s.density);
+    writeCompatStorage(localStorage, storageKeys.language, s.language);
   }, []);
 
   // Fetch authoritative settings from server (inline script in layout.tsx already applied localStorage values)

@@ -10,6 +10,7 @@ import { useToastHelpers } from '@/components/ui/Toast';
 import { useSettings } from '@/providers/SettingsProvider';
 import { QuickSearchPalette, type QuickSearchItem } from '@/components/layout/QuickSearchPalette';
 import { ModelSetupWizard } from '@/components/layout/ModelSetupWizard';
+import { readCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
 interface AppShellProps {
   children: ReactNode;
@@ -174,9 +175,9 @@ export function AppShell({ children, user }: AppShellProps) {
       try {
         const selection = await window.electronAPI?.desktopAI?.getSelection();
         if (!selection || cancelled) return;
-        const localCompleted = localStorage.getItem('studypilot_model_setup_done') === 'true';
+        const localCompleted = readCompatStorage(localStorage, storageKeys.modelSetupDone) === 'true';
         if (selection.setupCompleted && !localCompleted) {
-          localStorage.setItem('studypilot_model_setup_done', 'true');
+          writeCompatStorage(localStorage, storageKeys.modelSetupDone, 'true');
         }
         if (selection.wizardEnabled && !selection.setupCompleted && !localCompleted) {
           setShowModelSetupWizard(true);
@@ -193,7 +194,7 @@ export function AppShell({ children, user }: AppShellProps) {
   }, [mounted]);
 
   const handleModelWizardComplete = useCallback(() => {
-    localStorage.setItem('studypilot_model_setup_done', 'true');
+    writeCompatStorage(localStorage, storageKeys.modelSetupDone, 'true');
     setShowModelSetupWizard(false);
   }, []);
 

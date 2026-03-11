@@ -74,6 +74,9 @@ export default function RegisterPage() {
     'Guest mode stays available for quick starts': 'يبقى وضع الضيف متاحًا للبداية السريعة',
     'You can switch to a full account later': 'يمكنك التحول إلى حساب كامل لاحقًا',
     'OAuth stays optional when configured': 'يبقى OAuth اختياريًا عند الإعداد',
+    'Synced planner': 'مخطط متزامن',
+    Analytics: 'التحليلات',
+    'Shared workspace links': 'روابط مساحة العمل المشتركة',
     'Email and password are required': 'البريد الإلكتروني وكلمة المرور مطلوبان',
     'Password must be at least 6 characters': 'يجب أن تكون كلمة المرور 6 أحرف على الأقل',
     'Passwords do not match': 'كلمتا المرور غير متطابقتين',
@@ -235,9 +238,9 @@ export default function RegisterPage() {
             </div>
           </div>
           <div className={styles.panelFooter}>
-            <span>Synced planner</span>
-            <span>Analytics</span>
-            <span>Shared workspace links</span>
+            <span>{t('Synced planner')}</span>
+            <span>{t('Analytics')}</span>
+            <span>{t('Shared workspace links')}</span>
           </div>
         </section>
 
