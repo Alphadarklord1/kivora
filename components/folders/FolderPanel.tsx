@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/providers/ToastProvider';
 import { idbStore } from '@/lib/idb';
 import { v4 as uuidv4 } from 'uuid';
+import { deleteLocalFilesForFolder, deleteLocalFilesForTopic, upsertLocalFile } from '@/lib/files/local-files';
 
 interface Topic  { id: string; name: string; folderId: string; }
 interface Folder { id: string; name: string; expanded: boolean; topics: Topic[]; }
@@ -15,14 +16,17 @@ export interface FolderPanelProps {
   refreshKey: number;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  onFilesChanged?: () => void;
 }
 
 const LS_KEY = 'kivora_local_folders';
 const localLoad  = (): Folder[] => { try { return JSON.parse(localStorage.getItem(LS_KEY) ?? '[]'); } catch { return []; } };
 const localSave  = (f: Folder[]) => { try { localStorage.setItem(LS_KEY, JSON.stringify(f)); } catch {} };
 
+const ACCEPT = '.pdf,.docx,.pptx,.txt,.md,.png,.jpg,.jpeg';
+
 export function FolderPanel({
-  onSelect, selectedFolder, selectedTopic, refreshKey, collapsed = false, onToggleCollapse,
+  onSelect, selectedFolder, selectedTopic, refreshKey, collapsed = false, onToggleCollapse, onFilesChanged,
 }: FolderPanelProps) {
   const { toast } = useToast();
   const [folders,        setFolders]        = useState<Folder[]>([]);
@@ -32,6 +36,8 @@ export function FolderPanel({
   const [addTopicFor,    setAddTopicFor]    = useState<string | null>(null);
   const [newTopicName,   setNewTopicName]   = useState('');
   const [uploadingFor,   setUploadingFor]   = useState<{ folderId: string; topicId?: string } | null>(null);
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [dragOverSidebar,setDragOverSidebar]= useState(false);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const topicInputRef  = useRef<HTMLInputElement>(null);
   const fileInputRef   = useRef<HTMLInputElement>(null);
@@ -95,6 +101,7 @@ export function FolderPanel({
     e.stopPropagation();
     if (!confirm(`Delete "${folder.name}" and all its content?`)) return;
     try { await fetch(`/api/folders/${folder.id}`, { method: 'DELETE' }); } catch {}
+    deleteLocalFilesForFolder(folder.id);
     const updated = folders.filter(f => f.id !== folder.id);
     localSave(updated); setFolders(updated);
     if (selectedFolder === folder.id) onSelect(null, '', null, '');
@@ -105,32 +112,110 @@ export function FolderPanel({
     e.stopPropagation();
     if (!confirm(`Delete topic "${topic.name}"?`)) return;
     try { await fetch(`/api/folders/${folder.id}/topics/${topic.id}`, { method: 'DELETE' }); } catch {}
+    deleteLocalFilesForTopic(folder.id, topic.id);
     const updated = folders.map(f => f.id === folder.id ? { ...f, topics: f.topics.filter(t => t.id !== topic.id) } : f);
     localSave(updated); setFolders(updated);
     if (selectedTopic === topic.id) onSelect(folder.id, folder.name, null, '');
     toast('Topic deleted', 'info');
   }
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !uploadingFor) return;
+  // Core upload logic shared by both click-upload and drag-drop
+  async function uploadFile(file: File, folderId: string, topicId?: string) {
     const blobId = uuidv4();
     await idbStore.put(blobId, { blob: file, name: file.name, type: file.type, size: file.size });
+    const fileId = uuidv4();
+    const createdAt = new Date().toISOString();
+    const localFilePath = (file as File & { path?: string }).path || undefined;
     try {
       const res = await fetch('/api/files', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          folderId: uploadingFor.folderId, topicId: uploadingFor.topicId ?? null,
+          folderId, topicId: topicId ?? null,
+          id: fileId,
           name: file.name, type: 'upload', localBlobId: blobId, mimeType: file.type, fileSize: file.size,
+          localFilePath,
         }),
       });
-      toast(res.ok ? `"${file.name}" uploaded` : `"${file.name}" saved locally`, res.ok ? 'success' : 'info');
+      if (res.ok) {
+        toast(`"${file.name}" uploaded`, 'success');
+      } else {
+        upsertLocalFile({
+          id: fileId,
+          folderId,
+          topicId: topicId ?? null,
+          name: file.name,
+          type: 'upload',
+          localBlobId: blobId || undefined,
+          localFilePath,
+          mimeType: file.type || undefined,
+          fileSize: file.size || undefined,
+          createdAt,
+        });
+        toast(`"${file.name}" saved locally`, 'info');
+      }
     } catch {
+      upsertLocalFile({
+        id: fileId,
+        folderId,
+        topicId: topicId ?? null,
+        name: file.name,
+        type: 'upload',
+        localBlobId: blobId || undefined,
+        localFilePath,
+        mimeType: file.type || undefined,
+        fileSize: file.size || undefined,
+        createdAt,
+      });
       toast(`"${file.name}" saved locally`, 'info');
     }
-    const folder = folders.find(f => f.id === uploadingFor.folderId);
-    onSelect(uploadingFor.folderId, folder?.name ?? '', uploadingFor.topicId ?? null, '');
+    const folder = folders.find(f => f.id === folderId);
+    onSelect(folderId, folder?.name ?? '', topicId ?? null, '');
+    onFilesChanged?.();
+  }
+
+  async function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !uploadingFor) return;
+    await uploadFile(file, uploadingFor.folderId, uploadingFor.topicId);
     e.target.value = ''; setUploadingFor(null);
+  }
+
+  // Drag-and-drop onto a folder row
+  function onDragOver(e: React.DragEvent, folderId: string) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDragOverFolder(folderId);
+  }
+
+  function onDragLeave(folderId: string) {
+    setDragOverFolder(d => d === folderId ? null : d);
+  }
+
+  async function onDrop(e: React.DragEvent, folderId: string) {
+    e.preventDefault();
+    setDragOverFolder(null);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    // Expand the folder after drop
+    setFolders(p => p.map(f => f.id === folderId ? { ...f, expanded: true } : f));
+    await uploadFile(file, folderId);
+  }
+
+  // Drag over the whole sidebar (fallback to selected folder)
+  function onSidebarDragOver(e: React.DragEvent) {
+    if (!selectedFolder) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDragOverSidebar(true);
+  }
+
+  async function onSidebarDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOverSidebar(false);
+    if (!selectedFolder) return;
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    await uploadFile(file, selectedFolder, selectedTopic ?? undefined);
   }
 
   /* ── Collapsed view ─────────────────────────────────────────────────── */
@@ -154,7 +239,12 @@ export function FolderPanel({
 
   /* ── Full view ──────────────────────────────────────────────────────── */
   return (
-    <div className="folder-sidebar">
+    <div
+      className={`folder-sidebar${dragOverSidebar ? ' drag-over' : ''}`}
+      onDragOver={onSidebarDragOver}
+      onDragLeave={() => setDragOverSidebar(false)}
+      onDrop={onSidebarDrop}
+    >
       {/* Header */}
       <div className="panel-header">
         <span className="panel-title">📚 Folders</span>
@@ -178,6 +268,13 @@ export function FolderPanel({
         </form>
       )}
 
+      {/* Drag hint */}
+      {folders.length > 0 && (
+        <div style={{ padding: '4px 12px 2px', fontSize: 'var(--text-xs)', color: 'var(--text-3)', userSelect: 'none' }}>
+          Drop files onto a folder to upload
+        </div>
+      )}
+
       {/* Tree */}
       <div className="panel-body">
         {loading ? (
@@ -192,15 +289,23 @@ export function FolderPanel({
         ) : (
           folders.map(folder => (
             <div key={folder.id}>
-              {/* Folder row */}
+              {/* Folder row — droppable */}
               <div
-                className={`folder-row${selectedFolder === folder.id && !selectedTopic ? ' active' : ''}`}
+                className={`folder-row${selectedFolder === folder.id && !selectedTopic ? ' active' : ''}${dragOverFolder === folder.id ? ' drag-over' : ''}`}
                 onClick={() => { onSelect(folder.id, folder.name, null, ''); setFolders(p => p.map(f => f.id === folder.id ? { ...f, expanded: !f.expanded } : f)); }}
+                onDragOver={e => onDragOver(e, folder.id)}
+                onDragLeave={() => onDragLeave(folder.id)}
+                onDrop={e => onDrop(e, folder.id)}
               >
                 <span style={{ fontSize: 11, opacity: 0.55, flexShrink: 0 }}>{folder.expanded ? '▾' : '▸'}</span>
-                <span style={{ fontSize: 15, flexShrink: 0 }}>📁</span>
+                <span style={{ fontSize: 15, flexShrink: 0 }}>
+                  {dragOverFolder === folder.id ? '📥' : '📁'}
+                </span>
                 <span style={{ flex: 1, fontSize: 'var(--text-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {folder.name}
+                  {dragOverFolder === folder.id && (
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginLeft: 6 }}>Drop to upload</span>
+                  )}
                 </span>
                 <div className="folder-actions">
                   <button className="btn-icon" style={{ width: 22, height: 22 }} title="Upload file"
@@ -253,7 +358,7 @@ export function FolderPanel({
       </div>
 
       {/* Hidden file picker */}
-      <input ref={fileInputRef} type="file" accept=".pdf,.docx,.pptx,.txt,.md,.png,.jpg,.jpeg" style={{ display: 'none' }} onChange={handleFileUpload} />
+      <input ref={fileInputRef} type="file" accept={ACCEPT} style={{ display: 'none' }} onChange={handleFileInputChange} />
     </div>
   );
 }

@@ -5,6 +5,11 @@ import { useToast } from '@/providers/ToastProvider';
 import { idbStore } from '@/lib/idb';
 import { extractTextFromBlob } from '@/lib/pdf/extract';
 import type { ToolMode } from '@/lib/offline/generate';
+import { deleteLocalFile, listLocalFiles } from '@/lib/files/local-files';
+import { MathSolver } from '@/components/tools/MathSolver';
+import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
+import { MatlabLab } from '@/components/tools/MatlabLab';
+import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -15,6 +20,7 @@ interface FileRecord {
   mimeType?: string;
   fileSize?: number;
   localBlobId?: string;
+  localFilePath?: string | null;
   content?: string;
   createdAt: string;
 }
@@ -38,6 +44,10 @@ const TABS = [
   { id: 'mcq',        label: 'MCQ'        },
   { id: 'flashcards', label: 'Flashcards' },
   { id: 'assignment', label: 'Assignment' },
+  { id: 'math',       label: 'Math'       },
+  { id: 'graph',      label: 'Graph'      },
+  { id: 'matlab',     label: 'MATLAB Lab' },
+  { id: 'visual',     label: 'Visual'     },
   { id: 'library',    label: 'Library'    },
 ] as const;
 
@@ -180,6 +190,7 @@ export function WorkspacePanel({
   const [count,      setCount]      = useState(5);
   const [libItems,   setLibItems]   = useState<Array<{ id: string; mode: string; content: string; createdAt: string }>>([]);
   const [libLoad,    setLibLoad]    = useState(false);
+  const [graphExpression, setGraphExpression] = useState('x^2');
 
   // Load files when folder/topic changes
   useEffect(() => {
@@ -188,9 +199,15 @@ export function WorkspacePanel({
     const qs = new URLSearchParams({ folderId: selectedFolder });
     if (selectedTopic) qs.set('topicId', selectedTopic);
     fetch(`/api/files?${qs}`)
-      .then(r => r.ok ? r.json() : [])
-      .then(data => setFiles(data))
-      .catch(() => setFiles([]))
+      .then(async (r) => {
+        if (r.ok) {
+          const data = await r.json();
+          setFiles(data);
+          return;
+        }
+        setFiles(listLocalFiles(selectedFolder, selectedTopic));
+      })
+      .catch(() => setFiles(listLocalFiles(selectedFolder, selectedTopic)))
       .finally(() => setFilesLoad(false));
   }, [selectedFolder, selectedTopic]);
 
@@ -274,6 +291,7 @@ export function WorkspacePanel({
     e.stopPropagation();
     if (!confirm(`Delete "${file.name}"?`)) return;
     if (file.localBlobId) await idbStore.delete(file.localBlobId);
+    deleteLocalFile(file.id);
     await fetch(`/api/files/${file.id}`, { method: 'DELETE' }).catch(() => {});
     setFiles(p => p.filter(f => f.id !== file.id));
     if (selFile?.id === file.id) { setSelFile(null); setExtractedText(''); setOutput(''); }
@@ -458,6 +476,34 @@ export function WorkspacePanel({
         {(['summarize', 'rephrase', 'notes', 'quiz', 'mcq', 'flashcards', 'assignment'] as ToolMode[]).map(mode => (
           tab === mode && <ToolPanel key={mode} mode={mode} />
         ))}
+
+        {tab === 'math' && (
+          <MathSolver
+            onGraphExpression={(expression) => {
+              setGraphExpression(expression);
+              setTab('graph');
+              toast('Sent to graphing tool', 'info');
+            }}
+          />
+        )}
+
+        {tab === 'graph' && (
+          <GraphingCalculator initialExpression={graphExpression} />
+        )}
+
+        {tab === 'matlab' && (
+          <MatlabLab
+            onGraphExpression={(expression) => {
+              setGraphExpression(expression);
+              setTab('graph');
+              toast('Sent to graphing tool', 'info');
+            }}
+          />
+        )}
+
+        {tab === 'visual' && (
+          <VisualAnalyzer />
+        )}
 
         {/* LIBRARY TAB */}
         {tab === 'library' && (
