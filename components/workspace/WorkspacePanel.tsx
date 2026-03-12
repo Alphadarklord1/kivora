@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/providers/ToastProvider';
 import { idbStore } from '@/lib/idb';
 import { extractTextFromBlob } from '@/lib/pdf/extract';
 import type { ToolMode } from '@/lib/offline/generate';
-import { deleteLocalFile, listLocalFiles } from '@/lib/files/local-files';
+import { v4 as uuidv4 } from 'uuid';
+import { deleteLocalFile, listLocalFiles, upsertLocalFile } from '@/lib/files/local-files';
 import { MathSolver } from '@/components/tools/MathSolver';
 import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
 import { MatlabLab } from '@/components/tools/MatlabLab';
@@ -178,6 +179,7 @@ export function WorkspacePanel({
   selectedFolder, selectedTopic, selectedFolderName, selectedTopicName, onRefresh,
 }: WorkspacePanelProps) {
   const { toast } = useToast();
+  const filePickerRef = useRef<HTMLInputElement>(null);
 
   const [tab,        setTab]        = useState<Tab>('files');
   const [files,      setFiles]      = useState<FileRecord[]>([]);
@@ -191,25 +193,36 @@ export function WorkspacePanel({
   const [libItems,   setLibItems]   = useState<Array<{ id: string; mode: string; content: string; createdAt: string }>>([]);
   const [libLoad,    setLibLoad]    = useState(false);
   const [graphExpression, setGraphExpression] = useState('x^2');
+  const [draggingFiles, setDraggingFiles] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
 
-  // Load files when folder/topic changes
-  useEffect(() => {
-    if (!selectedFolder) { setFiles([]); return; }
+  const loadFiles = useCallback(async () => {
+    if (!selectedFolder) {
+      setFiles([]);
+      return;
+    }
+
     setFilesLoad(true);
     const qs = new URLSearchParams({ folderId: selectedFolder });
     if (selectedTopic) qs.set('topicId', selectedTopic);
-    fetch(`/api/files?${qs}`)
-      .then(async (r) => {
-        if (r.ok) {
-          const data = await r.json();
-          setFiles(data);
-          return;
-        }
-        setFiles(listLocalFiles(selectedFolder, selectedTopic));
-      })
-      .catch(() => setFiles(listLocalFiles(selectedFolder, selectedTopic)))
-      .finally(() => setFilesLoad(false));
+    try {
+      const response = await fetch(`/api/files?${qs}`);
+      if (response.ok) {
+        setFiles(await response.json());
+        return;
+      }
+      setFiles(listLocalFiles(selectedFolder, selectedTopic));
+    } catch {
+      setFiles(listLocalFiles(selectedFolder, selectedTopic));
+    } finally {
+      setFilesLoad(false);
+    }
   }, [selectedFolder, selectedTopic]);
+
+  // Load files when folder/topic changes
+  useEffect(() => {
+    loadFiles();
+  }, [loadFiles]);
 
   // Load library
   const loadLib = useCallback(() => {
@@ -224,20 +237,30 @@ export function WorkspacePanel({
   useEffect(() => { if (tab === 'library') loadLib(); }, [tab, loadLib]);
 
   // Extract text from selected file
-  async function extractFromFile(file: FileRecord) {
+  async function extractFromFile(file: FileRecord): Promise<string | null> {
     if (!file.localBlobId) {
-      if (file.content) { setExtractedText(file.content); return; }
+      if (file.content) {
+        setExtractedText(file.content);
+        return file.content;
+      }
       toast('No file data available for extraction.', 'error');
-      return;
+      return null;
     }
     setExtracting(true);
     try {
       const payload = await idbStore.get(file.localBlobId);
-      if (!payload) { toast('File not found in local storage.', 'error'); return; }
+      if (!payload) {
+        toast('File not found in local storage.', 'error');
+        return null;
+      }
       const result = await extractTextFromBlob(payload.blob, file.name);
-      if (result.error) { toast(result.error, 'error'); return; }
+      if (result.error) {
+        toast(result.error, 'error');
+        return null;
+      }
       setExtractedText(result.text);
       toast(`Extracted ${result.wordCount.toLocaleString()} words`, 'success');
+      return result.text;
     } finally {
       setExtracting(false);
     }
@@ -250,10 +273,115 @@ export function WorkspacePanel({
     setExtractedText('');
   }
 
+  async function uploadWorkspaceFile(file: File) {
+    if (!selectedFolder) {
+      toast('Select a folder first.', 'warning');
+      return;
+    }
+
+    const blobId = uuidv4();
+    const fileId = uuidv4();
+    const createdAt = new Date().toISOString();
+    const localFilePath = (file as File & { path?: string }).path || undefined;
+
+    await idbStore.put(blobId, { blob: file, name: file.name, type: file.type, size: file.size });
+
+    let nextRecord: FileRecord = {
+      id: fileId,
+      name: file.name,
+      type: 'upload',
+      mimeType: file.type,
+      fileSize: file.size,
+      localBlobId: blobId,
+      localFilePath,
+      createdAt,
+    };
+
+    try {
+      const response = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          folderId: selectedFolder,
+          topicId: selectedTopic ?? null,
+          id: fileId,
+          name: file.name,
+          type: 'upload',
+          localBlobId: blobId,
+          mimeType: file.type,
+          fileSize: file.size,
+          localFilePath,
+        }),
+      });
+
+      if (response.ok) {
+        nextRecord = await response.json();
+        toast(`"${file.name}" uploaded`, 'success');
+      } else {
+        upsertLocalFile({
+          id: fileId,
+          folderId: selectedFolder,
+          topicId: selectedTopic ?? null,
+          name: file.name,
+          type: 'upload',
+          localBlobId: blobId,
+          localFilePath,
+          mimeType: file.type,
+          fileSize: file.size,
+          createdAt,
+        });
+        toast(`"${file.name}" saved locally`, 'info');
+      }
+    } catch {
+      upsertLocalFile({
+        id: fileId,
+        folderId: selectedFolder,
+        topicId: selectedTopic ?? null,
+        name: file.name,
+        type: 'upload',
+        localBlobId: blobId,
+        localFilePath,
+        mimeType: file.type,
+        fileSize: file.size,
+        createdAt,
+      });
+      toast(`"${file.name}" saved locally`, 'info');
+    }
+
+    await loadFiles();
+    setSelFile(nextRecord);
+    setExtractedText('');
+    onRefresh();
+  }
+
+  async function uploadWorkspaceFiles(fileList: FileList | File[]) {
+    const filesToUpload = Array.from(fileList);
+    if (filesToUpload.length === 0) return;
+    setUploadingFiles(true);
+    try {
+      for (const file of filesToUpload) {
+        await uploadWorkspaceFile(file);
+      }
+    } finally {
+      setUploadingFiles(false);
+    }
+  }
+
+  async function handleWorkspaceFileInput(event: React.ChangeEvent<HTMLInputElement>) {
+    const pickedFiles = event.target.files;
+    if (!pickedFiles?.length) return;
+    await uploadWorkspaceFiles(pickedFiles);
+    event.target.value = '';
+  }
+
   // Run AI tool
   async function runTool(mode: ToolMode) {
-    if (!extractedText.trim()) {
-      toast('Extract text from a file first, or select a file and extract.', 'warning');
+    let sourceText = extractedText.trim();
+    if (!sourceText && selFile) {
+      sourceText = (await extractFromFile(selFile))?.trim() ?? '';
+    }
+    if (!sourceText) {
+      toast('Select a file and load it first.', 'warning');
       return;
     }
     setGenerating(true);
@@ -262,7 +390,7 @@ export function WorkspacePanel({
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, text: extractedText, options: { count } }),
+        body: JSON.stringify({ mode, text: sourceText, options: { count } }),
       });
       const data = await res.json();
       setOutput(data.content ?? data.error ?? 'No output.');
@@ -304,7 +432,36 @@ export function WorkspacePanel({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* Context: which file is loaded */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ flex: 1, minWidth: 240, display: 'grid', gap: 10 }}>
+            {files.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <select
+                  value={selFile?.id ?? ''}
+                  onChange={(event) => {
+                    const next = files.find((file) => file.id === event.target.value) ?? null;
+                    if (next) selectFile(next);
+                  }}
+                  style={{ minWidth: 240, flex: '1 1 240px' }}
+                >
+                  <option value="">Select file for this tool…</option>
+                  {files.map((file) => (
+                    <option key={file.id} value={file.id}>
+                      {file.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    setTab('files');
+                    filePickerRef.current?.click();
+                  }}
+                  disabled={!selectedFolder || uploadingFiles}
+                >
+                  {uploadingFiles ? 'Uploading…' : 'Add file'}
+                </button>
+              </div>
+            )}
             {selFile ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 8, padding: '6px 12px' }}>
                 <span>{fileIcon(selFile)}</span>
@@ -313,7 +470,9 @@ export function WorkspacePanel({
               </div>
             ) : (
               <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
-                No file selected — go to <strong>Files</strong> tab to pick one.
+                {files.length > 0
+                  ? <>Choose a file above or use the <strong>Files</strong> tab.</>
+                  : <>Upload a file to the selected folder to use this tool.</>}
               </span>
             )}
           </div>
@@ -427,13 +586,58 @@ export function WorkspacePanel({
                 <h3>No folder selected</h3>
                 <p>Pick a folder from the left sidebar to see its files.</p>
               </div>
-            ) : filesLoad ? (
+            ) : (
+              <div style={{ display: 'grid', gap: 16 }}>
+                <input
+                  ref={filePickerRef}
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg,.webp"
+                  style={{ display: 'none' }}
+                  onChange={handleWorkspaceFileInput}
+                />
+
+                <div
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDraggingFiles(true);
+                  }}
+                  onDragLeave={() => setDraggingFiles(false)}
+                  onDrop={async (event) => {
+                    event.preventDefault();
+                    setDraggingFiles(false);
+                    if (!selectedFolder) return;
+                    await uploadWorkspaceFiles(event.dataTransfer.files);
+                  }}
+                  onClick={() => {
+                    if (!selectedFolder) return;
+                    filePickerRef.current?.click();
+                  }}
+                  style={{
+                    border: draggingFiles ? '1px solid var(--accent)' : '1px dashed var(--border-2)',
+                    background: draggingFiles ? 'color-mix(in srgb, var(--accent) 8%, var(--surface))' : 'var(--surface)',
+                    borderRadius: 16,
+                    padding: '20px 18px',
+                    cursor: selectedFolder ? 'pointer' : 'default',
+                    display: 'grid',
+                    gap: 6,
+                  }}
+                >
+                  <strong style={{ fontSize: 'var(--text-sm)' }}>
+                    {draggingFiles ? 'Drop files to upload' : 'Drag files here or click to upload'}
+                  </strong>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                    Files go into {selectedTopicName || selectedFolderName}. PDFs, Word docs, text files, and images are supported.
+                  </span>
+                </div>
+
+                {filesLoad ? (
               [1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 60, marginBottom: 8, borderRadius: 10 }} />)
             ) : files.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon">📁</div>
                 <h3>No files yet</h3>
-                <p>Upload a PDF, Word doc, or text file using the <strong>↑</strong> button in the folder sidebar.</p>
+                <p>Drag files into this area or click the upload surface above.</p>
               </div>
             ) : (
               <div className="file-list">
@@ -467,6 +671,8 @@ export function WorkspacePanel({
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
               </div>
             )}
           </div>
