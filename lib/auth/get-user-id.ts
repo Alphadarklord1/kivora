@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 import { hasValidTwoFactorSession, LEGACY_TWO_FACTOR_COOKIE_NAME, TWO_FACTOR_COOKIE_NAME } from '@/lib/auth/two-factor';
+import { GUEST_SESSION_HEADER, isGuestEmail, isGuestSessionId, resolveGuestUserId } from '@/lib/auth/guest-session';
 
 export const DEMO_USER_EMAIL = 'demo@local.kivora';
 export const LEGACY_STUDYHARBOR_DEMO_USER_EMAIL = 'demo@local.studyharbor';
@@ -13,16 +14,7 @@ export const LEGACY_DEMO_USER_EMAIL = 'demo@local.studypilot';
 export const DEMO_USER_NAME = 'Local Demo';
 
 export function isDemoGuestEmail(email: string | null | undefined): boolean {
-  if (typeof email !== 'string') {
-    return false;
-  }
-
-  const normalized = email.trim().toLowerCase();
-  return (
-    normalized === DEMO_USER_EMAIL ||
-    normalized === LEGACY_STUDYHARBOR_DEMO_USER_EMAIL ||
-    normalized === LEGACY_DEMO_USER_EMAIL
-  );
+  return isGuestEmail(email);
 }
 
 /**
@@ -69,6 +61,12 @@ export async function getUserId(
 
   // Local demo mode: bootstrap a deterministic demo user for API-backed flows.
   if (isGuestModeEnabled()) {
+    const guestSessionId = request.headers.get(GUEST_SESSION_HEADER)?.trim();
+    if (isGuestSessionId(guestSessionId)) {
+      const guestUserId = await resolveGuestUserId(guestSessionId);
+      if (guestUserId) return guestUserId;
+    }
+
     if (!isDatabaseConfigured) {
       return 'local-demo-user';
     }
