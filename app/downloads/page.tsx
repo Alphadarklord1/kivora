@@ -61,6 +61,7 @@ async function getLatestRelease(): Promise<LatestReleasePayload | null> {
     const response = await fetch(GITHUB_API_LATEST_RELEASE, {
       headers: { Accept: 'application/vnd.github+json' },
       next: { revalidate: 300 },
+      signal: AbortSignal.timeout(4000),
     });
     if (!response.ok) return null;
     const payload = await response.json();

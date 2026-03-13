@@ -15,7 +15,7 @@ const NAV = [
   { href: '/analytics', label: 'Analytics', icon: '📊' },
   { href: '/models',    label: 'AI Models', icon: '🤖' },
   { href: '/sharing',   label: 'Sharing',   icon: '🔗' },
-  { href: '/download',  label: 'Download',  icon: '⬇️' },
+  { href: '/downloads', label: 'Download',  icon: '⬇️' },
   { href: '/settings',  label: 'Settings',  icon: '⚙️' },
   { href: '/report',    label: 'Report',    icon: '🩺' },
 ];
