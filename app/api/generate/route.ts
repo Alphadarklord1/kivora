@@ -25,10 +25,11 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: 'Invalid JSON.' }, { status: 400 }); }
 
-  const { mode, text, options } = body as {
+  const { mode, text, options, model: clientModel } = body as {
     mode?: string;
     text?: string;
     options?: Record<string, unknown>;
+    model?: string;
   };
 
   if (!mode || !VALID_MODES.includes(mode as AllModes)) {
@@ -51,7 +52,9 @@ export async function POST(req: NextRequest) {
   // ── 1. Ollama (open-source local LLM) ────────────────────────────────────
   const ollamaBase = process.env.OLLAMA_URL ?? 'http://localhost:11434';
   try {
-    const ollamaModel = process.env.OLLAMA_MODEL ?? 'mistral';
+    const ollamaModel = (typeof clientModel === 'string' && clientModel.trim())
+      ? clientModel.trim()
+      : (process.env.OLLAMA_MODEL ?? 'mistral');
     const prompt = buildPrompt(currentMode, trimmedText, options);
 
     // Try Ollama OpenAI-compatible endpoint first (works with most versions)

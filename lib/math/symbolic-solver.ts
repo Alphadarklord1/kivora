@@ -41,10 +41,20 @@ export type ProblemType =
   | 'trig'
   | 'stats'
   | 'complex'
+  | 'integral'
+  | 'limit'
+  | 'series'
+  | 'system'
   | 'expression';
 
 export function detectType(input: string): ProblemType {
   const s = input.toLowerCase().trim();
+
+  // Integral
+  if (/\b(integrate|integral|∫|int\s*\()\b/.test(s) || /\bintegral\s+of\b/.test(s)) return 'integral';
+  if (/\b(limit|lim)\b.*->/.test(s) || /lim\s*\(/.test(s)) return 'limit';
+  if (/\b(series|taylor|maclaurin|expand\s+around)\b/.test(s)) return 'series';
+  if (/\bsystem\b/.test(s) || (s.match(/=/g) || []).length >= 2) return 'system';
 
   // Derivative
   if (/\b(d\/dx|derivative|differentiate|dy\/dx|f'\s*\()\b/.test(s)) return 'derivative';
@@ -225,6 +235,424 @@ function solveDerivative(input: string): SolverResult {
       error: String(err),
     };
   }
+}
+
+// ─── Integral solver (numerical + symbolic patterns) ──────────────────────────────────
+function solveIntegral(input: string): SolverResult {
+  const steps: MathStep[] = [];
+  // Extract expr: handles "integrate x^2", "integral of sin(x)", "int(x^2, x, 0, 1)"
+  let expr = input
+    .replace(/\b(integrate|integral\s+of|integral|int\s*\(|∫)\b/gi, '')
+    .replace(/\s*dx\s*/gi, '')
+    .replace(/,\s*x\s*,.*/, '') // remove bounds for now
+    .replace(/\bwith\s+respect\s+to\s+x\b/i, '')
+    .trim();
+
+  // Extract definite integral bounds if present
+  const boundsMatch = input.match(/,\s*x\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)/);
+  const isDefinite = !!boundsMatch;
+  const a = boundsMatch ? parseFloat(boundsMatch[1]) : undefined;
+  const b = boundsMatch ? parseFloat(boundsMatch[2]) : undefined;
+
+  steps.push({
+    step: 1,
+    description: isDefinite ? `Definite integral from ${a} to ${b}` : 'Indefinite integral',
+    expression: isDefinite
+      ? `\\int_{${a}}^{${b}} ${toLatex(expr)} \\, dx`
+      : `\\int ${toLatex(expr)} \\, dx`,
+    explanation: 'Identify the integrand and determine the type of integral.',
+  });
+
+  // Try symbolic anti-derivative patterns
+  const antiderivativePatterns: [RegExp, (m: RegExpMatchArray) => string, string][] = [
+    [/^x\^([\d.]+)$/, m => `x^${parseFloat(m[1])+1} / ${parseFloat(m[1])+1}`, 'Power rule: ∫xⁿ dx = xⁿ⁺¹/(n+1) + C'],
+    [/^(\d+)$/, m => `${m[1]}*x`, 'Constant rule: ∫k dx = kx + C'],
+    [/^sin\(x\)$/, () => '-cos(x)', '∫sin(x) dx = -cos(x) + C'],
+    [/^cos\(x\)$/, () => 'sin(x)', '∫cos(x) dx = sin(x) + C'],
+    [/^exp\(x\)$|^e\^x$/, () => 'e^x', '∫eˣ dx = eˣ + C'],
+    [/^1\/x$|^x\^\(-1\)$/, () => 'ln(|x|)', '∫1/x dx = ln|x| + C'],
+    [/^(\d+)\*x$/, m => `${m[1]}/2 * x^2`, 'Power rule with coefficient'],
+    [/^x$/, () => 'x^2/2', 'Power rule: ∫x dx = x²/2 + C'],
+    [/^(\d+)$/, m => `${m[1]}*x`, 'Constant rule'],
+  ];
+
+  let symbolicResult: string | null = null;
+  let ruleExplanation = '';
+  for (const [re, fn, rule] of antiderivativePatterns) {
+    const m = expr.match(re);
+    if (m) {
+      symbolicResult = fn(m);
+      ruleExplanation = rule;
+      break;
+    }
+  }
+
+  if (symbolicResult) {
+    steps.push({
+      step: 2,
+      description: 'Apply integration rule',
+      expression: `\\int ${toLatex(expr)} \\, dx = ${toLatex(symbolicResult)} + C`,
+      explanation: ruleExplanation,
+    });
+  }
+
+  // Numerical integration using Simpson's rule
+  const numA = a ?? 0;
+  const numB = b ?? 1;
+  let numResult: number | null = null;
+  try {
+    const n = 1000; // even number of intervals
+    const h = (numB - numA) / n;
+    let sum = 0;
+    const f = (x: number) => Number(math.evaluate(expr, { x }));
+    sum = f(numA) + f(numB);
+    for (let i = 1; i < n; i++) {
+      sum += (i % 2 === 0 ? 2 : 4) * f(numA + i * h);
+    }
+    numResult = (h / 3) * sum;
+    if (!isNaN(numResult) && isFinite(numResult)) {
+      steps.push({
+        step: symbolicResult ? 3 : 2,
+        description: isDefinite ? 'Evaluate definite integral (Simpson\'s rule)' : 'Numerical value over [0,1]',
+        expression: isDefinite
+          ? `\\int_{${numA}}^{${numB}} ${toLatex(expr)} \\, dx \\approx ${numResult.toFixed(6)}`
+          : `\\int_{0}^{1} ${toLatex(expr)} \\, dx \\approx ${numResult.toFixed(6)}`,
+        explanation: 'Computed using composite Simpson\'s rule with 1000 intervals for high accuracy.',
+      });
+    }
+  } catch { /* skip */ }
+
+  const finalAnswer = symbolicResult
+    ? (isDefinite && numResult !== null ? numResult.toFixed(6) : `${symbolicResult} + C`)
+    : (numResult !== null ? numResult.toFixed(6) : 'Could not compute');
+
+  const finalLatex = symbolicResult
+    ? (isDefinite && numResult !== null
+        ? toLatex(numResult)
+        : `${toLatex(symbolicResult)} + C`)
+    : (numResult !== null ? `\\approx ${toLatex(numResult)}` : '\\text{Could not compute}');
+
+  return {
+    input,
+    type: 'Integral',
+    steps,
+    answer: finalAnswer,
+    answerLatex: finalLatex,
+    numeric: numResult ?? undefined,
+    verified: symbolicResult !== null || numResult !== null,
+  };
+}
+
+// ─── Limit solver ─────────────────────────────────────────────────────────────
+function solveLimit(input: string): SolverResult {
+  const steps: MathStep[] = [];
+
+  // Parse: "limit x->2 of x^2 + 1" or "lim(x^2, x, 2)"
+  const arrowMatch = input.match(/(?:limit|lim)\s+x\s*->\s*([-∞∞\d.]+)\s+(?:of\s+)?(.+)/i);
+  const fnMatch    = input.match(/(?:limit|lim)\s*\(\s*(.+?)\s*,\s*x\s*,\s*([-∞∞\d.]+)\s*\)/i);
+  const match = arrowMatch || fnMatch;
+
+  let approachPoint = match ? (arrowMatch ? match[1] : match[2]) : '0';
+  let expr = match ? (arrowMatch ? match[2] : match[1]) : input.replace(/limit|lim/gi, '').trim();
+
+  const isInfinity = /∞|inf/i.test(approachPoint);
+  const xVal = isInfinity ? 1e6 : parseFloat(approachPoint);
+
+  steps.push({
+    step: 1,
+    description: `Find the limit as x → ${approachPoint}`,
+    expression: `\\lim_{x \\to ${isInfinity ? '\\infty' : approachPoint}} ${toLatex(expr)}`,
+    explanation: 'Identify the function and the point we are approaching.',
+  });
+
+  steps.push({
+    step: 2,
+    description: 'Attempt direct substitution',
+    expression: toLatex(expr),
+    explanation: `Try substituting x = ${approachPoint} directly into the expression.`,
+  });
+
+  try {
+    let result: number;
+    if (isInfinity) {
+      // Evaluate at large x to estimate limit at infinity
+      const f1 = Number(math.evaluate(expr, { x: 1e6 }));
+      const f2 = Number(math.evaluate(expr, { x: 1e9 }));
+      // Check convergence
+      if (Math.abs(f1 - f2) < Math.abs(f1) * 0.01) {
+        result = f1;
+      } else if (Math.abs(f2) > 1e15) {
+        result = Infinity;
+      } else {
+        result = f2;
+      }
+    } else {
+      // Try direct substitution
+      const direct = Number(math.evaluate(expr, { x: xVal }));
+      if (isFinite(direct) && !isNaN(direct)) {
+        result = direct;
+        steps.push({
+          step: 3,
+          description: 'Direct substitution works',
+          expression: `= ${toLatex(direct)}`,
+          explanation: `The function is continuous at x = ${approachPoint}, so direct substitution gives the limit.`,
+        });
+      } else {
+        // L'Hôpital or numerical approach
+        const eps = 1e-7;
+        const fLeft  = Number(math.evaluate(expr, { x: xVal - eps }));
+        const fRight = Number(math.evaluate(expr, { x: xVal + eps }));
+        if (Math.abs(fLeft - fRight) < 1e-4) {
+          result = (fLeft + fRight) / 2;
+          steps.push({
+            step: 3,
+            description: 'Apply numerical limit (indeterminate form)',
+            expression: `\\lim_{x \\to ${approachPoint}} = ${toLatex(result)}`,
+            explanation: 'Direct substitution gives 0/0 or similar. Used two-sided numerical limit.',
+          });
+        } else {
+          result = NaN;
+          steps.push({
+            step: 3,
+            description: 'Limit does not exist or is infinite',
+            expression: `\\lim_{x \\to ${approachPoint}} = \\text{DNE or } \\pm\\infty`,
+            explanation: 'Left-hand limit ≠ right-hand limit, so the limit does not exist.',
+          });
+        }
+      }
+    }
+
+    const answerLatex = !isFinite(result) ? '\\infty'
+      : isNaN(result) ? '\\text{Does Not Exist}'
+      : toLatex(result);
+
+    const answerStr = !isFinite(result) ? '∞'
+      : isNaN(result) ? 'Does Not Exist'
+      : result.toFixed(6);
+
+    steps.push({
+      step: steps.length + 1,
+      description: 'Final answer',
+      expression: `\\lim_{x \\to ${isInfinity ? '\\infty' : approachPoint}} ${toLatex(expr)} = ${answerLatex}`,
+      explanation: `The limit of the function as x approaches ${approachPoint}.`,
+    });
+
+    return {
+      input,
+      type: 'Limit',
+      steps,
+      answer: answerStr,
+      answerLatex,
+      numeric: isFinite(result) && !isNaN(result) ? result : undefined,
+      verified: true,
+    };
+  } catch (err) {
+    return {
+      input,
+      type: 'Limit',
+      steps: [...steps, { step: steps.length + 1, description: 'Error', expression: toLatex(expr), explanation: String(err) }],
+      answer: 'Could not compute',
+      answerLatex: '\\text{Could not compute}',
+      verified: false,
+      error: String(err),
+    };
+  }
+}
+
+// ─── Taylor series ────────────────────────────────────────────────────────────
+function solveSeries(input: string): SolverResult {
+  const steps: MathStep[] = [];
+
+  // Extract: "series sin(x)" or "taylor sin(x) around 0 order 4"
+  let expr = input.replace(/\b(series|taylor|maclaurin)\b/gi, '').replace(/\baround\s+[\d.]+\b/i, '').replace(/\border\s+\d+\b/i, '').trim();
+  const orderMatch = input.match(/order\s+(\d+)/i);
+  const centerMatch = input.match(/around\s+([-\d.]+)/i);
+  const order = orderMatch ? parseInt(orderMatch[1]) : 4;
+  const center = centerMatch ? parseFloat(centerMatch[1]) : 0;
+
+  steps.push({
+    step: 1,
+    description: `Taylor series for f(x) = ${expr} around x = ${center}`,
+    expression: `f(x) = \\sum_{n=0}^{${order}} \\frac{f^{(n)}(${center})}{n!}(x-${center})^n`,
+    explanation: `Computing the first ${order+1} terms of the Taylor series expansion.`,
+  });
+
+  try {
+    // Compute coefficients via repeated differentiation
+    const terms: string[] = [];
+    const latexTerms: string[] = [];
+    let currentExpr = expr;
+
+    for (let n = 0; n <= order; n++) {
+      const coeff = Number(math.evaluate(currentExpr, { x: center }));
+      if (isNaN(coeff) || !isFinite(coeff)) break;
+
+      const factorial = n === 0 ? 1 : Array.from({length: n}, (_, i) => i + 1).reduce((a, b) => a * b, 1);
+      const termCoeff = coeff / factorial;
+
+      if (Math.abs(termCoeff) > 1e-10) {
+        const termFmt = termCoeff.toFixed(4).replace(/\.?0+$/, '');
+        if (n === 0) {
+          terms.push(termFmt);
+          latexTerms.push(toLatex(termCoeff));
+        } else if (n === 1) {
+          terms.push(`${termFmt}*x`);
+          latexTerms.push(`${toLatex(termCoeff)}x`);
+        } else {
+          terms.push(`${termFmt}*x^${n}`);
+          latexTerms.push(`${toLatex(termCoeff)}x^{${n}}`);
+        }
+      }
+
+      if (n < order) {
+        try {
+          const derivNode = math.derivative(currentExpr, 'x');
+          currentExpr = derivNode.toString();
+        } catch { break; }
+      }
+    }
+
+    const seriesStr = terms.join(' + ').replace(/\+ -/g, '- ') || '0';
+    const seriesLatex = latexTerms.join(' + ').replace(/\+ -/g, '- ') + (order < 6 ? ` + O(x^{${order+1}})` : '');
+
+    steps.push({
+      step: 2,
+      description: 'Compute each term coefficient aₙ = f⁽ⁿ⁾(0)/n!',
+      expression: seriesLatex,
+      explanation: 'Differentiate n times, evaluate at center, divide by n! to get each coefficient.',
+    });
+
+    steps.push({
+      step: 3,
+      description: 'Final Taylor series',
+      expression: `${toLatex(expr)} \\approx ${seriesLatex}`,
+      explanation: `Valid approximation near x = ${center}. More terms increase accuracy.`,
+    });
+
+    return {
+      input,
+      type: 'Taylor Series',
+      steps,
+      answer: seriesStr + ` + O(x^${order+1})`,
+      answerLatex: seriesLatex,
+      verified: true,
+    };
+  } catch (err) {
+    return {
+      input,
+      type: 'Taylor Series',
+      steps: [...steps, { step: 2, description: 'Error', expression: expr, explanation: String(err) }],
+      answer: 'Could not compute series',
+      answerLatex: '\\text{Could not compute}',
+      verified: false,
+      error: String(err),
+    };
+  }
+}
+
+// ─── System of equations ──────────────────────────────────────────────────────
+function solveSystem(input: string): SolverResult {
+  const steps: MathStep[] = [];
+
+  // Parse multiple equations separated by comma, semicolon, or newline
+  const eqStrings = input.split(/[,;\n]+/).map(s => s.trim()).filter(s => s.includes('='));
+  if (eqStrings.length < 2) {
+    return solveLinear(input);
+  }
+
+  steps.push({
+    step: 1,
+    description: `System of ${eqStrings.length} equations`,
+    expression: eqStrings.map(e => toLatex(e)).join(', \\quad '),
+    explanation: 'Identify all equations in the system.',
+  });
+
+  // Extract variables
+  const vars = Array.from(new Set(input.match(/\b[a-zA-Z]\b/g) || [])).filter(v => v !== 'e');
+
+  if (vars.length === 2 && eqStrings.length === 2) {
+    const [v1, v2] = vars;
+    steps.push({
+      step: 2,
+      description: `Using substitution/elimination for ${v1} and ${v2}`,
+      expression: eqStrings.map(e => toLatex(e)).join(' \\\\[6pt] '),
+      explanation: `Solve for ${v1} from the first equation, substitute into the second.`,
+    });
+
+    try {
+      // Numerical solve: scan grid for f1=0 and f2=0 simultaneously
+      const buildF = (eq: string) => {
+        const [lhs, rhs] = eq.split('=').map(s => s.trim());
+        return (scope: Record<string, number>) => {
+          try { return Number(math.evaluate(`(${lhs}) - (${rhs})`, scope)); } catch { return NaN; }
+        };
+      };
+      const f1 = buildF(eqStrings[0]);
+      const f2 = buildF(eqStrings[1]);
+
+      // Simple grid search then Newton-Raphson refinement
+      let best: { x1: number; x2: number; err: number } | null = null;
+      for (let a = -10; a <= 10; a += 0.5) {
+        for (let b = -10; b <= 10; b += 0.5) {
+          const scope = { [v1]: a, [v2]: b };
+          const err = f1(scope)**2 + f2(scope)**2;
+          if (!best || err < best.err) best = { x1: a, x2: b, err };
+        }
+      }
+
+      if (best && best.err < 1) {
+        // Newton refinement
+        const eps = 1e-5;
+        let { x1, x2 } = best;
+        for (let iter = 0; iter < 50; iter++) {
+          const scope = { [v1]: x1, [v2]: x2 };
+          const F1 = f1(scope), F2 = f2(scope);
+          if (Math.abs(F1) + Math.abs(F2) < 1e-10) break;
+          const df1dv1 = (f1({[v1]: x1+eps, [v2]: x2}) - F1) / eps;
+          const df1dv2 = (f1({[v1]: x1, [v2]: x2+eps}) - F1) / eps;
+          const df2dv1 = (f2({[v1]: x1+eps, [v2]: x2}) - F2) / eps;
+          const df2dv2 = (f2({[v1]: x1, [v2]: x2+eps}) - F2) / eps;
+          const det = df1dv1*df2dv2 - df1dv2*df2dv1;
+          if (Math.abs(det) < 1e-14) break;
+          x1 -= (F1*df2dv2 - F2*df1dv2) / det;
+          x2 -= (F2*df1dv1 - F1*df2dv1) / det;
+        }
+
+        const fmt = (v: number) => Number.isInteger(v) ? String(v) : v.toFixed(4);
+        const r1 = fmt(x1), r2 = fmt(x2);
+
+        steps.push({
+          step: 3,
+          description: 'Solution found via Newton-Raphson',
+          expression: `${v1} = ${r1}, \\quad ${v2} = ${r2}`,
+          explanation: `Numerically solved to ${v1} = ${r1}, ${v2} = ${r2}. Verify by substituting back.`,
+        });
+
+        return {
+          input,
+          type: 'System of Equations',
+          steps,
+          answer: `${v1} = ${r1}, ${v2} = ${r2}`,
+          answerLatex: `${v1} = ${toLatex(x1)}, \\quad ${v2} = ${toLatex(x2)}`,
+          verified: best.err < 0.01,
+        };
+      }
+    } catch { /* fall through */ }
+  }
+
+  return {
+    input,
+    type: 'System of Equations',
+    steps: [...steps, {
+      step: 2,
+      description: 'Could not solve automatically',
+      expression: '\\text{System requires CAS}',
+      explanation: 'Complex systems with more than 2 variables require matrix methods. Try entering as: [a+b=5, a-b=1]',
+    }],
+    answer: 'Use matrix method',
+    answerLatex: '\\text{Use matrix method}',
+    verified: false,
+  };
 }
 
 // ─── Simplify ─────────────────────────────────────────────────────────────────
@@ -822,6 +1250,10 @@ export function solve(input: string): SolverResult {
 
   switch (type) {
     case 'derivative':     return solveDerivative(input);
+    case 'integral':       return solveIntegral(input);
+    case 'limit':          return solveLimit(input);
+    case 'series':         return solveSeries(input);
+    case 'system':         return solveSystem(input);
     case 'simplify':       return solveSimplify(input);
     case 'expand':         return solveExpand(input);
     case 'quadratic':      return solveQuadratic(input);
@@ -858,14 +1290,26 @@ export const EXAMPLE_PROBLEMS: Record<string, { label: string; examples: { expr:
       { expr: 'x^2 - 6*x + 9 = 0', desc: 'Repeated root' },
     ],
   },
-  calculus: {
-    label: 'Calculus',
+  derivatives: {
+    label: 'Derivatives',
     examples: [
       { expr: 'd/dx(x^3 + 2*x^2 - x)', desc: 'Polynomial derivative' },
       { expr: 'd/dx(sin(x) * x^2)', desc: 'Product rule' },
       { expr: 'd/dx(sin(2*x))', desc: 'Chain rule' },
       { expr: 'd/dx(exp(x^2))', desc: 'Exponential' },
       { expr: 'd/dx(log(x^2 + 1))', desc: 'Logarithm' },
+    ],
+  },
+  calculus: {
+    label: 'Calculus+',
+    examples: [
+      { expr: 'integrate x^2', desc: 'Indefinite integral' },
+      { expr: 'integrate sin(x)', desc: '∫sin(x) dx' },
+      { expr: 'integrate x^2, x, 0, 3', desc: 'Definite integral' },
+      { expr: 'limit x->2 of x^2 + 1', desc: 'Direct substitution' },
+      { expr: 'limit x->0 of sin(x)/x', desc: 'L\'Hôpital (sinc)' },
+      { expr: 'series sin(x)', desc: 'Taylor series at 0' },
+      { expr: 'series cos(x) order 6', desc: 'Cosine series 6 terms' },
     ],
   },
   trig: {
@@ -903,6 +1347,14 @@ export const EXAMPLE_PROBLEMS: Record<string, { label: string; examples: { expr:
       { expr: 'sqrt(2) + sqrt(3)', desc: 'Irrational numbers' },
       { expr: 'factorial(10)', desc: 'Factorial' },
       { expr: 'floor(pi * 100) / 100', desc: 'π approximation' },
+    ],
+  },
+  system: {
+    label: 'Systems',
+    examples: [
+      { expr: 'x + y = 5, x - y = 1', desc: '2 equations, 2 unknowns' },
+      { expr: '2*x + y = 7, x + 3*y = 11', desc: 'Linear system' },
+      { expr: 'x^2 + y = 4, x + y = 2', desc: 'Nonlinear system' },
     ],
   },
 };
