@@ -17,6 +17,7 @@ const NAV = [
   { href: '/sharing',   label: 'Sharing',   icon: '🔗' },
   { href: '/download',  label: 'Download',  icon: '⬇️' },
   { href: '/settings',  label: 'Settings',  icon: '⚙️' },
+  { href: '/report',    label: 'Report',    icon: '🩺' },
 ];
 
 // ── Tiny inline avatar ────────────────────────────────────────────────────

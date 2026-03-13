@@ -37,6 +37,7 @@ export default function StatusPage() {
     'Open roadmap': 'افتح خارطة الطريق',
     'Go to settings': 'اذهب إلى الإعدادات',
     'Open GitHub repo': 'افتح مستودع GitHub',
+    'Open report form': 'افتح نموذج البلاغ',
   });
 
   const categories = [
@@ -57,9 +58,9 @@ export default function StatusPage() {
           <p>{t('Known product state, issue reporting, and team workflow in one place.')}</p>
         </div>
         <div className={styles.heroActions}>
-          <a className="sp-button-primary" href={ERROR_REPORT_URL} target="_blank" rel="noreferrer">
-            {t('Error report')}
-          </a>
+          <Link className="sp-button-primary" href="/report">
+            {t('Open report form')}
+          </Link>
           <Link className="sp-button-secondary" href="/settings?tab=security">
             {t('Go to settings')}
           </Link>
@@ -95,6 +96,7 @@ export default function StatusPage() {
           ))}
         </div>
         <div className={styles.actions}>
+          <Link className="sp-button-secondary" href="/report">{t('Open report form')}</Link>
           <a className="sp-button-secondary" href={ERROR_REPORT_URL} target="_blank" rel="noreferrer">{t('Error report')}</a>
           <a className="sp-button-secondary" href={BUG_REPORT_URL} target="_blank" rel="noreferrer">{t('Bug report')}</a>
           <a className="sp-button-secondary" href={FEATURE_REQUEST_URL} target="_blank" rel="noreferrer">{t('Feature request')}</a>
