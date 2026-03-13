@@ -6,7 +6,7 @@ const OFFLINE_MODES: ToolMode[] = [
   'mcq', 'flashcards', 'assignment',
 ];
 
-const VALID_MODES = [...OFFLINE_MODES, 'outline', 'exam'] as const;
+const VALID_MODES = [...OFFLINE_MODES, 'outline', 'exam', 'practice'] as const;
 type AllModes = typeof VALID_MODES[number];
 
 /**
@@ -225,6 +225,7 @@ function buildUserPrompt(mode: AllModes, text: string, options?: Record<string, 
     assignment: `Generate a structured assignment with ${count} questions based on:\n\n${text}`,
     outline:    `Create a detailed hierarchical outline with main topics and subtopics from:\n\n${text}`,
     exam:       `Create a realistic exam paper with ${count} mixed questions (MCQ, short answer, essay) worth 100 marks total. Include a marking scheme. Based on:\n\n${text}`,
+    practice:   `Create a practice problem based on this content. Use EXACTLY this format:\n\n## Problem\n[Write a clear, challenging practice question here]\n\n## Hint 1\n[A gentle nudge in the right direction, no direct answer]\n\n## Hint 2\n[More specific guidance, pointing to the key concept]\n\n## Hint 3\n[Almost there — tell them what approach to use]\n\n## Solution\n[Complete step-by-step worked solution with explanation]\n\nContent:\n\n${text}`,
   };
   return instructions[mode];
 }
@@ -259,6 +260,11 @@ function buildOfflineFallback(mode: AllModes, text: string, options?: Record<str
     parts.push('\n## Section C — Essay (30 marks)\n');
     parts.push(`1. Discuss the main themes covered in the provided material, supporting your answer with specific examples. (30 marks)\n`);
     return parts.join('\n');
+  }
+
+  if (mode === 'practice') {
+    const topic = sentences[0]?.slice(0, 80) ?? 'the provided content';
+    return `## Problem\nBased on the text, explain the concept: "${topic}…"\n\n## Hint 1\nThink about the definition and context provided in the source material.\n\n## Hint 2\nConsider the key terms and how they relate to each other.\n\n## Hint 3\nLook at the examples or evidence given — how do they support the main idea?\n\n## Solution\nThe concept refers to the ideas described in "${topic}…". A complete answer would reference the key terms from the text and explain how they connect. (Install Ollama for AI-generated practice problems.)`;
   }
 
   return `(No AI model available — install Ollama from https://ollama.com and run: ollama pull mistral)`;
