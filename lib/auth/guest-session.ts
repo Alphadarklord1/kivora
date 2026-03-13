@@ -37,7 +37,10 @@ export async function resolveGuestUserId(sessionId: string): Promise<string | nu
   const guestEmail = guestEmailForSession(sessionId);
 
   const existing = await db.query.users.findFirst({
-    where: eq(users.email, guestEmail),
+    where: or(
+      eq(users.guestSessionId, sessionId),
+      eq(users.email, guestEmail),
+    ),
   });
   if (existing) return existing.id;
 
@@ -48,10 +51,17 @@ export async function resolveGuestUserId(sessionId: string): Promise<string | nu
       email: guestEmail,
       name: 'Guest Session',
       image: null,
+      isGuest: true,
+      guestSessionId: sessionId,
     });
     return guestUserId;
   } catch {
-    const retry = await db.query.users.findFirst({ where: eq(users.email, guestEmail) });
+    const retry = await db.query.users.findFirst({
+      where: or(
+        eq(users.guestSessionId, sessionId),
+        eq(users.email, guestEmail),
+      ),
+    });
     return retry?.id ?? null;
   }
 }
@@ -59,6 +69,11 @@ export async function resolveGuestUserId(sessionId: string): Promise<string | nu
 export async function deleteGuestSessionData(sessionId: string): Promise<boolean> {
   if (!isGuestSessionId(sessionId) || !isDatabaseConfigured) return false;
   const guestEmail = guestEmailForSession(sessionId);
-  await db.delete(users).where(eq(users.email, guestEmail));
+  await db.delete(users).where(
+    or(
+      eq(users.guestSessionId, sessionId),
+      eq(users.email, guestEmail),
+    ),
+  );
   return true;
 }

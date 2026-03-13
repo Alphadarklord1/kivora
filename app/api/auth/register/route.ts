@@ -19,29 +19,42 @@ export async function POST(req: NextRequest) {
   if (!email || !password) {
     return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 });
   }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim().toLowerCase())) {
+    return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
+  }
   if (password.length < 8) {
     return NextResponse.json({ error: 'Password must be at least 8 characters.' }, { status: 400 });
+  }
+  if (name && name.trim().length > 80) {
+    return NextResponse.json({ error: 'Name is too long.' }, { status: 400 });
   }
 
   const normalised = email.trim().toLowerCase();
 
-  const existing = await db.query.users.findFirst({ where: eq(users.email, normalised) });
-  if (existing) {
-    return NextResponse.json({ error: 'An account with this email already exists.' }, { status: 409 });
+  try {
+    const existing = await db.query.users.findFirst({ where: eq(users.email, normalised) });
+    if (existing) {
+      return NextResponse.json({ error: 'An account with this email already exists.' }, { status: 409 });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const userId = uuidv4();
+
+    const [newUser] = await db.insert(users).values({
+      id: userId,
+      email: normalised,
+      name: name?.trim() || normalised.split('@')[0],
+      passwordHash,
+      isGuest: false,
+      guestSessionId: null,
+    }).returning({ id: users.id, email: users.email, name: users.name });
+
+    // Default settings should not make registration fail if they already exist or insert late.
+    await db.insert(userSettings).values({ userId }).onConflictDoNothing();
+
+    return NextResponse.json({ id: newUser.id, email: newUser.email, name: newUser.name }, { status: 201 });
+  } catch (error) {
+    console.error('[auth/register] registration failed', error);
+    return NextResponse.json({ error: 'Could not create the account right now. Please try again.' }, { status: 500 });
   }
-
-  const passwordHash = await bcrypt.hash(password, 12);
-  const userId = uuidv4();
-
-  const [newUser] = await db.insert(users).values({
-    id: userId,
-    email: normalised,
-    name: name?.trim() || normalised.split('@')[0],
-    passwordHash,
-  }).returning({ id: users.id, email: users.email, name: users.name });
-
-  // Create default settings row
-  await db.insert(userSettings).values({ userId }).onConflictDoNothing();
-
-  return NextResponse.json({ id: newUser.id, email: newUser.email, name: newUser.name }, { status: 201 });
 }
