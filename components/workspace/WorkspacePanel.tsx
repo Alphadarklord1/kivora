@@ -10,6 +10,7 @@ import { deleteLocalFile, listLocalFiles, upsertLocalFile } from '@/lib/files/lo
 import { solveOffline } from '@/lib/math/offline-solver';
 import type { MathSolution } from '@/lib/math/offline-solver';
 import { MathRenderer, MathText } from '@/components/math/MathRenderer';
+import { createCard, gradeCard, getDeckStats, loadDecks, saveDeck, deleteDeck, type SRSDeck } from '@/lib/srs/sm2';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -180,92 +181,250 @@ function MCQView({ content }: { content: string }) {
 
 // ── Flashcard renderer ─────────────────────────────────────────────────────
 
-function FlashcardView({ content }: { content: string }) {
-  const [idx,    setIdx]    = useState(0);
-  const [flip,   setFlip]   = useState(false);
-  const [known,  setKnown]  = useState<Set<number>>(new Set());
-
-  const cards = content
+// ── Flashcard parser ───────────────────────────────────────────────────────
+function parseFlashcards(content: string): Array<{ front: string; back: string }> {
+  // Format 1: "Front: ... | Back: ..." (pipe-separated on one line)
+  const pipeLines = content
+    .split(/\n/)
+    .map(l => l.replace(/^\d+[.)]\s*/, '').trim())
+    .filter(l => /front:/i.test(l) && /back:/i.test(l));
+  if (pipeLines.length > 0) {
+    return pipeLines.map(l => ({
+      front: (l.match(/front:\s*(.*?)(?:\s*\|\s*back:|$)/i)?.[1] ?? '').trim(),
+      back:  (l.match(/back:\s*(.*?)$/i)?.[1] ?? '').trim(),
+    })).filter(c => c.front);
+  }
+  // Format 2: blocks separated by --- with Front: / Back: labels
+  return content
     .split(/---+/)
     .map(block => ({
       front: block.match(/\*?\*?Front:\*?\*?\s*([\s\S]*?)(?=\*?\*?Back:|$)/i)?.[1]?.trim() ?? '',
       back:  block.match(/\*?\*?Back:\*?\*?\s*([\s\S]*?)$/i)?.[1]?.trim() ?? '',
     }))
     .filter(c => c.front);
+}
 
-  if (cards.length === 0)
+// ── SM-2 Flashcard view ────────────────────────────────────────────────────
+function FlashcardView({ content }: { content: string }) {
+  const rawCards = parseFlashcards(content);
+
+  // SRS deck state (persisted in localStorage)
+  const [deck,       setDeck]       = useState<SRSDeck | null>(null);
+  const [sessionIdx, setSessionIdx] = useState(0);
+  const [flip,       setFlip]       = useState(false);
+  const [phase,      setPhase]      = useState<'preview' | 'review' | 'done'>('preview');
+  const [graded,     setGraded]     = useState<number[]>([]); // grades for session
+
+  // Build/load the deck when content changes
+  useEffect(() => {
+    if (rawCards.length === 0) return;
+    const deckId = 'deck-' + btoa(content.slice(0, 80)).replace(/[^a-z0-9]/gi, '').slice(0, 20);
+    const existing = loadDecks().find(d => d.id === deckId);
+    if (existing) {
+      setDeck(existing);
+    } else {
+      const newDeck: SRSDeck = {
+        id: deckId,
+        name: `Flashcards (${rawCards.length} cards)`,
+        cards: rawCards.map((c, i) => createCard(`${deckId}-${i}`, c.front, c.back)),
+        createdAt: new Date().toISOString(),
+      };
+      saveDeck(newDeck);
+      setDeck(newDeck);
+    }
+    setSessionIdx(0); setFlip(false); setPhase('preview'); setGraded([]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content]);
+
+  if (rawCards.length === 0)
     return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
 
-  const card = cards[idx];
-  const pct  = Math.round((known.size / cards.length) * 100);
+  if (!deck) return null;
 
-  function mark(val: 'known' | 'unsure') {
-    if (val === 'known') setKnown(p => new Set([...p, idx]));
+  const stats = getDeckStats(deck);
+  // Session cards: due today first, then new cards
+  const today = new Date().toISOString().split('T')[0];
+  const sessionCards = [
+    ...deck.cards.filter(c => c.nextReview <= today && c.repetitions > 0),
+    ...deck.cards.filter(c => c.repetitions === 0),
+  ];
+  const totalSession = sessionCards.length || deck.cards.length;
+  const allCards = sessionCards.length > 0 ? sessionCards : deck.cards;
+
+  function doGrade(grade: 0 | 1 | 2 | 3) {
+    const card = allCards[sessionIdx];
+    const updated = gradeCard(card, grade);
+    const nextDeck: SRSDeck = {
+      ...deck!,
+      cards: deck!.cards.map(c => c.id === updated.id ? updated : c),
+      lastStudied: new Date().toISOString(),
+    };
+    saveDeck(nextDeck);
+    setDeck(nextDeck);
+    setGraded(p => [...p, grade]);
     setFlip(false);
-    setTimeout(() => setIdx(i => (i + 1) % cards.length), 120);
+    if (sessionIdx + 1 >= allCards.length) {
+      setTimeout(() => setPhase('done'), 100);
+    } else {
+      setTimeout(() => setSessionIdx(i => i + 1), 120);
+    }
   }
 
+  // GRADE_META
+  const GRADES: Array<{ grade: 0|1|2|3; label: string; hint: string; color: string }> = [
+    { grade: 0, label: 'Again',  hint: 'Forgot — review tomorrow',       color: '#e05252' },
+    { grade: 1, label: 'Hard',   hint: 'Recalled with effort',           color: '#f59e0b' },
+    { grade: 2, label: 'Good',   hint: 'Recalled correctly',             color: '#4f86f7' },
+    { grade: 3, label: 'Easy',   hint: 'Instant recall — longer gap',    color: '#52b788' },
+  ];
+
+  // ── Done screen ──────────────────────────────────────────────────────
+  if (phase === 'done') {
+    const correct = graded.filter(g => g >= 2).length;
+    const pct = Math.round((correct / graded.length) * 100);
+    const nextStats = getDeckStats({ ...deck!, cards: deck!.cards });
+    return (
+      <div style={{ textAlign: 'center', padding: '32px 20px', maxWidth: 480, margin: '0 auto' }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>{pct >= 80 ? '🎉' : pct >= 50 ? '📚' : '💪'}</div>
+        <h3 style={{ margin: '0 0 6px' }}>Session complete!</h3>
+        <p style={{ color: 'var(--text-3)', margin: '0 0 20px' }}>
+          {correct}/{graded.length} recalled correctly ({pct}%)
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 24, fontSize: 'var(--text-sm)' }}>
+          {[
+            { label: 'New',      val: nextStats.new,      color: '#4f86f7' },
+            { label: 'Learning', val: nextStats.learning, color: '#f59e0b' },
+            { label: 'Mature',   val: nextStats.mature,   color: '#52b788' },
+          ].map(s => (
+            <div key={s.label} style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10, padding: '10px 8px' }}>
+              <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', color: s.color }}>{s.val}</div>
+              <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+        {nextStats.due > 0 && (
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 16 }}>
+            {nextStats.due} card{nextStats.due !== 1 ? 's' : ''} still due today
+          </div>
+        )}
+        <button className="btn btn-primary btn-sm" onClick={() => {
+          setSessionIdx(0); setFlip(false); setGraded([]);
+          setPhase(nextStats.due > 0 ? 'review' : 'preview');
+        }}>
+          {nextStats.due > 0 ? `Review ${nextStats.due} remaining` : 'Browse all cards'}
+        </button>
+      </div>
+    );
+  }
+
+  // ── Preview (browse all) mode ────────────────────────────────────────
+  if (phase === 'preview') {
+    return (
+      <div style={{ maxWidth: 560, margin: '0 auto' }}>
+        {/* Deck stats bar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>
+            📇 {deck.name}
+          </span>
+          {[
+            { label: `${stats.new} new`,      color: '#4f86f7' },
+            { label: `${stats.learning} learning`, color: '#f59e0b' },
+            { label: `${stats.mature} mature`, color: '#52b788' },
+          ].map(b => (
+            <span key={b.label} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 12, background: `${b.color}22`, color: b.color, fontWeight: 600 }}>
+              {b.label}
+            </span>
+          ))}
+          {stats.due > 0 && (
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 12, background: 'var(--accent-subtle, rgba(79,134,247,0.12))', color: 'var(--accent)', fontWeight: 700, marginLeft: 'auto' }}>
+              {stats.due} due today
+            </span>
+          )}
+        </div>
+
+        <button className="btn btn-primary btn-sm" style={{ width: '100%', marginBottom: 16 }}
+          onClick={() => { setSessionIdx(0); setFlip(false); setGraded([]); setPhase('review'); }}>
+          {stats.due > 0 ? `▶ Study ${stats.due} due card${stats.due !== 1 ? 's' : ''}` : `▶ Study all ${deck.cards.length} cards`}
+        </button>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8 }}>
+          {deck.cards.map((c, i) => {
+            const maturity = c.repetitions === 0 ? 'new' : c.interval >= 21 ? 'mature' : 'learning';
+            const colors = { new: '#4f86f7', learning: '#f59e0b', mature: '#52b788' };
+            return (
+              <div key={c.id}
+                style={{ background: 'var(--surface)', border: `1px solid var(--border-2)`, borderRadius: 8, padding: '8px 10px', cursor: 'pointer', fontSize: 'var(--text-xs)', borderLeft: `3px solid ${colors[maturity]}` }}
+                onClick={() => { setSessionIdx(i); setFlip(false); setPhase('review'); }}>
+                <div style={{ fontWeight: 600, marginBottom: 3 }}>{c.front}</div>
+                <div style={{ color: 'var(--text-3)', marginBottom: 4 }}>{c.back}</div>
+                {c.repetitions > 0 && (
+                  <div style={{ color: 'var(--text-3)', fontSize: 10 }}>
+                    Next: {c.nextReview} · {Math.round((c.correctReviews / Math.max(1, c.totalReviews)) * 100)}% accuracy
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Review mode ──────────────────────────────────────────────────────
+  const card = allCards[Math.min(sessionIdx, allCards.length - 1)];
+  const reviewPct = Math.round((sessionIdx / totalSession) * 100);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 540, margin: '0 auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 540, margin: '0 auto' }}>
+      {/* Progress bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
-          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: 'var(--success)', transition: 'width 0.4s' }} />
+        <div style={{ flex: 1, height: 5, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
+          <div style={{ width: `${reviewPct}%`, height: '100%', borderRadius: 3, background: 'var(--accent)', transition: 'width 0.4s' }} />
         </div>
         <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-          {known.size}/{cards.length} known
+          {sessionIdx + 1}/{totalSession}
         </span>
+        <button className="btn-icon" style={{ fontSize: 11, color: 'var(--text-3)' }}
+          title="Back to overview" onClick={() => { setPhase('preview'); }}>✕</button>
       </div>
-      <div style={{ textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-        Card {idx + 1} of {cards.length}
-      </div>
-      <div className="flashcard-wrap" style={{ minHeight: 200 }} onClick={() => setFlip(f => !f)}>
+
+      {/* Card */}
+      <div className="flashcard-wrap" style={{ minHeight: 200 }} onClick={() => !flip && setFlip(true)}>
         <div className={`flashcard${flip ? ' flipped' : ''}`} style={{ minHeight: 200 }}>
           <div className="flashcard-face">
             <div className="flashcard-label">Front</div>
             <div className="flashcard-text">{card.front}</div>
-            <small style={{ marginTop: 'auto', color: 'var(--text-3)', paddingTop: 12 }}>Click to reveal</small>
+            {!flip && <small style={{ marginTop: 'auto', color: 'var(--text-3)', paddingTop: 12 }}>Click to reveal answer</small>}
           </div>
           <div className="flashcard-face flashcard-back">
-            <div className="flashcard-label">Answer</div>
+            <div className="flashcard-label">Back</div>
             <div className="flashcard-text">{card.back}</div>
           </div>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-        <button className="btn btn-sm btn-ghost"
-          onClick={() => { setFlip(false); setTimeout(() => setIdx(i => (i - 1 + cards.length) % cards.length), 80); }}>
-          ← Prev
-        </button>
-        {flip && (
-          <>
-            <button className="btn btn-sm btn-ghost" style={{ color: 'var(--danger)' }} onClick={() => mark('unsure')}>✗ Again</button>
-            <button className="btn btn-sm" style={{ background: 'var(--success)', color: '#fff' }} onClick={() => mark('known')}>✓ Got it</button>
-          </>
-        )}
-        <button className="btn btn-sm btn-ghost"
-          onClick={() => { setFlip(false); setTimeout(() => setIdx(i => (i + 1) % cards.length), 80); }}>
-          Next →
-        </button>
-      </div>
-      <details style={{ marginTop: 4 }}>
-        <summary style={{ cursor: 'pointer', fontSize: 'var(--text-xs)', color: 'var(--text-3)', userSelect: 'none' }}>
-          All {cards.length} cards
-        </summary>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8, marginTop: 10 }}>
-          {cards.map((c, i) => (
-            <div key={i}
+
+      {/* Grade buttons — only shown after flip */}
+      {flip ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+          {GRADES.map(g => (
+            <button key={g.grade}
+              onClick={() => doGrade(g.grade)}
+              title={g.hint}
               style={{
-                background: known.has(i) ? 'var(--success-bg)' : 'var(--surface)',
-                border: `1px solid ${known.has(i) ? 'var(--success)' : 'var(--border-2)'}`,
-                borderRadius: 8, padding: '8px 10px', cursor: 'pointer', fontSize: 'var(--text-xs)',
-              }}
-              onClick={() => { setIdx(i); setFlip(false); }}>
-              <div style={{ fontWeight: 600, marginBottom: 3 }}>{c.front}</div>
-              <div style={{ color: 'var(--text-3)' }}>{c.back}</div>
-            </div>
+                border: 'none', borderRadius: 8, padding: '8px 4px', cursor: 'pointer',
+                background: `${g.color}18`, color: g.color, fontWeight: 600, fontSize: 'var(--text-xs)',
+                transition: 'background 0.12s',
+              }}>
+              {g.label}
+              <div style={{ fontWeight: 400, fontSize: 10, opacity: 0.8, marginTop: 2 }}>{g.hint.split('—')[0].trim()}</div>
+            </button>
           ))}
         </div>
-      </details>
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setFlip(true)}>Show answer</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -953,12 +1112,15 @@ export function WorkspacePanel({
   const [libItems,      setLibItems]      = useState<Array<{ id: string; mode: string; content: string; createdAt: string }>>([]);
   const [libLoad,       setLibLoad]       = useState(false);
   const [libExpanded,   setLibExpanded]   = useState<Record<string, boolean>>({});
+  const [srsDecks,      setSrsDecks]      = useState<SRSDeck[]>([]);
+  const [reviewDeck,    setReviewDeck]    = useState<string | null>(null); // deckId being reviewed inline
   const [dragging,      setDragging]      = useState(false);
   const [uploading,     setUploading]     = useState(false);
   const [missingBlobs,  setMissingBlobs]  = useState<Set<string>>(new Set());
   const [reuploadTarget, setReuploadTarget] = useState<FileRecord | null>(null);
   const reuploadRef = useRef<HTMLInputElement>(null);
   const [streamSource,  setStreamSource]  = useState<string>('');
+  const [editMode,      setEditMode]      = useState(false);
   const [streak,        setStreak]        = useState<number>(0);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -1001,7 +1163,12 @@ export function WorkspacePanel({
       .finally(() => setLibLoad(false));
   }, []);
 
-  useEffect(() => { if (mainTab === 'library') loadLib(); }, [mainTab, loadLib]);
+  useEffect(() => {
+    if (mainTab === 'library') {
+      loadLib();
+      setSrsDecks(loadDecks());
+    }
+  }, [mainTab, loadLib]);
 
   // ── File operations ───────────────────────────────────────────────────
 
@@ -1081,6 +1248,7 @@ export function WorkspacePanel({
     setGenerating(true);
     setOutput('');
     setStreamSource('');
+    setEditMode(false);
 
     try {
       const ollamaModel = typeof window !== 'undefined'
@@ -1505,10 +1673,45 @@ export function WorkspacePanel({
                     {generating && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginLeft: 4 }}>● streaming…</span>}
                     {!generating && streamSource === 'offline' && <span className="badge" style={{ fontSize: 10, opacity: 0.6 }}>offline</span>}
                     {!generating && streamSource === 'ollama' && <span className="badge badge-accent" style={{ fontSize: 10 }}>AI</span>}
+                    {/* Edit toggle — only for text modes, not while streaming */}
+                    {!generating && (genMode === 'summarize' || genMode === 'notes' || genMode === 'rephrase' || genMode === 'outline' || genMode === 'assignment' || genMode === 'quiz') && (
+                      <button
+                        className={`btn btn-sm ${editMode ? 'btn-accent' : 'btn-ghost'}`}
+                        style={{ marginLeft: 'auto', fontSize: 12 }}
+                        onClick={() => setEditMode(v => !v)}
+                        title={editMode ? 'Done editing (view rendered)' : 'Edit output inline'}
+                      >
+                        {editMode ? '✓ Done' : '✏ Edit'}
+                      </button>
+                    )}
                   </div>
 
                   {/* While streaming or if mode needs full content for parsing, show raw markdown */}
-                  {(generating || genMode === 'summarize' || genMode === 'notes' || genMode === 'rephrase' || genMode === 'outline' || genMode === 'assignment')
+                  {editMode && !generating && (genMode === 'summarize' || genMode === 'notes' || genMode === 'rephrase' || genMode === 'outline' || genMode === 'assignment' || genMode === 'quiz')
+                    ? (
+                      <textarea
+                        className="tool-output-editor"
+                        value={output}
+                        onChange={e => setOutput(e.target.value)}
+                        spellCheck
+                        style={{
+                          width: '100%',
+                          minHeight: 320,
+                          padding: '14px 16px',
+                          background: 'var(--surface-2)',
+                          border: '1.5px solid var(--accent)',
+                          borderRadius: 10,
+                          color: 'var(--text-1)',
+                          fontSize: 'var(--text-sm)',
+                          lineHeight: 1.7,
+                          fontFamily: 'inherit',
+                          resize: 'vertical',
+                          outline: 'none',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    )
+                    : (generating || genMode === 'summarize' || genMode === 'notes' || genMode === 'rephrase' || genMode === 'outline' || genMode === 'assignment')
                     ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) + (generating ? '<span class="stream-cursor">▍</span>' : '') }} />
                     : genMode === 'mcq'        ? <MCQView content={output} />
                     : genMode === 'flashcards' ? <FlashcardView content={output} />
@@ -1526,7 +1729,7 @@ export function WorkspacePanel({
                       <button className="btn btn-ghost btn-sm" onClick={() => downloadOutput('md')} title="Download as Markdown (Ctrl+E)">⬇ .md</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => downloadOutput('txt')} title="Download as plain text">⬇ .txt</button>
                       <button className="btn btn-ghost btn-sm" onClick={saveToLibrary} title="Save to Library (Ctrl+S)">🗂 Save</button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => setOutput('')}>✕ Clear</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setOutput(''); setEditMode(false); }}>✕ Clear</button>
                     </div>
                   )}
                 </>
@@ -1585,6 +1788,55 @@ export function WorkspacePanel({
               </div>
               <button className="btn btn-ghost btn-sm" onClick={loadLib}>↻ Refresh</button>
             </div>
+
+            {/* ── SRS Decks ───────────────────────────────────────────────── */}
+            {srsDecks.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>📇 Saved Flashcard Decks</span>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{srsDecks.length} deck{srsDecks.length !== 1 ? 's' : ''}</span>
+                </div>
+                {srsDecks.map(deck => {
+                  const st = getDeckStats(deck);
+                  const isReviewing = reviewDeck === deck.id;
+                  return (
+                    <div key={deck.id} style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 500, fontSize: 'var(--text-sm)', marginBottom: 3 }}>{deck.name}</div>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {[
+                              { label: `${st.new} new`,       color: '#4f86f7' },
+                              { label: `${st.learning} lrn`,  color: '#f59e0b' },
+                              { label: `${st.mature} mature`,  color: '#52b788' },
+                            ].map(b => (
+                              <span key={b.label} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 10, background: `${b.color}22`, color: b.color, fontWeight: 600 }}>{b.label}</span>
+                            ))}
+                            {st.due > 0 && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 10, background: 'var(--accent-subtle, rgba(79,134,247,0.12))', color: 'var(--accent)', fontWeight: 700 }}>{st.due} due</span>}
+                          </div>
+                        </div>
+                        <button className="btn btn-primary btn-sm"
+                          onClick={() => setReviewDeck(isReviewing ? null : deck.id)}>
+                          {isReviewing ? 'Close' : (st.due > 0 ? `▶ Review ${st.due}` : '▶ Browse')}
+                        </button>
+                        <button className="btn-icon" style={{ color: 'var(--text-3)', width: 24, height: 24, fontSize: 12 }}
+                          onClick={() => {
+                            if (!confirm(`Delete deck "${deck.name}"?`)) return;
+                            deleteDeck(deck.id);
+                            setSrsDecks(d => d.filter(x => x.id !== deck.id));
+                          }}>✕</button>
+                      </div>
+                      {isReviewing && (
+                        <div style={{ borderTop: '1px solid var(--border)', padding: '14px' }}>
+                          <FlashcardView content={deck.cards.map(c => `Front: ${c.front} | Back: ${c.back}`).join('\n')} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <div style={{ height: 1, background: 'var(--border)', margin: '16px 0' }} />
+              </div>
+            )}
 
             {libLoad ? (
               [1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 90, marginBottom: 10, borderRadius: 10 }} />)
