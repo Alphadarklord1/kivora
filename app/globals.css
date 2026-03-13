@@ -271,6 +271,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .btn-ghost      { background: transparent; color: var(--text-2); }
 .btn-ghost:hover:not(:disabled)    { background: var(--surface-2); color: var(--text); }
+.btn-accent     { background: var(--accent); color: #fff; }
+.btn-accent:hover:not(:disabled)   { opacity: 0.88; }
 
 .btn-danger     { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(248,113,113,0.2); }
 .btn-danger:hover:not(:disabled)   { background: rgba(248,113,113,0.2); }
