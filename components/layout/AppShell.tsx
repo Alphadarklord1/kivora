@@ -9,8 +9,10 @@ import { useSettings } from '@/providers/SettingsProvider';
 const NAV = [
   { href: '/workspace', label: 'Workspace', icon: '📚' },
   { href: '/planner',   label: 'Planner',   icon: '📅' },
+  { href: '/math',      label: 'Math',      icon: '∑'  },
   { href: '/library',   label: 'Library',   icon: '🗂️' },
   { href: '/analytics', label: 'Analytics', icon: '📊' },
+  { href: '/models',    label: 'AI Models', icon: '🤖' },
   { href: '/sharing',   label: 'Sharing',   icon: '🔗' },
   { href: '/settings',  label: 'Settings',  icon: '⚙️' },
 ];
