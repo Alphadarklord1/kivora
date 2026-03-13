@@ -21,7 +21,7 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const provider = searchParams.get('provider');
 
-    if (!provider || !['google', 'github'].includes(provider)) {
+    if (!provider || !['google', 'github', 'microsoft-entra-id'].includes(provider)) {
       return apiError(400, {
         errorCode: 'INVALID_PROVIDER',
         reason: 'Invalid provider',

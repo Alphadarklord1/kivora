@@ -8,6 +8,7 @@ import Link from 'next/link';
 interface AuthCapabilities {
   googleConfigured: boolean;
   githubConfigured: boolean;
+  microsoftConfigured: boolean;
   oauthDisabled?: boolean;
 }
 
@@ -33,7 +34,7 @@ export default function RegisterPage() {
     await signIn(provider, { callbackUrl: '/workspace' });
   }
 
-  const hasOAuth = !caps?.oauthDisabled && (caps?.googleConfigured || caps?.githubConfigured);
+  const hasOAuth = !caps?.oauthDisabled && (caps?.googleConfigured || caps?.microsoftConfigured || caps?.githubConfigured);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,6 +84,19 @@ export default function RegisterPage() {
                   <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
                 </svg>
                 {oauthLoading === 'google' ? 'Redirecting…' : 'Sign up with Google'}
+              </button>
+            )}
+            {caps?.microsoftConfigured && (
+              <button type="button" className="btn btn-secondary btn-full" disabled={!!oauthLoading}
+                onClick={() => handleOAuth('microsoft-entra-id')}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <rect x="1" y="1" width="7" height="7" fill="#F25022"/>
+                  <rect x="10" y="1" width="7" height="7" fill="#7FBA00"/>
+                  <rect x="1" y="10" width="7" height="7" fill="#00A4EF"/>
+                  <rect x="10" y="10" width="7" height="7" fill="#FFB900"/>
+                </svg>
+                {oauthLoading === 'microsoft-entra-id' ? 'Redirecting…' : 'Sign up with Microsoft'}
               </button>
             )}
             {caps?.githubConfigured && (

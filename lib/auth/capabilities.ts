@@ -54,6 +54,10 @@ export function normalizeAuthEmail(value: string | null | undefined): string | n
 export function getAuthCapabilities() {
   const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
   const githubConfigured = Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
+  const microsoftConfigured = Boolean(
+    (process.env.AUTH_MICROSOFT_ENTRA_ID_ID || process.env.MICROSOFT_CLIENT_ID) &&
+    (process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET || process.env.MICROSOFT_CLIENT_SECRET)
+  );
   const guestModeEnabled = isGuestModeEnabledForCapabilities();
   const authSecretConfigured = hasConfiguredAuthSecret();
   const authDisabledByMissingSecret = process.env.NODE_ENV === 'production' && !authSecretConfigured;
@@ -71,6 +75,7 @@ export function getAuthCapabilities() {
   return {
     googleConfigured,
     githubConfigured,
+    microsoftConfigured,
     guestModeEnabled,
     authSecretConfigured,
     authDisabled,

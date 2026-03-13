@@ -7,6 +7,7 @@ export async function GET() {
   return NextResponse.json({
     googleConfigured: capabilities.googleConfigured,
     githubConfigured: capabilities.githubConfigured,
+    microsoftConfigured: capabilities.microsoftConfigured,
     guestModeEnabled: capabilities.guestModeEnabled,
     authSecretConfigured: capabilities.authSecretConfigured,
     authDisabled: capabilities.authDisabled,
