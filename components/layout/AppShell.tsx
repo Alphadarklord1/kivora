@@ -19,6 +19,26 @@ const NAV = [
   { href: '/settings',  label: 'Settings',  icon: '⚙️' },
 ];
 
+// ── Tiny inline avatar ────────────────────────────────────────────────────
+function SidebarAvatar({ src, name, email }: { src?: string | null; name?: string | null; email?: string | null }) {
+  const letters = (() => {
+    if (name?.trim()) {
+      const p = name.trim().split(/\s+/);
+      return p.length >= 2 ? (p[0][0] + p[p.length-1][0]).toUpperCase() : p[0].slice(0,2).toUpperCase();
+    }
+    return (email ?? '?').slice(0,2).toUpperCase();
+  })();
+  const hue = Array.from(email ?? '').reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+  if (src) {
+    return <img src={src} alt={letters} style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
+  }
+  return (
+    <div style={{ width: 26, height: 26, borderRadius: '50%', background: `hsl(${hue},55%,55%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 10, flexShrink: 0, userSelect: 'none' }}>
+      {letters}
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -81,14 +101,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
 
           {session?.user ? (
-            <button className="nav-item" onClick={handleSignOut} title="Sign out">
-              <span className="nav-icon">🚪</span>
-              {!collapsed && (
-                <span className="nav-label" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {session.user.name || session.user.email || 'Sign out'}
+            <>
+              {/* Account link */}
+              <Link
+                href="/account"
+                className={`nav-item${pathname?.startsWith('/account') ? ' active' : ''}`}
+                title="My account"
+              >
+                <span className="nav-icon">
+                  <SidebarAvatar src={session.user.image} name={session.user.name} email={session.user.email} />
                 </span>
-              )}
-            </button>
+                {!collapsed && (
+                  <span className="nav-label" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {session.user.name || session.user.email || 'Account'}
+                  </span>
+                )}
+              </Link>
+              {/* Sign out */}
+              <button className="nav-item" onClick={handleSignOut} title="Sign out" style={{ color: 'var(--text-3)' }}>
+                <span className="nav-icon">🚪</span>
+                {!collapsed && <span className="nav-label">Sign out</span>}
+              </button>
+            </>
           ) : (
             <Link href="/login" className="nav-item" title="Sign in">
               <span className="nav-icon">👤</span>

@@ -1254,3 +1254,26 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   .tab-content { padding: var(--sp-4); }
   .auth-card { padding: var(--sp-6) var(--sp-5); border-radius: var(--r-xl); }
 }
+
+/* ── Streaming cursor ──────────────────────────────────────────────────── */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+.stream-cursor {
+  display: inline-block;
+  width: 2px;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  color: var(--accent);
+  animation: blink 0.9s step-start infinite;
+  font-size: 1.1em;
+}
+
+/* ── Account / Settings cards ──────────────────────────────────────────── */
+.settings-card {
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  margin-bottom: 16px;
+}

@@ -141,7 +141,8 @@ export const authConfig: NextAuthConfig = {
         pathname.startsWith('/math') ||
         pathname.startsWith('/analytics') ||
         pathname.startsWith('/models') ||
-        pathname.startsWith('/sharing');
+        pathname.startsWith('/sharing') ||
+        pathname.startsWith('/account');
 
       const isAuthPage = pathname.startsWith('/login') || pathname.startsWith('/register');
 

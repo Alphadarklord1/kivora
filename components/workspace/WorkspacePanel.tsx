@@ -958,6 +958,9 @@ export function WorkspacePanel({
   const [missingBlobs,  setMissingBlobs]  = useState<Set<string>>(new Set());
   const [reuploadTarget, setReuploadTarget] = useState<FileRecord | null>(null);
   const reuploadRef = useRef<HTMLInputElement>(null);
+  const [streamSource,  setStreamSource]  = useState<string>('');
+  const [streak,        setStreak]        = useState<number>(0);
+  const abortRef = useRef<AbortController | null>(null);
 
   // ── Data loading ──────────────────────────────────────────────────────
 
@@ -1063,25 +1066,106 @@ export function WorkspacePanel({
     toast('File deleted', 'info');
   }
 
-  // ── AI generation ─────────────────────────────────────────────────────
+  // ── AI generation (streaming) ──────────────────────────────────────────
 
   async function runGenerate(mode: ToolMode) {
     let src = extractedText.trim();
     if (!src && selFile) src = (await extractFromFile(selFile))?.trim() ?? '';
     if (!src) { toast('Select a file or paste content first.', 'warning'); return; }
-    setGenerating(true); setOutput('');
+
+    // Cancel any in-flight stream
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    setGenerating(true);
+    setOutput('');
+    setStreamSource('');
+
     try {
-      const ollamaModel = typeof window !== 'undefined' ? (localStorage.getItem('kivora_ollama_model') ?? 'mistral') : 'mistral';
-      const res = await fetch('/api/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const ollamaModel = typeof window !== 'undefined'
+        ? (localStorage.getItem('kivora_ollama_model') ?? 'mistral')
+        : 'mistral';
+
+      const res = await fetch('/api/generate/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode, text: src, options: { count }, model: ollamaModel }),
+        signal: ctrl.signal,
       });
-      const data = await res.json();
-      setOutput(data.content ?? data.error ?? 'No output received.');
-      if (data.source === 'offline') toast('Generated offline — AI not connected', 'info');
-    } catch { toast('Generation failed. Please try again.', 'error'); }
-    finally { setGenerating(false); }
+
+      if (!res.ok || !res.body) {
+        // Fallback to non-streaming route
+        const fallback = await fetch('/api/generate', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode, text: src, options: { count }, model: ollamaModel }),
+        });
+        const data = await fallback.json();
+        setOutput(data.content ?? data.error ?? 'No output received.');
+        if (data.source === 'offline') toast('Generated offline — AI not connected', 'info');
+        return;
+      }
+
+      // Read SSE stream
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      let accumulated = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+          try {
+            const parsed = JSON.parse(trimmed.slice(6));
+            if (parsed.token) {
+              accumulated += parsed.token;
+              setOutput(accumulated);
+            }
+            if (parsed.done) {
+              setStreamSource(parsed.source ?? '');
+              if (parsed.source === 'offline') toast('Generated offline — AI not connected', 'info');
+            }
+          } catch { /* malformed chunk */ }
+        }
+      }
+      if (!accumulated) setOutput('No output received.');
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return; // cancelled
+      toast('Generation failed. Please try again.', 'error');
+    } finally {
+      setGenerating(false);
+    }
   }
+
+  // ── Export generated content ───────────────────────────────────────────
+
+  function downloadOutput(format: 'txt' | 'md') {
+    if (!output) return;
+    const ext = format === 'md' ? 'md' : 'txt';
+    const mime = format === 'md' ? 'text/markdown' : 'text/plain';
+    const filename = `${genMode}-${selFile?.name?.replace(/\.[^.]+$/, '') ?? 'export'}.${ext}`;
+    const blob = new Blob([output], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    toast(`Downloaded ${filename}`, 'success');
+  }
+
+  // ── Streak counter from localStorage ─────────────────────────────────
+  useEffect(() => {
+    // Read study streak from local analytics data
+    try {
+      const raw = localStorage.getItem('kivora_study_streak');
+      if (raw) setStreak(parseInt(raw, 10) || 0);
+    } catch {}
+  }, []);
 
   async function saveToLibrary() {
     if (!output) return;
@@ -1102,7 +1186,25 @@ export function WorkspacePanel({
     toast('Content loaded — pick a tool and generate', 'success');
   }
 
-  function clearGen() { setSelFile(null); setExtractedText(''); setOutput(''); setPasteMode(false); }
+  function clearGen() { abortRef.current?.abort(); setSelFile(null); setExtractedText(''); setOutput(''); setPasteMode(false); setGenerating(false); }
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const ctrl = e.ctrlKey || e.metaKey;
+      // Don't fire if focus is in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      if (e.key === 'Escape' && output) { clearGen(); return; }
+      if (inInput) return;
+      if (ctrl && e.key === 'g') { e.preventDefault(); if (mainTab === 'generate' && extractedText && !generating) runGenerate(genMode as ToolMode); }
+      if (ctrl && e.key === 's') { e.preventDefault(); if (output) saveToLibrary(); }
+      if (ctrl && e.key === 'e') { e.preventDefault(); if (output) downloadOutput('md'); }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainTab, extractedText, generating, genMode, output]);
 
   const breadcrumb = [selectedFolderName, selectedTopicName].filter(Boolean).join(' › ');
   const currentGen = GENERATE_TABS.find(t => t.id === genMode)!;
@@ -1120,7 +1222,14 @@ export function WorkspacePanel({
             : 'Kivora Workspace'}
         </span>
         {!selectedFolder && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', fontWeight: 400 }}>← Select a folder to get started</span>}
-        {files.length > 0 && <span className="badge badge-accent" style={{ marginLeft: 'auto' }}>{files.length} file{files.length !== 1 ? 's' : ''}</span>}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+          {streak > 0 && (
+            <span title={`${streak}-day study streak`} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--text-xs)', color: 'var(--text-2)', background: 'color-mix(in srgb, #f59e0b 15%, var(--surface))', border: '1px solid color-mix(in srgb, #f59e0b 30%, transparent)', borderRadius: 20, padding: '2px 8px', cursor: 'default' }}>
+              🔥 {streak}d
+            </span>
+          )}
+          {files.length > 0 && <span className="badge badge-accent">{files.length} file{files.length !== 1 ? 's' : ''}</span>}
+        </div>
       </div>
 
       {/* Tab bar */}
@@ -1342,12 +1451,20 @@ export function WorkspacePanel({
                         style={{ width: 52, padding: '3px 7px', fontSize: 'var(--text-xs)' }} />
                     </label>
                   )}
-                  <button
-                    className={`btn btn-sm ${output ? 'btn-secondary' : 'btn-primary'}`}
-                    disabled={generating || (!extractedText.trim() && pasteMode)}
-                    onClick={() => runGenerate(genMode as ToolMode)}>
-                    {generating ? '⏳ Generating…' : output ? `↻ Regenerate` : `${currentGen.icon} Generate ${currentGen.label}`}
-                  </button>
+                  {generating ? (
+                    <button className="btn btn-sm btn-ghost" style={{ color: 'var(--text-3)' }}
+                      onClick={() => { abortRef.current?.abort(); setGenerating(false); }}>
+                      ✕ Cancel
+                    </button>
+                  ) : (
+                    <button
+                      className={`btn btn-sm ${output ? 'btn-secondary' : 'btn-primary'}`}
+                      disabled={!extractedText.trim() && pasteMode}
+                      onClick={() => runGenerate(genMode as ToolMode)}
+                      title="Generate (Ctrl+G)">
+                      {output ? `↻ Regenerate` : `${currentGen.icon} Generate ${currentGen.label}`}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1372,34 +1489,46 @@ export function WorkspacePanel({
 
             {/* Output */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>
-              {generating && (
+              {generating && !output && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '48px 20px', justifyContent: 'center' }}>
                   <div style={{ width: 22, height: 22, border: '2.5px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                   <span style={{ color: 'var(--text-3)' }}>Generating {currentGen.label.toLowerCase()}…</span>
                 </div>
               )}
 
-              {!generating && output && (
+              {(output || (generating && output)) && (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                     <span style={{ fontSize: 18 }}>{currentGen.icon}</span>
                     <span style={{ fontWeight: 600 }}>{currentGen.label}</span>
                     {selFile && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>from &ldquo;{selFile.name}&rdquo;</span>}
+                    {generating && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginLeft: 4 }}>● streaming…</span>}
+                    {!generating && streamSource === 'offline' && <span className="badge" style={{ fontSize: 10, opacity: 0.6 }}>offline</span>}
+                    {!generating && streamSource === 'ollama' && <span className="badge badge-accent" style={{ fontSize: 10 }}>AI</span>}
                   </div>
 
-                  {genMode === 'mcq'        ? <MCQView content={output} />
-                  : genMode === 'flashcards' ? <FlashcardView content={output} />
-                  : genMode === 'exam'       ? <ExamView content={output} />
-                  : <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) }} />}
+                  {/* While streaming or if mode needs full content for parsing, show raw markdown */}
+                  {(generating || genMode === 'summarize' || genMode === 'notes' || genMode === 'rephrase' || genMode === 'outline' || genMode === 'assignment')
+                    ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) + (generating ? '<span class="stream-cursor">▍</span>' : '') }} />
+                    : genMode === 'mcq'        ? <MCQView content={output} />
+                    : genMode === 'flashcards' ? <FlashcardView content={output} />
+                    : genMode === 'exam'       ? <ExamView content={output} />
+                    : genMode === 'quiz'       ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) }} />
+                    : <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) }} />
+                  }
 
-                  <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-                    <button className="btn btn-secondary btn-sm"
-                      onClick={() => navigator.clipboard.writeText(output).then(() => toast('Copied!', 'success'))}>
-                      📋 Copy
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={saveToLibrary}>🗂 Save to Library</button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setOutput('')}>Clear</button>
-                  </div>
+                  {!generating && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+                      <button className="btn btn-secondary btn-sm"
+                        onClick={() => navigator.clipboard.writeText(output).then(() => toast('Copied!', 'success'))}>
+                        📋 Copy
+                      </button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => downloadOutput('md')} title="Download as Markdown (Ctrl+E)">⬇ .md</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => downloadOutput('txt')} title="Download as plain text">⬇ .txt</button>
+                      <button className="btn btn-ghost btn-sm" onClick={saveToLibrary} title="Save to Library (Ctrl+S)">🗂 Save</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setOutput('')}>✕ Clear</button>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -1409,8 +1538,14 @@ export function WorkspacePanel({
                   <h3>{currentGen.label}</h3>
                   <p>{currentGen.hint}</p>
                   <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 6 }}>
-                    {wordCount(extractedText).toLocaleString()} words ready · click Generate above
+                    {wordCount(extractedText).toLocaleString()} words ready
                   </p>
+                  <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button className="btn btn-primary btn-sm" onClick={() => runGenerate(genMode as ToolMode)}>
+                      {currentGen.icon} Generate {currentGen.label}
+                    </button>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>or press Ctrl+G</span>
+                  </div>
                 </div>
               )}
 
@@ -1422,6 +1557,12 @@ export function WorkspacePanel({
                     Open a file in <strong>Files</strong> and click <strong>⚡ Use for Generate</strong>,
                     or switch to <strong>Paste text</strong> above to enter content directly.
                   </p>
+                  <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', fontSize: 'var(--text-xs)', color: 'var(--text-3)', textAlign: 'left', maxWidth: 280, margin: '18px auto 0' }}>
+                    <span><kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Ctrl+G</kbd> Generate</span>
+                    <span><kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Ctrl+S</kbd> Save to library</span>
+                    <span><kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Ctrl+E</kbd> Export .md</span>
+                    <span><kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Esc</kbd> Clear output</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -1485,12 +1626,23 @@ export function WorkspacePanel({
                   <div className="lib-item-preview" style={{ maxHeight: expanded ? 'none' : 80, overflow: expanded ? 'visible' : 'hidden', WebkitMaskImage: expanded ? 'none' : 'linear-gradient(to bottom, #000 60%, transparent)', maskImage: expanded ? 'none' : 'linear-gradient(to bottom, #000 60%, transparent)' }}>
                     {item.content.slice(0, expanded ? undefined : 600)}{!expanded && item.content.length > 600 ? '…' : ''}
                   </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
                       onClick={() => navigator.clipboard.writeText(item.content).then(() => toast('Copied!', 'success'))}>
                       📋 Copy
                     </button>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>
+                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
+                      onClick={() => {
+                        const filename = `${item.mode}-${new Date(item.createdAt).toISOString().slice(0,10)}.md`;
+                        const blob = new Blob([item.content], { type: 'text/markdown' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+                        URL.revokeObjectURL(url);
+                        toast(`Downloaded ${filename}`, 'success');
+                      }}>
+                      ⬇ .md
+                    </button>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center', marginLeft: 2 }}>
                       {wordCount(item.content).toLocaleString()} words
                     </span>
                   </div>

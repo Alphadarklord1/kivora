@@ -104,8 +104,14 @@ export function useAnalytics(initialPeriod: number = 30): UseAnalyticsReturn {
         throw new Error(reason);
       }
 
-      const analyticsData = await res.json();
-      setData(analyticsData?.fallback ? buildAnalyticsFromLocalPlans(analyticsData) : analyticsData);
+      const raw = await res.json();
+      const analyticsData: AnalyticsData = raw?.fallback ? buildAnalyticsFromLocalPlans(raw) : raw;
+      setData(analyticsData);
+      // Persist streak to localStorage so other components can read it without re-fetching
+      try {
+        const streak = analyticsData?.activity?.currentStreak ?? 0;
+        if (streak > 0) localStorage.setItem('kivora_study_streak', String(streak));
+      } catch { /* ignore */ }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
       setData(null);
