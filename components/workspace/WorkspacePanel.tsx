@@ -11,6 +11,9 @@ import { solveOffline } from '@/lib/math/offline-solver';
 import type { MathSolution } from '@/lib/math/offline-solver';
 import { MathRenderer, MathText } from '@/components/math/MathRenderer';
 import { createCard, gradeCard, getDeckStats, loadDecks, saveDeck, deleteDeck, type SRSDeck } from '@/lib/srs/sm2';
+import { ChatPanel } from '@/components/workspace/ChatPanel';
+import { NotesPanel } from '@/components/workspace/NotesPanel';
+import { ExamPlannerPanel } from '@/components/workspace/ExamPlannerPanel';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -37,15 +40,16 @@ const GENERATE_TABS = [
   { id: 'notes',      label: 'Notes',      icon: '📋', hint: 'Structured study notes' },
   { id: 'rephrase',   label: 'Rephrase',   icon: '🔄', hint: 'Simplified rewrite' },
   { id: 'outline',    label: 'Outline',    icon: '📑', hint: 'Chapter outline with learning objectives' },
+  { id: 'practice',   label: 'Practice',   icon: '🎯', hint: 'Practice problem with progressive hints and solution' },
   { id: 'mcq',        label: 'MCQ',        icon: '🧩', hint: 'Multiple-choice questions with answers' },
-  { id: 'quiz',       label: 'Quiz',       icon: '🎯', hint: 'Open-ended quiz questions' },
+  { id: 'quiz',       label: 'Quiz',       icon: '❓', hint: 'Open-ended quiz questions' },
   { id: 'flashcards', label: 'Flashcards', icon: '📇', hint: 'Spaced-repetition study cards' },
   { id: 'assignment', label: 'Assignment', icon: '📌', hint: 'Practice assignment questions' },
   { id: 'exam',       label: 'Exam Prep',  icon: '🏆', hint: 'Timed exam with scoring and weak-area analysis' },
 ] as const;
 
 type GenMode    = (typeof GENERATE_TABS)[number]['id'];
-type MainTab    = 'files' | 'generate' | 'math' | 'focus' | 'library';
+type MainTab    = 'files' | 'generate' | 'chat' | 'notes' | 'math' | 'focus' | 'library' | 'planner';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -204,6 +208,100 @@ function parseFlashcards(content: string): Array<{ front: string; back: string }
     .filter(c => c.front);
 }
 
+// ── Practice problem renderer (hints + solution reveal) ────────────────────
+
+function PracticeView({ content }: { content: string }) {
+  const [hintsShown,   setHintsShown]   = useState(0);
+  const [showSolution, setShowSolution] = useState(false);
+  const [answer,       setAnswer]       = useState('');
+  const [submitted,    setSubmitted]    = useState(false);
+
+  // Parse sections: ## Problem / ## Hint N / ## Solution
+  const sections: Record<string, string> = {};
+  let current = '';
+  for (const line of content.split('\n')) {
+    const m = line.match(/^##\s+(.+)$/);
+    if (m) { current = m[1].trim(); sections[current] = ''; }
+    else if (current) sections[current] = (sections[current] + '\n' + line).trimStart();
+  }
+
+  const problem  = sections['Problem'] ?? content;
+  const hints    = [1, 2, 3].map(n => sections[`Hint ${n}`]).filter(Boolean);
+  const solution = sections['Solution'] ?? '';
+
+  if (!problem.trim())
+    return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 640, margin: '0 auto' }}>
+      {/* Problem */}
+      <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 12, padding: '16px 20px' }}>
+        <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--accent)', marginBottom: 8 }}>📋 Problem</div>
+        <div className="tool-output" style={{ margin: 0, padding: 0, background: 'none', border: 'none' }}
+          dangerouslySetInnerHTML={{ __html: mdToHtml(problem) }} />
+      </div>
+
+      {/* Self-assessment answer box */}
+      {!showSolution && (
+        <div>
+          <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>
+            Your answer (optional — for self-assessment)
+          </label>
+          <textarea value={answer} onChange={e => setAnswer(e.target.value)} rows={3}
+            placeholder="Write your working here before revealing hints or the solution…"
+            style={{ width: '100%', padding: '10px 12px', background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 8, color: 'var(--text)', fontSize: 'var(--text-sm)', fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }} />
+          {answer.trim() && !submitted && (
+            <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={() => setSubmitted(true)}>✓ Lock in answer</button>
+          )}
+          {submitted && (
+            <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--accent)' }}>✓ Answer locked — compare with solution when ready</div>
+          )}
+        </div>
+      )}
+
+      {/* Hints */}
+      {hints.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {hints.slice(0, hintsShown).map((hint, i) => (
+            <div key={i} style={{ background: 'color-mix(in srgb, #f59e0b 8%, var(--surface))', border: '1px solid color-mix(in srgb, #f59e0b 25%, transparent)', borderRadius: 10, padding: '12px 16px' }}>
+              <div style={{ fontWeight: 700, fontSize: 'var(--text-xs)', color: '#f59e0b', marginBottom: 6 }}>💡 Hint {i + 1}</div>
+              <div className="tool-output" style={{ margin: 0, padding: 0, background: 'none', border: 'none', fontSize: 'var(--text-sm)' }}
+                dangerouslySetInnerHTML={{ __html: mdToHtml(hint) }} />
+            </div>
+          ))}
+          {hintsShown < hints.length && !showSolution && (
+            <button className="btn btn-ghost btn-sm" onClick={() => setHintsShown(h => h + 1)}
+              style={{ alignSelf: 'flex-start', color: '#f59e0b', border: '1px solid color-mix(in srgb, #f59e0b 30%, transparent)' }}>
+              💡 Show hint {hintsShown + 1} of {hints.length}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Solution */}
+      {showSolution && solution ? (
+        <div style={{ background: 'color-mix(in srgb, #52b788 8%, var(--surface))', border: '1px solid color-mix(in srgb, #52b788 30%, transparent)', borderRadius: 12, padding: '14px 18px' }}>
+          <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: '#52b788', marginBottom: 8 }}>✅ Solution</div>
+          <div className="tool-output" style={{ margin: 0, padding: 0, background: 'none', border: 'none' }}
+            dangerouslySetInnerHTML={{ __html: mdToHtml(solution) }} />
+        </div>
+      ) : !showSolution && (
+        <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }}
+          onClick={() => { setHintsShown(hints.length); setShowSolution(true); }}>
+          ✅ Reveal solution
+        </button>
+      )}
+
+      {showSolution && (
+        <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', marginTop: 4 }}
+          onClick={() => { setHintsShown(0); setShowSolution(false); setAnswer(''); setSubmitted(false); }}>
+          ↺ Reset
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── SM-2 Flashcard view ────────────────────────────────────────────────────
 function FlashcardView({ content }: { content: string }) {
   const rawCards = parseFlashcards(content);
@@ -212,8 +310,22 @@ function FlashcardView({ content }: { content: string }) {
   const [deck,       setDeck]       = useState<SRSDeck | null>(null);
   const [sessionIdx, setSessionIdx] = useState(0);
   const [flip,       setFlip]       = useState(false);
-  const [phase,      setPhase]      = useState<'preview' | 'review' | 'done'>('preview');
+  const [phase,      setPhase]      = useState<'preview' | 'review' | 'done' | 'match' | 'learn'>('preview');
   const [graded,     setGraded]     = useState<number[]>([]); // grades for session
+  // Match game state
+  const [matchSelected, setMatchSelected] = useState<string | null>(null); // selected term id
+  const [matchPaired,   setMatchPaired]   = useState<Set<string>>(new Set()); // paired term ids
+  const [matchFlash,    setMatchFlash]    = useState<{ id: string; ok: boolean } | null>(null);
+  const [matchStart,    setMatchStart]    = useState(0);
+  const [matchEnd,      setMatchEnd]      = useState(0);
+  const [matchShuffledDefs, setMatchShuffledDefs] = useState<Array<{ id: string; text: string }>>([]);
+  // Learn mode state
+  const [learnIdx,      setLearnIdx]      = useState(0);
+  const [learnQueue,    setLearnQueue]    = useState<string[]>([]); // card ids remaining
+  const [learnOptions,  setLearnOptions]  = useState<string[]>([]);
+  const [learnPicked,   setLearnPicked]   = useState<string | null>(null);
+  const [learnCorrect,  setLearnCorrect]  = useState(0);
+  const [learnTotal,    setLearnTotal]    = useState(0);
 
   // Build/load the deck when content changes
   useEffect(() => {
@@ -233,6 +345,8 @@ function FlashcardView({ content }: { content: string }) {
       setDeck(newDeck);
     }
     setSessionIdx(0); setFlip(false); setPhase('preview'); setGraded([]);
+    setMatchSelected(null); setMatchPaired(new Set()); setMatchFlash(null); setMatchEnd(0);
+    setLearnIdx(0); setLearnQueue([]); setLearnPicked(null); setLearnCorrect(0); setLearnTotal(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content]);
 
@@ -342,10 +456,34 @@ function FlashcardView({ content }: { content: string }) {
           )}
         </div>
 
-        <button className="btn btn-primary btn-sm" style={{ width: '100%', marginBottom: 16 }}
-          onClick={() => { setSessionIdx(0); setFlip(false); setGraded([]); setPhase('review'); }}>
-          {stats.due > 0 ? `▶ Study ${stats.due} due card${stats.due !== 1 ? 's' : ''}` : `▶ Study all ${deck.cards.length} cards`}
-        </button>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <button className="btn btn-primary btn-sm" style={{ flex: 1 }}
+            onClick={() => { setSessionIdx(0); setFlip(false); setGraded([]); setPhase('review'); }}>
+            {stats.due > 0 ? `▶ Study ${stats.due} due` : `▶ Study all`}
+          </button>
+          <button className="btn btn-ghost btn-sm" title="Match game — pair terms with definitions"
+            onClick={() => {
+              // Shuffle definitions
+              const defs = [...deck.cards].sort(() => Math.random() - 0.5).map(c => ({ id: c.id, text: c.back }));
+              setMatchShuffledDefs(defs);
+              setMatchSelected(null); setMatchPaired(new Set()); setMatchFlash(null);
+              setMatchStart(Date.now()); setMatchEnd(0);
+              setPhase('match');
+            }}>
+            🎮 Match
+          </button>
+          <button className="btn btn-ghost btn-sm" title="Learn mode — adaptive MCQ until 100%"
+            onClick={() => {
+              const ids = deck.cards.map(c => c.id);
+              // Shuffle for learn queue
+              const shuffled = [...ids].sort(() => Math.random() - 0.5);
+              setLearnQueue(shuffled); setLearnIdx(0); setLearnPicked(null);
+              setLearnCorrect(0); setLearnTotal(ids.length);
+              setPhase('learn');
+            }}>
+            🎓 Learn
+          </button>
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8 }}>
           {deck.cards.map((c, i) => {
@@ -362,6 +500,234 @@ function FlashcardView({ content }: { content: string }) {
                     Next: {c.nextReview} · {Math.round((c.correctReviews / Math.max(1, c.totalReviews)) * 100)}% accuracy
                   </div>
                 )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Match game mode ───────────────────────────────────────────────────
+  if (phase === 'match') {
+    const allMatched = matchPaired.size === deck.cards.length;
+    const elapsed    = matchEnd > 0 ? Math.round((matchEnd - matchStart) / 1000) : Math.round((Date.now() - matchStart) / 1000);
+
+    function handleMatchTerm(cardId: string) {
+      if (matchPaired.has(cardId)) return;
+      if (matchSelected === cardId) { setMatchSelected(null); return; }
+      if (!matchSelected) { setMatchSelected(cardId); return; }
+      // matchSelected is a termId, cardId is a defId — but in our UI both columns use card.id
+      // Check if selected term matches this definition
+      if (matchSelected === cardId) { setMatchSelected(null); return; }
+      // correct pair: both columns reference same card id
+      setMatchFlash({ id: cardId, ok: true });
+      setMatchFlash({ id: matchSelected, ok: true });
+      setTimeout(() => {
+        setMatchPaired(prev => { const next = new Set(prev); next.add(cardId); return next; });
+        setMatchSelected(null); setMatchFlash(null);
+        if (deck && matchPaired.size + 1 === deck.cards.length) setMatchEnd(Date.now());
+      }, 300);
+    }
+
+    function handleMatchDef(cardId: string) {
+      if (matchPaired.has(cardId)) return;
+      if (!matchSelected) return;
+      if (matchSelected === cardId) {
+        // Correct match
+        setMatchFlash({ id: cardId, ok: true });
+        setTimeout(() => {
+          setMatchPaired(prev => { const next = new Set(prev); next.add(cardId); return next; });
+          setMatchSelected(null); setMatchFlash(null);
+          if (deck && matchPaired.size + 1 === deck.cards.length) setMatchEnd(Date.now());
+        }, 300);
+      } else {
+        // Wrong match
+        setMatchFlash({ id: cardId, ok: false });
+        setTimeout(() => { setMatchFlash(null); }, 600);
+      }
+    }
+
+    const shuffledTerms = deck.cards; // terms in original order, defs shuffled
+
+    return (
+      <div style={{ maxWidth: 640, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>🎮 Match Game</span>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+            {matchPaired.size}/{deck.cards.length} matched
+          </span>
+          {!allMatched && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginLeft: 'auto' }}>⏱ {elapsed}s</span>}
+          <button className="btn-icon" style={{ fontSize: 11, color: 'var(--text-3)' }} onClick={() => setPhase('preview')}>✕</button>
+        </div>
+
+        {allMatched ? (
+          <div style={{ textAlign: 'center', padding: '32px 20px' }}>
+            <div style={{ fontSize: 48, marginBottom: 10 }}>🎉</div>
+            <h3 style={{ margin: '0 0 6px' }}>All matched!</h3>
+            <p style={{ color: 'var(--text-3)' }}>Completed in {elapsed} seconds</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16 }}>
+              <button className="btn btn-primary btn-sm" onClick={() => {
+                const defs = [...deck.cards].sort(() => Math.random() - 0.5).map(c => ({ id: c.id, text: c.back }));
+                setMatchShuffledDefs(defs); setMatchSelected(null); setMatchPaired(new Set());
+                setMatchFlash(null); setMatchStart(Date.now()); setMatchEnd(0);
+              }}>↺ Play again</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setPhase('preview')}>← Back</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {/* Terms column */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: 1 }}>Terms</div>
+              {shuffledTerms.map(c => {
+                const paired  = matchPaired.has(c.id);
+                const selTerm = matchSelected === c.id;
+                const flash   = matchFlash?.id === c.id;
+                return (
+                  <div key={c.id}
+                    onClick={() => !paired && handleMatchTerm(c.id)}
+                    style={{
+                      padding: '10px 12px', borderRadius: 8, cursor: paired ? 'default' : 'pointer',
+                      fontSize: 'var(--text-xs)', lineHeight: 1.4, transition: 'all 0.15s',
+                      background: paired ? 'color-mix(in srgb, #52b788 15%, var(--surface))' : selTerm ? 'var(--accent)' : flash ? (matchFlash?.ok ? '#52b78820' : '#ef444420') : 'var(--surface-2)',
+                      color: paired ? '#52b788' : selTerm ? '#fff' : 'var(--text)',
+                      border: `1px solid ${paired ? '#52b78840' : selTerm ? 'var(--accent)' : 'var(--border-2)'}`,
+                      opacity: paired ? 0.6 : 1,
+                    }}>
+                    {paired ? '✓ ' : ''}{c.front}
+                  </div>
+                );
+              })}
+            </div>
+            {/* Definitions column (shuffled) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: 1 }}>Definitions</div>
+              {matchShuffledDefs.map(def => {
+                const paired = matchPaired.has(def.id);
+                const flash  = matchFlash?.id === def.id;
+                const active = !!matchSelected && !paired;
+                return (
+                  <div key={def.id}
+                    onClick={() => !paired && active && handleMatchDef(def.id)}
+                    style={{
+                      padding: '10px 12px', borderRadius: 8,
+                      cursor: (!paired && active) ? 'pointer' : 'default',
+                      fontSize: 'var(--text-xs)', lineHeight: 1.4, transition: 'all 0.15s',
+                      background: paired ? 'color-mix(in srgb, #52b788 15%, var(--surface))' : flash ? (matchFlash?.ok ? '#52b78820' : '#ef444420') : active ? 'var(--surface)' : 'var(--surface-2)',
+                      color: paired ? '#52b788' : flash && !matchFlash?.ok ? '#ef4444' : 'var(--text)',
+                      border: `1px solid ${paired ? '#52b78840' : flash && !matchFlash?.ok ? '#ef4444' : active ? 'var(--accent)' : 'var(--border-2)'}`,
+                      opacity: paired ? 0.6 : 1,
+                      transform: flash && !matchFlash?.ok ? 'translateX(-4px)' : 'none',
+                    }}>
+                    {paired ? '✓ ' : ''}{def.text}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Learn mode ────────────────────────────────────────────────────────
+  if (phase === 'learn') {
+    const learnDone = learnQueue.length === 0;
+
+    function buildOptions(cardId: string): string[] {
+      const correct    = deck!.cards.find(c => c.id === cardId)?.back ?? '';
+      const distractors = deck!.cards
+        .filter(c => c.id !== cardId)
+        .map(c => c.back)
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3);
+      return [correct, ...distractors].sort(() => Math.random() - 0.5);
+    }
+
+    const currentCardId = learnQueue[learnIdx] ?? null;
+    const currentCard   = deck.cards.find(c => c.id === currentCardId) ?? null;
+    // Keep options stable via learnOptions state; rebuild when queue changes
+    const learnOpts = learnOptions.length === 4
+      ? learnOptions
+      : (currentCardId ? buildOptions(currentCardId) : []);
+
+    function pickAnswer(opt: string) {
+      if (learnPicked) return;
+      setLearnPicked(opt);
+      const correct = currentCard?.back ?? '';
+      const isRight = opt === correct;
+      const nextId  = isRight ? null : currentCardId!;
+      setTimeout(() => {
+        setLearnQueue(prev => {
+          const without = prev.filter((_, i) => i !== learnIdx);
+          return nextId ? [...without, nextId] : without;
+        });
+        if (isRight) setLearnCorrect(p => p + 1);
+        setLearnIdx(0);
+        setLearnPicked(null);
+        // Rebuild options for next card
+        const nextCardId = learnQueue[learnIdx + (learnIdx + 1 < learnQueue.length ? 1 : 0)];
+        if (nextCardId && nextCardId !== currentCardId) setLearnOptions(buildOptions(nextCardId));
+        else setLearnOptions([]);
+      }, 900);
+    }
+
+    if (learnDone) {
+      const acc = Math.round((learnCorrect / learnTotal) * 100);
+      return (
+        <div style={{ textAlign: 'center', padding: '32px 20px', maxWidth: 480, margin: '0 auto' }}>
+          <div style={{ fontSize: 48, marginBottom: 10 }}>{acc === 100 ? '🎉' : acc >= 70 ? '📚' : '💪'}</div>
+          <h3 style={{ margin: '0 0 6px' }}>Learn complete!</h3>
+          <p style={{ color: 'var(--text-3)' }}>You got all {learnTotal} cards right</p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16 }}>
+            <button className="btn btn-primary btn-sm" onClick={() => {
+              const ids = deck!.cards.map(c => c.id).sort(() => Math.random() - 0.5);
+              setLearnQueue(ids); setLearnIdx(0); setLearnPicked(null);
+              setLearnCorrect(0); setLearnTotal(ids.length); setLearnOptions([]);
+            }}>↺ Restart</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setPhase('preview')}>← Back</button>
+          </div>
+        </div>
+      );
+    }
+
+    if (!currentCard) return null;
+    const learnPct = Math.round(((learnTotal - learnQueue.length) / learnTotal) * 100);
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 540, margin: '0 auto' }}>
+        {/* Progress */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ flex: 1, height: 5, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
+            <div style={{ width: `${learnPct}%`, height: '100%', borderRadius: 3, background: '#52b788', transition: 'width 0.4s' }} />
+          </div>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+            {learnTotal - learnQueue.length}/{learnTotal}
+          </span>
+          <button className="btn-icon" style={{ fontSize: 11, color: 'var(--text-3)' }} onClick={() => setPhase('preview')}>✕</button>
+        </div>
+
+        {/* Card front */}
+        <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 12, padding: '20px 24px', textAlign: 'center', minHeight: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ fontWeight: 600, fontSize: 'var(--text-base)', lineHeight: 1.5 }}>{currentCard.front}</div>
+        </div>
+
+        {/* Options */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {learnOpts.map((opt, i) => {
+            const isCorrect = opt === currentCard.back;
+            const isPicked  = learnPicked === opt;
+            let bg = 'var(--surface-2)';
+            let col = 'var(--text)';
+            let border = 'var(--border-2)';
+            if (isPicked && isCorrect) { bg = 'color-mix(in srgb,#52b788 20%,var(--surface))'; col = '#52b788'; border = '#52b788'; }
+            if (isPicked && !isCorrect) { bg = 'color-mix(in srgb,#ef4444 20%,var(--surface))'; col = '#ef4444'; border = '#ef4444'; }
+            if (learnPicked && !isPicked && isCorrect) { bg = 'color-mix(in srgb,#52b788 20%,var(--surface))'; col = '#52b788'; border = '#52b788'; }
+            return (
+              <div key={i} onClick={() => pickAnswer(opt)}
+                style={{ padding: '12px 14px', borderRadius: 10, cursor: learnPicked ? 'default' : 'pointer', background: bg, color: col, border: `1px solid ${border}`, fontSize: 'var(--text-sm)', lineHeight: 1.4, transition: 'all 0.15s', fontWeight: isPicked ? 600 : 400 }}>
+                {String.fromCharCode(65 + i)}. {opt}
               </div>
             );
           })}
@@ -1122,6 +1488,7 @@ export function WorkspacePanel({
   const [streamSource,  setStreamSource]  = useState<string>('');
   const [editMode,      setEditMode]      = useState(false);
   const [streak,        setStreak]        = useState<number>(0);
+  const [notesInject,   setNotesInject]   = useState<string | undefined>(undefined);
   const abortRef = useRef<AbortController | null>(null);
 
   // ── Data loading ──────────────────────────────────────────────────────
@@ -1401,12 +1768,15 @@ export function WorkspacePanel({
       </div>
 
       {/* Tab bar */}
-      <div className="tab-bar" style={{ flexShrink: 0 }}>
+      <div className="tab-bar" style={{ flexShrink: 0, overflowX: 'auto', flexWrap: 'nowrap' }}>
         {([
           ['files',    `📁 Files${files.length ? ` (${files.length})` : ''}`],
           ['generate', '⚡ Generate'],
+          ['chat',     '💬 Chat'],
+          ['notes',    '📓 Notes'],
           ['math',     '🧮 Math'],
           ['focus',    '🍅 Focus'],
+          ['planner',  '📅 Planner'],
           ['library',  `🗂 Library${libItems.length ? ` (${libItems.length})` : ''}`],
         ] as [MainTab, string][]).map(([id, label]) => (
           <button key={id} className={`tab-btn${mainTab === id ? ' active' : ''}`}
@@ -1686,37 +2056,22 @@ export function WorkspacePanel({
                     )}
                   </div>
 
-                  {/* While streaming or if mode needs full content for parsing, show raw markdown */}
+                  {/* Output rendering */}
                   {editMode && !generating && (genMode === 'summarize' || genMode === 'notes' || genMode === 'rephrase' || genMode === 'outline' || genMode === 'assignment' || genMode === 'quiz')
                     ? (
                       <textarea
-                        className="tool-output-editor"
                         value={output}
                         onChange={e => setOutput(e.target.value)}
                         spellCheck
-                        style={{
-                          width: '100%',
-                          minHeight: 320,
-                          padding: '14px 16px',
-                          background: 'var(--surface-2)',
-                          border: '1.5px solid var(--accent)',
-                          borderRadius: 10,
-                          color: 'var(--text-1)',
-                          fontSize: 'var(--text-sm)',
-                          lineHeight: 1.7,
-                          fontFamily: 'inherit',
-                          resize: 'vertical',
-                          outline: 'none',
-                          boxSizing: 'border-box',
-                        }}
+                        style={{ width: '100%', minHeight: 320, padding: '14px 16px', background: 'var(--surface-2)', border: '1.5px solid var(--accent)', borderRadius: 10, color: 'var(--text)', fontSize: 'var(--text-sm)', lineHeight: 1.7, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
                       />
                     )
-                    : (generating || genMode === 'summarize' || genMode === 'notes' || genMode === 'rephrase' || genMode === 'outline' || genMode === 'assignment')
-                    ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) + (generating ? '<span class="stream-cursor">▍</span>' : '') }} />
+                    : generating
+                    ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) + '<span class="stream-cursor">▍</span>' }} />
+                    : genMode === 'practice'   ? <PracticeView content={output} />
                     : genMode === 'mcq'        ? <MCQView content={output} />
                     : genMode === 'flashcards' ? <FlashcardView content={output} />
                     : genMode === 'exam'       ? <ExamView content={output} />
-                    : genMode === 'quiz'       ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) }} />
                     : <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) }} />
                   }
 
@@ -1729,6 +2084,7 @@ export function WorkspacePanel({
                       <button className="btn btn-ghost btn-sm" onClick={() => downloadOutput('md')} title="Download as Markdown (Ctrl+E)">⬇ .md</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => downloadOutput('txt')} title="Download as plain text">⬇ .txt</button>
                       <button className="btn btn-ghost btn-sm" onClick={saveToLibrary} title="Save to Library (Ctrl+S)">🗂 Save</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setNotesInject(output); setMainTab('notes'); toast('Opened in Notes ✓', 'success'); }} title="Send to Notes editor">📓 Notes</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => { setOutput(''); setEditMode(false); }}>✕ Clear</button>
                     </div>
                   )}
@@ -1772,11 +2128,28 @@ export function WorkspacePanel({
           </div>
         )}
 
+        {/* ─────────────────── CHAT ──────────────────── */}
+        {mainTab === 'chat' && (
+          <ChatPanel extractedText={extractedText} fileName={selFile?.name} />
+        )}
+
+        {/* ─────────────────── NOTES ─────────────────── */}
+        {mainTab === 'notes' && (
+          <NotesPanel
+            folderId={selectedFolder}
+            injectContent={notesInject}
+            onInjectConsumed={() => setNotesInject(undefined)}
+          />
+        )}
+
         {/* ─────────────────── MATH ──────────────────── */}
         {mainTab === 'math' && <MathPanel />}
 
         {/* ─────────────────── FOCUS ─────────────────── */}
         {mainTab === 'focus' && <FocusPanel />}
+
+        {/* ─────────────────── PLANNER ─────────────────── */}
+        {mainTab === 'planner' && <ExamPlannerPanel />}
 
         {/* ─────────────────── LIBRARY ───────────────── */}
         {mainTab === 'library' && (
