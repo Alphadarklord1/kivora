@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useSettings } from '@/providers/SettingsProvider';
+import { OnboardingModal } from './OnboardingModal';
 
 const NAV = [
   { href: '/workspace', label: 'Workspace', icon: '📚' },
@@ -14,6 +15,7 @@ const NAV = [
   { href: '/analytics', label: 'Analytics', icon: '📊' },
   { href: '/models',    label: 'AI Models', icon: '🤖' },
   { href: '/sharing',   label: 'Sharing',   icon: '🔗' },
+  { href: '/download',  label: 'Download',  icon: '⬇️' },
   { href: '/settings',  label: 'Settings',  icon: '⚙️' },
 ];
 
@@ -35,6 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell">
+      <OnboardingModal />
       {/* Sidebar */}
       <nav className={`sidebar${collapsed ? ' collapsed' : ''}`}>
         <div className="sidebar-header">

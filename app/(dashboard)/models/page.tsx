@@ -153,15 +153,25 @@ const TIER_LABELS: Record<string, string> = {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
+const OLLAMA_MODEL_KEY = 'kivora_ollama_model';
+
 export default function ModelsPage() {
   const [aiStatus, setAiStatus] = useState<AIStatus>('checking');
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [defaultModel, setDefaultModel] = useState<string>('mistral');
   const [filterTier, setFilterTier] = useState<string>('all');
   const [ollamaVersion, setOllamaVersion] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(OLLAMA_MODEL_KEY);
+    if (stored) setDefaultModel(stored);
+  }, []);
 
   const checkStatus = useCallback(async () => {
+    setRefreshing(true);
     setAiStatus('checking');
     // Check Ollama
     try {
@@ -177,6 +187,7 @@ export default function ModelsPage() {
           const data = await listRes.json();
           setOllamaModels(data?.models ?? []);
         }
+        setRefreshing(false);
         return;
       }
     } catch { /* noop */ }
@@ -184,11 +195,17 @@ export default function ModelsPage() {
     // Check llama.cpp
     try {
       const res = await fetch('/api/llama-status', { signal: AbortSignal.timeout(3000) });
-      if (res.ok) { setAiStatus('llama-ok'); return; }
+      if (res.ok) { setAiStatus('llama-ok'); setRefreshing(false); return; }
     } catch { /* noop */ }
 
     setAiStatus('none');
+    setRefreshing(false);
   }, []);
+
+  function setAsDefault(modelId: string) {
+    setDefaultModel(modelId);
+    localStorage.setItem(OLLAMA_MODEL_KEY, modelId);
+  }
 
   useEffect(() => { checkStatus(); }, [checkStatus]);
 
@@ -216,7 +233,10 @@ export default function ModelsPage() {
             <p>Manage offline AI models · No data leaves your device</p>
           </div>
         </div>
-        <button className="mdl-refresh-btn" onClick={checkStatus}>↻ Refresh</button>
+        <button className="mdl-refresh-btn" onClick={checkStatus} disabled={refreshing}
+          style={{ opacity: refreshing ? 0.7 : 1 }}>
+          {refreshing ? '⟳ Checking…' : '↻ Refresh'}
+        </button>
       </div>
 
       {/* Status banner */}
@@ -275,6 +295,7 @@ export default function ModelsPage() {
                     <span className="mc-tag">{model.tag}</span>
                     {model.mathOptimized && <span className="mc-math-badge">∑ Math</span>}
                     {installed && <span className="mc-installed-badge">✓ Installed</span>}
+                    {defaultModel === model.id && <span className="mc-default-badge">⚡ Active</span>}
                   </div>
                   <span className="mc-best">{model.bestFor}</span>
                 </div>
@@ -332,9 +353,26 @@ export default function ModelsPage() {
                     </p>
                   </div>
 
+                  <div className="mc-default-row">
+                    <button
+                      className={`mc-default-btn${defaultModel === model.id ? ' active' : ''}`}
+                      onClick={() => setAsDefault(model.id)}
+                    >
+                      {defaultModel === model.id ? '✓ Active model' : 'Set as default model'}
+                    </button>
+                    {defaultModel === model.id && (
+                      <span className="mc-default-hint">Kivora uses this model for all AI features</span>
+                    )}
+                  </div>
+
                   {installed && (
                     <div className="mc-active-note">
-                      ✓ This model is installed and ready. Kivora will use it automatically for AI generation and math verification.
+                      ✓ This model is installed and ready.
+                    </div>
+                  )}
+                  {!installed && aiStatus === 'ollama-ok' && (
+                    <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)', fontSize: 12, color: '#f59e0b' }}>
+                      ⚠ Not installed — run the pull command above, then click Refresh.
                     </div>
                   )}
                 </div>
@@ -462,6 +500,12 @@ export default function ModelsPage() {
         .mc-copy-btn.copied { background: #52b788; color: white; border-color: #52b788; }
         .mc-cmd-note { font-size: 11px; color: var(--text-muted); margin: 0; }
         .mc-active-note { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: #52b78816; color: #52b788; font-size: 13px; font-weight: 500; border: 1px solid #52b78830; }
+        .mc-default-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+        .mc-default-btn { padding: 7px 16px; border-radius: 9px; border: 1.5px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.12s; }
+        .mc-default-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .mc-default-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .mc-default-hint { font-size: 12px; color: var(--text-muted); }
+        .mc-default-badge { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: var(--primary, #4f86f7)20; color: var(--primary, #4f86f7); font-weight: 700; }
 
         .bundled-section {
           margin: 24px; padding: 20px 24px; border-radius: 20px;

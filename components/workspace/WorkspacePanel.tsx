@@ -955,23 +955,39 @@ export function WorkspacePanel({
   const [libExpanded,   setLibExpanded]   = useState<Record<string, boolean>>({});
   const [dragging,      setDragging]      = useState(false);
   const [uploading,     setUploading]     = useState(false);
+  const [missingBlobs,  setMissingBlobs]  = useState<Set<string>>(new Set());
+  const [reuploadTarget, setReuploadTarget] = useState<FileRecord | null>(null);
+  const reuploadRef = useRef<HTMLInputElement>(null);
 
   // ── Data loading ──────────────────────────────────────────────────────
 
   const loadFiles = useCallback(async () => {
-    if (!selectedFolder) { setFiles([]); return; }
+    if (!selectedFolder) { setFiles([]); setMissingBlobs(new Set()); return; }
     setFilesLoad(true);
     const qs = new URLSearchParams({ folderId: selectedFolder });
     if (selectedTopic) qs.set('topicId', selectedTopic);
     try {
       const r = await fetch(`/api/files?${qs}`);
-      setFiles(r.ok ? await r.json() : listLocalFiles(selectedFolder, selectedTopic));
-    } catch { setFiles(listLocalFiles(selectedFolder, selectedTopic)); }
+      const loaded: FileRecord[] = r.ok ? await r.json() : listLocalFiles(selectedFolder, selectedTopic);
+      setFiles(loaded);
+      // Check for missing blobs in the background
+      const missing = new Set<string>();
+      await Promise.all(loaded.map(async f => {
+        if (f.localBlobId) {
+          const payload = await idbStore.get(f.localBlobId).catch(() => undefined);
+          if (!payload) missing.add(f.id);
+        }
+      }));
+      setMissingBlobs(missing);
+    } catch {
+      const loaded = listLocalFiles(selectedFolder, selectedTopic);
+      setFiles(loaded);
+    }
     finally { setFilesLoad(false); }
   }, [selectedFolder, selectedTopic]);
 
   useEffect(() => { loadFiles(); }, [loadFiles, filesRefreshKey]);
-  useEffect(() => { setViewFile(null); }, [selectedFolder, selectedTopic]);
+  useEffect(() => { setViewFile(null); setMissingBlobs(new Set()); }, [selectedFolder, selectedTopic]);
 
   const loadLib = useCallback(() => {
     setLibLoad(true);
@@ -1020,6 +1036,21 @@ export function WorkspacePanel({
     finally { setUploading(false); }
   }
 
+  async function handleReupload(newFile: File, target: FileRecord) {
+    const newBlobId = uuidv4();
+    await idbStore.put(newBlobId, { blob: newFile, name: newFile.name, type: newFile.type, size: newFile.size });
+    try {
+      await fetch(`/api/files/${target.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ localBlobId: newBlobId, fileSize: newFile.size }),
+      });
+    } catch {}
+    setFiles(prev => prev.map(f => f.id === target.id ? { ...f, localBlobId: newBlobId, fileSize: newFile.size } : f));
+    setMissingBlobs(prev => { const next = new Set(prev); next.delete(target.id); return next; });
+    setReuploadTarget(null);
+    toast(`"${target.name}" restored ✓`, 'success');
+  }
+
   async function deleteFile(e: React.MouseEvent, file: FileRecord) {
     e.stopPropagation();
     if (!confirm(`Delete "${file.name}"?`)) return;
@@ -1040,9 +1071,10 @@ export function WorkspacePanel({
     if (!src) { toast('Select a file or paste content first.', 'warning'); return; }
     setGenerating(true); setOutput('');
     try {
+      const ollamaModel = typeof window !== 'undefined' ? (localStorage.getItem('kivora_ollama_model') ?? 'mistral') : 'mistral';
       const res = await fetch('/api/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, text: src, options: { count } }),
+        body: JSON.stringify({ mode, text: src, options: { count }, model: ollamaModel }),
       });
       const data = await res.json();
       setOutput(data.content ?? data.error ?? 'No output received.');
@@ -1162,26 +1194,67 @@ export function WorkspacePanel({
                         <p style={{ fontSize: 'var(--text-sm)' }}>No files yet — drag one in above.</p>
                       </div>
                     ) : (
-                      files.map(file => (
-                        <div key={file.id}
-                          className={`file-card${viewFile?.id === file.id ? ' selected' : ''}`}
-                          style={{ cursor: 'pointer', marginBottom: 6 }}
-                          onClick={() => setViewFile(v => v?.id === file.id ? null : file)}>
-                          <div className="file-thumb">{fileIcon(file)}</div>
-                          <div className="file-info">
-                            <div className="file-name" title={file.name}>{file.name}</div>
-                            <div className="file-meta">{fmt(file.fileSize)}{file.fileSize ? ' · ' : ''}{fmtDate(file.createdAt)}</div>
+                      files.map(file => {
+                        const isMissing = missingBlobs.has(file.id);
+                        return (
+                          <div key={file.id}
+                            className={`file-card${viewFile?.id === file.id ? ' selected' : ''}${isMissing ? ' file-card-missing' : ''}`}
+                            style={{ cursor: 'pointer', marginBottom: 6, flexDirection: 'column', alignItems: 'stretch' }}
+                            onClick={() => !isMissing && setViewFile(v => v?.id === file.id ? null : file)}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div className="file-thumb" style={{ opacity: isMissing ? 0.45 : 1 }}>{fileIcon(file)}</div>
+                              <div className="file-info" style={{ flex: 1, minWidth: 0 }}>
+                                <div className="file-name" title={file.name}>{file.name}</div>
+                                <div className="file-meta">{fmt(file.fileSize)}{file.fileSize ? ' · ' : ''}{fmtDate(file.createdAt)}</div>
+                              </div>
+                              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                                {!isMissing && (
+                                  <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}
+                                    onClick={e => { e.stopPropagation(); setViewFile(file); }}>View</button>
+                                )}
+                                <button className="btn-icon" style={{ color: 'var(--danger)', width: 26, height: 26 }}
+                                  onClick={e => deleteFile(e, file)}>✕</button>
+                              </div>
+                            </div>
+                            {isMissing && (
+                              <div style={{
+                                marginTop: 6, padding: '6px 10px', borderRadius: 8,
+                                background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)',
+                                display: 'flex', alignItems: 'center', gap: 8,
+                              }}
+                                onClick={e => e.stopPropagation()}>
+                                <span style={{ fontSize: 'var(--text-xs)', color: '#f59e0b', flex: 1 }}>
+                                  ⚠ File data missing — re-upload to restore
+                                </span>
+                                <button
+                                  className="btn btn-sm"
+                                  style={{ fontSize: 11, padding: '2px 10px', background: '#f59e0b', color: '#000', border: 'none' }}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    setReuploadTarget(file);
+                                    reuploadRef.current?.click();
+                                  }}>
+                                  ↑ Re-upload
+                                </button>
+                              </div>
+                            )}
                           </div>
-                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}
-                              onClick={e => { e.stopPropagation(); setViewFile(file); }}>View</button>
-                            <button className="btn-icon" style={{ color: 'var(--danger)', width: 26, height: 26 }}
-                              onClick={e => deleteFile(e, file)}>✕</button>
-                          </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
+                  {/* Hidden re-upload input */}
+                  <input
+                    ref={reuploadRef}
+                    type="file"
+                    accept=".pdf,.docx,.pptx,.txt,.md,.png,.jpg,.jpeg,.webp"
+                    style={{ display: 'none' }}
+                    onChange={async e => {
+                      const file = e.target.files?.[0];
+                      if (file && reuploadTarget) await handleReupload(file, reuploadTarget);
+                      e.target.value = '';
+                    }}
+                  />
                 </>
               )}
             </div>
