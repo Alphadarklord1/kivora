@@ -11,6 +11,7 @@ export default function WorkspacePage() {
   const [selectedTopicName,  setSelectedTopicName]  = useState('');
   const [folderCollapsed,    setFolderCollapsed]    = useState(false);
   const [refreshKey,         setRefreshKey]         = useState(0);
+  const [filesRefreshKey,    setFilesRefreshKey]    = useState(0);
 
   const handleSelect = useCallback((
     folderId: string | null,
@@ -24,6 +25,11 @@ export default function WorkspacePage() {
     setSelectedTopicName(topicName);
   }, []);
 
+  // Called when FolderPanel uploads a file — tells WorkspacePanel to reload
+  const handleFilesChanged = useCallback(() => {
+    setFilesRefreshKey(k => k + 1);
+  }, []);
+
   const handleRefresh = useCallback(() => setRefreshKey(k => k + 1), []);
 
   return (
@@ -35,6 +41,7 @@ export default function WorkspacePage() {
         refreshKey={refreshKey}
         collapsed={folderCollapsed}
         onToggleCollapse={() => setFolderCollapsed(c => !c)}
+        onFilesChanged={handleFilesChanged}
       />
       <WorkspacePanel
         selectedFolder={selectedFolder}
@@ -42,6 +49,7 @@ export default function WorkspacePage() {
         selectedFolderName={selectedFolderName}
         selectedTopicName={selectedTopicName}
         onRefresh={handleRefresh}
+        filesRefreshKey={filesRefreshKey}
       />
     </div>
   );

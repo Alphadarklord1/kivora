@@ -7,23 +7,17 @@ import { extractTextFromBlob } from '@/lib/pdf/extract';
 import type { ToolMode } from '@/lib/offline/generate';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteLocalFile, listLocalFiles, upsertLocalFile } from '@/lib/files/local-files';
-import { MathSolver } from '@/components/tools/MathSolver';
-import { GraphingCalculator } from '@/components/tools/GraphingCalculator';
-import { MatlabLab } from '@/components/tools/MatlabLab';
-import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
+import { solveOffline } from '@/lib/math/offline-solver';
+import type { MathSolution } from '@/lib/math/offline-solver';
+import { MathRenderer, MathText } from '@/components/math/MathRenderer';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface FileRecord {
-  id: string;
-  name: string;
-  type: string;
-  mimeType?: string;
-  fileSize?: number;
-  localBlobId?: string;
-  localFilePath?: string | null;
-  content?: string;
-  createdAt: string;
+  id: string; name: string; type: string;
+  mimeType?: string; fileSize?: number;
+  localBlobId?: string; localFilePath?: string | null;
+  content?: string; createdAt: string;
 }
 
 export interface WorkspacePanelProps {
@@ -32,38 +26,40 @@ export interface WorkspacePanelProps {
   selectedFolderName: string;
   selectedTopicName:  string;
   onRefresh: () => void;
+  filesRefreshKey?: number;
 }
 
-// ── Tool tabs ──────────────────────────────────────────────────────────────
+// ── Tab config ─────────────────────────────────────────────────────────────
 
-const TABS = [
-  { id: 'files',      label: 'Files'      },
-  { id: 'summarize',  label: 'Summarize'  },
-  { id: 'rephrase',   label: 'Rephrase'   },
-  { id: 'notes',      label: 'Notes'      },
-  { id: 'quiz',       label: 'Quiz'       },
-  { id: 'mcq',        label: 'MCQ'        },
-  { id: 'flashcards', label: 'Flashcards' },
-  { id: 'assignment', label: 'Assignment' },
-  { id: 'math',       label: 'Math'       },
-  { id: 'graph',      label: 'Graph'      },
-  { id: 'matlab',     label: 'MATLAB Lab' },
-  { id: 'visual',     label: 'Visual'     },
-  { id: 'library',    label: 'Library'    },
+const GENERATE_TABS = [
+  { id: 'summarize',  label: 'Summarize',  icon: '📝', hint: 'Key-point summary of your content' },
+  { id: 'notes',      label: 'Notes',      icon: '📋', hint: 'Structured study notes' },
+  { id: 'rephrase',   label: 'Rephrase',   icon: '🔄', hint: 'Simplified rewrite' },
+  { id: 'outline',    label: 'Outline',    icon: '📑', hint: 'Chapter outline with learning objectives' },
+  { id: 'mcq',        label: 'MCQ',        icon: '🧩', hint: 'Multiple-choice questions with answers' },
+  { id: 'quiz',       label: 'Quiz',       icon: '🎯', hint: 'Open-ended quiz questions' },
+  { id: 'flashcards', label: 'Flashcards', icon: '📇', hint: 'Spaced-repetition study cards' },
+  { id: 'assignment', label: 'Assignment', icon: '📌', hint: 'Practice assignment questions' },
+  { id: 'exam',       label: 'Exam Prep',  icon: '🏆', hint: 'Timed exam with scoring and weak-area analysis' },
 ] as const;
 
-type Tab = (typeof TABS)[number]['id'];
+type GenMode    = (typeof GENERATE_TABS)[number]['id'];
+type MainTab    = 'files' | 'generate' | 'math' | 'focus' | 'library';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function fileIcon(file: FileRecord): string {
-  if (file.mimeType === 'application/pdf' || file.name.endsWith('.pdf')) return '📕';
-  if (file.name.match(/\.docx?$/i)) return '📘';
-  if (file.name.match(/\.pptx?$/i)) return '📙';
-  if (file.name.match(/\.(png|jpg|jpeg|gif|webp)$/i)) return '🖼️';
-  if (file.name.match(/\.(txt|md)$/i)) return '📝';
+function fileIcon(f: FileRecord): string {
+  const n = f.name.toLowerCase();
+  if (f.mimeType === 'application/pdf' || n.endsWith('.pdf')) return '📕';
+  if (n.match(/\.docx?$/))  return '📘';
+  if (n.match(/\.pptx?$/))  return '📙';
+  if (n.match(/\.(png|jpg|jpeg|gif|webp|svg)$/)) return '🖼️';
+  if (n.match(/\.(txt|md)$/)) return '📝';
   return '📄';
 }
+
+function isPDF(f: FileRecord)   { return f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'); }
+function isImage(f: FileRecord) { return !!f.name.toLowerCase().match(/\.(png|jpg|jpeg|gif|webp|svg)$/); }
 
 function fmt(bytes?: number): string {
   if (!bytes) return '';
@@ -73,102 +69,863 @@ function fmt(bytes?: number): string {
 }
 
 function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-// ── MCQ renderer ──────────────────────────────────────────────────────────
+function wordCount(text: string) {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+function mdToHtml(md: string): string {
+  return md
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^(#{1,3})\s+(.+)/gm, (_, h, t) => `<h${h.length} style="margin:14px 0 6px">${t}</h${h.length}>`)
+    .replace(/^[•\-]\s+(.+)/gm, '<li style="margin:3px 0">$1</li>')
+    .replace(/(<li[^>]*>[\s\S]*?<\/li>)/g, '<ul style="padding-left:20px;margin:8px 0">$1</ul>')
+    .replace(/\n/g, '<br/>');
+}
+
+// ── MCQ renderer ───────────────────────────────────────────────────────────
 
 function MCQView({ content }: { content: string }) {
   const [selected, setSelected] = useState<Record<number, string>>({});
   const [revealed, setRevealed] = useState<Record<number, boolean>>({});
+  const [score,    setScore]    = useState<number | null>(null);
 
-  const blocks = content.split(/\*\*Q\d+\.\*\*/).filter(Boolean);
+  const blocks = content
+    .split(/\n(?=\*?\*?Q\d+[\.\)])/i)
+    .map(b => b.trim())
+    .filter(b => /Q\d+/i.test(b) && b.length > 10);
+
+  if (blocks.length === 0)
+    return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
+
+  function revealAll() {
+    const r: Record<number, boolean> = {};
+    blocks.forEach((_, i) => { r[i] = true; });
+    setRevealed(r);
+    let correct = 0;
+    blocks.forEach((block, qi) => {
+      const ans = block.match(/✓\s*([A-D])\)?/)?.[1]
+        ?? block.match(/Answer:\s*([A-D])\b/i)?.[1];
+      if (ans && selected[qi] === ans) correct++;
+    });
+    setScore(correct);
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {blocks.map((block, qi) => {
-        const lines = block.trim().split('\n').filter(Boolean);
-        const stem = lines[0];
-        const options = lines.slice(1).filter(l => /^\s*[A-D]\)/.test(l));
-        const answerLine = lines.find(l => l.includes('✓'));
-        const correctLetter = answerLine?.match(/([A-D])\)/)?.[1];
-
-        return (
-          <div key={qi} className="quiz-card">
-            <div className="quiz-q-num">Question {qi + 1}</div>
-            <div className="quiz-q-text">{stem}</div>
-            <div className="quiz-options">
-              {options.map((opt, oi) => {
-                const letter = opt.trim().match(/^([A-D])\)/)?.[1] ?? '';
-                const optText = opt.replace(/^\s*[A-D]\)\s*/, '');
-                const isSelected = selected[qi] === letter;
-                const isRevealed = revealed[qi];
-                const isCorrect = letter === correctLetter;
-                let cls = 'quiz-option';
-                if (isRevealed) { if (isCorrect) cls += ' correct'; else if (isSelected) cls += ' wrong'; }
-                else if (isSelected) cls += ' selected';
-
-                return (
-                  <div key={oi} className={cls} onClick={() => {
-                    if (isRevealed) return;
-                    setSelected(p => ({ ...p, [qi]: letter }));
-                  }}>
-                    <span style={{ fontWeight: 600, width: 20, flexShrink: 0 }}>{letter})</span>
-                    <span>{optText}</span>
+    <div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {blocks.map((block, qi) => {
+          const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+          const stem  = lines[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '');
+          const opts  = lines.filter(l => /^[A-D]\)/.test(l));
+          const ans   = block.match(/✓\s*([A-D])\)?/)?.[1] ?? block.match(/Answer:\s*([A-D])\b/i)?.[1];
+          const isRev = revealed[qi];
+          return (
+            <div key={qi} className="quiz-card">
+              <div className="quiz-q-num">Q{qi + 1} of {blocks.length}</div>
+              <div className="quiz-q-text">{stem}</div>
+              <div className="quiz-options">
+                {opts.map((opt, oi) => {
+                  const letter = opt.match(/^([A-D])\)/)?.[1] ?? '';
+                  const text   = opt.replace(/^[A-D]\)\s*/, '');
+                  const isSel  = selected[qi] === letter;
+                  let cls = 'quiz-option';
+                  if (isRev) { if (letter === ans) cls += ' correct'; else if (isSel) cls += ' wrong'; }
+                  else if (isSel) cls += ' selected';
+                  return (
+                    <div key={oi} className={cls}
+                      onClick={() => { if (!isRev) setSelected(p => ({ ...p, [qi]: letter })); }}>
+                      <span className="quiz-opt-letter">{letter}</span>
+                      <span>{text}</span>
+                      {isRev && letter === ans && <span style={{ marginLeft: 'auto' }}>✓</span>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                {!isRev && selected[qi] && (
+                  <button className="btn btn-sm btn-primary"
+                    onClick={() => setRevealed(p => ({ ...p, [qi]: true }))}>Check answer</button>
+                )}
+                {!isRev && !selected[qi] && (
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>Select an option</span>
+                )}
+                {isRev && ans && (
+                  <div className="quiz-answer">
+                    {selected[qi] === ans ? '🎉 Correct!' : `✗ Correct: ${ans}`}
                   </div>
-                );
-              })}
+                )}
+              </div>
             </div>
-            {!revealed[qi] && selected[qi] && (
-              <button className="btn btn-sm btn-secondary" style={{ marginTop: 10, alignSelf: 'flex-start' }}
-                onClick={() => setRevealed(p => ({ ...p, [qi]: true }))}>
-                Check Answer
-              </button>
-            )}
-            {revealed[qi] && correctLetter && (
-              <div className="quiz-answer">✓ Correct answer: {correctLetter}</div>
-            )}
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 18, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button className="btn btn-sm btn-secondary" onClick={revealAll}>Reveal all answers</button>
+        {score !== null && (
+          <div className={`badge ${score === blocks.length ? 'badge-success' : score >= blocks.length / 2 ? 'badge-accent' : 'badge-danger'}`}
+            style={{ fontSize: 'var(--text-sm)', padding: '4px 12px' }}>
+            Score: {score} / {blocks.length}
           </div>
-        );
-      })}
+        )}
+        <button className="btn btn-sm btn-ghost"
+          onClick={() => { setSelected({}); setRevealed({}); setScore(null); }}>Reset</button>
+      </div>
     </div>
   );
 }
 
-// ── Flashcard renderer ────────────────────────────────────────────────────
+// ── Flashcard renderer ─────────────────────────────────────────────────────
 
 function FlashcardView({ content }: { content: string }) {
-  const [flipped, setFlipped] = useState<Record<number, boolean>>({});
-  const cards = content.split(/---/).filter(c => c.includes('Front:'));
+  const [idx,    setIdx]    = useState(0);
+  const [flip,   setFlip]   = useState(false);
+  const [known,  setKnown]  = useState<Set<number>>(new Set());
+
+  const cards = content
+    .split(/---+/)
+    .map(block => ({
+      front: block.match(/\*?\*?Front:\*?\*?\s*([\s\S]*?)(?=\*?\*?Back:|$)/i)?.[1]?.trim() ?? '',
+      back:  block.match(/\*?\*?Back:\*?\*?\s*([\s\S]*?)$/i)?.[1]?.trim() ?? '',
+    }))
+    .filter(c => c.front);
+
+  if (cards.length === 0)
+    return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
+
+  const card = cards[idx];
+  const pct  = Math.round((known.size / cards.length) * 100);
+
+  function mark(val: 'known' | 'unsure') {
+    if (val === 'known') setKnown(p => new Set([...p, idx]));
+    setFlip(false);
+    setTimeout(() => setIdx(i => (i + 1) % cards.length), 120);
+  }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-      {cards.map((card, i) => {
-        const front = card.match(/Front:\*\*\s*(.*)/)?.[1]?.trim() ?? '';
-        const back  = card.match(/Back:\*\*\s*(.*)/)?.[1]?.trim() ?? '';
-        const isFlipped = flipped[i] ?? false;
-        return (
-          <div
-            key={i}
-            className="flashcard-wrap"
-            style={{ minHeight: 160 }}
-            onClick={() => setFlipped(p => ({ ...p, [i]: !p[i] }))}
-          >
-            <div className={`flashcard${isFlipped ? ' flipped' : ''}`} style={{ minHeight: 160 }}>
-              <div className="flashcard-face">
-                <div className="flashcard-label">Front</div>
-                <div className="flashcard-text">{front || card.trim()}</div>
-                <small style={{ marginTop: 12, color: 'var(--text-3)' }}>Click to flip</small>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 540, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: 'var(--success)', transition: 'width 0.4s' }} />
+        </div>
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+          {known.size}/{cards.length} known
+        </span>
+      </div>
+      <div style={{ textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+        Card {idx + 1} of {cards.length}
+      </div>
+      <div className="flashcard-wrap" style={{ minHeight: 200 }} onClick={() => setFlip(f => !f)}>
+        <div className={`flashcard${flip ? ' flipped' : ''}`} style={{ minHeight: 200 }}>
+          <div className="flashcard-face">
+            <div className="flashcard-label">Front</div>
+            <div className="flashcard-text">{card.front}</div>
+            <small style={{ marginTop: 'auto', color: 'var(--text-3)', paddingTop: 12 }}>Click to reveal</small>
+          </div>
+          <div className="flashcard-face flashcard-back">
+            <div className="flashcard-label">Answer</div>
+            <div className="flashcard-text">{card.back}</div>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button className="btn btn-sm btn-ghost"
+          onClick={() => { setFlip(false); setTimeout(() => setIdx(i => (i - 1 + cards.length) % cards.length), 80); }}>
+          ← Prev
+        </button>
+        {flip && (
+          <>
+            <button className="btn btn-sm btn-ghost" style={{ color: 'var(--danger)' }} onClick={() => mark('unsure')}>✗ Again</button>
+            <button className="btn btn-sm" style={{ background: 'var(--success)', color: '#fff' }} onClick={() => mark('known')}>✓ Got it</button>
+          </>
+        )}
+        <button className="btn btn-sm btn-ghost"
+          onClick={() => { setFlip(false); setTimeout(() => setIdx(i => (i + 1) % cards.length), 80); }}>
+          Next →
+        </button>
+      </div>
+      <details style={{ marginTop: 4 }}>
+        <summary style={{ cursor: 'pointer', fontSize: 'var(--text-xs)', color: 'var(--text-3)', userSelect: 'none' }}>
+          All {cards.length} cards
+        </summary>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8, marginTop: 10 }}>
+          {cards.map((c, i) => (
+            <div key={i}
+              style={{
+                background: known.has(i) ? 'var(--success-bg)' : 'var(--surface)',
+                border: `1px solid ${known.has(i) ? 'var(--success)' : 'var(--border-2)'}`,
+                borderRadius: 8, padding: '8px 10px', cursor: 'pointer', fontSize: 'var(--text-xs)',
+              }}
+              onClick={() => { setIdx(i); setFlip(false); }}>
+              <div style={{ fontWeight: 600, marginBottom: 3 }}>{c.front}</div>
+              <div style={{ color: 'var(--text-3)' }}>{c.back}</div>
+            </div>
+          ))}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+// ── Exam renderer (timed exam with score) ──────────────────────────────────
+
+function ExamView({ content, onDone }: { content: string; onDone?: (score: number, total: number) => void }) {
+  const blocks = content
+    .split(/\n(?=\*?\*?Q\d+[\.\)])/i)
+    .map(b => b.trim())
+    .filter(b => /Q\d+/i.test(b) && b.length > 10);
+
+  const [phase,    setPhase]    = useState<'setup' | 'exam' | 'results'>('setup');
+  const [minutes,  setMinutes]  = useState(Math.max(5, Math.ceil(blocks.length * 1.5)));
+  const [secsLeft, setSecsLeft] = useState(0);
+  const [answers,  setAnswers]  = useState<Record<number, string>>({});
+  const [score,    setScore]    = useState<{ correct: number; total: number; weak: string[] } | null>(null);
+
+  useEffect(() => {
+    if (phase !== 'exam') return;
+    const timer = setInterval(() => {
+      setSecsLeft(s => {
+        if (s <= 1) { clearInterval(timer); submitExam(); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  function startExam() {
+    setSecsLeft(minutes * 60);
+    setAnswers({});
+    setScore(null);
+    setPhase('exam');
+  }
+
+  function submitExam() {
+    let correct = 0;
+    const weak: string[] = [];
+    blocks.forEach((block, qi) => {
+      const ans = block.match(/✓\s*([A-D])\)?/)?.[1] ?? block.match(/Answer:\s*([A-D])\b/i)?.[1];
+      const stem = block.split('\n')[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '').slice(0, 40);
+      if (ans && answers[qi] === ans) correct++;
+      else weak.push(stem + '…');
+    });
+    setScore({ correct, total: blocks.length, weak: weak.slice(0, 5) });
+    setPhase('results');
+    onDone?.(correct, blocks.length);
+  }
+
+  const mm = String(Math.floor(secsLeft / 60)).padStart(2, '0');
+  const ss = String(secsLeft % 60).padStart(2, '0');
+  const pct = blocks.length > 0 ? Math.round((Object.keys(answers).length / blocks.length) * 100) : 0;
+
+  if (phase === 'setup') {
+    return (
+      <div style={{ maxWidth: 440, margin: '0 auto', padding: 24, textAlign: 'center' }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>🏆</div>
+        <h3 style={{ margin: '0 0 6px' }}>Exam Simulator</h3>
+        <p style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', marginBottom: 24 }}>
+          {blocks.length} questions · timed exam with scoring
+        </p>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', marginBottom: 20, fontSize: 'var(--text-sm)' }}>
+          Time limit:
+          <input type="number" value={minutes} min={1} max={180}
+            onChange={e => setMinutes(Math.max(1, +e.target.value))}
+            style={{ width: 64, textAlign: 'center' }} /> minutes
+        </label>
+        <button className="btn btn-primary" style={{ padding: '10px 32px', fontSize: 'var(--text-base)' }}
+          onClick={startExam}>
+          Start Exam →
+        </button>
+      </div>
+    );
+  }
+
+  if (phase === 'results' && score) {
+    const pctScore = Math.round((score.correct / score.total) * 100);
+    return (
+      <div style={{ maxWidth: 520, margin: '0 auto', padding: 20 }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={{ fontSize: 52, marginBottom: 8 }}>
+            {pctScore >= 80 ? '🎉' : pctScore >= 60 ? '📚' : '💪'}
+          </div>
+          <h3 style={{ margin: '0 0 6px', fontSize: 'var(--text-2xl)' }}>{pctScore}%</h3>
+          <div className={`badge ${pctScore >= 80 ? 'badge-success' : pctScore >= 60 ? 'badge-accent' : 'badge-danger'}`}
+            style={{ fontSize: 'var(--text-sm)', padding: '4px 14px' }}>
+            {score.correct} / {score.total} correct
+          </div>
+        </div>
+        {score.weak.length > 0 && (
+          <div style={{ background: 'var(--danger-bg)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+            <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--danger)', marginBottom: 6 }}>
+              ⚠ Areas to review:
+            </div>
+            {score.weak.map((w, i) => (
+              <div key={i} style={{ fontSize: 'var(--text-xs)', color: 'var(--danger)', marginTop: 3 }}>• {w}</div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20 }}>
+          <button className="btn btn-primary" onClick={startExam}>Retake Exam</button>
+          <button className="btn btn-ghost" onClick={() => setPhase('setup')}>Change settings</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Exam in progress
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Exam header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', color: secsLeft < 60 ? 'var(--danger)' : 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>
+          ⏱ {mm}:{ss}
+        </div>
+        <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: 'var(--accent)', transition: 'width 0.3s' }} />
+        </div>
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+          {Object.keys(answers).length}/{blocks.length} answered
+        </span>
+        <button className="btn btn-sm btn-primary" onClick={submitExam}>Submit</button>
+      </div>
+
+      {/* Questions */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {blocks.map((block, qi) => {
+          const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+          const stem  = lines[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '');
+          const opts  = lines.filter(l => /^[A-D]\)/.test(l));
+          return (
+            <div key={qi} className="quiz-card">
+              <div className="quiz-q-num">Q{qi + 1}</div>
+              <div className="quiz-q-text">{stem}</div>
+              <div className="quiz-options">
+                {opts.map((opt, oi) => {
+                  const letter = opt.match(/^([A-D])\)/)?.[1] ?? '';
+                  const text   = opt.replace(/^[A-D]\)\s*/, '');
+                  const isSel  = answers[qi] === letter;
+                  return (
+                    <div key={oi} className={`quiz-option${isSel ? ' selected' : ''}`}
+                      onClick={() => setAnswers(p => ({ ...p, [qi]: letter }))}>
+                      <span className="quiz-opt-letter">{letter}</span>
+                      <span>{text}</span>
+                    </div>
+                  );
+                })}
               </div>
-              <div className="flashcard-face flashcard-back">
-                <div className="flashcard-label">Back</div>
-                <div className="flashcard-text">{back}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Math Solver panel ──────────────────────────────────────────────────────
+
+const MATH_EXAMPLES = [
+  { label: 'Derivative', q: "Find the derivative of x^3 + 2x^2 - 5x + 3" },
+  { label: 'Integral',   q: "Integrate x^2 + 3x - 1 dx" },
+  { label: 'Quadratic',  q: "Solve x^2 - 5x + 6 = 0" },
+  { label: 'Linear Eq',  q: "Solve 3x + 7 = 22" },
+  { label: 'Limit',      q: "Find the limit as x approaches 2 of (x^2 - 4)/(x - 2)" },
+  { label: 'Arithmetic', q: "Calculate (15 * 4 + sqrt(81)) / 3" },
+];
+
+function MathPanel() {
+  const { toast } = useToast();
+  const [problem,   setProblem]   = useState('');
+  const [solution,  setSolution]  = useState<MathSolution | null>(null);
+  const [solving,   setSolving]   = useState(false);
+  const [history,   setHistory]   = useState<MathSolution[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function solve() {
+    const p = problem.trim();
+    if (!p) return;
+    setSolving(true);
+    setSolution(null);
+    try {
+      const sol = solveOffline(p);
+      setSolution(sol);
+      setHistory(h => [sol, ...h].slice(0, 10));
+    } catch (e) {
+      toast('Could not solve: ' + (e instanceof Error ? e.message : 'Unknown error'), 'error');
+    } finally {
+      setSolving(false);
+    }
+  }
+
+  function copyResult() {
+    if (!solution) return;
+    const text = [
+      `Problem: ${solution.problem}`,
+      `Type: ${solution.problemType}`,
+      '',
+      'Steps:',
+      ...solution.steps.map(s => `${s.step}. ${s.description}: ${s.expression}\n   ${s.explanation}`),
+      '',
+      `Answer: ${solution.finalAnswer}`,
+    ].join('\n');
+    navigator.clipboard.writeText(text).then(() => toast('Copied!', 'success'));
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+      {/* Input */}
+      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: 'var(--text-base)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          🧮 Math Solver
+          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 400, color: 'var(--text-3)' }}>
+            Derivatives · Integrals · Algebra · Limits · Arithmetic
+          </span>
+        </div>
+        <textarea
+          ref={textareaRef}
+          rows={2}
+          placeholder="Type a math problem, e.g.  Find the derivative of x^3 + 2x - 5"
+          value={problem}
+          onChange={e => setProblem(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); solve(); } }}
+          style={{
+            width: '100%', resize: 'none',
+            background: 'var(--surface)', border: '1.5px solid var(--border-2)',
+            borderRadius: 10, padding: '10px 14px',
+            fontSize: 'var(--text-sm)', lineHeight: 1.6, color: 'var(--text)', fontFamily: 'inherit',
+          }}
+        />
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn btn-primary btn-sm" onClick={solve} disabled={!problem.trim() || solving}>
+            {solving ? '⏳ Solving…' : '= Solve'}
+          </button>
+          {solution && (
+            <>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setSolution(null); setProblem(''); }}>Clear</button>
+              <button className="btn btn-ghost btn-sm" onClick={copyResult}>📋 Copy</button>
+            </>
+          )}
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginLeft: 'auto' }}>
+            Press Enter to solve · Shift+Enter for new line
+          </span>
+        </div>
+        {/* Examples */}
+        <div style={{ display: 'flex', gap: 5, marginTop: 10, flexWrap: 'wrap' }}>
+          {MATH_EXAMPLES.map(ex => (
+            <button key={ex.label}
+              className="btn btn-ghost btn-sm"
+              style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12 }}
+              onClick={() => { setProblem(ex.q); setSolution(null); textareaRef.current?.focus(); }}>
+              {ex.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Solution */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px' }}>
+        {!solution && !solving && !history.length && (
+          <div className="empty-state" style={{ padding: '48px 20px' }}>
+            <div className="empty-icon">🧮</div>
+            <h3>Math Solver</h3>
+            <p>Enter any math problem above — algebra, calculus, limits, and more. Step-by-step solutions shown.</p>
+          </div>
+        )}
+
+        {solving && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 60 }}>
+            <div style={{ width: 20, height: 20, border: '2.5px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            <span style={{ color: 'var(--text-3)' }}>Solving…</span>
+          </div>
+        )}
+
+        {solution && (
+          <div className="math-solution">
+            {/* Problem header */}
+            <div className="math-sol-header">
+              <div className="math-sol-type">{solution.problemType.replace(/-/g, ' ')}</div>
+              <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>
+                <MathText>{solution.problem}</MathText>
+              </div>
+            </div>
+
+            {/* Steps */}
+            {solution.steps.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3)', marginBottom: 10 }}>
+                  Step-by-step solution
+                </div>
+                {solution.steps.map(step => (
+                  <div key={step.step} className="math-step">
+                    <div className="math-step-num">{step.step}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', marginBottom: 4 }}>
+                        {step.description}
+                      </div>
+                      {step.expression && (
+                        <div className="math-expr">
+                          <MathRenderer math={step.expression} display={true} />
+                        </div>
+                      )}
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 4 }}>
+                        {step.explanation}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Final answer */}
+            <div className="math-answer">
+              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent)', marginBottom: 10 }}>
+                Final Answer
+              </div>
+              <div className="math-answer-expr">
+                <MathRenderer math={solution.finalAnswer} display={true} />
+              </div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 8 }}>
+                Plain text: {solution.finalAnswer}
               </div>
             </div>
           </div>
-        );
-      })}
+        )}
+
+        {/* History */}
+        {!solution && history.length > 0 && (
+          <div>
+            <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3)', marginBottom: 10 }}>
+              Recent problems
+            </div>
+            {history.map((h, i) => (
+              <div key={i} className="math-history-item"
+                onClick={() => { setSolution(h); setProblem(h.problem); }}>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', textTransform: 'uppercase' }}>{h.problemType.replace(/-/g, ' ')}</div>
+                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, marginTop: 2 }}>{h.problem}</div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginTop: 4 }}>→ {h.finalAnswer}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Focus / Pomodoro panel ─────────────────────────────────────────────────
+
+type PomPhase = 'work' | 'short-break' | 'long-break';
+
+const POMODORO_PRESETS: Record<PomPhase, number> = {
+  'work': 25,
+  'short-break': 5,
+  'long-break': 15,
+};
+
+function FocusPanel() {
+  const { toast } = useToast();
+  const [phase,         setPhase]         = useState<PomPhase>('work');
+  const [customMins,    setCustomMins]     = useState<Record<PomPhase, number>>({ ...POMODORO_PRESETS });
+  const [secsLeft,      setSecsLeft]       = useState(POMODORO_PRESETS.work * 60);
+  const [running,       setRunning]        = useState(false);
+  const [sessions,      setSessions]       = useState(0);    // pomodoros completed today
+  const [todayTotal,    setTodayTotal]     = useState(0);    // total minutes studied today
+  const [task,          setTask]           = useState('');   // what are you studying?
+  const [showSettings,  setShowSettings]   = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const totalSecs    = customMins[phase] * 60;
+  const progress     = Math.max(0, Math.min(100, ((totalSecs - secsLeft) / totalSecs) * 100));
+  const mm           = String(Math.floor(secsLeft / 60)).padStart(2, '0');
+  const ss           = String(secsLeft % 60).padStart(2, '0');
+  const circumference = 2 * Math.PI * 54; // radius 54 on SVG
+
+  useEffect(() => {
+    if (running) {
+      intervalRef.current = setInterval(() => {
+        setSecsLeft(s => {
+          if (s <= 1) {
+            clearInterval(intervalRef.current!);
+            setRunning(false);
+            handlePhaseEnd();
+            return 0;
+          }
+          return s - 1;
+        });
+      }, 1000);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
+
+  function handlePhaseEnd() {
+    if (phase === 'work') {
+      const newSessions = sessions + 1;
+      setSessions(newSessions);
+      setTodayTotal(t => t + customMins.work);
+      toast(`🎉 Pomodoro #${newSessions} complete! Take a break.`, 'success');
+      const next: PomPhase = newSessions % 4 === 0 ? 'long-break' : 'short-break';
+      switchPhase(next);
+    } else {
+      toast('Break over — back to work!', 'info');
+      switchPhase('work');
+    }
+  }
+
+  function switchPhase(p: PomPhase) {
+    setPhase(p);
+    setSecsLeft(customMins[p] * 60);
+    setRunning(false);
+  }
+
+  function reset() {
+    setSecsLeft(customMins[phase] * 60);
+    setRunning(false);
+  }
+
+  function skip() {
+    handlePhaseEnd();
+  }
+
+  const phaseColor: Record<PomPhase, string> = {
+    'work': 'var(--accent)',
+    'short-break': 'var(--success)',
+    'long-break': 'var(--purple)',
+  };
+
+  const strokeDash = circumference - (progress / 100) * circumference;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'auto' }}>
+      <div style={{ maxWidth: 500, margin: '0 auto', padding: '24px 20px', width: '100%' }}>
+
+        {/* Phase selector */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 28, background: 'var(--surface)', borderRadius: 12, padding: 4 }}>
+          {(['work', 'short-break', 'long-break'] as PomPhase[]).map(p => (
+            <button key={p}
+              onClick={() => switchPhase(p)}
+              style={{
+                flex: 1, padding: '7px 4px', borderRadius: 9, border: 'none', cursor: 'pointer',
+                fontSize: 'var(--text-xs)', fontWeight: 600,
+                background: phase === p ? 'var(--bg)' : 'transparent',
+                color: phase === p ? phaseColor[p] : 'var(--text-3)',
+                boxShadow: phase === p ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                transition: 'all 0.15s',
+              }}>
+              {p === 'work' ? '🍅 Focus' : p === 'short-break' ? '☕ Short break' : '🌿 Long break'}
+            </button>
+          ))}
+        </div>
+
+        {/* Ring timer */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 28 }}>
+          <svg width={140} height={140} style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx={70} cy={70} r={54} fill="none" stroke="var(--surface-2)" strokeWidth={8} />
+            <circle cx={70} cy={70} r={54} fill="none"
+              stroke={phaseColor[phase]}
+              strokeWidth={8}
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeDash}
+              style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.3s' }}
+            />
+          </svg>
+          <div style={{ position: 'absolute', textAlign: 'center' }}>
+            <div style={{
+              fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em',
+              fontVariantNumeric: 'tabular-nums',
+              color: running ? phaseColor[phase] : 'var(--text)',
+              animation: running ? 'timer-pulse 2s ease-in-out infinite' : 'none',
+            }}>
+              {mm}:{ss}
+            </div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2, textTransform: 'capitalize' }}>
+              {phase.replace('-', ' ')}
+            </div>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 24 }}>
+          <button className="btn btn-ghost btn-sm" onClick={reset}>↺ Reset</button>
+          <button
+            style={{
+              padding: '10px 36px', borderRadius: 50, border: 'none', cursor: 'pointer',
+              background: phaseColor[phase], color: '#fff',
+              fontSize: 'var(--text-base)', fontWeight: 700,
+              boxShadow: running ? `0 0 0 4px color-mix(in srgb, ${phaseColor[phase]} 25%, transparent)` : 'none',
+              transition: 'all 0.2s',
+            }}
+            onClick={() => setRunning(r => !r)}>
+            {running ? '⏸ Pause' : secsLeft < totalSecs ? '▶ Resume' : '▶ Start'}
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={skip} disabled={!running}>Skip →</button>
+        </div>
+
+        {/* Task input */}
+        <div style={{ marginBottom: 20 }}>
+          <input
+            type="text"
+            placeholder="What are you studying? (optional)"
+            value={task}
+            onChange={e => setTask(e.target.value)}
+            style={{
+              width: '100%', padding: '8px 14px', borderRadius: 10,
+              background: 'var(--surface)', border: '1px solid var(--border-2)',
+              fontSize: 'var(--text-sm)', color: 'var(--text)',
+            }}
+          />
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
+          {[
+            { label: 'Pomodoros', value: sessions, icon: '🍅' },
+            { label: 'Min studied', value: todayTotal, icon: '⏱' },
+            { label: 'Goal today', value: '4 sessions', icon: '🎯' },
+          ].map(stat => (
+            <div key={stat.label} style={{
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 10, padding: '10px 12px', textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 20, marginBottom: 4 }}>{stat.icon}</div>
+              <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text)' }}>{stat.value}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' }}>{stat.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Custom durations */}
+        <div style={{ marginBottom: 16 }}>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 'var(--text-xs)', width: '100%', justifyContent: 'center' }}
+            onClick={() => setShowSettings(s => !s)}>
+            {showSettings ? '▲ Hide settings' : '⚙ Customize durations'}
+          </button>
+          {showSettings && (
+            <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, padding: '14px', background: 'var(--surface)', borderRadius: 10 }}>
+              {(['work', 'short-break', 'long-break'] as PomPhase[]).map(p => (
+                <label key={p} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                  {p === 'work' ? 'Focus' : p === 'short-break' ? 'Short break' : 'Long break'} (min)
+                  <input type="number" value={customMins[p]} min={1} max={90}
+                    onChange={e => {
+                      const v = Math.max(1, +e.target.value);
+                      setCustomMins(prev => ({ ...prev, [p]: v }));
+                      if (phase === p) { setSecsLeft(v * 60); setRunning(false); }
+                    }}
+                    style={{ padding: '4px 8px', textAlign: 'center' }} />
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Study tips */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px' }}>
+          <div style={{ fontWeight: 600, fontSize: 'var(--text-xs)', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+            💡 Pomodoro tips
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 16, fontSize: 'var(--text-xs)', color: 'var(--text-3)', lineHeight: 1.7 }}>
+            <li>Work in 25-min focused bursts with no distractions</li>
+            <li>Every 4 pomodoros, take a longer 15-min break</li>
+            <li>Note what you studied each session to track progress</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Inline file viewer ─────────────────────────────────────────────────────
+
+function FileViewer({
+  file, onClose, onUseForTools,
+}: { file: FileRecord; onClose: () => void; onUseForTools: (text: string) => void }) {
+  const { toast } = useToast();
+  const [blobUrl,     setBlobUrl]     = useState<string | null>(null);
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [loading,     setLoading]     = useState(true);
+  const [err,         setErr]         = useState<string | null>(null);
+
+  useEffect(() => {
+    let url: string | null = null;
+    setLoading(true); setErr(null); setBlobUrl(null); setTextContent(null);
+    (async () => {
+      try {
+        if (file.content && !file.localBlobId) { setTextContent(file.content); return; }
+        if (!file.localBlobId) { setErr('No local file data — this file may have been uploaded on another device.'); return; }
+        const payload = await idbStore.get(file.localBlobId);
+        if (!payload) { setErr('File not found in local storage.'); return; }
+        if (isPDF(file) || isImage(file)) {
+          url = URL.createObjectURL(payload.blob);
+          setBlobUrl(url);
+        } else {
+          const isPlain = !!file.name.toLowerCase().match(/\.(txt|md|csv|json|xml|html)$/);
+          if (isPlain) setTextContent(await payload.blob.text());
+          else {
+            const res = await extractTextFromBlob(payload.blob, file.name);
+            if (res.error) setErr(res.error); else setTextContent(res.text);
+          }
+        }
+      } catch (e) { setErr(e instanceof Error ? e.message : 'Failed to load file.'); }
+      finally { setLoading(false); }
+    })();
+    return () => { if (url) URL.revokeObjectURL(url); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file.id]);
+
+  async function useForTools() {
+    if (textContent) { onUseForTools(textContent); return; }
+    if (!file.localBlobId) return;
+    const payload = await idbStore.get(file.localBlobId);
+    if (!payload) { toast('File not found locally.', 'error'); return; }
+    const res = await extractTextFromBlob(payload.blob, file.name);
+    if (res.error) { toast(res.error, 'error'); return; }
+    toast(`${res.wordCount.toLocaleString()} words loaded into Generate`, 'success');
+    onUseForTools(res.text);
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', borderLeft: '1px solid var(--border)', background: 'var(--bg)', animation: 'slideInRight 0.18s ease' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0, minWidth: 0 }}>
+        <span style={{ fontSize: 18, flexShrink: 0 }}>{fileIcon(file)}</span>
+        <span style={{ flex: 1, fontSize: 'var(--text-sm)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{file.name}</span>
+        {fmt(file.fileSize) && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', flexShrink: 0 }}>{fmt(file.fileSize)}</span>}
+        <button className="btn btn-primary btn-sm" onClick={useForTools} title="Load into Generate tab" style={{ flexShrink: 0 }}>
+          ⚡ Use for Generate
+        </button>
+        <button className="btn-icon" onClick={onClose} title="Close" style={{ flexShrink: 0 }}>✕</button>
+      </div>
+      <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+        {loading && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10 }}>
+            <div style={{ width: 22, height: 22, border: '2.5px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            <span style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>Loading…</span>
+          </div>
+        )}
+        {err && <div style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div><p style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)', maxWidth: 300, margin: '0 auto' }}>{err}</p></div>}
+        {!loading && !err && blobUrl && isPDF(file) && (
+          <iframe src={blobUrl} title={file.name} style={{ width: '100%', height: '100%', border: 'none', display: 'block' }} />
+        )}
+        {!loading && !err && blobUrl && isImage(file) && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 24, overflow: 'auto', background: 'var(--surface)' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={blobUrl} alt={file.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }} />
+          </div>
+        )}
+        {!loading && !err && textContent !== null && (
+          <div style={{ height: '100%', overflow: 'auto', padding: '16px 20px' }}>
+            <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span className="badge badge-accent">{wordCount(textContent).toLocaleString()} words</span>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>Extracted text preview</span>
+            </div>
+            <pre style={{ fontFamily: 'inherit', fontSize: 'var(--text-sm)', lineHeight: 1.8, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: 'var(--text)', margin: 0 }}>{textContent}</pre>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -176,55 +933,46 @@ function FlashcardView({ content }: { content: string }) {
 // ── Main component ─────────────────────────────────────────────────────────
 
 export function WorkspacePanel({
-  selectedFolder, selectedTopic, selectedFolderName, selectedTopicName, onRefresh,
+  selectedFolder, selectedTopic, selectedFolderName, selectedTopicName, onRefresh, filesRefreshKey,
 }: WorkspacePanelProps) {
   const { toast } = useToast();
   const filePickerRef = useRef<HTMLInputElement>(null);
 
-  const [tab,        setTab]        = useState<Tab>('files');
-  const [files,      setFiles]      = useState<FileRecord[]>([]);
-  const [filesLoad,  setFilesLoad]  = useState(false);
-  const [selFile,    setSelFile]    = useState<FileRecord | null>(null);
+  const [mainTab,       setMainTab]       = useState<MainTab>('files');
+  const [genMode,       setGenMode]       = useState<GenMode>('summarize');
+  const [files,         setFiles]         = useState<FileRecord[]>([]);
+  const [filesLoad,     setFilesLoad]     = useState(false);
+  const [viewFile,      setViewFile]      = useState<FileRecord | null>(null);
+  const [selFile,       setSelFile]       = useState<FileRecord | null>(null);
   const [extractedText, setExtractedText] = useState('');
-  const [extracting, setExtracting] = useState(false);
-  const [output,     setOutput]     = useState('');
-  const [generating, setGenerating] = useState(false);
-  const [count,      setCount]      = useState(5);
-  const [libItems,   setLibItems]   = useState<Array<{ id: string; mode: string; content: string; createdAt: string }>>([]);
-  const [libLoad,    setLibLoad]    = useState(false);
-  const [graphExpression, setGraphExpression] = useState('x^2');
-  const [draggingFiles, setDraggingFiles] = useState(false);
-  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [pasteMode,     setPasteMode]     = useState(false);
+  const [extracting,    setExtracting]    = useState(false);
+  const [output,        setOutput]        = useState('');
+  const [generating,    setGenerating]    = useState(false);
+  const [count,         setCount]         = useState(5);
+  const [libItems,      setLibItems]      = useState<Array<{ id: string; mode: string; content: string; createdAt: string }>>([]);
+  const [libLoad,       setLibLoad]       = useState(false);
+  const [libExpanded,   setLibExpanded]   = useState<Record<string, boolean>>({});
+  const [dragging,      setDragging]      = useState(false);
+  const [uploading,     setUploading]     = useState(false);
+
+  // ── Data loading ──────────────────────────────────────────────────────
 
   const loadFiles = useCallback(async () => {
-    if (!selectedFolder) {
-      setFiles([]);
-      return;
-    }
-
+    if (!selectedFolder) { setFiles([]); return; }
     setFilesLoad(true);
     const qs = new URLSearchParams({ folderId: selectedFolder });
     if (selectedTopic) qs.set('topicId', selectedTopic);
     try {
-      const response = await fetch(`/api/files?${qs}`);
-      if (response.ok) {
-        setFiles(await response.json());
-        return;
-      }
-      setFiles(listLocalFiles(selectedFolder, selectedTopic));
-    } catch {
-      setFiles(listLocalFiles(selectedFolder, selectedTopic));
-    } finally {
-      setFilesLoad(false);
-    }
+      const r = await fetch(`/api/files?${qs}`);
+      setFiles(r.ok ? await r.json() : listLocalFiles(selectedFolder, selectedTopic));
+    } catch { setFiles(listLocalFiles(selectedFolder, selectedTopic)); }
+    finally { setFilesLoad(false); }
   }, [selectedFolder, selectedTopic]);
 
-  // Load files when folder/topic changes
-  useEffect(() => {
-    loadFiles();
-  }, [loadFiles]);
+  useEffect(() => { loadFiles(); }, [loadFiles, filesRefreshKey]);
+  useEffect(() => { setViewFile(null); }, [selectedFolder, selectedTopic]);
 
-  // Load library
   const loadLib = useCallback(() => {
     setLibLoad(true);
     fetch('/api/library')
@@ -234,187 +982,44 @@ export function WorkspacePanel({
       .finally(() => setLibLoad(false));
   }, []);
 
-  useEffect(() => { if (tab === 'library') loadLib(); }, [tab, loadLib]);
+  useEffect(() => { if (mainTab === 'library') loadLib(); }, [mainTab, loadLib]);
 
-  // Extract text from selected file
+  // ── File operations ───────────────────────────────────────────────────
+
   async function extractFromFile(file: FileRecord): Promise<string | null> {
-    if (!file.localBlobId) {
-      if (file.content) {
-        setExtractedText(file.content);
-        return file.content;
-      }
-      toast('No file data available for extraction.', 'error');
-      return null;
-    }
+    if (file.content) { setExtractedText(file.content); return file.content; }
+    if (!file.localBlobId) { toast('No local file data.', 'error'); return null; }
     setExtracting(true);
     try {
       const payload = await idbStore.get(file.localBlobId);
-      if (!payload) {
-        toast('File not found in local storage.', 'error');
-        return null;
-      }
-      const result = await extractTextFromBlob(payload.blob, file.name);
-      if (result.error) {
-        toast(result.error, 'error');
-        return null;
-      }
-      setExtractedText(result.text);
-      toast(`Extracted ${result.wordCount.toLocaleString()} words`, 'success');
-      return result.text;
-    } finally {
-      setExtracting(false);
-    }
+      if (!payload) { toast('File not found in local storage.', 'error'); return null; }
+      const res = await extractTextFromBlob(payload.blob, file.name);
+      if (res.error) { toast(res.error, 'error'); return null; }
+      setExtractedText(res.text);
+      toast(`Extracted ${res.wordCount.toLocaleString()} words from "${file.name}"`, 'success');
+      return res.text;
+    } finally { setExtracting(false); }
   }
 
-  // Select file
-  function selectFile(file: FileRecord) {
-    setSelFile(file);
-    setOutput('');
-    setExtractedText('');
-  }
-
-  async function uploadWorkspaceFile(file: File) {
-    if (!selectedFolder) {
-      toast('Select a folder first.', 'warning');
-      return;
-    }
-
-    const blobId = uuidv4();
-    const fileId = uuidv4();
-    const createdAt = new Date().toISOString();
-    const localFilePath = (file as File & { path?: string }).path || undefined;
-
+  async function uploadFile(file: File) {
+    if (!selectedFolder) { toast('Select a folder first.', 'warning'); return; }
+    const blobId = uuidv4(), fileId = uuidv4(), createdAt = new Date().toISOString();
     await idbStore.put(blobId, { blob: file, name: file.name, type: file.type, size: file.size });
-
-    let nextRecord: FileRecord = {
-      id: fileId,
-      name: file.name,
-      type: 'upload',
-      mimeType: file.type,
-      fileSize: file.size,
-      localBlobId: blobId,
-      localFilePath,
-      createdAt,
-    };
-
+    const local = { id: fileId, folderId: selectedFolder, topicId: selectedTopic ?? null, name: file.name, type: 'upload', localBlobId: blobId, mimeType: file.type, fileSize: file.size, createdAt };
     try {
-      const response = await fetch('/api/files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          folderId: selectedFolder,
-          topicId: selectedTopic ?? null,
-          id: fileId,
-          name: file.name,
-          type: 'upload',
-          localBlobId: blobId,
-          mimeType: file.type,
-          fileSize: file.size,
-          localFilePath,
-        }),
-      });
-
-      if (response.ok) {
-        nextRecord = await response.json();
-        toast(`"${file.name}" uploaded`, 'success');
-      } else {
-        upsertLocalFile({
-          id: fileId,
-          folderId: selectedFolder,
-          topicId: selectedTopic ?? null,
-          name: file.name,
-          type: 'upload',
-          localBlobId: blobId,
-          localFilePath,
-          mimeType: file.type,
-          fileSize: file.size,
-          createdAt,
-        });
-        toast(`"${file.name}" saved locally`, 'info');
-      }
-    } catch {
-      upsertLocalFile({
-        id: fileId,
-        folderId: selectedFolder,
-        topicId: selectedTopic ?? null,
-        name: file.name,
-        type: 'upload',
-        localBlobId: blobId,
-        localFilePath,
-        mimeType: file.type,
-        fileSize: file.size,
-        createdAt,
-      });
-      toast(`"${file.name}" saved locally`, 'info');
-    }
-
-    await loadFiles();
-    setSelFile(nextRecord);
-    setExtractedText('');
-    onRefresh();
+      const res = await fetch('/api/files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(local) });
+      toast(res.ok ? `"${file.name}" uploaded` : `"${file.name}" saved locally`, res.ok ? 'success' : 'info');
+      if (!res.ok) upsertLocalFile(local);
+    } catch { upsertLocalFile(local); toast(`"${file.name}" saved locally`, 'info'); }
+    await loadFiles(); onRefresh();
   }
 
-  async function uploadWorkspaceFiles(fileList: FileList | File[]) {
-    const filesToUpload = Array.from(fileList);
-    if (filesToUpload.length === 0) return;
-    setUploadingFiles(true);
-    try {
-      for (const file of filesToUpload) {
-        await uploadWorkspaceFile(file);
-      }
-    } finally {
-      setUploadingFiles(false);
-    }
+  async function uploadFiles(list: FileList | File[]) {
+    setUploading(true);
+    try { for (const f of Array.from(list)) await uploadFile(f); }
+    finally { setUploading(false); }
   }
 
-  async function handleWorkspaceFileInput(event: React.ChangeEvent<HTMLInputElement>) {
-    const pickedFiles = event.target.files;
-    if (!pickedFiles?.length) return;
-    await uploadWorkspaceFiles(pickedFiles);
-    event.target.value = '';
-  }
-
-  // Run AI tool
-  async function runTool(mode: ToolMode) {
-    let sourceText = extractedText.trim();
-    if (!sourceText && selFile) {
-      sourceText = (await extractFromFile(selFile))?.trim() ?? '';
-    }
-    if (!sourceText) {
-      toast('Select a file and load it first.', 'warning');
-      return;
-    }
-    setGenerating(true);
-    setOutput('');
-    try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, text: sourceText, options: { count } }),
-      });
-      const data = await res.json();
-      setOutput(data.content ?? data.error ?? 'No output.');
-      if (data.source === 'offline') toast('Generated offline (AI model not available)', 'info');
-    } catch {
-      toast('Generation failed.', 'error');
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  // Save to library
-  async function saveToLibrary() {
-    if (!output) return;
-    const res = await fetch('/api/library', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: tab, content: output }),
-    });
-    if (res.ok) toast('Saved to Library', 'success');
-    else toast('Could not save (DB may not be configured)', 'warning');
-  }
-
-  // Delete file
   async function deleteFile(e: React.MouseEvent, file: FileRecord) {
     e.stopPropagation();
     if (!confirm(`Delete "${file.name}"?`)) return;
@@ -422,335 +1027,403 @@ export function WorkspacePanel({
     deleteLocalFile(file.id);
     await fetch(`/api/files/${file.id}`, { method: 'DELETE' }).catch(() => {});
     setFiles(p => p.filter(f => f.id !== file.id));
+    if (viewFile?.id === file.id) setViewFile(null);
     if (selFile?.id === file.id) { setSelFile(null); setExtractedText(''); setOutput(''); }
     toast('File deleted', 'info');
   }
 
-  // ── Tool panel: shared layout for generative tools
-  function ToolPanel({ mode }: { mode: ToolMode }) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* Context: which file is loaded */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 240, display: 'grid', gap: 10 }}>
-            {files.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <select
-                  value={selFile?.id ?? ''}
-                  onChange={(event) => {
-                    const next = files.find((file) => file.id === event.target.value) ?? null;
-                    if (next) selectFile(next);
-                  }}
-                  style={{ minWidth: 240, flex: '1 1 240px' }}
-                >
-                  <option value="">Select file for this tool…</option>
-                  {files.map((file) => (
-                    <option key={file.id} value={file.id}>
-                      {file.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => {
-                    setTab('files');
-                    filePickerRef.current?.click();
-                  }}
-                  disabled={!selectedFolder || uploadingFiles}
-                >
-                  {uploadingFiles ? 'Uploading…' : 'Add file'}
-                </button>
-              </div>
-            )}
-            {selFile ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 8, padding: '6px 12px' }}>
-                <span>{fileIcon(selFile)}</span>
-                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{selFile.name}</span>
-                {extractedText && <span className="badge badge-accent">{extractedText.split(/\s+/).filter(Boolean).length} words</span>}
-              </div>
-            ) : (
-              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
-                {files.length > 0
-                  ? <>Choose a file above or use the <strong>Files</strong> tab.</>
-                  : <>Upload a file to the selected folder to use this tool.</>}
-              </span>
-            )}
-          </div>
-          {selFile && !extractedText && (
-            <button className="btn btn-secondary btn-sm" disabled={extracting} onClick={() => extractFromFile(selFile)}>
-              {extracting ? 'Extracting…' : 'Extract text'}
-            </button>
-          )}
-          {extractedText && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {(mode === 'quiz' || mode === 'mcq' || mode === 'flashcards' || mode === 'assignment') && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                  Count:
-                  <input type="number" value={count} min={2} max={20} onChange={e => setCount(+e.target.value)}
-                    style={{ width: 52, padding: '3px 8px', fontSize: 'var(--text-xs)' }} />
-                </label>
-              )}
-              <button className="btn btn-primary btn-sm" disabled={generating} onClick={() => runTool(mode)}>
-                {generating ? 'Generating…' : `Generate ${TABS.find(t => t.id === mode)?.label}`}
-              </button>
-            </div>
-          )}
-        </div>
+  // ── AI generation ─────────────────────────────────────────────────────
 
-        {/* Output */}
-        {output && (
-          <div>
-            {mode === 'mcq' ? (
-              <MCQView content={output} />
-            ) : mode === 'flashcards' ? (
-              <FlashcardView content={output} />
-            ) : (
-              <div className="tool-output" dangerouslySetInnerHTML={{ __html: output
-                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.+?)\*/g, '<em>$1</em>')
-                .replace(/^(#{1,3})\s+(.+)/gm, (_, hashes, text) => `<h${hashes.length}>${text}</h${hashes.length}>`)
-                .replace(/^•\s+(.+)/gm, '<li>$1</li>')
-                .replace(/\n/g, '<br/>')
-              }} />
-            )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => navigator.clipboard.writeText(output).then(() => toast('Copied!', 'success'))}>
-                Copy
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={saveToLibrary}>
-                Save to Library
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setOutput('')}>
-                Clear
-              </button>
-            </div>
-          </div>
-        )}
-
-        {!output && extractedText && !generating && (
-          <div className="empty-state" style={{ padding: '40px 20px' }}>
-            <div className="empty-icon">✨</div>
-            <p>Click <strong>Generate</strong> to create {TABS.find(t => t.id === mode)?.label?.toLowerCase()} from your material.</p>
-          </div>
-        )}
-        {!output && !extractedText && !generating && (
-          <div className="empty-state" style={{ padding: '40px 20px' }}>
-            <div className="empty-icon">📂</div>
-            <p>Select a file from the <strong>Files</strong> tab, then extract its text to use this tool.</p>
-          </div>
-        )}
-      </div>
-    );
+  async function runGenerate(mode: ToolMode) {
+    let src = extractedText.trim();
+    if (!src && selFile) src = (await extractFromFile(selFile))?.trim() ?? '';
+    if (!src) { toast('Select a file or paste content first.', 'warning'); return; }
+    setGenerating(true); setOutput('');
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, text: src, options: { count } }),
+      });
+      const data = await res.json();
+      setOutput(data.content ?? data.error ?? 'No output received.');
+      if (data.source === 'offline') toast('Generated offline — AI not connected', 'info');
+    } catch { toast('Generation failed. Please try again.', 'error'); }
+    finally { setGenerating(false); }
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  async function saveToLibrary() {
+    if (!output) return;
+    const res = await fetch('/api/library', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: genMode, content: output }),
+    });
+    if (res.ok) toast('Saved to Library ✓', 'success');
+    else toast('Could not save — DB may not be configured', 'warning');
+  }
+
+  function handleUseForTools(text: string) {
+    setExtractedText(text);
+    setSelFile(viewFile);
+    setPasteMode(false);
+    setOutput('');
+    setMainTab('generate');
+    toast('Content loaded — pick a tool and generate', 'success');
+  }
+
+  function clearGen() { setSelFile(null); setExtractedText(''); setOutput(''); setPasteMode(false); }
 
   const breadcrumb = [selectedFolderName, selectedTopicName].filter(Boolean).join(' › ');
+  const currentGen = GENERATE_TABS.find(t => t.id === genMode)!;
+
+  // ── Render ────────────────────────────────────────────────────────────
 
   return (
-    <div className="tool-panel">
+    <div className="tool-panel" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
       {/* Header */}
-      <div className="panel-header" style={{ gap: 8 }}>
-        <span className="panel-title" style={{ fontSize: 'var(--text-base)' }}>
-          {breadcrumb || 'Workspace'}
+      <div className="panel-header" style={{ gap: 10, flexShrink: 0 }}>
+        <span className="panel-title">
+          {breadcrumb
+            ? <>{selectedFolderName}<span style={{ color: 'var(--text-3)' }}>{selectedTopicName ? ` › ${selectedTopicName}` : ''}</span></>
+            : 'Kivora Workspace'}
         </span>
-        {!selectedFolder && (
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-            Select a folder to get started
-          </span>
-        )}
+        {!selectedFolder && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', fontWeight: 400 }}>← Select a folder to get started</span>}
+        {files.length > 0 && <span className="badge badge-accent" style={{ marginLeft: 'auto' }}>{files.length} file{files.length !== 1 ? 's' : ''}</span>}
       </div>
 
       {/* Tab bar */}
-      <div className="tab-bar">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            className={`tab-btn${tab === t.id ? ' active' : ''}`}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
+      <div className="tab-bar" style={{ flexShrink: 0 }}>
+        {([
+          ['files',    `📁 Files${files.length ? ` (${files.length})` : ''}`],
+          ['generate', '⚡ Generate'],
+          ['math',     '🧮 Math'],
+          ['focus',    '🍅 Focus'],
+          ['library',  `🗂 Library${libItems.length ? ` (${libItems.length})` : ''}`],
+        ] as [MainTab, string][]).map(([id, label]) => (
+          <button key={id} className={`tab-btn${mainTab === id ? ' active' : ''}`}
+            onClick={() => setMainTab(id)}>
+            {label}
           </button>
         ))}
       </div>
 
-      {/* Tab content */}
-      <div className="tab-content">
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
-        {/* FILES TAB */}
-        {tab === 'files' && (
-          <div>
-            {!selectedFolder ? (
-              <div className="empty-state">
-                <div className="empty-icon">📂</div>
-                <h3>No folder selected</h3>
-                <p>Pick a folder from the left sidebar to see its files.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gap: 16 }}>
-                <input
-                  ref={filePickerRef}
-                  type="file"
-                  multiple
-                  accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg,.webp"
-                  style={{ display: 'none' }}
-                  onChange={handleWorkspaceFileInput}
-                />
-
-                <div
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    setDraggingFiles(true);
-                  }}
-                  onDragLeave={() => setDraggingFiles(false)}
-                  onDrop={async (event) => {
-                    event.preventDefault();
-                    setDraggingFiles(false);
-                    if (!selectedFolder) return;
-                    await uploadWorkspaceFiles(event.dataTransfer.files);
-                  }}
-                  onClick={() => {
-                    if (!selectedFolder) return;
-                    filePickerRef.current?.click();
-                  }}
-                  style={{
-                    border: draggingFiles ? '1px solid var(--accent)' : '1px dashed var(--border-2)',
-                    background: draggingFiles ? 'color-mix(in srgb, var(--accent) 8%, var(--surface))' : 'var(--surface)',
-                    borderRadius: 16,
-                    padding: '20px 18px',
-                    cursor: selectedFolder ? 'pointer' : 'default',
-                    display: 'grid',
-                    gap: 6,
-                  }}
-                >
-                  <strong style={{ fontSize: 'var(--text-sm)' }}>
-                    {draggingFiles ? 'Drop files to upload' : 'Drag files here or click to upload'}
-                  </strong>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                    Files go into {selectedTopicName || selectedFolderName}. PDFs, Word docs, text files, and images are supported.
-                  </span>
+        {/* ─────────────────── FILES ─────────────────── */}
+        {mainTab === 'files' && (
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+            <div style={{
+              width: viewFile ? 'clamp(180px, 28%, 300px)' : '100%',
+              flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              borderRight: viewFile ? '1px solid var(--border)' : 'none',
+              transition: 'width 0.22s ease',
+            }}>
+              {!selectedFolder ? (
+                <div className="empty-state" style={{ flex: 1 }}>
+                  <div className="empty-icon">📂</div>
+                  <h3>No folder selected</h3>
+                  <p>Pick a folder from the left sidebar to see and upload files.</p>
                 </div>
+              ) : (
+                <>
+                  <input ref={filePickerRef} type="file" multiple
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg,.webp"
+                    style={{ display: 'none' }}
+                    onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = ''; }} />
 
-                {filesLoad ? (
-              [1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 60, marginBottom: 8, borderRadius: 10 }} />)
-            ) : files.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">📁</div>
-                <h3>No files yet</h3>
-                <p>Drag files into this area or click the upload surface above.</p>
-              </div>
-            ) : (
-              <div className="file-list">
-                {files.map(file => (
+                  {/* Drop zone */}
                   <div
-                    key={file.id}
-                    className={`file-card${selFile?.id === file.id ? ' selected' : ''}`}
-                    onClick={() => selectFile(file)}
-                  >
-                    <div className="file-thumb">{fileIcon(file)}</div>
-                    <div className="file-info">
-                      <div className="file-name">{file.name}</div>
-                      <div className="file-meta">
-                        {fmt(file.fileSize)} {file.fileSize ? '·' : ''} {fmtDate(file.createdAt)}
-                        {selFile?.id === file.id && extractedText && (
-                          <span className="badge badge-accent" style={{ marginLeft: 6 }}>
-                            {extractedText.split(/\s+/).filter(Boolean).length} words extracted
-                          </span>
-                        )}
-                      </div>
+                    onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={async e => { e.preventDefault(); setDragging(false); await uploadFiles(e.dataTransfer.files); }}
+                    onClick={() => filePickerRef.current?.click()}
+                    style={{
+                      margin: '10px 10px 0', borderRadius: 10, padding: '12px 14px', cursor: 'pointer',
+                      border: dragging ? '2px solid var(--accent)' : '1.5px dashed var(--border-2)',
+                      background: dragging ? 'color-mix(in srgb, var(--accent) 8%, var(--surface))' : 'var(--surface)',
+                      transition: 'border-color 0.15s, background 0.15s', flexShrink: 0,
+                    }}>
+                    <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: dragging ? 'var(--accent)' : 'var(--text-2)' }}>
+                      {uploading ? '⏳ Uploading…' : dragging ? '📥 Drop to upload' : '＋ Drop files or click to upload'}
                     </div>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {selFile?.id === file.id && !extractedText && (
-                        <button className="btn btn-secondary btn-sm" disabled={extracting}
-                          onClick={e => { e.stopPropagation(); extractFromFile(file); }}>
-                          {extracting ? '…' : 'Extract'}
-                        </button>
-                      )}
-                      <button className="btn-icon" style={{ color: 'var(--danger)' }} title="Delete"
-                        onClick={e => deleteFile(e, file)}>✕</button>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 3 }}>
+                      PDF · Word · PowerPoint · Images · Text
+                      {(selectedTopicName || selectedFolderName) && <span style={{ color: 'var(--accent)' }}> → {selectedTopicName || selectedFolderName}</span>}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+
+                  {/* File list */}
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px 12px' }}>
+                    {filesLoad ? (
+                      [1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 58, marginBottom: 8, borderRadius: 10 }} />)
+                    ) : files.length === 0 ? (
+                      <div className="empty-state" style={{ padding: '32px 12px' }}>
+                        <div className="empty-icon">📁</div>
+                        <p style={{ fontSize: 'var(--text-sm)' }}>No files yet — drag one in above.</p>
+                      </div>
+                    ) : (
+                      files.map(file => (
+                        <div key={file.id}
+                          className={`file-card${viewFile?.id === file.id ? ' selected' : ''}`}
+                          style={{ cursor: 'pointer', marginBottom: 6 }}
+                          onClick={() => setViewFile(v => v?.id === file.id ? null : file)}>
+                          <div className="file-thumb">{fileIcon(file)}</div>
+                          <div className="file-info">
+                            <div className="file-name" title={file.name}>{file.name}</div>
+                            <div className="file-meta">{fmt(file.fileSize)}{file.fileSize ? ' · ' : ''}{fmtDate(file.createdAt)}</div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}
+                              onClick={e => { e.stopPropagation(); setViewFile(file); }}>View</button>
+                            <button className="btn-icon" style={{ color: 'var(--danger)', width: 26, height: 26 }}
+                              onClick={e => deleteFile(e, file)}>✕</button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+            {viewFile && (
+              <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
+                <FileViewer file={viewFile} onClose={() => setViewFile(null)} onUseForTools={handleUseForTools} />
               </div>
             )}
           </div>
         )}
 
-        {/* TOOL TABS */}
-        {(['summarize', 'rephrase', 'notes', 'quiz', 'mcq', 'flashcards', 'assignment'] as ToolMode[]).map(mode => (
-          tab === mode && <ToolPanel key={mode} mode={mode} />
-        ))}
+        {/* ─────────────────── GENERATE ──────────────── */}
+        {mainTab === 'generate' && (
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
 
-        {tab === 'math' && (
-          <MathSolver
-            onGraphExpression={(expression) => {
-              setGraphExpression(expression);
-              setTab('graph');
-              toast('Sent to graphing tool', 'info');
-            }}
-          />
+            {/* Tool mode pills */}
+            <div style={{ display: 'flex', gap: 5, padding: '10px 14px 8px', flexWrap: 'wrap', flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
+              {GENERATE_TABS.map(t => (
+                <button key={t.id} title={t.hint}
+                  onClick={() => { setGenMode(t.id); setOutput(''); }}
+                  style={{
+                    padding: '5px 12px', borderRadius: 20, fontSize: 'var(--text-xs)',
+                    fontWeight: 500, border: `1.5px solid ${genMode === t.id ? 'var(--accent)' : 'var(--border-2)'}`,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                    background: genMode === t.id ? 'var(--accent)' : 'var(--surface-2)',
+                    color: genMode === t.id ? '#fff' : 'var(--text-2)',
+                    transition: 'all 0.14s',
+                  }}>
+                  {t.icon} {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Source row */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                <button className={`btn btn-sm ${!pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setPasteMode(false)}>From file</button>
+                <button className={`btn btn-sm ${pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => { setPasteMode(true); setSelFile(null); if (!pasteMode) setExtractedText(''); }}>Paste text</button>
+              </div>
+
+              {!pasteMode && (
+                <>
+                  {selFile ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 8, padding: '5px 10px' }}>
+                      <span>{fileIcon(selFile)}</span>
+                      <span style={{ fontSize: 'var(--text-sm)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selFile.name}</span>
+                      {extractedText && <span className="badge badge-accent">{wordCount(extractedText).toLocaleString()} words</span>}
+                      <button className="btn-icon" style={{ width: 22, height: 22, fontSize: 11 }} onClick={clearGen}>✕</button>
+                    </div>
+                  ) : files.length > 0 ? (
+                    <select defaultValue="" onChange={e => { const f = files.find(x => x.id === e.target.value); if (f) { setSelFile(f); setExtractedText(''); setOutput(''); } }} style={{ flex: 1, minWidth: 180 }}>
+                      <option value="" disabled>Choose a file…</option>
+                      {files.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    </select>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>No files yet —</span>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setMainTab('files')}>Go to Files ↗</button>
+                    </div>
+                  )}
+                  {selFile && !extractedText && (
+                    <button className="btn btn-secondary btn-sm" disabled={extracting}
+                      onClick={() => extractFromFile(selFile)}>
+                      {extracting ? 'Extracting…' : '↓ Extract text'}
+                    </button>
+                  )}
+                </>
+              )}
+
+              {pasteMode && !extractedText && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>Paste content below →</span>}
+              {pasteMode && extractedText && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="badge badge-accent">{wordCount(extractedText).toLocaleString()} words</span>
+                  <button className="btn-icon" style={{ width: 22, height: 22, fontSize: 11 }} onClick={() => { setExtractedText(''); setOutput(''); }}>✕</button>
+                </div>
+              )}
+
+              {(extractedText || pasteMode) && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, marginLeft: 'auto' }}>
+                  {['quiz','mcq','flashcards','assignment','exam'].includes(genMode) && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                      Count:
+                      <input type="number" value={count} min={2} max={25}
+                        onChange={e => setCount(Math.max(2, Math.min(25, +e.target.value)))}
+                        style={{ width: 52, padding: '3px 7px', fontSize: 'var(--text-xs)' }} />
+                    </label>
+                  )}
+                  <button
+                    className={`btn btn-sm ${output ? 'btn-secondary' : 'btn-primary'}`}
+                    disabled={generating || (!extractedText.trim() && pasteMode)}
+                    onClick={() => runGenerate(genMode as ToolMode)}>
+                    {generating ? '⏳ Generating…' : output ? `↻ Regenerate` : `${currentGen.icon} Generate ${currentGen.label}`}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Paste textarea */}
+            {pasteMode && !extractedText && (
+              <div style={{ padding: '12px 14px', flexShrink: 0 }}>
+                <textarea
+                  placeholder="Paste your notes, essay, textbook content, or any study material here…"
+                  style={{ width: '100%', minHeight: 140, resize: 'vertical', background: 'var(--surface)', border: '1.5px solid var(--border-2)', borderRadius: 10, padding: '12px 14px', fontSize: 'var(--text-sm)', lineHeight: 1.6, color: 'var(--text)', fontFamily: 'inherit' }}
+                  onBlur={e => { if (e.target.value.trim()) setExtractedText(e.target.value.trim()); }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                  <button className="btn btn-primary btn-sm"
+                    onClick={e => {
+                      const ta = (e.currentTarget.closest('div')?.previousElementSibling as HTMLTextAreaElement);
+                      if (ta?.value.trim()) setExtractedText(ta.value.trim());
+                    }}>Use this text →</button>
+                </div>
+              </div>
+            )}
+
+            {/* Output */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>
+              {generating && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '48px 20px', justifyContent: 'center' }}>
+                  <div style={{ width: 22, height: 22, border: '2.5px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                  <span style={{ color: 'var(--text-3)' }}>Generating {currentGen.label.toLowerCase()}…</span>
+                </div>
+              )}
+
+              {!generating && output && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                    <span style={{ fontSize: 18 }}>{currentGen.icon}</span>
+                    <span style={{ fontWeight: 600 }}>{currentGen.label}</span>
+                    {selFile && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>from &ldquo;{selFile.name}&rdquo;</span>}
+                  </div>
+
+                  {genMode === 'mcq'        ? <MCQView content={output} />
+                  : genMode === 'flashcards' ? <FlashcardView content={output} />
+                  : genMode === 'exam'       ? <ExamView content={output} />
+                  : <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) }} />}
+
+                  <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+                    <button className="btn btn-secondary btn-sm"
+                      onClick={() => navigator.clipboard.writeText(output).then(() => toast('Copied!', 'success'))}>
+                      📋 Copy
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={saveToLibrary}>🗂 Save to Library</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setOutput('')}>Clear</button>
+                  </div>
+                </>
+              )}
+
+              {!generating && !output && extractedText && (
+                <div className="empty-state" style={{ padding: '50px 20px' }}>
+                  <div className="empty-icon">{currentGen.icon}</div>
+                  <h3>{currentGen.label}</h3>
+                  <p>{currentGen.hint}</p>
+                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 6 }}>
+                    {wordCount(extractedText).toLocaleString()} words ready · click Generate above
+                  </p>
+                </div>
+              )}
+
+              {!generating && !output && !extractedText && !pasteMode && (
+                <div className="empty-state" style={{ padding: '50px 20px' }}>
+                  <div className="empty-icon">⚡</div>
+                  <h3>AI Generate</h3>
+                  <p>
+                    Open a file in <strong>Files</strong> and click <strong>⚡ Use for Generate</strong>,
+                    or switch to <strong>Paste text</strong> above to enter content directly.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
-        {tab === 'graph' && (
-          <GraphingCalculator initialExpression={graphExpression} />
-        )}
+        {/* ─────────────────── MATH ──────────────────── */}
+        {mainTab === 'math' && <MathPanel />}
 
-        {tab === 'matlab' && (
-          <MatlabLab
-            onGraphExpression={(expression) => {
-              setGraphExpression(expression);
-              setTab('graph');
-              toast('Sent to graphing tool', 'info');
-            }}
-          />
-        )}
+        {/* ─────────────────── FOCUS ─────────────────── */}
+        {mainTab === 'focus' && <FocusPanel />}
 
-        {tab === 'visual' && (
-          <VisualAnalyzer />
-        )}
-
-        {/* LIBRARY TAB */}
-        {tab === 'library' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ fontSize: 'var(--text-lg)' }}>Saved outputs</h3>
+        {/* ─────────────────── LIBRARY ───────────────── */}
+        {mainTab === 'library' && (
+          <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 'var(--text-lg)' }}>Saved outputs</h3>
+                {libItems.length > 0 && <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>{libItems.length} item{libItems.length !== 1 ? 's' : ''}</div>}
+              </div>
               <button className="btn btn-ghost btn-sm" onClick={loadLib}>↻ Refresh</button>
             </div>
+
             {libLoad ? (
               [1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 90, marginBottom: 10, borderRadius: 10 }} />)
             ) : libItems.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-icon">🗂️</div>
                 <h3>Library is empty</h3>
-                <p>Generate something from a tool, then click <strong>Save to Library</strong>.</p>
+                <p>Generate something in <strong>Generate</strong>, then click <strong>Save to Library</strong>.</p>
               </div>
-            ) : (
-              libItems.map(item => (
-                <div key={item.id} className="lib-item" style={{ marginBottom: 12 }}>
+            ) : libItems.map(item => {
+              const tool = GENERATE_TABS.find(t => t.id === item.mode);
+              const expanded = libExpanded[item.id];
+              return (
+                <div key={item.id} className="lib-item" style={{ marginBottom: 10 }}>
                   <div className="lib-item-header">
-                    <span className="lib-item-mode">{item.mode}</span>
+                    <span style={{ fontSize: 16 }}>{tool?.icon ?? '📄'}</span>
+                    <span className="lib-item-mode">{tool?.label ?? item.mode}</span>
                     <span className="lib-item-date">{fmtDate(item.createdAt)}</span>
-                    <button
-                      className="btn-icon btn-sm"
-                      style={{ color: 'var(--danger)', marginLeft: 'auto' }}
-                      title="Delete"
-                      onClick={async () => {
-                        await fetch(`/api/library/${item.id}`, { method: 'DELETE' });
-                        setLibItems(p => p.filter(x => x.id !== item.id));
-                        toast('Deleted', 'info');
-                      }}
-                    >✕</button>
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setLibExpanded(p => ({ ...p, [item.id]: !expanded }))}>
+                        {expanded ? 'Collapse' : 'Expand'}
+                      </button>
+                      <button className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          setOutput(item.content);
+                          const match = GENERATE_TABS.find(t => t.id === item.mode);
+                          setGenMode(match ? item.mode as GenMode : 'summarize');
+                          setMainTab('generate');
+                          toast('Loaded into Generate', 'info');
+                        }}>Open ↗</button>
+                      <button className="btn-icon" style={{ color: 'var(--danger)', width: 26, height: 26 }}
+                        onClick={async () => {
+                          await fetch(`/api/library/${item.id}`, { method: 'DELETE' });
+                          setLibItems(p => p.filter(x => x.id !== item.id));
+                          toast('Deleted', 'info');
+                        }}>✕</button>
+                    </div>
                   </div>
-                  <div className="lib-item-preview">{item.content}</div>
-                  <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }}
-                    onClick={() => { setOutput(item.content); setTab(item.mode as Tab); toast('Loaded into tool', 'info'); }}>
-                    Reopen
-                  </button>
+                  <div className="lib-item-preview" style={{ maxHeight: expanded ? 'none' : 80, overflow: expanded ? 'visible' : 'hidden', WebkitMaskImage: expanded ? 'none' : 'linear-gradient(to bottom, #000 60%, transparent)', maskImage: expanded ? 'none' : 'linear-gradient(to bottom, #000 60%, transparent)' }}>
+                    {item.content.slice(0, expanded ? undefined : 600)}{!expanded && item.content.length > 600 ? '…' : ''}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
+                      onClick={() => navigator.clipboard.writeText(item.content).then(() => toast('Copied!', 'success'))}>
+                      📋 Copy
+                    </button>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>
+                      {wordCount(item.content).toLocaleString()} words
+                    </span>
+                  </div>
                 </div>
-              ))
-            )}
+              );
+            })}
           </div>
         )}
       </div>
