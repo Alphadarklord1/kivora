@@ -10,12 +10,16 @@ export const users = pgTable('users', {
   emailVerified: timestamp('email_verified'),
   image: text('image'),
   passwordHash: text('password_hash'),
+  isGuest: boolean('is_guest').notNull().default(false),
+  guestSessionId: text('guest_session_id'),
   twoFactorEnabled: boolean('two_factor_enabled').notNull().default(false),
   twoFactorSecret: text('two_factor_secret'),
   twoFactorConfirmedAt: timestamp('two_factor_confirmed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  guestSessionUnique: uniqueIndex('users_guest_session_id_uq').on(table.guestSessionId),
+}));
 
 export const accounts = pgTable('accounts', {
   id: uuid('id').defaultRandom().primaryKey(),

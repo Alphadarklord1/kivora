@@ -19,6 +19,7 @@
     "db:down": "docker compose down -v",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
+    "db:verify": "curl -fsS http://localhost:3000/api/db/verify | cat",
     "test:policy": "node --test --experimental-strip-types tests/ai-policy.test.mjs",
     "test:web-ai": "node --test --experimental-strip-types tests/web-rate-limit.test.mjs",
     "test:beta": "node --test --experimental-strip-types tests/*.test.mjs",

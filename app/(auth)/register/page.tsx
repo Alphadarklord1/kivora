@@ -55,8 +55,19 @@ export default function RegisterPage() {
       return;
     }
 
-    await signIn('credentials', { email: email.trim().toLowerCase(), password, redirect: false });
+    const signInResult = await signIn('credentials', {
+      email: email.trim().toLowerCase(),
+      password,
+      redirect: false,
+    });
     setLoading(false);
+
+    if (signInResult?.error) {
+      setError('Your account was created, but automatic sign-in failed. Please sign in from the login page.');
+      router.replace('/login');
+      return;
+    }
+
     router.replace('/workspace');
   }
 
