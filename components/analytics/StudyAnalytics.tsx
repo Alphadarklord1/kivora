@@ -1,1495 +1,875 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useAnalytics } from '@/hooks/useAnalytics';
-import { SkeletonCard } from '@/components/ui/Skeleton';
-import { generateStudySchedule, type StudyTopic } from '@/lib/planner/generate';
-import { useI18n } from '@/lib/i18n/useI18n';
-import { createLocalStudyPlan } from '@/lib/planner/local-plans';
+import { useState, useMemo } from 'react';
+import {
+  useAnalytics,
+  type QuizStats,
+  type PlanStats,
+  type WeakArea,
+  type Activity,
+  type UsageStats,
+} from '@/hooks/useAnalytics';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function pad(n: number) { return String(n).padStart(2, '0'); }
+function toDateStr(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 
 const PERIOD_OPTIONS = [
-  { value: 7, label: 'Last 7 days' },
-  { value: 30, label: 'Last 30 days' },
-  { value: 90, label: 'Last 90 days' },
+  { value: 7,   label: 'Last 7 days' },
+  { value: 30,  label: 'Last 30 days' },
+  { value: 90,  label: 'Last 90 days' },
   { value: 365, label: 'Last year' },
 ];
 
-type DailyPoint = { date: string; quizzes: number; avgScore: number };
+const SCORE_COLORS = {
+  excellent: '#52b788',
+  good:      '#4f86f7',
+  fair:      '#f59e0b',
+  needsWork: '#e05252',
+};
+
+// ─── Main Export ──────────────────────────────────────────────────────────────
 
 export function StudyAnalytics() {
-  const { t, locale } = useI18n({
-    'Last 7 days': 'آخر 7 أيام',
-    'Last 30 days': 'آخر 30 يومًا',
-    'Last 90 days': 'آخر 90 يومًا',
-    'Last year': 'آخر سنة',
-    'Failed to load analytics': 'فشل تحميل التحليلات',
-    'Try Again': 'حاول مرة أخرى',
-    'Study Analytics': 'تحليلات الدراسة',
-    'Track outcomes, identify weak spots, and improve consistency with AI guidance.': 'تتبّع النتائج، وحدد نقاط الضعف، وحسّن الاستمرارية بإرشاد الذكاء الاصطناعي.',
-    'AI-powered insights': 'رؤى مدعومة بالذكاء الاصطناعي',
-    Range: 'النطاق',
-    'Export PDF': 'تصدير PDF',
-    'Export CSV': 'تصدير CSV',
-    'Share Snapshot': 'مشاركة اللقطة',
-    'AI Study Advisor': 'مستشار الدراسة الذكي',
-    'Adaptive recommendations': 'توصيات تكيفية',
-    'Generate Plan': 'توليد خطة',
-    'Review Weak Areas': 'مراجعة نقاط الضعف',
-    'Average Score': 'متوسط الدرجة',
-    'Across all attempts': 'عبر جميع المحاولات',
-    'Average score across selected period': 'متوسط الدرجة خلال الفترة المحددة',
-    'Total Quizzes': 'إجمالي الاختبارات',
-    'Attempts completed': 'المحاولات المكتملة',
-    'Total quiz attempts in selected period': 'إجمالي محاولات الاختبار في الفترة المحددة',
-    'Study Streak': 'سلسلة الدراسة',
-    'Consecutive days': 'أيام متتالية',
-    'Current consecutive active-study days': 'عدد الأيام المتتالية النشطة حاليًا',
-    'Tools Used': 'الأدوات المستخدمة',
-    'No usage yet': 'لا يوجد استخدام بعد',
-    'Distinct tools used this period': 'عدد الأدوات المختلفة المستخدمة في هذه الفترة',
-    'Active Study Plan': 'الخطة الدراسية النشطة',
-    'Plans currently marked active': 'الخطط المصنفة نشطة حاليًا',
-    'Quiz Performance': 'أداء الاختبارات',
-    'Easy Signal': 'إشارة السهل',
-    'Medium Signal': 'إشارة المتوسط',
-    'Hard Signal': 'إشارة الصعب',
-    'Tool Usage': 'استخدام الأدوات',
-    'Most used: {tool}': 'الأكثر استخدامًا: {tool}',
-    'No tool activity yet.': 'لا يوجد نشاط أدوات بعد.',
-    'Performance Trend': 'اتجاه الأداء',
-    'Score trend': 'اتجاه الدرجات',
-    Attempts: 'المحاولات',
-    'Areas to Improve': 'المجالات التي تحتاج تحسين',
-    'Generate Practice': 'توليد تدريب',
-    'No weak areas identified yet. Keep practicing to get targeted coaching.': 'لم يتم تحديد نقاط ضعف بعد. واصل التدريب للحصول على توجيه أدق.',
-    'Study Plan Analytics': 'تحليلات خطة الدراسة',
-    'Completion Rate': 'معدل الإكمال',
-    'Avg Study Time': 'متوسط وقت الدراسة',
-    'Consistency Score': 'درجة الاستمرارية',
-    'Completed Days': 'الأيام المكتملة',
-    'Weekly Activity Heatmap': 'خريطة حرارة النشاط الأسبوعي',
-    Low: 'منخفض',
-    High: 'مرتفع',
-    'Recent Quiz Scores': 'درجات الاختبارات الأخيرة',
-    'Study Analytics Snapshot': 'لقطة تحليلات الدراسة',
-    'Average score: {value}%': 'متوسط الدرجة: {value}%',
-    'Total quizzes: {value}': 'إجمالي الاختبارات: {value}',
-    'Current streak: {value} day(s)': 'السلسلة الحالية: {value} يوم',
-    'Most used tool: {value}': 'الأداة الأكثر استخدامًا: {value}',
-    'Consistency score: {value}%': 'درجة الاستمرارية: {value}%',
-    Metric: 'المؤشر',
-    Value: 'القيمة',
-    'Current Streak': 'السلسلة الحالية',
-    'Active Plans': 'الخطط النشطة',
-    'Average Study Minutes': 'متوسط دقائق الدراسة',
-    'Most Used Tool': 'الأداة الأكثر استخدامًا',
-    'Weak Area': 'نقطة الضعف',
-    Accuracy: 'الدقة',
-    General: 'عام',
-    'Could not generate plan. Please try again.': 'تعذر توليد الخطة. يرجى المحاولة مرة أخرى.',
-    'No AI insights yet. Complete a few more quizzes to unlock adaptive guidance.': 'لا توجد رؤى ذكاء اصطناعي بعد. أكمل بعض الاختبارات الإضافية لفتح التوجيه التكيفي.',
-    'Top: {tool}': 'الأعلى: {tool}',
-    'total plans': 'إجمالي الخطط',
-    'Showing fallback analytics due to a temporary data issue.': 'يتم عرض تحليلات احتياطية بسبب مشكلة مؤقتة في البيانات.',
-    'Planner data is using local beta storage on this device.': 'تستخدم بيانات المخطط تخزينًا محليًا تجريبيًا على هذا الجهاز.',
-  });
-  const router = useRouter();
   const { data, loading, error, refresh, setPeriod, period } = useAnalytics(30);
-  const periodOptions = PERIOD_OPTIONS.map((option) => ({ ...option, label: t(option.label) }));
+  const [activeTab, setActiveTab] = useState<'overview' | 'scores' | 'activity' | 'goals'>('overview');
 
-  if (loading) {
-    return (
-      <div className="analytics-skeleton">
-        <div className="skeleton-hero">
-          <SkeletonCard />
-        </div>
-        <div className="skeleton-stats">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
-        </div>
-        <div className="skeleton-grid">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </div>
-        <style jsx>{`
-          .analytics-skeleton {
-            display: grid;
-            gap: var(--space-4);
-            padding: var(--space-4);
-          }
-
-          .skeleton-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: var(--space-3);
-          }
-
-          .skeleton-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: var(--space-4);
-          }
-
-          @media (max-width: 980px) {
-            .skeleton-grid {
-              grid-template-columns: 1fr;
-            }
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="analytics-error">
-        <p>{t('Failed to load analytics')}</p>
-        <button className="btn" onClick={refresh}>{t('Try Again')}</button>
-        <style jsx>{`
-          .analytics-error {
-            text-align: center;
-            padding: var(--space-8);
-            color: var(--error);
-            display: grid;
-            gap: var(--space-3);
-            justify-items: center;
-          }
-        `}</style>
-      </div>
-    );
-  }
-
+  if (loading) return <AnalyticsSkeleton />;
+  if (error) return (
+    <div className="an-error">
+      <span className="an-error-icon">⚠️</span>
+      <p>{error}</p>
+      <button className="an-retry-btn" onClick={refresh}>Try Again</button>
+    </div>
+  );
   if (!data) return null;
 
   const { quizStats, planStats, weakAreas, activity, insights, usage } = data;
 
-  const dailySeries: DailyPoint[] = activity.dailyActivity && activity.dailyActivity.length > 0
-    ? activity.dailyActivity
-    : [];
-
-  const toolUsageEntries = Object.entries(usage.toolUsage);
-  const maxToolCount = Math.max(1, ...toolUsageEntries.map(([, count]) => count));
-  const totalToolHits = Math.max(1, toolUsageEntries.reduce((sum, [, count]) => sum + count, 0));
-  const mostUsedTool = toolUsageEntries[0]?.[0] || 'none';
-
-  const completionRate =
-    planStats.totalStudyDays > 0
-      ? Math.round((planStats.completedDays / planStats.totalStudyDays) * 100)
-      : planStats.totalPlans > 0
-        ? Math.round((planStats.completedPlans / planStats.totalPlans) * 100)
-        : 0;
-
-  const avgStudyMinutes =
-    quizStats.totalAttempts > 0 ? Math.max(0, Math.round(quizStats.totalTimeTaken / quizStats.totalAttempts / 60)) : 0;
-
-  const consistencyScore = Math.min(
-    100,
-    Math.round((activity.totalActiveDays / Math.max(period, 1)) * 65 + (Math.min(activity.currentStreak, 14) / 14) * 35)
-  );
-
-  const chronologicalScores = [...quizStats.recentScores].reverse().map((item) => item.score);
-
-  const trendSeries = dailySeries.length > 0
-    ? dailySeries
-    : quizStats.recentScores
-        .slice()
-        .reverse()
-        .map((item) => ({ date: item.date, quizzes: 1, avgScore: item.score }));
-
-  const trendTail = trendSeries.slice(-Math.min(60, trendSeries.length));
-  const trendLine = buildLinePoints(
-    trendTail.map((point) => point.avgScore),
-    760,
-    220,
-    20,
-    0,
-    100
-  );
-  const maxAttempts = Math.max(1, ...trendTail.map((point) => point.quizzes));
-  const improvement = getImprovement(chronologicalScores);
-
-  const easySignal = Math.round(
-    ((quizStats.scoreDistribution.excellent + quizStats.scoreDistribution.good) / Math.max(quizStats.totalAttempts, 1)) * 100
-  );
-  const mediumSignal = Math.round((quizStats.scoreDistribution.fair / Math.max(quizStats.totalAttempts, 1)) * 100);
-  const hardSignal = Math.round((quizStats.scoreDistribution.needsWork / Math.max(quizStats.totalAttempts, 1)) * 100);
-
-  const heatmapWeeks = buildHeatmapWeeks(dailySeries);
-  const maxHeat = Math.max(1, ...dailySeries.map((d) => d.quizzes));
-
-  const aiInsights = insights.length > 0
-    ? insights
-    : [t('No AI insights yet. Complete a few more quizzes to unlock adaptive guidance.')];
-
-  const exportCsv = () => {
-    const rows: string[][] = [
-      [t('Metric'), t('Value')],
-      [t('Average Score'), `${quizStats.averageScore}%`],
-      [t('Total Quizzes'), `${quizStats.totalAttempts}`],
-      [t('Current Streak'), `${activity.currentStreak}`],
-      [t('Tools Used'), `${toolUsageEntries.length}`],
-      [t('Active Plans'), `${planStats.activePlans}`],
-      [t('Completion Rate'), `${completionRate}%`],
-      [t('Consistency Score'), `${consistencyScore}%`],
-      [t('Average Study Minutes'), `${avgStudyMinutes}`],
-      [t('Most Used Tool'), formatMode(mostUsedTool, t)],
-      ['---', '---'],
-      [t('Weak Area'), t('Accuracy')],
-      ...weakAreas.map((item) => [item.topic, `${item.accuracy}%`]),
-    ];
-
-    const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `study-analytics-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const exportPdf = () => {
-    window.print();
-  };
-
-  const shareSnapshot = async () => {
-    const snapshot = [
-      `${t('Study Analytics')} (${period}d)`,
-      t('Average score: {value}%', { value: quizStats.averageScore }),
-      t('Total quizzes: {value}', { value: quizStats.totalAttempts }),
-      t('Current streak: {value} day(s)', { value: activity.currentStreak }),
-      t('Most used tool: {value}', { value: formatMode(mostUsedTool, t) }),
-      t('Consistency score: {value}%', { value: consistencyScore }),
-    ].join('\n');
-
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: t('Study Analytics Snapshot'),
-          text: snapshot,
-        });
-        return;
-      } catch {
-        // no-op
-      }
-    }
-
-    await navigator.clipboard.writeText(snapshot);
-  };
-
-  const scrollToWeakAreas = () => {
-    const node = document.getElementById('weak-areas-card');
-    if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  const generateCoachPlan = async (topic: string, minutes: number, difficulty: 'easy' | 'medium' | 'hard') => {
-    const examDate = new Date();
-    examDate.setDate(examDate.getDate() + 7);
-    const normalizedDifficulty: StudyTopic['difficulty'] =
-      difficulty === 'hard' ? 4 : difficulty === 'medium' ? 3 : 2;
-
-    const topics: StudyTopic[] = [
-      {
-        name: topic,
-        difficulty: normalizedDifficulty,
-        estimatedHours: Math.max(1, Math.round((minutes * 4) / 60)),
-        completed: false,
-      },
-    ];
-    const schedule = generateStudySchedule(examDate, topics, minutes);
-
-    const res = await fetch('/api/study-plans', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        title: `Coach: ${topic} (${minutes}-min)`,
-        examDate: examDate.toISOString(),
-        dailyMinutes: minutes,
-        topics,
-        schedule,
-        source: 'coach',
-        coachContext: { topic, minutes, difficulty },
-      }),
-    });
-
-    if (res.ok) {
-      router.push('/planner');
-      return;
-    }
-
-    const payload = await res.json().catch(() => null);
-    const errorCode = payload && typeof payload === 'object'
-      ? (payload as Record<string, unknown>).errorCode
-      : null;
-
-    if (errorCode === 'DATABASE_NOT_CONFIGURED') {
-      createLocalStudyPlan({
-        title: `Coach: ${topic} (${minutes}-min)`,
-        examDate: examDate.toISOString(),
-        dailyMinutes: minutes,
-        topics,
-        schedule,
-      });
-      router.push('/planner');
-      return;
-    }
-
-    window.alert(t('Could not generate plan. Please try again.'));
-  };
-
-  const onCoachAction = async () => {
-    const planAction = data.coachActions?.find((action) => action.type === 'plan');
-    if (!planAction) {
-      router.push('/planner');
-      return;
-    }
-    const topic = planAction.payload.topic || 'General';
-    const minutes = Number(planAction.payload.minutes || '20');
-    const difficulty = (planAction.payload.difficulty || 'medium') as 'easy' | 'medium' | 'hard';
-    await generateCoachPlan(topic, minutes, difficulty);
-  };
-
   return (
-    <div className="study-analytics">
-      <section className="analytics-header">
-        <div className="header-copy">
-          <h1>{t('Study Analytics')}</h1>
-          <p>{t('Track outcomes, identify weak spots, and improve consistency with AI guidance.')}</p>
-          <span className="ai-badge">{t('AI-powered insights')}</span>
+    <div className="an-shell">
+      {/* Hero */}
+      <section className="an-hero">
+        <div>
+          <p className="eyebrow">Study Analytics</p>
+          <h1>Your Progress</h1>
+          <p>Track outcomes, spot weak areas, and see your consistency at a glance.</p>
         </div>
-        <div className="header-controls">
-          <label className="period">
-            <span>{t('Range')}</span>
-            <select value={period} onChange={(e) => setPeriod(Number(e.target.value))}>
-              {periodOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </label>
-          <button className="analytics-btn ghost" onClick={exportPdf}>{t('Export PDF')}</button>
-          <button className="analytics-btn ghost" onClick={exportCsv}>{t('Export CSV')}</button>
-          <button className="analytics-btn ghost" onClick={shareSnapshot}>{t('Share Snapshot')}</button>
-        </div>
-      </section>
-
-      {data.fallback && (
-        <div className="fallback-banner">{t('Showing fallback analytics due to a temporary data issue.')}</div>
-      )}
-
-      <section className="ai-hero">
-        <div className="ai-hero-head">
-          <h2>🧠 {t('AI Study Advisor')}</h2>
-          <span className="accent-pill">{t('Adaptive recommendations')}</span>
-        </div>
-        <ul>
-          {aiInsights.slice(0, 3).map((insight, index) => (
-            <li key={index}>{t(insight)}</li>
-          ))}
-        </ul>
-        <div className="hero-actions">
-          <button className="analytics-btn primary" onClick={onCoachAction}>
-            {t('Generate Plan')}
-          </button>
-          <button className="analytics-btn ghost" onClick={scrollToWeakAreas}>
-            {t('Review Weak Areas')}
-          </button>
-        </div>
-      </section>
-
-      <section className="kpi-row">
-        {[
-          { label: t('Average Score'), value: `${quizStats.averageScore}%`, hint: t('Across all attempts'), tooltip: t('Average score across selected period') },
-          { label: t('Total Quizzes'), value: `${quizStats.totalAttempts}`, hint: t('Attempts completed'), tooltip: t('Total quiz attempts in selected period') },
-          { label: t('Study Streak'), value: `${activity.currentStreak}`, hint: t('Consecutive days'), tooltip: t('Current consecutive active-study days') },
-          { label: t('Tools Used'), value: `${toolUsageEntries.length}`, hint: mostUsedTool === 'none' ? t('No usage yet') : t('Top: {tool}', { tool: formatMode(mostUsedTool, t) }), tooltip: t('Distinct tools used this period') },
-          { label: t('Active Study Plan'), value: `${planStats.activePlans}`, hint: `${planStats.totalPlans} ${t('total plans')}`, tooltip: t('Plans currently marked active') },
-        ].map((metric) => (
-          <article key={metric.label} className="metric-card" title={metric.tooltip}>
-            <span className="metric-label">{metric.label}</span>
-            <strong className="metric-value">{metric.value}</strong>
-            <span className="metric-hint">{metric.hint}</span>
-          </article>
-        ))}
-      </section>
-
-      <section className="analytics-grid top">
-        <article className="analytics-card performance">
-          <h3>{t('Quiz Performance')}</h3>
-          <div className="performance-grid">
-            <div className="score-hero">
-              <div className="score-main">{quizStats.averageScore}%</div>
-              <div className={`trend-chip ${improvement >= 0 ? 'up' : 'down'}`}>
-                {improvement >= 0 ? '↑' : '↓'} {Math.abs(improvement)}%
-              </div>
-              <svg viewBox="0 0 220 70" className="sparkline" role="img" aria-label={t('Score trend')}>
-                <polyline points={buildLinePoints(chronologicalScores.length ? chronologicalScores : [0], 220, 70, 6, 0, 100)} />
-              </svg>
-            </div>
-            <div className="difficulty-signal">
-              {[
-                { label: t('Easy Signal'), value: easySignal, tone: 'good' as const },
-                { label: t('Medium Signal'), value: mediumSignal, tone: 'fair' as const },
-                { label: t('Hard Signal'), value: hardSignal, tone: 'needs-work' as const },
-              ].map((item) => (
-                <div key={item.label} className="difficulty-row" title={`${item.label}: ${item.value}%`}>
-                  <span className="difficulty-label">{item.label}</span>
-                  <div className="difficulty-track">
-                    <div className={`difficulty-fill ${item.tone}`} style={{ width: `${Math.max(0, Math.min(100, item.value))}%` }} />
-                  </div>
-                  <strong className="difficulty-value">{item.value}%</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-        </article>
-
-        <article className="analytics-card tool-usage-card">
-          <div className="card-head">
-            <h3>{t('Tool Usage')}</h3>
-            <span className="mini-badge">{t('Most used: {tool}', { tool: formatMode(mostUsedTool, t) })}</span>
-          </div>
-          {toolUsageEntries.length === 0 ? (
-            <p className="muted">{t('No tool activity yet.')}</p>
-          ) : (
-            <div className="tool-usage-list">
-              {toolUsageEntries.slice(0, 7).map(([tool, count]) => {
-                const width = Math.round((count / maxToolCount) * 100);
-                const percent = Math.round((count / totalToolHits) * 100);
-                return (
-                  <div key={tool} className="tool-row" title={`${formatMode(tool, t)}: ${count} uses`}>
-                    <div className="tool-label">
-                      <span className="tool-icon">{getToolIcon(tool)}</span>
-                      <span>{formatMode(tool, t)}</span>
-                    </div>
-                    <div className="tool-bar">
-                      <div className="tool-bar-fill" style={{ width: `${width}%` }} />
-                    </div>
-                    <span className="tool-percent">{percent}%</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </article>
-      </section>
-
-      <section className="analytics-grid middle">
-        <article className="analytics-card trend-card">
-          <h3>{t('Performance Trend')}</h3>
-          <div className="trend-chart-wrap">
-            <svg viewBox="0 0 760 220" className="trend-chart" role="img" aria-label={`${t('Score trend')} + ${t('Attempts')}`}>
-              <line x1="20" y1="20" x2="740" y2="20" className="guide-line" />
-              <line x1="20" y1="110" x2="740" y2="110" className="guide-line" />
-              <line x1="20" y1="200" x2="740" y2="200" className="guide-line" />
-              {trendTail.map((point, index) => {
-                const spacing = trendTail.length > 1 ? (720 / (trendTail.length - 1)) : 0;
-                const x = 20 + index * spacing;
-                const barHeight = Math.round((point.quizzes / maxAttempts) * 58);
-                return (
-                  <rect
-                    key={`${point.date}-${index}`}
-                    x={x - 3}
-                    y={200 - barHeight}
-                    width="6"
-                    height={Math.max(2, barHeight)}
-                    className="attempt-bar"
-                  />
-                );
-              })}
-              <polyline points={trendLine} className="score-line" />
-            </svg>
-          </div>
-          <div className="trend-legend">
-            <span><i className="legend score" /> {t('Score trend')}</span>
-            <span><i className="legend attempts" /> {t('Attempts')}</span>
-          </div>
-        </article>
-
-        <article id="weak-areas-card" className="analytics-card weak-areas-card">
-          <h3>{t('Areas to Improve')}</h3>
-          {weakAreas.length > 0 ? (
-            <div className="weak-areas-list">
-              {weakAreas.slice(0, 4).map((area, index) => (
-                <div key={`${area.topic}-${index}`} className="weak-item">
-                  <div className="weak-head">
-                    <strong>{area.topic}</strong>
-                    <span className={`score-pill ${getScoreClass(area.accuracy)}`}>{area.accuracy}%</span>
-                  </div>
-                  <p>{area.suggestion}</p>
-                  <div className="weak-actions">
-                    <button
-                      className="analytics-btn ghost small"
-                      onClick={() => router.push(`/tools?topic=${encodeURIComponent(area.topic)}`)}
-                    >
-                      {t('Generate Practice')}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="muted">{t('No weak areas identified yet. Keep practicing to get targeted coaching.')}</p>
-          )}
-        </article>
-      </section>
-
-      <section className="analytics-grid bottom">
-        <article className="analytics-card plan-card">
-          <h3>{t('Study Plan Analytics')}</h3>
-          <div className="plan-kpis">
-            <div className="plan-kpi">
-              <span>{t('Completion Rate')}</span>
-              <strong>{completionRate}%</strong>
-            </div>
-            <div className="plan-kpi">
-              <span>{t('Avg Study Time')}</span>
-              <strong>{avgStudyMinutes} min</strong>
-            </div>
-            <div className="plan-kpi">
-              <span>{t('Consistency Score')}</span>
-              <strong>{consistencyScore}%</strong>
-            </div>
-          </div>
-          <div className="plan-progress">
-            <div className="progress-head">
-              <span>{t('Completed Days')}</span>
-              <span>{planStats.completedDays} / {Math.max(planStats.totalStudyDays, 0)}</span>
-            </div>
-            <div className="progress-track">
-              <div className="progress-fill" style={{ width: `${completionRate}%` }} />
-            </div>
-          </div>
-        </article>
-
-        <article className="analytics-card heatmap-card">
-          <h3>{t('Weekly Activity Heatmap')}</h3>
-          <div className="heatmap-scroll">
-            <div className="heatmap-grid">
-              {heatmapWeeks.map((week, weekIndex) => (
-                <div key={weekIndex} className="heatmap-week">
-                  {week.map((day, dayIndex) => {
-                    if (!day) return <span key={`${weekIndex}-${dayIndex}`} className="heat-cell empty" />;
-                    const intensity = getIntensity(day.quizzes, maxHeat);
-                    return (
-                      <span
-                        key={`${day.date}-${dayIndex}`}
-                        className={`heat-cell i${intensity}`}
-                        title={`${formatFullDate(day.date, locale)} • ${day.quizzes} activity`}
-                      />
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="heatmap-legend">
-            <span>{t('Low')}</span>
-            <div className="legend-scale">
-              <i className="heat-cell i0" />
-              <i className="heat-cell i1" />
-              <i className="heat-cell i2" />
-              <i className="heat-cell i3" />
-              <i className="heat-cell i4" />
-            </div>
-            <span>{t('High')}</span>
-          </div>
-        </article>
-      </section>
-
-      {quizStats.recentScores.length > 0 && (
-        <section className="analytics-card recent-card">
-          <h3>{t('Recent Quiz Scores')}</h3>
-          <div className="recent-scores">
-            {quizStats.recentScores.slice(0, 10).map((score, index) => (
-              <div key={`${score.date}-${score.mode}-${index}`} className="recent-item">
-                <div className="ring" style={{ background: `conic-gradient(var(--primary) ${score.score}%, var(--bg-inset) 0)` }}>
-                  <span>{score.score}%</span>
-                </div>
-                <div className="recent-meta">
-                  <strong>{formatMode(score.mode, t)}</strong>
-                  <span>{formatShortDate(score.date, locale)}</span>
-                </div>
-              </div>
+        <div className="an-hero-right">
+          <select
+            className="period-select"
+            value={period}
+            onChange={e => setPeriod(Number(e.target.value))}
+          >
+            {PERIOD_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
-          </div>
-        </section>
+          </select>
+          <button className="an-refresh-btn" onClick={refresh}>↻ Refresh</button>
+        </div>
+      </section>
+
+      {/* Stats cards */}
+      <div className="stats-grid">
+        <StatCard
+          icon="🔥"
+          label="Day Streak"
+          value={activity?.currentStreak ?? 0}
+          unit="days"
+          accent="#e07a52"
+          detail={`${activity?.totalActiveDays ?? 0} active days total`}
+        />
+        <StatCard
+          icon="📊"
+          label="Avg Score"
+          value={`${Math.round(quizStats?.averageScore ?? 0)}%`}
+          accent={
+            (quizStats?.averageScore ?? 0) >= 80 ? '#52b788' :
+            (quizStats?.averageScore ?? 0) >= 60 ? '#4f86f7' : '#e05252'
+          }
+          detail={`${quizStats?.totalAttempts ?? 0} quizzes taken`}
+        />
+        <StatCard
+          icon="📝"
+          label="Total Quizzes"
+          value={quizStats?.totalAttempts ?? 0}
+          accent="#4f86f7"
+          detail={`${quizStats?.totalQuestions ?? 0} questions answered`}
+        />
+        <StatCard
+          icon="📅"
+          label="Plan Progress"
+          value={`${Math.round(planStats?.averageProgress ?? 0)}%`}
+          accent="#a78bfa"
+          detail={`${planStats?.completedDays ?? 0}/${planStats?.totalStudyDays ?? 0} study days done`}
+        />
+        <StatCard
+          icon="📚"
+          label="Files"
+          value={usage?.totalFiles ?? 0}
+          accent="#52b788"
+          detail={`${usage?.libraryItems ?? 0} saved to library`}
+        />
+        <StatCard
+          icon="⏱️"
+          label="Study Time"
+          value={`${Math.round((quizStats?.totalTimeTaken ?? 0) / 60)}m`}
+          accent="#f59e0b"
+          detail="Total quiz time logged"
+        />
+      </div>
+
+      {/* Tab navigation */}
+      <div className="an-tabs">
+        {(['overview', 'scores', 'activity', 'goals'] as const).map(tab => (
+          <button
+            key={tab}
+            className={`an-tab${activeTab === tab ? ' active' : ''}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tab.charAt(0).toUpperCase()+tab.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      {activeTab === 'overview' && (
+        <OverviewTab
+          quizStats={quizStats}
+          planStats={planStats}
+          weakAreas={weakAreas}
+          insights={insights}
+          usage={usage}
+        />
+      )}
+      {activeTab === 'scores' && (
+        <ScoresTab quizStats={quizStats} activity={activity} />
+      )}
+      {activeTab === 'activity' && (
+        <ActivityTab activity={activity} period={period} />
+      )}
+      {activeTab === 'goals' && (
+        <GoalsTab planStats={planStats} weakAreas={weakAreas} />
       )}
 
       <style jsx>{`
-        .study-analytics {
-          display: grid;
-          gap: var(--space-6);
+        .an-shell {
           padding: var(--space-4);
-        }
-
-        .analytics-header {
           display: flex;
-          justify-content: space-between;
+          flex-direction: column;
+          gap: var(--space-4);
+          max-width: 1200px;
+          margin: 0 auto;
+        }
+        .an-hero {
+          display: flex;
           align-items: flex-start;
+          justify-content: space-between;
           gap: var(--space-4);
           flex-wrap: wrap;
-        }
-
-        .fallback-banner {
-          padding: var(--space-2) var(--space-3);
-          border-radius: var(--radius-md);
-          border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border-default));
-          background: var(--warning-muted);
-          color: var(--warning);
-          font-size: var(--font-meta);
-        }
-
-        .header-copy h1 {
-          margin: 0;
-          font-size: clamp(28px, 4vw, 36px);
-          font-weight: 700;
-          letter-spacing: var(--letter-tight);
-        }
-
-        .header-copy p {
-          margin: var(--space-2) 0 0;
-          color: var(--text-muted);
-          font-size: var(--font-body);
-          max-width: 62ch;
-        }
-
-        .ai-badge {
-          display: inline-flex;
-          margin-top: var(--space-2);
-          padding: 4px 10px;
-          border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border-default));
-          border-radius: var(--radius-full);
-          background: color-mix(in srgb, var(--primary-muted) 45%, transparent);
-          color: var(--primary);
-          font-size: var(--font-tiny);
-          font-weight: 600;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
-        }
-
-        .header-controls {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: flex-end;
-          gap: var(--space-2);
-        }
-
-        .period {
-          display: grid;
-          gap: 4px;
-          min-width: 170px;
-        }
-
-        .period span {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-          letter-spacing: 0.05em;
-          text-transform: uppercase;
-          font-weight: 600;
-        }
-
-        .period select {
-          height: 36px;
-          padding: 0 10px;
-          border-radius: 10px;
-          border: 1px solid var(--border-subtle);
-          background: var(--bg-surface);
-          color: var(--text-primary);
-          font-size: var(--font-meta);
-        }
-
-        .ai-hero,
-        .analytics-card {
-          background: var(--bg-elevated);
-          border: 1px solid var(--border-subtle);
-          border-radius: 16px;
-          box-shadow: var(--shadow-sm);
-          transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-        }
-
-        .ai-hero:hover,
-        .analytics-card:hover {
-          transform: translateY(-1px);
-          box-shadow: var(--shadow-md);
-          border-color: var(--border-default);
-        }
-
-        .ai-hero {
           padding: var(--space-5);
-          border-left: 3px solid color-mix(in srgb, var(--primary) 60%, var(--border-default));
-        }
-
-        .ai-hero-head {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: var(--space-3);
-          margin-bottom: var(--space-3);
-          flex-wrap: wrap;
-        }
-
-        .ai-hero h2 {
-          margin: 0;
-          font-size: var(--font-lg);
-        }
-
-        .accent-pill {
-          font-size: var(--font-tiny);
-          color: var(--text-secondary);
-          background: var(--bg-surface);
           border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-full);
-          padding: 3px 10px;
-          white-space: nowrap;
+          border-radius: 28px;
+          background:
+            radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 14%, transparent), transparent 30%),
+            linear-gradient(180deg, var(--bg-elevated), var(--bg-surface));
+          box-shadow: var(--shadow-md);
         }
-
-        .ai-hero ul {
-          margin: 0;
-          padding-left: var(--space-4);
+        .eyebrow {
+          margin: 0 0 6px;
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          color: var(--text-muted);
+        }
+        .an-hero h1 { margin: 0; font-size: clamp(2rem,4vw,3rem); line-height:1; letter-spacing:-0.04em; }
+        .an-hero p { margin: 10px 0 0; max-width: 58ch; color: var(--text-muted); line-height:1.7; }
+        .an-hero-right { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .period-select {
+          padding: 8px 14px; border-radius: 12px;
+          border: 1.5px solid var(--border-subtle);
+          background: var(--bg-surface); color: var(--text-primary);
+          font-size: 13px; font-weight: 500; cursor: pointer;
+        }
+        .an-refresh-btn {
+          padding: 8px 16px; border-radius: 12px;
+          border: 1.5px solid var(--border-subtle);
+          background: var(--bg-surface); color: var(--text-secondary);
+          font-size: 13px; font-weight: 500; cursor: pointer;
+          transition: all 0.15s;
+        }
+        .an-refresh-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .stats-grid {
           display: grid;
-          gap: var(--space-2);
-        }
-
-        .ai-hero li {
-          color: var(--text-secondary);
-          font-size: var(--font-body);
-          line-height: 1.5;
-        }
-
-        .hero-actions {
-          margin-top: var(--space-4);
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--space-2);
-        }
-
-        .kpi-row {
-          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
           gap: var(--space-3);
-          grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
         }
-
-        .metric-card {
-          background: var(--bg-surface);
+        .an-tabs {
+          display: flex;
+          gap: 4px;
+          background: var(--bg-elevated);
           border: 1px solid var(--border-subtle);
           border-radius: 14px;
-          padding: var(--space-4);
-          display: grid;
-          gap: var(--space-2);
-          transition: transform 0.2s ease, border-color 0.2s ease;
-        }
-
-        .metric-card:hover {
-          transform: translateY(-1px);
-          border-color: var(--border-default);
-        }
-
-        .metric-label {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-          font-weight: 600;
-        }
-
-        .metric-value {
-          font-size: clamp(24px, 3vw, 34px);
-          font-weight: 700;
-          line-height: 1;
-        }
-
-        .metric-hint {
-          font-size: var(--font-meta);
-          color: var(--text-secondary);
-        }
-
-        .analytics-grid {
-          display: grid;
-          gap: var(--space-4);
-        }
-
-        .analytics-grid.top {
-          grid-template-columns: 1.3fr 1fr;
-        }
-
-        .analytics-grid.middle {
-          grid-template-columns: 1.3fr 1fr;
-        }
-
-        .analytics-grid.bottom {
-          grid-template-columns: 1fr 1fr;
-        }
-
-        @media (max-width: 1080px) {
-          .analytics-grid.top,
-          .analytics-grid.middle,
-          .analytics-grid.bottom {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        .analytics-card {
-          padding: var(--space-4);
-        }
-
-        .analytics-card h3 {
-          margin: 0 0 var(--space-3);
-          font-size: var(--font-section);
-          font-weight: 600;
-        }
-
-        .performance-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: var(--space-4);
-          align-items: center;
-        }
-
-        @media (max-width: 780px) {
-          .performance-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        .score-hero {
-          display: grid;
-          gap: var(--space-2);
-          align-content: center;
-        }
-
-        .score-main {
-          font-size: clamp(34px, 6vw, 56px);
-          font-weight: 700;
-          line-height: 1;
-        }
-
-        .trend-chip {
-          display: inline-flex;
-          width: fit-content;
-          padding: 4px 8px;
-          border-radius: var(--radius-full);
-          font-size: var(--font-tiny);
-          font-weight: 700;
-        }
-
-        .trend-chip.up {
-          color: var(--success);
-          background: color-mix(in srgb, var(--success) 18%, transparent);
-        }
-
-        .trend-chip.down {
-          color: var(--error);
-          background: color-mix(in srgb, var(--error) 16%, transparent);
-        }
-
-        .sparkline {
-          width: 100%;
-          max-width: 260px;
-          height: 72px;
-        }
-
-        .sparkline polyline {
-          fill: none;
-          stroke: var(--primary);
-          stroke-width: 2.5;
-          stroke-linecap: round;
-          stroke-linejoin: round;
-        }
-
-        .difficulty-signal {
-          display: grid;
-          gap: var(--space-2);
-        }
-
-        .difficulty-row {
-          display: grid;
-          grid-template-columns: 110px 1fr 42px;
-          gap: var(--space-2);
-          align-items: center;
-          font-size: var(--font-meta);
-        }
-
-        .difficulty-label {
-          color: var(--text-secondary);
-        }
-
-        .difficulty-track {
-          height: 8px;
-          border-radius: var(--radius-full);
-          background: var(--bg-inset);
-          overflow: hidden;
-        }
-
-        .difficulty-fill {
-          height: 100%;
-          border-radius: var(--radius-full);
-        }
-
-        .difficulty-fill.good {
-          background: color-mix(in srgb, var(--success) 85%, white);
-        }
-
-        .difficulty-fill.fair {
-          background: color-mix(in srgb, var(--warning) 85%, white);
-        }
-
-        .difficulty-fill.needs-work {
-          background: color-mix(in srgb, var(--error) 82%, white);
-        }
-
-        .difficulty-value {
-          text-align: right;
-          font-weight: 600;
-        }
-
-        .card-head {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: var(--space-2);
-          margin-bottom: var(--space-2);
-          flex-wrap: wrap;
-        }
-
-        .mini-badge {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-          background: var(--bg-surface);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-full);
-          padding: 3px 8px;
-        }
-
-        .tool-usage-list {
-          display: grid;
-          gap: var(--space-2);
-        }
-
-        .tool-row {
-          display: grid;
-          grid-template-columns: 1fr minmax(100px, 1fr) 42px;
-          gap: var(--space-2);
-          align-items: center;
-        }
-
-        .tool-label {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          min-width: 0;
-          color: var(--text-secondary);
-          font-size: var(--font-meta);
-        }
-
-        .tool-label span:last-child {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .tool-icon {
-          font-size: 14px;
-          line-height: 1;
-        }
-
-        .tool-bar {
-          height: 10px;
-          background: var(--bg-inset);
-          border-radius: var(--radius-full);
-          overflow: hidden;
-        }
-
-        .tool-bar-fill {
-          height: 100%;
-          border-radius: var(--radius-full);
-          background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 76%, #9cc4ff), var(--primary));
-          transition: width 0.25s ease;
-        }
-
-        .tool-percent {
-          text-align: right;
-          font-weight: 600;
-          font-size: var(--font-meta);
-        }
-
-        .trend-chart-wrap {
-          border: 1px solid var(--border-subtle);
-          background: var(--bg-surface);
-          border-radius: 12px;
-          padding: var(--space-2);
-          overflow: auto;
-        }
-
-        .trend-chart {
-          width: 100%;
-          min-width: 520px;
-          height: 240px;
-          display: block;
-        }
-
-        .guide-line {
-          stroke: color-mix(in srgb, var(--border-default) 55%, transparent);
-          stroke-width: 1;
-        }
-
-        .attempt-bar {
-          fill: color-mix(in srgb, var(--primary) 26%, transparent);
-        }
-
-        .score-line {
-          fill: none;
-          stroke: var(--primary);
-          stroke-width: 3;
-          stroke-linecap: round;
-          stroke-linejoin: round;
-        }
-
-        .trend-legend {
-          margin-top: var(--space-2);
-          display: flex;
-          gap: var(--space-3);
-          flex-wrap: wrap;
-          font-size: var(--font-meta);
-          color: var(--text-secondary);
-        }
-
-        .trend-legend span {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .legend {
-          width: 12px;
-          height: 12px;
-          border-radius: 3px;
-          display: inline-block;
-        }
-
-        .legend.score {
-          background: var(--primary);
-        }
-
-        .legend.attempts {
-          background: color-mix(in srgb, var(--primary) 28%, transparent);
-        }
-
-        .weak-areas-list {
-          display: grid;
-          gap: var(--space-2);
-        }
-
-        .weak-item {
-          border: 1px solid var(--border-subtle);
-          background: var(--bg-surface);
-          border-radius: 12px;
-          padding: var(--space-3);
-          display: grid;
-          gap: var(--space-2);
-        }
-
-        .weak-head {
-          display: flex;
-          justify-content: space-between;
-          gap: var(--space-2);
-          align-items: center;
-        }
-
-        .score-pill {
-          font-size: var(--font-tiny);
-          font-weight: 700;
-          border-radius: var(--radius-full);
-          padding: 3px 8px;
-        }
-
-        .score-pill.excellent {
-          color: var(--success);
-          background: color-mix(in srgb, var(--success) 16%, transparent);
-        }
-
-        .score-pill.good {
-          color: var(--primary);
-          background: color-mix(in srgb, var(--primary) 20%, transparent);
-        }
-
-        .score-pill.fair {
-          color: var(--warning);
-          background: color-mix(in srgb, var(--warning) 20%, transparent);
-        }
-
-        .score-pill.needs-work {
-          color: var(--error);
-          background: color-mix(in srgb, var(--error) 16%, transparent);
-        }
-
-        .weak-item p {
-          margin: 0;
-          color: var(--text-secondary);
-          font-size: var(--font-meta);
-          line-height: 1.5;
-        }
-
-        .weak-actions {
-          display: flex;
-          justify-content: flex-end;
-        }
-
-        .plan-kpis {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: var(--space-2);
-          margin-bottom: var(--space-3);
-        }
-
-        .plan-kpi {
-          border: 1px solid var(--border-subtle);
-          border-radius: 12px;
-          background: var(--bg-surface);
-          padding: var(--space-3);
-          display: grid;
-          gap: 4px;
-        }
-
-        .plan-kpi span {
-          color: var(--text-muted);
-          font-size: var(--font-tiny);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          font-weight: 600;
-        }
-
-        .plan-kpi strong {
-          font-size: var(--font-lg);
-          line-height: 1;
-        }
-
-        @media (max-width: 780px) {
-          .plan-kpis {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        .plan-progress {
-          border: 1px solid var(--border-subtle);
-          border-radius: 12px;
-          background: var(--bg-surface);
-          padding: var(--space-3);
-        }
-
-        .progress-head {
-          display: flex;
-          justify-content: space-between;
-          gap: var(--space-2);
-          font-size: var(--font-meta);
-          color: var(--text-secondary);
-          margin-bottom: var(--space-2);
-        }
-
-        .progress-track {
-          height: 8px;
-          border-radius: var(--radius-full);
-          background: var(--bg-inset);
-          overflow: hidden;
-        }
-
-        .progress-fill {
-          height: 100%;
-          border-radius: var(--radius-full);
-          background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 80%, #8ebcff), var(--primary));
-          transition: width 0.25s ease;
-        }
-
-        .heatmap-scroll {
-          overflow-x: auto;
-          padding-bottom: var(--space-2);
-        }
-
-        .heatmap-grid {
-          display: inline-flex;
-          gap: 4px;
-          min-width: fit-content;
-        }
-
-        .heatmap-week {
-          display: grid;
-          gap: 4px;
-          grid-template-rows: repeat(7, 12px);
-        }
-
-        .heat-cell {
-          width: 12px;
-          height: 12px;
-          border-radius: 3px;
-          background: var(--bg-inset);
-          border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
-        }
-
-        .heat-cell.empty {
-          opacity: 0.3;
-          border-color: transparent;
-        }
-
-        .heat-cell.i0 { background: color-mix(in srgb, var(--bg-inset) 85%, var(--bg-surface)); }
-        .heat-cell.i1 { background: color-mix(in srgb, var(--primary) 20%, var(--bg-inset)); }
-        .heat-cell.i2 { background: color-mix(in srgb, var(--primary) 42%, var(--bg-inset)); }
-        .heat-cell.i3 { background: color-mix(in srgb, var(--primary) 62%, var(--bg-inset)); }
-        .heat-cell.i4 { background: color-mix(in srgb, var(--primary) 80%, var(--bg-inset)); }
-
-        .heatmap-legend {
-          margin-top: var(--space-3);
-          display: flex;
-          justify-content: flex-end;
-          gap: var(--space-2);
-          align-items: center;
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-        }
-
-        .legend-scale {
-          display: inline-flex;
-          gap: 4px;
-        }
-
-        .recent-scores {
-          display: flex;
-          gap: var(--space-3);
-          overflow-x: auto;
-          padding-bottom: var(--space-1);
-        }
-
-        .recent-item {
-          min-width: 84px;
-          display: grid;
-          justify-items: center;
-          gap: var(--space-2);
-        }
-
-        .ring {
-          width: 56px;
-          height: 56px;
-          border-radius: 50%;
-          display: grid;
-          place-items: center;
-          position: relative;
-        }
-
-        .ring::before {
-          content: '';
-          position: absolute;
-          inset: 6px;
-          border-radius: 50%;
-          background: var(--bg-elevated);
-          border: 1px solid var(--border-subtle);
-        }
-
-        .ring span {
-          position: relative;
-          z-index: 1;
-          font-size: var(--font-tiny);
-          font-weight: 700;
-        }
-
-        .recent-meta {
-          text-align: center;
-          display: grid;
-          gap: 2px;
-        }
-
-        .recent-meta strong {
-          font-size: var(--font-tiny);
-        }
-
-        .recent-meta span {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-        }
-
-        .analytics-btn {
-          height: 36px;
-          border-radius: 10px;
-          border: 1px solid var(--border-subtle);
-          background: var(--bg-surface);
-          color: var(--text-secondary);
-          padding: 0 12px;
-          font-size: var(--font-meta);
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          white-space: nowrap;
-        }
-
-        .analytics-btn:hover {
-          background: var(--bg-hover);
-          color: var(--text-primary);
-          border-color: var(--border-default);
-        }
-
-        .analytics-btn.primary {
-          background: var(--primary);
-          border-color: color-mix(in srgb, var(--primary) 65%, var(--border-default));
-          color: white;
-        }
-
-        .analytics-btn.primary:hover {
-          background: var(--primary-hover);
-          color: white;
-        }
-
-        .analytics-btn.small {
-          height: 30px;
-          font-size: var(--font-tiny);
-          padding: 0 10px;
-        }
-
-        .muted {
-          color: var(--text-muted);
-          font-size: var(--font-meta);
-        }
-
-        .analytics-btn:focus-visible,
-        .period select:focus-visible {
-          outline: 2px solid color-mix(in srgb, var(--primary) 72%, transparent);
-          outline-offset: 2px;
-        }
-
-        .analytics-btn:active {
-          transform: scale(0.98);
-        }
+          padding: 4px;
+          align-self: flex-start;
+        }
+        .an-tab {
+          padding: 8px 20px; border-radius: 10px; border: none;
+          background: transparent; color: var(--text-secondary);
+          font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.12s;
+        }
+        .an-tab.active { background: var(--primary); color: white; }
+        .an-tab:hover:not(.active) { color: var(--text-primary); }
+        .an-error {
+          display:flex; flex-direction:column; align-items:center; gap:12px;
+          padding:80px 40px; color:var(--text-muted); text-align:center;
+        }
+        .an-error-icon { font-size:32px; }
+        .an-retry-btn {
+          padding:8px 20px; border-radius:10px; border:1.5px solid var(--border-subtle);
+          background:var(--bg-surface); color:var(--text-secondary); cursor:pointer; font-size:14px;
+          transition:all 0.12s;
+        }
+        .an-retry-btn:hover { border-color:var(--primary); color:var(--primary); }
       `}</style>
     </div>
   );
 }
 
-function buildLinePoints(
-  values: number[],
-  width: number,
-  height: number,
-  padding: number,
-  minY: number,
-  maxY: number
-): string {
-  if (values.length === 0) return '';
-  if (values.length === 1) {
-    const y = mapToY(values[0], height, padding, minY, maxY);
-    return `${padding},${y} ${width - padding},${y}`;
-  }
+// ─── Stat Card ─────────────────────────────────────────────────────────────────
 
-  const step = (width - padding * 2) / (values.length - 1);
-  return values
-    .map((value, index) => {
-      const x = padding + index * step;
-      const y = mapToY(value, height, padding, minY, maxY);
-      return `${x},${y}`;
-    })
-    .join(' ');
+function StatCard({ icon, label, value, unit, accent, detail }: {
+  icon: string; label: string; value: number | string; unit?: string; accent: string; detail?: string;
+}) {
+  return (
+    <div className="stat-card">
+      <div className="stat-icon" style={{ background: accent+'20' }}>{icon}</div>
+      <div className="stat-body">
+        <div className="stat-value" style={{ color: accent }}>
+          {value}{unit && <span className="stat-unit">{unit}</span>}
+        </div>
+        <div className="stat-label">{label}</div>
+        {detail && <div className="stat-detail">{detail}</div>}
+      </div>
+      <style jsx>{`
+        .stat-card {
+          display:flex; align-items:flex-start; gap:12px;
+          padding:16px; border-radius:16px;
+          border:1px solid var(--border-subtle);
+          background:var(--bg-elevated);
+          box-shadow:var(--shadow-sm);
+          transition:transform 0.15s, box-shadow 0.15s;
+        }
+        .stat-card:hover { transform:translateY(-2px); box-shadow:var(--shadow-md); }
+        .stat-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+        .stat-body { min-width:0; }
+        .stat-value { font-size:24px; font-weight:700; line-height:1; }
+        .stat-unit { font-size:13px; font-weight:500; margin-left:3px; }
+        .stat-label { font-size:12px; font-weight:600; color:var(--text-secondary); margin-top:4px; }
+        .stat-detail { font-size:11px; color:var(--text-muted); margin-top:2px; }
+      `}</style>
+    </div>
+  );
 }
 
-function mapToY(value: number, height: number, padding: number, minY: number, maxY: number): number {
-  const clamped = Math.max(minY, Math.min(maxY, value));
-  const ratio = (clamped - minY) / (maxY - minY || 1);
-  return Math.round(height - padding - ratio * (height - padding * 2));
+// ─── Overview Tab ─────────────────────────────────────────────────────────────
+
+function OverviewTab({ quizStats, planStats, weakAreas, insights, usage }: {
+  quizStats: QuizStats | null;
+  planStats: PlanStats | null;
+  weakAreas: WeakArea[];
+  insights: string[];
+  usage: UsageStats | null;
+}) {
+  const dist = quizStats?.scoreDistribution;
+
+  const distData = dist ? [
+    { label: 'Excellent (90+)', value: dist.excellent as number, color: SCORE_COLORS.excellent },
+    { label: 'Good (70–89)', value: dist.good as number, color: SCORE_COLORS.good },
+    { label: 'Fair (50–69)', value: dist.fair as number, color: SCORE_COLORS.fair },
+    { label: 'Needs Work (<50)', value: dist.needsWork as number, color: SCORE_COLORS.needsWork },
+  ] : [];
+
+  const toolUsage = (usage?.toolUsage ?? {}) as Record<string, number>;
+  const toolEntries = Object.entries(toolUsage).sort((a,b) => (b[1] as number)-(a[1] as number)).slice(0,6);
+  const maxTool = Math.max(...toolEntries.map(([,v]) => v as number), 1);
+
+  return (
+    <div className="ov-grid">
+      {/* Score distribution */}
+      <div className="an-card wide">
+        <h3 className="card-title">Score Distribution</h3>
+        {distData.every(d => d.value === 0) ? (
+          <p className="card-empty">No quiz data yet. Take a quiz to see your score distribution.</p>
+        ) : (
+          <div className="dist-rows">
+            {distData.map(item => (
+              <div key={item.label} className="dist-row">
+                <span className="dist-label">{item.label}</span>
+                <div className="dist-bar-bg">
+                  <div
+                    className="dist-bar-fill"
+                    style={{
+                      width: `${(item.value / Math.max(...distData.map(d=>d.value),1)) * 100}%`,
+                      background: item.color,
+                    }}
+                  />
+                </div>
+                <span className="dist-count" style={{ color: item.color }}>{item.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Weak areas */}
+      <div className="an-card">
+        <h3 className="card-title">Weak Areas</h3>
+        {(!weakAreas || weakAreas.length === 0) ? (
+          <p className="card-empty">No weak areas detected yet.</p>
+        ) : (
+          <div className="weak-list">
+            {(weakAreas as WeakArea[]).slice(0,5).map((area: WeakArea, i: number) => (
+              <div key={i} className="weak-item">
+                <div className="weak-header">
+                  <span className="weak-topic">{area.topic}</span>
+                  <span className="weak-pct" style={{ color: area.accuracy < 50 ? '#e05252' : area.accuracy < 70 ? '#f59e0b' : '#52b788' }}>
+                    {Math.round(area.accuracy)}%
+                  </span>
+                </div>
+                <div className="weak-bar-bg">
+                  <div
+                    className="weak-bar"
+                    style={{
+                      width: `${area.accuracy}%`,
+                      background: area.accuracy < 50 ? '#e05252' : area.accuracy < 70 ? '#f59e0b' : '#52b788',
+                    }}
+                  />
+                </div>
+                <p className="weak-suggestion">{area.suggestion}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Tool usage */}
+      <div className="an-card">
+        <h3 className="card-title">Tool Usage</h3>
+        {toolEntries.length === 0 ? (
+          <p className="card-empty">No tool usage data yet.</p>
+        ) : (
+          <div className="tool-bars">
+            {toolEntries.map(([tool, cnt]) => (
+              <div key={tool} className="tool-row">
+                <span className="tool-name">{tool}</span>
+                <div className="tool-bar-bg">
+                  <div className="tool-bar-fill" style={{ width: `${((cnt as number)/maxTool)*100}%` }} />
+                </div>
+                <span className="tool-count">{cnt as number}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* AI Insights */}
+      {insights && insights.length > 0 && (
+        <div className="an-card wide insights-card">
+          <h3 className="card-title">🤖 AI Insights</h3>
+          <ul className="insights-list">
+            {insights.map((ins, i) => (
+              <li key={i} className="insight-item">{ins}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <style jsx>{`
+        .ov-grid { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-3); }
+        .an-card {
+          background:var(--bg-elevated); border:1px solid var(--border-subtle);
+          border-radius:20px; padding:20px; box-shadow:var(--shadow-sm);
+        }
+        .an-card.wide { grid-column:1/-1; }
+        .card-title { margin:0 0 16px; font-size:15px; font-weight:600; color:var(--text-primary); }
+        .card-empty { font-size:13px; color:var(--text-muted); }
+        .dist-rows { display:flex; flex-direction:column; gap:10px; }
+        .dist-row { display:flex; align-items:center; gap:10px; }
+        .dist-label { font-size:12px; color:var(--text-secondary); min-width:140px; }
+        .dist-bar-bg { flex:1; height:8px; background:var(--bg-surface); border-radius:4px; overflow:hidden; }
+        .dist-bar-fill { height:100%; border-radius:4px; transition:width 0.5s; }
+        .dist-count { font-size:13px; font-weight:600; min-width:28px; text-align:right; }
+        .weak-list { display:flex; flex-direction:column; gap:12px; }
+        .weak-item { }
+        .weak-header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; }
+        .weak-topic { font-size:13px; font-weight:500; color:var(--text-primary); }
+        .weak-pct { font-size:14px; font-weight:700; }
+        .weak-bar-bg { height:6px; background:var(--bg-surface); border-radius:3px; overflow:hidden; margin-bottom:4px; }
+        .weak-bar { height:100%; border-radius:3px; transition:width 0.5s; }
+        .weak-suggestion { font-size:11px; color:var(--text-muted); margin:0; }
+        .tool-bars { display:flex; flex-direction:column; gap:8px; }
+        .tool-row { display:flex; align-items:center; gap:10px; }
+        .tool-name { font-size:12px; color:var(--text-secondary); min-width:80px; text-transform:capitalize; }
+        .tool-bar-bg { flex:1; height:8px; background:var(--bg-surface); border-radius:4px; overflow:hidden; }
+        .tool-bar-fill { height:100%; border-radius:4px; background:var(--primary); transition:width 0.5s; }
+        .tool-count { font-size:12px; font-weight:600; color:var(--text-muted); min-width:24px; text-align:right; }
+        .insights-card { background:color-mix(in srgb, var(--primary) 5%, var(--bg-elevated)); }
+        .insights-list { margin:0; padding:0 0 0 16px; display:flex; flex-direction:column; gap:6px; }
+        .insight-item { font-size:14px; color:var(--text-secondary); line-height:1.6; }
+        @media (max-width: 768px) { .ov-grid { grid-template-columns:1fr; } }
+      `}</style>
+    </div>
+  );
 }
 
-function buildHeatmapWeeks(daily: DailyPoint[]): Array<Array<DailyPoint | null>> {
-  if (daily.length === 0) return [];
+// ─── Scores Tab ───────────────────────────────────────────────────────────────
 
-  const firstDay = new Date(daily[0].date).getDay();
-  const padded: Array<DailyPoint | null> = [...Array.from({ length: firstDay }, () => null), ...daily];
-  const weeks: Array<Array<DailyPoint | null>> = [];
+function ScoresTab({ quizStats, activity }: {
+  quizStats: QuizStats | null;
+  activity: Activity | null;
+}) {
+  const recentScores = quizStats?.recentScores ?? [];
+  const byMode = (quizStats?.byMode ?? {}) as Record<string, { attempts: number; avgScore: number; totalQuestions: number }>;
 
-  for (let index = 0; index < padded.length; index += 7) {
-    const week = padded.slice(index, index + 7);
-    while (week.length < 7) week.push(null);
-    weeks.push(week);
-  }
+  // Build score line chart data from recent scores
+  const chartData = useMemo(() => {
+    if (recentScores.length === 0) return [];
+    return recentScores.slice(-20).map((s: { score: number; date: string; mode: string }, i: number) => ({
+      x: i,
+      y: s.score as number,
+      date: s.date as string,
+      mode: s.mode as string,
+    }));
+  }, [recentScores]);
 
-  return weeks;
+  const maxScore = Math.max(...chartData.map((d: { y: number }) => d.y), 100);
+  const chartW = 600; const chartH = 200;
+
+  const points = chartData.map((d: { x: number; y: number }, i: number) => {
+    const x = chartData.length < 2 ? chartW/2 : (i / (chartData.length-1)) * (chartW - 40) + 20;
+    const y = chartH - ((d.y / maxScore) * (chartH - 40)) - 20;
+    return `${x},${y}`;
+  }).join(' ');
+
+  const pathD = chartData.length < 2 ? '' : chartData.map((d: { x: number; y: number }, i: number) => {
+    const x = (i / (chartData.length-1)) * (chartW - 40) + 20;
+    const y = chartH - ((d.y / maxScore) * (chartH - 40)) - 20;
+    return i === 0 ? `M${x},${y}` : `L${x},${y}`;
+  }).join(' ');
+
+  const modeEntries = Object.entries(byMode).sort((a,b) => b[1].avgScore - a[1].avgScore);
+
+  return (
+    <div className="sc-grid">
+      {/* Line chart */}
+      <div className="an-card wide">
+        <h3 className="card-title">Score Trend (Last 20 Quizzes)</h3>
+        {chartData.length === 0 ? (
+          <p className="card-empty">No quiz scores yet. Complete some quizzes to see your trend.</p>
+        ) : (
+          <div className="chart-wrap">
+            <svg viewBox={`0 0 ${chartW} ${chartH}`} className="score-chart" preserveAspectRatio="none">
+              {/* Grid lines */}
+              {[0,25,50,75,100].map(pct => {
+                const cy = chartH - ((pct/100) * (chartH-40)) - 20;
+                return (
+                  <g key={pct}>
+                    <line x1={20} y1={cy} x2={chartW-20} y2={cy} stroke="var(--border-subtle)" strokeWidth={1} />
+                    <text x={16} y={cy+4} fontSize={9} fill="var(--text-muted)" textAnchor="end">{pct}</text>
+                  </g>
+                );
+              })}
+              {/* Gradient fill */}
+              <defs>
+                <linearGradient id="scoreGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              {pathD && (
+                <path d={`${pathD} L${(chartW-40)+20},${chartH} L20,${chartH} Z`} fill="url(#scoreGrad)" />
+              )}
+              {pathD && (
+                <polyline points={points} fill="none" stroke="var(--primary)" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+              )}
+              {/* Dots */}
+              {chartData.map((d: { x: number; y: number; date: string; mode: string }, i: number) => {
+                const x = chartData.length < 2 ? chartW/2 : (i / (chartData.length-1)) * (chartW-40) + 20;
+                const y = chartH - ((d.y / maxScore) * (chartH-40)) - 20;
+                return (
+                  <circle key={i} cx={x} cy={y} r={4} fill="var(--primary)" stroke="var(--bg-elevated)" strokeWidth={2}>
+                    <title>{d.date}: {d.y}% ({d.mode})</title>
+                  </circle>
+                );
+              })}
+            </svg>
+          </div>
+        )}
+      </div>
+
+      {/* Score by mode */}
+      <div className="an-card">
+        <h3 className="card-title">Score by Tool</h3>
+        {modeEntries.length === 0 ? (
+          <p className="card-empty">No mode data yet.</p>
+        ) : (
+          <div className="mode-list">
+            {modeEntries.map(([mode, stats]: [string, { attempts: number; avgScore: number; totalQuestions: number }]) => (
+              <div key={mode} className="mode-row">
+                <div className="mode-header">
+                  <span className="mode-name">{mode}</span>
+                  <span className="mode-avg" style={{ color: stats.avgScore >= 80 ? '#52b788' : stats.avgScore >= 60 ? '#4f86f7' : '#e05252' }}>
+                    {Math.round(stats.avgScore)}%
+                  </span>
+                </div>
+                <div className="mode-bar-bg">
+                  <div
+                    className="mode-bar-fill"
+                    style={{
+                      width: `${stats.avgScore}%`,
+                      background: stats.avgScore >= 80 ? '#52b788' : stats.avgScore >= 60 ? '#4f86f7' : '#e05252',
+                    }}
+                  />
+                </div>
+                <span className="mode-meta">{stats.attempts} attempts · {stats.totalQuestions} questions</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recent attempts */}
+      <div className="an-card">
+        <h3 className="card-title">Recent Attempts</h3>
+        {recentScores.length === 0 ? (
+          <p className="card-empty">No recent attempts.</p>
+        ) : (
+          <div className="recent-list">
+            {recentScores.slice(-8).reverse().map((s: { score: number; date: string; mode: string }, i: number) => (
+              <div key={i} className="recent-item">
+                <div className="recent-dot" style={{
+                  background: s.score >= 80 ? '#52b788' : s.score >= 60 ? '#4f86f7' : '#e05252'
+                }} />
+                <div className="recent-info">
+                  <span className="recent-mode">{s.mode}</span>
+                  <span className="recent-date">{s.date}</span>
+                </div>
+                <span className="recent-score" style={{
+                  color: s.score >= 80 ? '#52b788' : s.score >= 60 ? '#4f86f7' : '#e05252'
+                }}>{s.score}%</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <style jsx>{`
+        .sc-grid { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-3); }
+        .an-card { background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:20px; padding:20px; box-shadow:var(--shadow-sm); }
+        .an-card.wide { grid-column:1/-1; }
+        .card-title { margin:0 0 16px; font-size:15px; font-weight:600; }
+        .card-empty { font-size:13px; color:var(--text-muted); }
+        .chart-wrap { width:100%; overflow:hidden; }
+        .score-chart { width:100%; height:200px; display:block; }
+        .mode-list { display:flex; flex-direction:column; gap:12px; }
+        .mode-row { }
+        .mode-header { display:flex; justify-content:space-between; margin-bottom:4px; }
+        .mode-name { font-size:13px; font-weight:500; color:var(--text-primary); text-transform:capitalize; }
+        .mode-avg { font-size:14px; font-weight:700; }
+        .mode-bar-bg { height:8px; background:var(--bg-surface); border-radius:4px; overflow:hidden; margin-bottom:3px; }
+        .mode-bar-fill { height:100%; border-radius:4px; transition:width 0.5s; }
+        .mode-meta { font-size:11px; color:var(--text-muted); }
+        .recent-list { display:flex; flex-direction:column; gap:8px; }
+        .recent-item { display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--border-subtle); }
+        .recent-item:last-child { border-bottom:none; }
+        .recent-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        .recent-info { flex:1; min-width:0; }
+        .recent-mode { display:block; font-size:13px; font-weight:500; color:var(--text-primary); text-transform:capitalize; }
+        .recent-date { display:block; font-size:11px; color:var(--text-muted); }
+        .recent-score { font-size:15px; font-weight:700; flex-shrink:0; }
+        @media (max-width:768px) { .sc-grid { grid-template-columns:1fr; } }
+      `}</style>
+    </div>
+  );
 }
 
-function getImprovement(scores: number[]): number {
-  if (scores.length < 4) return 0;
-  const middle = Math.floor(scores.length / 2);
-  const firstHalf = scores.slice(0, middle);
-  const secondHalf = scores.slice(middle);
-  const firstAvg = firstHalf.reduce((sum, value) => sum + value, 0) / Math.max(firstHalf.length, 1);
-  const secondAvg = secondHalf.reduce((sum, value) => sum + value, 0) / Math.max(secondHalf.length, 1);
-  return Math.round(secondAvg - firstAvg);
+// ─── Activity Tab ─────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function ActivityTab({ activity, period: _period }: {
+  activity: Activity | null;
+  period: number;
+}) {
+  const daily = activity?.dailyActivity ?? [];
+  const weekly = activity?.weeklyActivity ?? [];
+
+  // Build a 12-week heatmap
+  const today = new Date();
+  const heatmapDays = useMemo(() => {
+    const days: { date: string; quizzes: number }[] = [];
+    for (let i = 83; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate()-i);
+      const ds = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      const found = (daily as { date: string; quizzes: number }[]).find((x: { date: string }) => x.date === ds);
+      days.push({ date: ds, quizzes: found?.quizzes ?? 0 });
+    }
+    return days;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daily]);
+
+  const maxQ = Math.max(...heatmapDays.map((d: { quizzes: number }) => d.quizzes), 1);
+
+  // Weekly bar chart
+  const maxW = Math.max(...(weekly as { quizzes: number }[]).map((w: { quizzes: number }) => w.quizzes), 1);
+
+  return (
+    <div className="act-grid">
+      {/* Activity heatmap */}
+      <div className="an-card wide">
+        <h3 className="card-title">Activity Heatmap (Last 12 Weeks)</h3>
+        <div className="heatmap-wrap">
+          <div className="heatmap">
+            {heatmapDays.map((day, i) => {
+              const intensity = day.quizzes === 0 ? 0 : Math.max(0.15, day.quizzes / maxQ);
+              const isToday = day.date === toDateStr(today);
+              return (
+                <div
+                  key={i}
+                  className={`hmap-cell${isToday ? ' today' : ''}`}
+                  style={{
+                    background: day.quizzes === 0
+                      ? 'var(--bg-surface)'
+                      : `color-mix(in srgb, var(--primary) ${Math.round(intensity*100)}%, var(--bg-surface))`,
+                  }}
+                  title={`${day.date}: ${day.quizzes} quiz${day.quizzes!==1?'zes':''}`}
+                />
+              );
+            })}
+          </div>
+          <div className="hmap-legend">
+            <span className="hmap-leg-txt">Less</span>
+            {[0,0.25,0.5,0.75,1].map(v => (
+              <div key={v} className="hmap-leg-cell" style={{
+                background: v === 0 ? 'var(--bg-surface)' : `color-mix(in srgb, var(--primary) ${Math.round(v*100)}%, var(--bg-surface))`
+              }} />
+            ))}
+            <span className="hmap-leg-txt">More</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Weekly bar chart */}
+      <div className="an-card">
+        <h3 className="card-title">Weekly Activity</h3>
+        {weekly.length === 0 ? (
+          <p className="card-empty">No weekly data yet.</p>
+        ) : (
+          <div className="weekly-bars">
+            {(weekly as { week: string; quizzes: number; avgScore: number }[]).slice(-8).map((w: { week: string; quizzes: number }, i: number) => (
+              <div key={i} className="wb-col">
+                <div className="wb-bar-wrap">
+                  <div
+                    className="wb-bar"
+                    style={{ height: `${(w.quizzes/maxW)*120}px` }}
+                    title={`${w.week}: ${w.quizzes} quizzes`}
+                  />
+                </div>
+                <span className="wb-label">{w.week?.slice(5) ?? ''}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Streak info */}
+      <div className="an-card streak-card">
+        <h3 className="card-title">Streak Details</h3>
+        <div className="streak-nums">
+          <div className="streak-block">
+            <span className="streak-val" style={{ color: '#e07a52' }}>🔥 {activity?.currentStreak ?? 0}</span>
+            <span className="streak-lbl">Current Streak</span>
+          </div>
+          <div className="streak-block">
+            <span className="streak-val" style={{ color: '#4f86f7' }}>📅 {activity?.totalActiveDays ?? 0}</span>
+            <span className="streak-lbl">Total Active Days</span>
+          </div>
+        </div>
+        <p className="streak-tip">
+          {(activity?.currentStreak ?? 0) === 0
+            ? "Start studying today to begin your streak!"
+            : (activity?.currentStreak ?? 0) < 7
+              ? `Keep going! ${7-(activity?.currentStreak??0)} more days to a week-long streak.`
+              : `Impressive! You've been studying for ${activity?.currentStreak} days straight.`}
+        </p>
+      </div>
+
+      <style jsx>{`
+        .act-grid { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-3); }
+        .an-card { background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:20px; padding:20px; box-shadow:var(--shadow-sm); }
+        .an-card.wide { grid-column:1/-1; }
+        .card-title { margin:0 0 16px; font-size:15px; font-weight:600; }
+        .card-empty { font-size:13px; color:var(--text-muted); }
+        .heatmap-wrap { display:flex; flex-direction:column; gap:8px; }
+        .heatmap { display:grid; grid-template-columns:repeat(12,1fr); grid-template-rows:repeat(7,1fr); gap:3px; }
+        .hmap-cell { aspect-ratio:1; border-radius:3px; cursor:default; transition:transform 0.1s; }
+        .hmap-cell:hover { transform:scale(1.3); z-index:1; }
+        .hmap-cell.today { outline:2px solid var(--primary); outline-offset:1px; }
+        .hmap-legend { display:flex; align-items:center; gap:4px; }
+        .hmap-leg-txt { font-size:10px; color:var(--text-muted); }
+        .hmap-leg-cell { width:12px; height:12px; border-radius:2px; }
+        .weekly-bars { display:flex; align-items:flex-end; gap:8px; padding-top:8px; height:160px; }
+        .wb-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; height:100%; justify-content:flex-end; }
+        .wb-bar-wrap { display:flex; align-items:flex-end; height:120px; width:100%; }
+        .wb-bar { width:100%; background:var(--primary); border-radius:4px 4px 0 0; min-height:3px; transition:height 0.5s; }
+        .wb-label { font-size:10px; color:var(--text-muted); text-align:center; }
+        .streak-card { }
+        .streak-nums { display:flex; gap:24px; margin-bottom:12px; }
+        .streak-block { display:flex; flex-direction:column; gap:4px; }
+        .streak-val { font-size:28px; font-weight:700; }
+        .streak-lbl { font-size:12px; color:var(--text-secondary); }
+        .streak-tip { font-size:13px; color:var(--text-muted); margin:0; line-height:1.6; }
+        @media (max-width:768px) { .act-grid { grid-template-columns:1fr; } }
+      `}</style>
+    </div>
+  );
 }
 
-function getIntensity(value: number, maxValue: number): 0 | 1 | 2 | 3 | 4 {
-  if (value <= 0) return 0;
-  const ratio = value / Math.max(maxValue, 1);
-  if (ratio <= 0.25) return 1;
-  if (ratio <= 0.5) return 2;
-  if (ratio <= 0.75) return 3;
-  return 4;
+// ─── Goals Tab ────────────────────────────────────────────────────────────────
+
+function GoalsTab({ planStats, weakAreas }: {
+  planStats: PlanStats | null;
+  weakAreas: WeakArea[];
+}) {
+  const progress = planStats?.averageProgress ?? 0;
+  const completedDays = planStats?.completedDays ?? 0;
+  const totalDays = planStats?.totalStudyDays ?? 0;
+  const activePlans = planStats?.activePlans ?? 0;
+  const completedPlans = planStats?.completedPlans ?? 0;
+  const totalPlans = planStats?.totalPlans ?? 0;
+
+  // Circumference for SVG ring
+  const r = 72; const circ = 2 * Math.PI * r;
+  const offset = circ - (progress / 100) * circ;
+
+  const progressColor = progress >= 80 ? '#52b788' : progress >= 50 ? '#4f86f7' : '#f59e0b';
+
+  return (
+    <div className="goals-grid">
+      {/* Ring progress */}
+      <div className="an-card ring-card">
+        <h3 className="card-title">Overall Study Progress</h3>
+        <div className="ring-wrap">
+          <svg width={180} height={180} viewBox="0 0 180 180">
+            <circle cx={90} cy={90} r={r} fill="none" stroke="var(--bg-surface)" strokeWidth={14} />
+            <circle
+              cx={90} cy={90} r={r} fill="none"
+              stroke={progressColor} strokeWidth={14}
+              strokeLinecap="round"
+              strokeDasharray={circ}
+              strokeDashoffset={offset}
+              transform="rotate(-90 90 90)"
+              style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+            />
+            <text x={90} y={86} textAnchor="middle" fontSize={28} fontWeight={700} fill={progressColor}>{Math.round(progress)}%</text>
+            <text x={90} y={104} textAnchor="middle" fontSize={12} fill="var(--text-muted)">complete</text>
+          </svg>
+          <div className="ring-stats">
+            <div className="rstat">
+              <span className="rstat-v">{completedDays}</span>
+              <span className="rstat-l">Days done</span>
+            </div>
+            <div className="rstat">
+              <span className="rstat-v">{totalDays}</span>
+              <span className="rstat-l">Total days</span>
+            </div>
+            <div className="rstat">
+              <span className="rstat-v">{activePlans}</span>
+              <span className="rstat-l">Active plans</span>
+            </div>
+            <div className="rstat">
+              <span className="rstat-v">{completedPlans}</span>
+              <span className="rstat-l">Completed</span>
+            </div>
+          </div>
+        </div>
+        {totalPlans === 0 && (
+          <p className="card-empty" style={{ marginTop: 12 }}>
+            No study plans yet. Create one in the Planner to track your goals.
+          </p>
+        )}
+      </div>
+
+      {/* Improvement roadmap */}
+      <div className="an-card">
+        <h3 className="card-title">Improvement Roadmap</h3>
+        {(!weakAreas || weakAreas.length === 0) ? (
+          <p className="card-empty">You have no weak areas! Keep up the great work.</p>
+        ) : (
+          <div className="roadmap-list">
+            {(weakAreas as WeakArea[]).slice(0,5).map((area: WeakArea, i: number) => (
+              <div key={i} className="roadmap-item">
+                <div className="roadmap-num" style={{ background: `hsl(${220+i*30},70%,60%)` }}>{i+1}</div>
+                <div className="roadmap-body">
+                  <span className="roadmap-topic">{area.topic}</span>
+                  <span className="roadmap-time">~{area.estimatedMinutes} min to review</span>
+                  <span className="roadmap-tip">{area.suggestion}</span>
+                </div>
+                <div className="roadmap-acc" style={{ color: area.accuracy < 50 ? '#e05252' : area.accuracy < 70 ? '#f59e0b' : '#52b788' }}>
+                  {Math.round(area.accuracy)}%
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <style jsx>{`
+        .goals-grid { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-3); }
+        .an-card { background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:20px; padding:20px; box-shadow:var(--shadow-sm); }
+        .card-title { margin:0 0 16px; font-size:15px; font-weight:600; }
+        .card-empty { font-size:13px; color:var(--text-muted); margin:0; }
+        .ring-card { }
+        .ring-wrap { display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+        .ring-stats { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+        .rstat { display:flex; flex-direction:column; gap:2px; }
+        .rstat-v { font-size:22px; font-weight:700; color:var(--text-primary); }
+        .rstat-l { font-size:11px; color:var(--text-muted); }
+        .roadmap-list { display:flex; flex-direction:column; gap:12px; }
+        .roadmap-item { display:flex; align-items:flex-start; gap:12px; }
+        .roadmap-num { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:white; flex-shrink:0; }
+        .roadmap-body { flex:1; min-width:0; }
+        .roadmap-topic { display:block; font-size:13px; font-weight:600; color:var(--text-primary); }
+        .roadmap-time { display:block; font-size:11px; color:var(--text-muted); margin:1px 0; }
+        .roadmap-tip { display:block; font-size:12px; color:var(--text-secondary); line-height:1.5; }
+        .roadmap-acc { font-size:14px; font-weight:700; flex-shrink:0; }
+        @media (max-width:768px) { .goals-grid { grid-template-columns:1fr; } }
+      `}</style>
+    </div>
+  );
 }
 
-function formatMode(mode: string, t?: (key: string, params?: Record<string, string | number>) => string): string {
-  const mapping: Record<string, string> = {
-    mcq: 'MCQ',
-    quiz: 'Quiz',
-    summarize: 'Summarize',
-    assignment: 'Assignment',
-    notes: 'Notes',
-    graph: 'Graph',
-    math: 'Math',
-    exam: 'Exam Prep',
-    srs: 'SRS',
-    visual: 'Visual',
-    matlab: 'MATLAB',
-    focus: 'Focus',
-    pop: 'Pop Quiz',
-    flashcards: 'Flashcards',
-  };
-  const value = mapping[mode] || mode.charAt(0).toUpperCase() + mode.slice(1);
-  return t ? t(value) : value;
-}
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 
-function getToolIcon(tool: string): string {
-  const mapping: Record<string, string> = {
-    summarize: '📄',
-    assignment: '📝',
-    mcq: '✅',
-    quiz: '🧠',
-    notes: '📒',
-    math: '🧮',
-    graph: '📈',
-    visual: '🔍',
-    matlab: '📐',
-    focus: '⏱️',
-    exam: '🎯',
-    srs: '🧩',
-    audio: '🎧',
-    map: '🗺️',
-  };
-  return mapping[tool] || '🛠️';
-}
-
-function getScoreClass(score: number): 'excellent' | 'good' | 'fair' | 'needs-work' {
-  if (score >= 90) return 'excellent';
-  if (score >= 70) return 'good';
-  if (score >= 50) return 'fair';
-  return 'needs-work';
-}
-
-function formatShortDate(dateStr: string, locale?: string): string {
-  return new Date(dateStr).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-}
-
-function formatFullDate(dateStr: string, locale?: string): string {
-  return new Date(dateStr).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-function csvEscape(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
+function AnalyticsSkeleton() {
+  return (
+    <div className="an-skel">
+      <div className="skel-hero" />
+      <div className="skel-cards">
+        {Array.from({length:6}).map((_,i) => <div key={i} className="skel-card" />)}
+      </div>
+      <div className="skel-tabs" />
+      <div className="skel-main" />
+      <style jsx>{`
+        .an-skel { padding:var(--space-4); display:flex; flex-direction:column; gap:var(--space-3); }
+        .skel-hero { height:120px; border-radius:28px; background:var(--bg-elevated); animation:shimmer 1.5s infinite; }
+        .skel-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:var(--space-3); }
+        .skel-card { height:90px; border-radius:16px; background:var(--bg-elevated); animation:shimmer 1.5s infinite; }
+        .skel-tabs { height:48px; width:300px; border-radius:14px; background:var(--bg-elevated); animation:shimmer 1.5s infinite; }
+        .skel-main { height:300px; border-radius:20px; background:var(--bg-elevated); animation:shimmer 1.5s infinite; }
+        @keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:0.5} }
+      `}</style>
+    </div>
+  );
 }
