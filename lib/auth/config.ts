@@ -2,6 +2,7 @@ import type { NextAuthConfig } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
 import GitHub from 'next-auth/providers/github';
+import MicrosoftEntraID from 'next-auth/providers/microsoft-entra-id';
 import bcrypt from 'bcryptjs';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { users, accounts } from '@/lib/db/schema';
@@ -13,6 +14,60 @@ const authSecret =
   process.env.AUTH_SECRET ||
   process.env.NEXTAUTH_SECRET ||
   (process.env.NODE_ENV !== 'production' ? 'kivora-local-dev-secret' : undefined);
+
+const microsoftClientId =
+  process.env.AUTH_MICROSOFT_ENTRA_ID_ID ||
+  process.env.MICROSOFT_CLIENT_ID;
+
+const microsoftClientSecret =
+  process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET ||
+  process.env.MICROSOFT_CLIENT_SECRET;
+
+const microsoftIssuer =
+  process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER ||
+  (process.env.MICROSOFT_TENANT_ID
+    ? `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID}/v2.0`
+    : undefined);
+
+function normalizeEmail(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function getOAuthEmail(userEmail: string | null | undefined, profile: unknown): string | null {
+  const direct = normalizeEmail(userEmail);
+  if (direct) return direct;
+
+  if (!profile || typeof profile !== 'object') return null;
+
+  const record = profile as Record<string, unknown>;
+  const candidates = [
+    record.email,
+    record.preferred_username,
+    record.upn,
+    record.unique_name,
+    record.verified_primary_email,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      const normalized = normalizeEmail(candidate);
+      if (normalized) return normalized;
+    }
+
+    if (Array.isArray(candidate)) {
+      for (const value of candidate) {
+        if (typeof value === 'string') {
+          const normalized = normalizeEmail(value);
+          if (normalized) return normalized;
+        }
+      }
+    }
+  }
+
+  return null;
+}
 
 export const authConfig: NextAuthConfig = {
   trustHost: true,
@@ -51,13 +106,21 @@ export const authConfig: NextAuthConfig = {
     ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
       ? [GitHub({ clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET })]
       : []),
+    ...(microsoftClientId && microsoftClientSecret
+      ? [MicrosoftEntraID({
+          clientId: microsoftClientId,
+          clientSecret: microsoftClientSecret,
+          ...(microsoftIssuer ? { issuer: microsoftIssuer } : {}),
+        })]
+      : []),
   ],
   callbacks: {
-    async signIn({ user, account }) {
-      if (account?.provider === 'google' || account?.provider === 'github') {
-        if (!isDatabaseConfigured || !user.email) return false;
+    async signIn({ user, account, profile }) {
+      if (account?.type === 'oauth') {
+        if (!isDatabaseConfigured) return false;
 
-        const email = user.email.toLowerCase().trim();
+        const email = getOAuthEmail(user.email, profile);
+        if (!email) return false;
 
         try {
           // Check if this OAuth account already exists
@@ -109,7 +172,7 @@ export const authConfig: NextAuthConfig = {
 
           user.id = dbUser.id;
         } catch (err) {
-          console.error('[auth] Google sign-in error:', err);
+          console.error(`[auth] ${account.provider} sign-in error:`, err);
           return false;
         }
       }
