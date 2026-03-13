@@ -197,17 +197,17 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
 
         const data: object[] = [];
         for (const fn of active) {
-          const expr = fn.expr.replace(/\^/g, '**');
+          // function-plot uses ^ natively for power — do NOT convert to **
+          const expr = fn.expr.trim();
           data.push({ fn: expr, color: fn.color, graphType: 'polyline' });
           if (fn.showDerivative) {
             data.push({ fn: expr, fnType: 'x', color: fn.color + '80', derivative: { fn: expr, updateOnMouseMove: false } });
           }
         }
         if (showZeros && active.length > 0) {
-          // Show zeros as points
+          // Show zeros as scatter overlay
           for (const fn of active) {
-            const expr = fn.expr.replace(/\^/g, '**');
-            data.push({ fn: expr, color: fn.color, fnType: 'x', graphType: 'scatter' });
+            data.push({ fn: fn.expr.trim(), color: fn.color, fnType: 'x', graphType: 'scatter' });
           }
         }
 
@@ -254,7 +254,7 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
     return xs.map(x => {
       const vals = activeFns.map(fn => {
         try {
-          const val = math.evaluate(fn.expr.replace(/\*\*/g, '^'), { x });
+          const val = math.evaluate(fn.expr, { x });
           return typeof val === 'number' ? val.toFixed(4) : String(val);
         } catch {
           return '—';
