@@ -15,12 +15,9 @@ export async function GET(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
     const userId = await getUserId(request);
+    // Guest / unauthenticated — return empty list gracefully (not an error)
     if (!userId) {
-      return apiError(401, {
-        errorCode: 'UNAUTHORIZED',
-        reason: 'Authentication required',
-        requestId,
-      });
+      return NextResponse.json([]);
     }
 
     const { searchParams } = new URL(request.url);
