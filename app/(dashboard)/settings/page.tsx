@@ -196,6 +196,16 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* Support */}
+      <section style={{ marginBottom: 32 }}>
+        <h2 style={{ fontSize: 'var(--text-xl)', marginBottom: 14 }}>Support</h2>
+        <div className="card card-sm" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', flex: 1 }}>Open the guided report form to share crashes, UI issues, auth problems, or feature requests with diagnostics.</span>
+          <a href="/report" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Report an issue</a>
+          <a href="/status" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>Status & support</a>
+        </div>
+      </section>
+
       {/* AI Runtime */}
       <section>
         <h2 style={{ fontSize: 'var(--text-xl)', marginBottom: 14 }}>AI Runtime</h2>
