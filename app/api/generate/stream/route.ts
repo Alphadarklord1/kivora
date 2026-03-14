@@ -27,13 +27,15 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); }
   catch { return new Response('Invalid JSON', { status: 400 }); }
 
-  const { mode, text, options, model: clientModel, fileId } = body as {
+  const { mode, text, options, model: clientModel, fileId, deckTitle, deckContent } = body as {
     mode?: string;
     text?: string;
     options?: Record<string, unknown>;
     model?: string;
     retrievalContext?: string;
     fileId?: string | null;
+    deckTitle?: string;
+    deckContent?: string | null;
   };
 
   if (!mode || !VALID_MODES.includes(mode as AllModes)) {
@@ -45,13 +47,16 @@ export async function POST(req: NextRequest) {
   }
 
   const trimmedText = text.trim();
+  const baseSourceText = typeof deckContent === 'string' && deckContent.trim().length > 0
+    ? `Deck title: ${deckTitle?.trim() || 'Untitled deck'}\n\n${deckContent.trim()}`
+    : trimmedText;
   const currentMode = mode as AllModes;
   const persistedIndex = typeof fileId === 'string' && fileId.trim()
     ? await getPersistedRagIndexForRequest(req, fileId.trim()).catch(() => undefined)
     : undefined;
   const preparedContext = typeof body.retrievalContext === 'string' && body.retrievalContext.trim()
     ? body.retrievalContext.trim()
-    : buildGenerationContext(currentMode, trimmedText, options, persistedIndex);
+    : buildGenerationContext(currentMode, baseSourceText, options, persistedIndex);
 
   const encoder = new TextEncoder();
 
@@ -186,9 +191,9 @@ export async function POST(req: NextRequest) {
   // ── 2. Offline fallback: chunk the text into ~word-sized pieces ──────────
   let offlineContent: string;
   if (OFFLINE_MODES.includes(currentMode as ToolMode)) {
-    offlineContent = offlineGenerate(currentMode as ToolMode, trimmedText, options);
+    offlineContent = offlineGenerate(currentMode as ToolMode, baseSourceText, options);
   } else {
-    offlineContent = buildOfflineFallback(currentMode, trimmedText, options);
+    offlineContent = buildOfflineFallback(currentMode, baseSourceText, options);
   }
 
   // Stream offline content word-by-word with small delays (simulated streaming)

@@ -27,13 +27,15 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: 'Invalid JSON.' }, { status: 400 }); }
 
-  const { mode, text, options, model: clientModel, retrievalContext, fileId } = body as {
+  const { mode, text, options, model: clientModel, retrievalContext, fileId, deckTitle, deckContent } = body as {
     mode?: string;
     text?: string;
     options?: Record<string, unknown>;
     model?: string;
     retrievalContext?: string;
     fileId?: string | null;
+    deckTitle?: string;
+    deckContent?: string | null;
   };
 
   if (!mode || !VALID_MODES.includes(mode as AllModes)) {
@@ -51,13 +53,16 @@ export async function POST(req: NextRequest) {
   }
 
   const trimmedText = text.trim();
+  const baseSourceText = typeof deckContent === 'string' && deckContent.trim().length > 0
+    ? `Deck title: ${deckTitle?.trim() || 'Untitled deck'}\n\n${deckContent.trim()}`
+    : trimmedText;
   const currentMode = mode as AllModes;
   const persistedIndex = typeof fileId === 'string' && fileId.trim()
     ? await getPersistedRagIndexForRequest(req, fileId.trim()).catch(() => undefined)
     : undefined;
   const preparedText = typeof retrievalContext === 'string' && retrievalContext.trim()
     ? retrievalContext.trim()
-    : buildGenerationContext(currentMode, trimmedText, options, persistedIndex);
+    : buildGenerationContext(currentMode, baseSourceText, options, persistedIndex);
 
   // ── 1. Ollama (open-source local LLM) ────────────────────────────────────
   const ollamaBase = process.env.OLLAMA_URL ?? 'http://localhost:11434';
@@ -147,7 +152,7 @@ export async function POST(req: NextRequest) {
 
   // ── 3. Deterministic offline fallback ─────────────────────────────────────
   if (OFFLINE_MODES.includes(currentMode as ToolMode)) {
-    const content = offlineGenerate(currentMode as ToolMode, trimmedText, options);
+    const content = offlineGenerate(currentMode as ToolMode, baseSourceText, options);
     return NextResponse.json({ mode, content, source: 'offline' });
   }
 

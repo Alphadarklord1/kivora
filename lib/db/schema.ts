@@ -171,6 +171,7 @@ export const quizAttempts = pgTable('quiz_attempts', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   fileId: uuid('file_id').references(() => files.id, { onDelete: 'set null' }),
+  deckId: text('deck_id'),
   mode: text('mode').notNull(), // 'mcq' | 'quiz' | 'pop'
   totalQuestions: integer('total_questions').notNull(),
   correctAnswers: integer('correct_answers').notNull(),

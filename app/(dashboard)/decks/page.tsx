@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createCard, loadDecks, saveDeck, type SRSDeck } from '@/lib/srs/sm2';
-import { parseFlashcards } from '@/lib/srs/parse';
+import { loadDecks, type SRSDeck } from '@/lib/srs/sm2';
+import { buildImportedDeck, persistDeckLocally, syncDeckToCloud } from '@/lib/srs/deck-utils';
 import { useToast } from '@/providers/ToastProvider';
 import styles from './page.module.css';
 
@@ -23,22 +23,15 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function saveImportedDeck(title: string, description: string, content: string) {
-  const cards = parseFlashcards(content);
-  if (cards.length === 0) return null;
-
-  const deck: SRSDeck = {
-    id: `deck-${crypto.randomUUID().slice(0, 12)}`,
-    name: title,
-    description,
-    cards: cards.map((card, index) =>
-      createCard(`deck-card-${index}-${crypto.randomUUID().slice(0, 8)}`, card.front, card.back),
-    ),
-    createdAt: new Date().toISOString(),
-  };
-
-  saveDeck(deck);
-  return deck;
+function mergeDecks(local: SRSDeck[], remote: SRSDeck[]) {
+  const byId = new Map<string, SRSDeck>();
+  for (const deck of local) byId.set(deck.id, deck);
+  for (const deck of remote) byId.set(deck.id, deck);
+  return Array.from(byId.values()).sort((left, right) => {
+    const leftDate = new Date(left.lastStudied ?? left.createdAt).getTime();
+    const rightDate = new Date(right.lastStudied ?? right.createdAt).getTime();
+    return rightDate - leftDate;
+  });
 }
 
 export default function DeckLibraryPage() {
@@ -46,12 +39,33 @@ export default function DeckLibraryPage() {
   const { toast } = useToast();
   const [query, setQuery] = useState('');
   const [decks, setDecks] = useState<PublicDeck[]>([]);
+  const [myDecks, setMyDecks] = useState<SRSDeck[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMine, setLoadingMine] = useState(true);
   const [importUrl, setImportUrl] = useState('');
   const [importingUrl, setImportingUrl] = useState(false);
   const [lastImported, setLastImported] = useState<SRSDeck | null>(null);
 
-  const localDeckCount = useMemo(() => loadDecks().length, [lastImported]);
+  const localDeckCount = useMemo(() => myDecks.length, [myDecks]);
+
+  const refreshMyDecks = useCallback(async () => {
+    setLoadingMine(true);
+    const localDecks = loadDecks();
+    setMyDecks(localDecks);
+
+    try {
+      const res = await fetch('/api/srs', { cache: 'no-store' });
+      if (res.ok) {
+        const remoteDecks = await res.json() as SRSDeck[];
+        remoteDecks.forEach((deck) => persistDeckLocally(deck));
+        setMyDecks(mergeDecks(localDecks, remoteDecks));
+      }
+    } catch {
+      // Local decks remain available even when the sync path is offline.
+    } finally {
+      setLoadingMine(false);
+    }
+  }, []);
 
   const loadDecksFromApi = useCallback(async (search = '') => {
     setLoading(true);
@@ -70,7 +84,40 @@ export default function DeckLibraryPage() {
 
   useEffect(() => {
     void loadDecksFromApi();
-  }, [loadDecksFromApi]);
+    void refreshMyDecks();
+  }, [loadDecksFromApi, refreshMyDecks]);
+
+  async function finalizeImport(
+    payload: { title?: string; description?: string; content?: string; source?: string },
+    fallbackSource: { type: SRSDeck['sourceType']; label: string },
+  ) {
+    const deck = buildImportedDeck({
+      title: String(payload.title ?? 'Imported deck'),
+      description: String(payload.description ?? ''),
+      content: String(payload.content ?? ''),
+      sourceType: payload.source === 'quizlet'
+        ? 'quizlet'
+        : payload.source === 'kivora-share'
+          ? 'kivora-share'
+          : fallbackSource.type,
+      sourceLabel: payload.source === 'quizlet'
+        ? 'Quizlet import'
+        : payload.source === 'kivora-share'
+          ? 'Kivora shared deck'
+          : fallbackSource.label,
+      creatorName: 'You',
+    });
+
+    if (!deck) throw new Error('Could not parse deck cards');
+
+    persistDeckLocally(deck);
+    await syncDeckToCloud(deck);
+    setLastImported(deck);
+    setImportUrl('');
+    await refreshMyDecks();
+    toast(`Imported "${deck.name}"`, 'success');
+    router.push(`/decks/${deck.id}?imported=1`);
+  }
 
   async function importDeckFromUrl() {
     if (!importUrl.trim()) return;
@@ -86,16 +133,10 @@ export default function DeckLibraryPage() {
         throw new Error(payload?.error ?? 'Import failed');
       }
 
-      const deck = saveImportedDeck(
-        String(payload.title ?? 'Imported deck'),
-        String(payload.description ?? ''),
-        String(payload.content ?? ''),
-      );
-      if (!deck) throw new Error('Could not parse deck cards');
-
-      setLastImported(deck);
-      toast(`Imported "${deck.name}"`, 'success');
-      setImportUrl('');
+      await finalizeImport(payload as { title?: string; description?: string; content?: string; source?: string }, {
+        type: 'manual',
+        label: 'Deck import',
+      });
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Import failed', 'error');
     } finally {
@@ -103,14 +144,20 @@ export default function DeckLibraryPage() {
     }
   }
 
-  function importPublicDeck(deck: PublicDeck) {
-    const imported = saveImportedDeck(deck.title, deck.description, deck.content);
-    if (!imported) {
-      toast('Could not parse this deck', 'error');
-      return;
+  async function importPublicDeck(deck: PublicDeck) {
+    try {
+      await finalizeImport({
+        title: deck.title,
+        description: deck.description,
+        content: deck.content,
+        source: 'kivora-share',
+      }, {
+        type: 'public-library',
+        label: 'Kivora public deck',
+      });
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not parse this deck', 'error');
     }
-    setLastImported(imported);
-    toast(`Imported "${imported.name}"`, 'success');
   }
 
   return (
@@ -118,14 +165,14 @@ export default function DeckLibraryPage() {
       <section className={styles.hero}>
         <div className={styles.heroCopy}>
           <span className={styles.eyebrow}>Deck Library</span>
-          <h1>Browse public flashcard decks and import them into your study flow.</h1>
+          <h1>Import, open, and share decks as the center of your study workflow.</h1>
           <p>
-            Use shared Kivora decks for inspiration, pull in a Quizlet set by URL,
-            and save everything into your own private deck collection.
+            Pull in Quizlet sets, reuse public Kivora decks, and move straight into
+            study, quiz generation, analytics, and deck editing from one place.
           </p>
           <div className={styles.actions}>
-            <button className={styles.primaryButton} onClick={() => router.push('/workspace')}>
-              Open workspace
+            <button className={styles.primaryButton} onClick={() => router.push(myDecks[0] ? `/decks/${myDecks[0].id}` : '/workspace')}>
+              {myDecks[0] ? 'Open latest deck' : 'Open workspace'}
             </button>
             <button className={styles.secondaryButton} onClick={() => router.push('/analytics')}>
               View stats
@@ -135,17 +182,17 @@ export default function DeckLibraryPage() {
 
         <div className={styles.heroPanel}>
           <div className={styles.metricCard}>
+            <span className={styles.metricLabel}>Private decks</span>
+            <strong>{localDeckCount}</strong>
+            <small>Personal study decks</small>
+          </div>
+          <div className={styles.metricCard}>
             <span className={styles.metricLabel}>Public decks</span>
             <strong>{decks.length}</strong>
             <small>Searchable shared decks</small>
           </div>
           <div className={styles.metricCard}>
-            <span className={styles.metricLabel}>Your local decks</span>
-            <strong>{localDeckCount}</strong>
-            <small>Saved in this browser</small>
-          </div>
-          <div className={styles.metricCard}>
-            <span className={styles.metricLabel}>Quick import</span>
+            <span className={styles.metricLabel}>Import path</span>
             <strong>Quizlet</strong>
             <small>Paste a set URL below</small>
           </div>
@@ -159,8 +206,8 @@ export default function DeckLibraryPage() {
             <p>Supports Quizlet set URLs and Kivora shared deck links.</p>
           </div>
           {lastImported && (
-            <button className={styles.inlineAction} onClick={() => router.push('/workspace')}>
-              Go study “{lastImported.name}”
+            <button className={styles.inlineAction} onClick={() => router.push(`/decks/${lastImported.id}?imported=1`)}>
+              Open “{lastImported.name}”
             </button>
           )}
         </div>
@@ -175,6 +222,60 @@ export default function DeckLibraryPage() {
             {importingUrl ? 'Importing…' : 'Import URL'}
           </button>
         </div>
+      </section>
+
+      <section className={styles.libraryCard}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <h2>My decks</h2>
+            <p>Your personal flashcard decks, synced when you are signed in and always available locally.</p>
+          </div>
+          <button className={styles.secondaryButton} onClick={() => void refreshMyDecks()}>
+            Refresh
+          </button>
+        </div>
+
+        {loadingMine ? (
+          <div className={styles.emptyState}>Loading your decks…</div>
+        ) : myDecks.length === 0 ? (
+          <div className={styles.emptyState}>
+            No private decks yet. Import one above or generate flashcards from the workspace.
+          </div>
+        ) : (
+          <div className={styles.deckGrid}>
+            {myDecks.map((deck) => (
+              <article key={deck.id} className={styles.deckCard}>
+                <div className={styles.deckTop}>
+                  <div>
+                    <h3>{deck.name}</h3>
+                    {deck.description && <p>{deck.description}</p>}
+                  </div>
+                  <span className={styles.countPill}>{deck.cards.length} cards</span>
+                </div>
+
+                <div className={styles.metaRow}>
+                  <span>{deck.sourceLabel ?? 'Private deck'}</span>
+                  <span>{formatDate(deck.lastStudied ?? deck.createdAt)}</span>
+                </div>
+
+                <div className={styles.preview}>
+                  {deck.cards.slice(0, 3).map((card) => (
+                    <div key={card.id}><strong>{card.front}</strong> — {card.back}</div>
+                  ))}
+                </div>
+
+                <div className={styles.cardActions}>
+                  <button className={styles.primaryButton} onClick={() => router.push(`/decks/${deck.id}`)}>
+                    Open deck
+                  </button>
+                  <button className={styles.secondaryButton} onClick={() => router.push(`/decks/${deck.id}?imported=1`)}>
+                    Study
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className={styles.libraryCard}>
@@ -200,7 +301,7 @@ export default function DeckLibraryPage() {
           <div className={styles.emptyState}>Loading public decks…</div>
         ) : decks.length === 0 ? (
           <div className={styles.emptyState}>
-            No public decks found yet. Publish one from flashcards to seed the library.
+            No public decks found yet. Publish one from a personal deck to seed the library.
           </div>
         ) : (
           <div className={styles.deckGrid}>
@@ -226,7 +327,7 @@ export default function DeckLibraryPage() {
                 </div>
 
                 <div className={styles.cardActions}>
-                  <button className={styles.primaryButton} onClick={() => importPublicDeck(deck)}>
+                  <button className={styles.primaryButton} onClick={() => void importPublicDeck(deck)}>
                     Import deck
                   </button>
                   <button

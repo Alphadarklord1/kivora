@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
     description?: string;
     content?: string;
     cardCount?: number;
+    sourceDeckId?: string;
   } | null;
 
   if (!body?.content || !body?.title) {
@@ -92,6 +93,9 @@ export async function POST(request: NextRequest) {
         title: body.title,
         description: body.description ?? '',
         cardCount: body.cardCount ?? 0,
+        sourceDeckId: body.sourceDeckId ?? null,
+        sourceDeckName: body.title,
+        savedFrom: body.sourceDeckId ? `/decks/${body.sourceDeckId}` : '/decks',
       },
     }).returning();
 

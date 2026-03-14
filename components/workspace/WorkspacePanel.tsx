@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
 import { idbStore } from '@/lib/idb';
 import { extractTextFromBlob } from '@/lib/pdf/extract';
@@ -19,6 +20,7 @@ import { FlashcardView } from '@/components/workspace/views/FlashcardView';
 import { ExamView } from '@/components/workspace/views/ExamView';
 import { FocusPanel } from '@/components/workspace/views/FocusPanel';
 import { mdToHtml } from '@/lib/utils/md';
+import { writeMathContext } from '@/lib/math/context';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -94,8 +96,8 @@ function wordCount(text: string) {
 // ── Inline file viewer ─────────────────────────────────────────────────────
 
 function FileViewer({
-  file, onClose, onUseForTools,
-}: { file: FileRecord; onClose: () => void; onUseForTools: (text: string) => void }) {
+  file, onClose, onUseForTools, onUseInMath,
+}: { file: FileRecord; onClose: () => void; onUseForTools: (text: string) => void; onUseInMath: (file: FileRecord, text: string) => void }) {
   const { toast } = useToast();
   const [blobUrl,     setBlobUrl]     = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
@@ -140,6 +142,26 @@ function FileViewer({
     onUseForTools(res.text);
   }
 
+  async function useInMath() {
+    if (textContent) { onUseInMath(file, textContent); return; }
+    if (!file.localBlobId) {
+      toast('This file is not available locally for math context.', 'warning');
+      return;
+    }
+    const payload = await idbStore.get(file.localBlobId);
+    if (!payload) {
+      toast('File not found locally.', 'error');
+      return;
+    }
+    const res = await extractTextFromBlob(payload.blob, file.name);
+    if (res.error) {
+      toast(res.error, 'error');
+      return;
+    }
+    toast(`${res.wordCount.toLocaleString()} words sent to Math`, 'success');
+    onUseInMath(file, res.text);
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', borderLeft: '1px solid var(--border)', background: 'var(--bg)', animation: 'slideInRight 0.18s ease' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0, minWidth: 0 }}>
@@ -148,6 +170,9 @@ function FileViewer({
         {fmt(file.fileSize) && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', flexShrink: 0 }}>{fmt(file.fileSize)}</span>}
         <button className="btn btn-primary btn-sm" onClick={useForTools} title="Load into Generate tab" style={{ flexShrink: 0 }}>
           ⚡ Use for Generate
+        </button>
+        <button className="btn btn-secondary btn-sm" onClick={useInMath} title="Send this file into Math" style={{ flexShrink: 0 }}>
+          ∑ Use in Math
         </button>
         <button className="btn-icon" onClick={onClose} title="Close" style={{ flexShrink: 0 }}>✕</button>
       </div>
@@ -188,6 +213,7 @@ export function WorkspacePanel({
   selectedFolder, selectedTopic, selectedFolderName, selectedTopicName, onRefresh, filesRefreshKey,
 }: WorkspacePanelProps) {
   const { toast } = useToast();
+  const router = useRouter();
   const filePickerRef = useRef<HTMLInputElement>(null);
 
   const [mainTab,       setMainTab]       = useState<MainTab>('files');
@@ -202,11 +228,10 @@ export function WorkspacePanel({
   const [output,        setOutput]        = useState('');
   const [generating,    setGenerating]    = useState(false);
   const [count,         setCount]         = useState(5);
-  const [libItems,      setLibItems]      = useState<Array<{ id: string; mode: string; content: string; createdAt: string }>>([]);
+  const [libItems,      setLibItems]      = useState<Array<{ id: string; mode: string; content: string; createdAt: string; metadata?: { title?: string; category?: string; problem?: string; sourceFileName?: string; graphExpr?: string; savedFrom?: string } | null }>>([]);
   const [libLoad,       setLibLoad]       = useState(false);
   const [libExpanded,   setLibExpanded]   = useState<Record<string, boolean>>({});
   const [srsDecks,      setSrsDecks]      = useState<SRSDeck[]>([]);
-  const [reviewDeck,    setReviewDeck]    = useState<string | null>(null); // deckId being reviewed inline
   const [dragging,      setDragging]      = useState(false);
   const [uploading,     setUploading]     = useState(false);
   const [missingBlobs,  setMissingBlobs]  = useState<Set<string>>(new Set());
@@ -223,6 +248,27 @@ export function WorkspacePanel({
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('kivora:create-folder'));
     }
+  }
+
+  async function markRecentFile(fileId: string) {
+    await fetch('/api/recent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileId }),
+    }).catch(() => {});
+  }
+
+  async function sendFileToMath(file: FileRecord, text: string) {
+    writeMathContext({
+      fileId: file.id,
+      fileName: file.name,
+      extractedText: text,
+      sourceFolderId: selectedFolder,
+      sourceTopicId: selectedTopic,
+    });
+    await markRecentFile(file.id);
+    toast(`"${file.name}" ready in Math`, 'success');
+    router.push('/math');
   }
 
   // ── Data loading ──────────────────────────────────────────────────────
@@ -285,6 +331,7 @@ export function WorkspacePanel({
     if (file.content) {
       setExtractedText(file.content);
       void ensureRagIndex(file.id, file.content);
+      void markRecentFile(file.id);
       return file.content;
     }
     if (!file.localBlobId) { toast('No local file data.', 'error'); return null; }
@@ -296,6 +343,7 @@ export function WorkspacePanel({
       if (res.error) { toast(res.error, 'error'); return null; }
       setExtractedText(res.text);
       void ensureRagIndex(file.id, res.text);
+      void markRecentFile(file.id);
       toast(`Extracted ${res.wordCount.toLocaleString()} words from "${file.name}"`, 'success');
       return res.text;
     } finally { setExtracting(false); }
@@ -610,7 +658,11 @@ export function WorkspacePanel({
                           <div key={file.id}
                             className={`file-card${viewFile?.id === file.id ? ' selected' : ''}${isMissing ? ' file-card-missing' : ''}`}
                             style={{ cursor: 'pointer', marginBottom: 6, flexDirection: 'column', alignItems: 'stretch' }}
-                            onClick={() => !isMissing && setViewFile(v => v?.id === file.id ? null : file)}>
+                            onClick={() => {
+                              if (isMissing) return;
+                              void markRecentFile(file.id);
+                              setViewFile(v => v?.id === file.id ? null : file);
+                            }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <div className="file-thumb" style={{ opacity: isMissing ? 0.45 : 1 }}>{fileIcon(file)}</div>
                               <div className="file-info" style={{ flex: 1, minWidth: 0 }}>
@@ -633,8 +685,23 @@ export function WorkspacePanel({
                                       }}>
                                       ⚡ Use
                                     </button>
+                                    <button
+                                      className="btn btn-secondary btn-sm"
+                                      style={{ fontSize: 11, padding: '2px 8px' }}
+                                      title="Send this file into Math"
+                                      onClick={async () => {
+                                        const text = await extractFromFile(file);
+                                        if (text) {
+                                          await sendFileToMath(file, text);
+                                        }
+                                      }}>
+                                      ∑ Math
+                                    </button>
                                     <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}
-                                      onClick={() => setViewFile(v => v?.id === file.id ? null : file)}>
+                                      onClick={() => {
+                                        void markRecentFile(file.id);
+                                        setViewFile(v => v?.id === file.id ? null : file);
+                                      }}>
                                       {viewFile?.id === file.id ? 'Close' : 'View'}
                                     </button>
                                   </>
@@ -688,7 +755,12 @@ export function WorkspacePanel({
             </div>
             {viewFile && (
               <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }} className="file-viewer-panel">
-                <FileViewer file={viewFile} onClose={() => setViewFile(null)} onUseForTools={handleUseForTools} />
+                <FileViewer
+                  file={viewFile}
+                  onClose={() => setViewFile(null)}
+                  onUseForTools={handleUseForTools}
+                  onUseInMath={sendFileToMath}
+                />
               </div>
             )}
           </div>
@@ -963,7 +1035,6 @@ export function WorkspacePanel({
                 </div>
                 {srsDecks.map(deck => {
                   const st = getDeckStats(deck);
-                  const isReviewing = reviewDeck === deck.id;
                   return (
                     <div key={deck.id} style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
@@ -981,21 +1052,17 @@ export function WorkspacePanel({
                           </div>
                         </div>
                         <button className="btn btn-primary btn-sm"
-                          onClick={() => setReviewDeck(isReviewing ? null : deck.id)}>
-                          {isReviewing ? 'Close' : (st.due > 0 ? `▶ Review ${st.due}` : '▶ Browse')}
+                          onClick={() => router.push(`/decks/${deck.id}`)}>
+                          {st.due > 0 ? `▶ Review ${st.due}` : 'Open deck'}
                         </button>
                         <button className="btn-icon" style={{ color: 'var(--text-3)', width: 24, height: 24, fontSize: 12 }}
                           onClick={() => {
                             if (!confirm(`Delete deck "${deck.name}"?`)) return;
                             deleteDeck(deck.id);
                             setSrsDecks(d => d.filter(x => x.id !== deck.id));
+                            void fetch(`/api/srs/${deck.id}`, { method: 'DELETE' }).catch(() => {});
                           }}>✕</button>
                       </div>
-                      {isReviewing && (
-                        <div style={{ borderTop: '1px solid var(--border)', padding: '14px' }}>
-                          <FlashcardView content={deck.cards.map(c => `Front: ${c.front} | Back: ${c.back}`).join('\n')} />
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -1013,12 +1080,17 @@ export function WorkspacePanel({
               </div>
             ) : libItems.map(item => {
               const tool = GENERATE_TABS.find(t => t.id === item.mode);
+              const label = item.mode === 'math-solution'
+                ? 'Math Solution'
+                : item.mode === 'math-practice'
+                  ? 'Math Practice'
+                  : (tool?.label ?? item.mode);
               const expanded = libExpanded[item.id];
               return (
                 <div key={item.id} className="lib-item" style={{ marginBottom: 10 }}>
                   <div className="lib-item-header">
                     <span style={{ fontSize: 16 }}>{tool?.icon ?? '📄'}</span>
-                    <span className="lib-item-mode">{tool?.label ?? item.mode}</span>
+                    <span className="lib-item-mode">{label}</span>
                     <span className="lib-item-date">{fmtDate(item.createdAt)}</span>
                     <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
                       <button className="btn btn-ghost btn-sm" onClick={() => setLibExpanded(p => ({ ...p, [item.id]: !expanded }))}>
@@ -1026,6 +1098,11 @@ export function WorkspacePanel({
                       </button>
                       <button className="btn btn-ghost btn-sm"
                         onClick={() => {
+                          if (item.mode === 'math-solution' || item.mode === 'math-practice') {
+                            router.push('/math');
+                            toast('Open the Math page to review this item.', 'info');
+                            return;
+                          }
                           setOutput(item.content);
                           const match = GENERATE_TABS.find(t => t.id === item.mode);
                           setGenMode(match ? item.mode as GenMode : 'summarize');
@@ -1040,6 +1117,12 @@ export function WorkspacePanel({
                         }}>✕</button>
                     </div>
                   </div>
+                  {item.metadata?.problem && (
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 6 }}>Problem: {item.metadata.problem}</div>
+                  )}
+                  {item.metadata?.sourceFileName && (
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 6 }}>Source: {item.metadata.sourceFileName}</div>
+                  )}
                   {item.mode === 'flashcards' ? (
                     <div style={{ marginTop: 8 }}>
                       {expanded

@@ -55,6 +55,31 @@ export interface UsageStats {
   periodLibraryItems: number;
 }
 
+export interface DeckPerformance {
+  deckId: string;
+  name: string;
+  totalCards: number;
+  dueCards: number;
+  reviewedToday: number;
+  goalProgress: number;
+  accuracy: number;
+  quizAttempts: number;
+  avgQuizScore: number;
+  studyDays: number;
+  generatedOutputs: number;
+  weakConcepts: string[];
+  lastStudied?: string;
+  sourceLabel?: string;
+}
+
+export interface DeckStats {
+  totalDecks: number;
+  totalCards: number;
+  dailyGoal: number;
+  reviewedToday: number;
+  topDecks: DeckPerformance[];
+}
+
 export interface AnalyticsData {
   period: number;
   quizStats: QuizStats;
@@ -64,6 +89,7 @@ export interface AnalyticsData {
   activity: Activity;
   insights: string[];
   usage: UsageStats;
+  deckStats: DeckStats;
   fallback?: boolean;
   warning?: string;
   requestId?: string;
