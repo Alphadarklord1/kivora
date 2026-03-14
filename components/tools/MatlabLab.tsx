@@ -39,6 +39,12 @@ type MatlabHistoryItem = {
   timestamp: string;
 };
 
+type MatlabTemplate = {
+  label: string;
+  command: string;
+  description: string;
+};
+
 interface MatlabSession {
   variables: Record<string, MatlabValue>;
   history: MatlabHistoryItem[];
@@ -238,6 +244,34 @@ function matrixPower(matrix: Matrix, power: number): Matrix | null {
   return out;
 }
 
+function splitArguments(args: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let bracketDepth = 0;
+  let parenDepth = 0;
+
+  for (const char of args) {
+    if (char === '[') bracketDepth += 1;
+    if (char === ']') bracketDepth = Math.max(0, bracketDepth - 1);
+    if (char === '(') parenDepth += 1;
+    if (char === ')') parenDepth = Math.max(0, parenDepth - 1);
+
+    if (char === ',' && bracketDepth === 0 && parenDepth === 0) {
+      parts.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+function serializeMatrixBuilder(values: string[][]) {
+  return `[${values.map((row) => row.map((cell) => cell || '0').join(' ')).join('; ')}]`;
+}
+
 function eigen2x2(matrix: Matrix): Eigen2Result | null {
   if (matrix.length !== 2 || matrix[0].length !== 2) return null;
   const [[a, b], [c, d]] = matrix;
@@ -281,6 +315,18 @@ function scalarFirstMatrixOp(scalar: number, matrix: Matrix, op: '+' | '-'): Mat
   return matrix.map(row => row.map(v => (op === '+' ? scalar + v : scalar - v)));
 }
 
+const MATLAB_TEMPLATES: MatlabTemplate[] = [
+  { label: 'A = [1 2; 3 4]', command: 'A = [1 2; 3 4]', description: 'Create a matrix in the workspace.' },
+  { label: 'B = [5 6; 7 8]', command: 'B = [5 6; 7 8]', description: 'Create a second matrix for comparison.' },
+  { label: 'A * B', command: 'A * B', description: 'Multiply two matrices from the workspace.' },
+  { label: 'det(A)', command: 'det(A)', description: 'Compute a determinant.' },
+  { label: 'inv(A)', command: 'inv(A)', description: 'Find a 2x2 inverse.' },
+  { label: 'eig(A)', command: 'eig(A)', description: 'Estimate 2x2 eigenvalues.' },
+  { label: 'transpose(A)', command: 'transpose(A)', description: 'Transpose a matrix.' },
+  { label: 'solve(A,b)', command: 'solve(A,b)', description: 'Solve a linear system after defining A and b.' },
+  { label: 'plot(sin(x) + x^2)', command: 'plot(sin(x) + x^2)', description: 'Send a graphable expression to the Graph tab.' },
+];
+
 function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValue>): MatlabValue | null {
   const trimmed = expr.trim();
   if (!trimmed) return null;
@@ -312,6 +358,24 @@ function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValu
   if (fnMatch) {
     const fn = fnMatch[1].toLowerCase();
     const argRaw = fnMatch[2].trim();
+    if (fn === 'solve') {
+      const [leftRaw, rightRaw] = splitArguments(argRaw);
+      if (!leftRaw || !rightRaw) return null;
+      const left = vars[leftRaw] ?? evaluateCommandExpression(leftRaw, vars);
+      const right = vars[rightRaw] ?? evaluateCommandExpression(rightRaw, vars);
+      if (!left || !right || !isMatrix(left)) return null;
+      const rightVector = isMatrix(right)
+        ? right.length === 1
+          ? [...right[0]]
+          : right[0]?.length === 1
+            ? right.map((row) => row[0])
+            : null
+        : [right];
+      if (!rightVector) return null;
+      const solved = solveLinearSystem(left, rightVector);
+      return solved ? solved.map((value) => [value]) : null;
+    }
+
     const arg = vars[argRaw] ?? evaluateCommandExpression(argRaw, vars);
     if (arg == null) return null;
 
@@ -409,12 +473,24 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       'Operation failed. Check matrix sizes (A+B requires same size, A*B requires columns of A = rows of B).': 'فشلت العملية. تحقق من أبعاد المصفوفات.',
       'Run an operation to see output.': 'شغّل عملية لعرض النتيجة.',
       'Enter a valid matrix A to preview a heatmap.': 'أدخل مصفوفة A صحيحة لعرض الخريطة الحرارية.',
+      'Command templates': 'قوالب الأوامر',
+      'Supported syntax': 'الصياغة المدعومة',
+      'Matrix builder': 'منشئ المصفوفات',
+      'Apply to Matrix A': 'تطبيق على المصفوفة A',
+      'Apply to Matrix B': 'تطبيق على المصفوفة B',
+      'Load Matrix A': 'تحميل المصفوفة A',
+      'Use a template to seed the command window or hand a plot straight to the Graph tab.': 'استخدم قالباً لملء نافذة الأوامر أو لإرسال الرسم مباشرة إلى تبويب Graph.',
+      'Core commands: assignments, det, inv, trace, rank, norm, eig, transpose, solve(A,b), and plot(expr).': 'الأوامر الأساسية: الإسناد و det و inv و trace و rank و norm و eig و transpose و solve(A,b) و plot(expr).',
+      'The matrix builder is meant for fast 2x2 or 3x3 study cases, not full MATLAB table editing.': 'منشئ المصفوفات مخصص لحالات الدراسة السريعة 2x2 أو 3x3 وليس لتحرير جداول MATLAB الكاملة.',
     };
     return isArabic ? (ar[key] || key) : key;
   }, [isArabic]);
 
   const [matrixA, setMatrixA] = useState('[1 2; 3 4]');
   const [matrixB, setMatrixB] = useState('[5 6; 7 8]');
+  const [builderRows, setBuilderRows] = useState(2);
+  const [builderCols, setBuilderCols] = useState(2);
+  const [builderValues, setBuilderValues] = useState<string[][]>(() => Array.from({ length: 2 }, () => Array(2).fill('0')));
   const [expression, setExpression] = useState('sin(x) + x^2');
   const [result, setResult] = useState<string>('');
   const [error, setError] = useState<string>('');
@@ -436,6 +512,16 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
   const [, setHistoryIndex] = useState<number>(-1);
   const [runningScript, setRunningScript] = useState(false);
   const commandInputRef = useRef<HTMLInputElement | null>(null);
+
+  const resizeBuilder = useCallback((rows: number, cols: number) => {
+    setBuilderRows(rows);
+    setBuilderCols(cols);
+    setBuilderValues((prev) =>
+      Array.from({ length: rows }, (_, rowIndex) =>
+        Array.from({ length: cols }, (_, colIndex) => prev[rowIndex]?.[colIndex] ?? '0'),
+      ),
+    );
+  }, []);
 
   const variableRows = useMemo<MatlabVariable[]>(() => {
     return Object.entries(runtimeVars)
@@ -542,6 +628,18 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       };
     }
 
+    const plotMatch = text.match(/^plot\((.+)\)$/i);
+    if (plotMatch) {
+      const plotExpression = plotMatch[1].trim();
+      setExpression(plotExpression);
+      onGraphExpression?.(plotExpression);
+      return {
+        command: rawCommand,
+        output: `Sent ${plotExpression} to the Graph tab.`,
+        timestamp: new Date().toISOString(),
+      };
+    }
+
     const assignMatch = text.match(/^([A-Za-z]\w*)\s*=\s*(.+)$/);
     if (assignMatch) {
       const varName = assignMatch[1];
@@ -592,7 +690,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       output: formatValue(evaluated),
       timestamp: new Date().toISOString(),
     };
-  }, [t]);
+  }, [onGraphExpression, t]);
 
   const runCommand = useCallback(() => {
     const item = runSingleCommand(command, 'command');
@@ -604,6 +702,32 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       setCommand('');
     }
   }, [command, pushHistory, runSingleCommand]);
+
+  const applyTemplate = useCallback((template: MatlabTemplate) => {
+    if (template.command.startsWith('plot(')) {
+      const expr = template.command.replace(/^plot\(/, '').replace(/\)$/, '');
+      setExpression(expr);
+      onGraphExpression?.(expr);
+    }
+    setCommand(template.command);
+    commandInputRef.current?.focus();
+  }, [onGraphExpression]);
+
+  const applyBuilderToMatrix = useCallback((target: 'A' | 'B') => {
+    const serialized = serializeMatrixBuilder(builderValues);
+    if (target === 'A') {
+      setMatrixA(serialized);
+      return;
+    }
+    setMatrixB(serialized);
+  }, [builderValues]);
+
+  const loadBuilderFromA = useCallback(() => {
+    const parsed = parseMatrix(matrixA);
+    if (!parsed) return;
+    resizeBuilder(parsed.length, parsed[0]?.length || 0);
+    setBuilderValues(parsed.map((row) => row.map((value) => String(value))));
+  }, [matrixA, resizeBuilder]);
 
   const runScript = useCallback(async () => {
     if (runningScript) return;
@@ -750,6 +874,72 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       </div>
 
       <div className="lab-grid">
+        <section className="lab-card wide">
+          <h4>{t('Command templates')}</h4>
+          <p className="hint">{t('Use a template to seed the command window or hand a plot straight to the Graph tab.')}</p>
+          <div className="template-grid">
+            {MATLAB_TEMPLATES.map((template) => (
+              <button key={template.command} className="template-card" onClick={() => applyTemplate(template)}>
+                <strong>{template.label}</strong>
+                <span>{template.description}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="lab-card">
+          <h4>{t('Supported syntax')}</h4>
+          <ul className="syntax-list">
+            <li>{t('Core commands: assignments, det, inv, trace, rank, norm, eig, transpose, solve(A,b), and plot(expr).')}</li>
+            <li>{t('The matrix builder is meant for fast 2x2 or 3x3 study cases, not full MATLAB table editing.')}</li>
+            <li>Use `A = [1 2; 3 4]`, `b = [1; 2]`, then `solve(A,b)` for linear systems.</li>
+          </ul>
+        </section>
+
+        <section className="lab-card">
+          <h4>{t('Matrix builder')}</h4>
+          <div className="builder-toolbar">
+            <label>
+              Rows
+              <select value={builderRows} onChange={(e) => resizeBuilder(Number(e.target.value), builderCols)}>
+                <option value={2}>2</option>
+                <option value={3}>3</option>
+              </select>
+            </label>
+            <label>
+              Cols
+              <select value={builderCols} onChange={(e) => resizeBuilder(builderRows, Number(e.target.value))}>
+                <option value={2}>2</option>
+                <option value={3}>3</option>
+              </select>
+            </label>
+          </div>
+          <div className="builder-grid" style={{ gridTemplateColumns: `repeat(${builderCols}, minmax(0, 1fr))` }}>
+            {builderValues.map((row, rowIndex) =>
+              row.map((value, colIndex) => (
+                <input
+                  key={`${rowIndex}-${colIndex}`}
+                  value={value}
+                  onChange={(e) =>
+                    setBuilderValues((prev) =>
+                      prev.map((currentRow, currentRowIndex) =>
+                        currentRowIndex === rowIndex
+                          ? currentRow.map((cell, currentColIndex) => (currentColIndex === colIndex ? e.target.value : cell))
+                          : currentRow,
+                      ),
+                    )
+                  }
+                />
+              )),
+            )}
+          </div>
+          <div className="builder-actions">
+            <button className="btn secondary" onClick={() => applyBuilderToMatrix('A')}>{t('Apply to Matrix A')}</button>
+            <button className="btn secondary" onClick={() => applyBuilderToMatrix('B')}>{t('Apply to Matrix B')}</button>
+            <button className="btn secondary" onClick={loadBuilderFromA}>{t('Load Matrix A')}</button>
+          </div>
+        </section>
+
         <section className="lab-card">
           <h4>{t('Matrix A')}</h4>
           <textarea
@@ -1117,6 +1307,81 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
           gap: var(--space-2);
+        }
+
+        .template-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: var(--space-2);
+        }
+
+        .template-card {
+          display: grid;
+          gap: 6px;
+          text-align: left;
+          padding: var(--space-3);
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-subtle);
+          background: color-mix(in srgb, var(--bg-inset) 84%, transparent);
+          color: var(--text-primary);
+          cursor: pointer;
+        }
+
+        .template-card strong {
+          font-family: var(--font-mono, monospace);
+          font-size: var(--font-meta);
+        }
+
+        .template-card span {
+          font-size: var(--font-tiny);
+          color: var(--text-muted);
+          line-height: 1.45;
+        }
+
+        .syntax-list {
+          margin: 0;
+          padding-left: 1.1rem;
+          color: var(--text-secondary);
+          display: grid;
+          gap: 0.45rem;
+          line-height: 1.6;
+        }
+
+        .builder-toolbar {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: var(--space-2);
+        }
+
+        .builder-toolbar label {
+          display: grid;
+          gap: 6px;
+          color: var(--text-muted);
+          font-size: var(--font-tiny);
+        }
+
+        .builder-toolbar select {
+          width: 100%;
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-md);
+          padding: var(--space-2);
+          background: var(--bg-inset);
+          color: var(--text-primary);
+        }
+
+        .builder-grid {
+          display: grid;
+          gap: var(--space-2);
+        }
+
+        .builder-grid input {
+          text-align: center;
+        }
+
+        .builder-actions {
+          display: flex;
+          gap: var(--space-2);
+          flex-wrap: wrap;
         }
 
         .hint {

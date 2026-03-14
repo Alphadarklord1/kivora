@@ -199,13 +199,15 @@ export const authConfig: NextAuthConfig = {
       const isDashboard =
         pathname.startsWith('/workspace') ||
         pathname.startsWith('/library') ||
+        pathname.startsWith('/decks') ||
         pathname.startsWith('/settings') ||
         pathname.startsWith('/planner') ||
         pathname.startsWith('/math') ||
         pathname.startsWith('/analytics') ||
         pathname.startsWith('/models') ||
         pathname.startsWith('/sharing') ||
-        pathname.startsWith('/account');
+        pathname.startsWith('/account') ||
+        pathname.startsWith('/report');
 
       const isAuthPage = pathname.startsWith('/login') || pathname.startsWith('/register');
 

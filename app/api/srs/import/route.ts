@@ -1,35 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { libraryItems, shares } from '@/lib/db/schema';
+import { buildQuizletCandidateUrls, extractQuizletCards, extractQuizletTitle, looksLikeQuizletBlocked } from '@/lib/srs/quizlet-import';
 import { eq } from 'drizzle-orm';
-
-function decodeHtml(value: string) {
-  return value
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>');
-}
-
-function parseQuizletTerms(html: string) {
-  const matches = Array.from(
-    html.matchAll(/"word":"([^"]+)".{0,220}?"definition":"([^"]+)"/g),
-  );
-
-  const cards = matches
-    .map((match) => ({
-      front: decodeHtml(match[1].replace(/\\u003c/g, '<').replace(/\\u003e/g, '>')),
-      back: decodeHtml(match[2].replace(/\\u003c/g, '<').replace(/\\u003e/g, '>')),
-    }))
-    .filter((card) => card.front && card.back);
-
-  const unique = new Map<string, { front: string; back: string }>();
-  for (const card of cards) {
-    unique.set(`${card.front}:::${card.back}`, card);
-  }
-  return Array.from(unique.values()).slice(0, 500);
-}
 
 async function importKivoraShare(url: URL) {
   if (!isDatabaseConfigured) throw new Error('Database not configured');
@@ -76,27 +49,43 @@ export async function POST(request: NextRequest) {
     }
 
     if (hostname.includes('quizlet.com')) {
-      const response = await fetch(parsedUrl.toString(), {
-        headers: { 'User-Agent': 'Mozilla/5.0 Kivora Deck Importer' },
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (!response.ok) {
-        return NextResponse.json({ error: 'Could not fetch Quizlet set' }, { status: 502 });
+      const candidateUrls = buildQuizletCandidateUrls(parsedUrl);
+      let bestHtml = '';
+      let cards: Array<{ front: string; back: string }> = [];
+
+      for (const candidate of candidateUrls) {
+        const response = await fetch(candidate, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36',
+            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            Referer: 'https://quizlet.com/',
+          },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(20_000),
+        }).catch(() => null);
+
+        if (!response?.ok) continue;
+        const html = await response.text();
+        bestHtml = html;
+        cards = extractQuizletCards(html);
+        if (cards.length > 0) break;
       }
 
-      const html = await response.text();
-      const cards = parseQuizletTerms(html);
       if (cards.length === 0) {
+        if (bestHtml && looksLikeQuizletBlocked(bestHtml)) {
+          return NextResponse.json({ error: 'Quizlet blocked automated access for this set. Try a public set URL or import the cards from a copied deck page.' }, { status: 422 });
+        }
         return NextResponse.json({ error: 'Could not extract cards from this Quizlet set' }, { status: 422 });
       }
 
-      const titleMatch = html.match(/<title>(.*?)<\/title>/i);
-      const title = decodeHtml(titleMatch?.[1]?.replace(/\s*\|\s*Quizlet.*$/i, '') ?? 'Imported Quizlet set');
+      const title = extractQuizletTitle(bestHtml);
       const content = cards.map((card) => `Front: ${card.front} | Back: ${card.back}`).join('\n');
 
       return NextResponse.json({
         source: 'quizlet',
         title,
+        cardCount: cards.length,
         description: `Imported from Quizlet (${cards.length} cards)`,
         content,
       });

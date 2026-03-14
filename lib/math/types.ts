@@ -1,6 +1,9 @@
 export type MathCategoryId =
   | 'algebra'
+  | 'geometry'
   | 'calculus'
+  | 'trigonometry'
+  | 'sequences-series'
   | 'linear-algebra'
   | 'statistics'
   | 'vectors'
