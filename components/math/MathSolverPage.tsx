@@ -1,14 +1,16 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import * as math from 'mathjs';
 import { solve, EXAMPLE_PROBLEMS, type SolverResult } from '@/lib/math/symbolic-solver';
+import { MatlabLab } from '@/components/tools/MatlabLab';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
-type MainTab = 'solver' | 'graph' | 'units';
+type MainTab = 'solver' | 'graph' | 'units' | 'lab';
 
 interface GraphFn {
   id: string;
@@ -1101,10 +1103,11 @@ export default function MathSolverPage() {
     setActiveTab('graph');
   }, []);
 
-  const TABS: { id: MainTab; label: string; icon: string }[] = [
-    { id: 'solver', label: 'Solver', icon: '∑' },
-    { id: 'graph', label: 'Graph', icon: '📈' },
-    { id: 'units', label: 'Units', icon: '⚖️' },
+  const TABS: { id: MainTab; label: string; icon: string; hint?: string }[] = [
+    { id: 'solver', label: 'Solver', icon: '∑', hint: 'Solve symbolic and numeric problems' },
+    { id: 'graph', label: 'Graph', icon: '📈', hint: 'Plot functions and inspect derivatives' },
+    { id: 'units', label: 'Units', icon: '⚖️', hint: 'Convert physics and engineering units' },
+    { id: 'lab', label: 'MATLAB Flow', icon: '⌘', hint: 'Matrix-first workspace and MATLAB-style commands' },
   ];
 
   return (
@@ -1132,11 +1135,54 @@ export default function MathSolverPage() {
         </div>
       </div>
 
-      {/* Tab content */}
-      <div className="math-content">
-        {activeTab === 'solver' && <SolverPanel onGraphExpr={handleGraphExpr} />}
-        {activeTab === 'graph' && <GraphPanel initialExpr={graphExprFromSolver} />}
-        {activeTab === 'units' && <UnitsPanel />}
+      <div className="math-body">
+        <aside className="math-sidebar">
+          <div className="math-sidebar-section">
+            <div className="math-sidebar-label">Workflows</div>
+            <div className="math-sidebar-list">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`math-side-item${activeTab === tab.id ? ' active' : ''}`}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  <span className="math-side-icon">{tab.icon}</span>
+                  <span className="math-side-copy">
+                    <strong>{tab.label}</strong>
+                    {tab.hint ? <small>{tab.hint}</small> : null}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="math-sidebar-section">
+            <div className="math-sidebar-label">References</div>
+            <a className="math-ref-card" href="https://www.wolframalpha.com/" target="_blank" rel="noreferrer">
+              <span className="math-ref-icon">W</span>
+              <span className="math-side-copy">
+                <strong>Wolfram Alpha</strong>
+                <small>Cross-check exact symbolic results and edge cases.</small>
+              </span>
+            </a>
+            <Link className="math-ref-card" href="/workspace">
+              <span className="math-ref-icon">⌘</span>
+              <span className="math-side-copy">
+                <strong>Workspace + Files</strong>
+                <small>Bring math results back into notes, assignments, and study tools.</small>
+              </span>
+            </Link>
+          </div>
+        </aside>
+
+        {/* Tab content */}
+        <div className="math-content">
+          {activeTab === 'solver' && <SolverPanel onGraphExpr={handleGraphExpr} />}
+          {activeTab === 'graph' && <GraphPanel initialExpr={graphExprFromSolver} />}
+          {activeTab === 'units' && <UnitsPanel />}
+          {activeTab === 'lab' && <MatlabLab onGraphExpression={handleGraphExpr} />}
+        </div>
       </div>
 
       <style jsx>{`
@@ -1175,7 +1221,24 @@ export default function MathSolverPage() {
           box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 35%, transparent);
         }
         .math-tab-icon { font-size: 16px; }
-        .math-content { flex: 1; overflow: hidden; }
+        .math-body { flex: 1; display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 0; }
+        .math-sidebar { padding: 18px; border-right: 1px solid var(--border-subtle); background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 92%, transparent), color-mix(in srgb, var(--bg-surface) 96%, transparent)); overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+        .math-sidebar-section { display: flex; flex-direction: column; gap: 10px; }
+        .math-sidebar-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+        .math-sidebar-list { display: flex; flex-direction: column; gap: 8px; }
+        .math-side-item, .math-ref-card { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--border-subtle); background: color-mix(in srgb, var(--bg-elevated) 88%, transparent); color: var(--text-primary); text-align: left; text-decoration: none; transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease; }
+        .math-side-item { cursor: pointer; width: 100%; }
+        .math-side-item:hover, .math-ref-card:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border-subtle)); transform: translateY(-1px); }
+        .math-side-item.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--bg-elevated)); box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 16%, transparent); }
+        .math-side-icon, .math-ref-icon { width: 32px; height: 32px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--primary) 18%, var(--bg-elevated)); color: var(--text-primary); font-weight: 700; flex-shrink: 0; }
+        .math-side-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .math-side-copy strong { font-size: 14px; line-height: 1.2; }
+        .math-side-copy small { font-size: 12px; line-height: 1.45; color: var(--text-muted); }
+        .math-content { flex: 1; overflow: hidden; min-width: 0; }
+        @media (max-width: 980px) {
+          .math-body { grid-template-columns: 1fr; }
+          .math-sidebar { border-right: none; border-bottom: 1px solid var(--border-subtle); max-height: 260px; }
+        }
       `}</style>
     </div>
   );
