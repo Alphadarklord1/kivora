@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 const STEPS = [
   {
@@ -9,6 +10,8 @@ const STEPS = [
     desc: 'Your personal AI-powered study workspace. Everything you need to study smarter — in one place.',
     highlight: null,
     tip: null,
+    actionLabel: 'Open workspace',
+    href: '/workspace',
   },
   {
     icon: '📄',
@@ -16,6 +19,8 @@ const STEPS = [
     desc: 'Upload your lecture slides, PDFs, or Word docs. Kivora extracts the content and keeps everything organized by folder.',
     highlight: 'Go to Workspace → click Upload File',
     tip: 'Files stay on your device. Only metadata syncs to the cloud.',
+    actionLabel: 'Go to workspace',
+    href: '/workspace',
   },
   {
     icon: '🤖',
@@ -23,13 +28,35 @@ const STEPS = [
     desc: 'Select any uploaded file and instantly generate: summaries, quizzes, flashcards, MCQs, notes, and more — using AI that runs locally.',
     highlight: 'Select a file → choose a tool from the right panel',
     tip: 'Works offline too! Install a local AI model from the AI Models page.',
+    actionLabel: 'Open workspace tools',
+    href: '/workspace',
+  },
+  {
+    icon: '🌐',
+    title: 'Browse public decks',
+    desc: 'Explore shared flashcard decks, import Quizlet sets, or pull a Kivora deck into your own private study space.',
+    highlight: 'Open Decks → search, preview, or import by URL',
+    tip: 'Public decks are optional. Your own decks stay private unless you publish them.',
+    actionLabel: 'Open deck library',
+    href: '/decks',
+  },
+  {
+    icon: '🃏',
+    title: 'Supercharged flashcards',
+    desc: 'Flashcard decks come with multiple study modes: flip cards, Write mode (type the answer), Test mode (mixed quiz), Match, and Learn. Study sessions sync across all your devices.',
+    highlight: 'Open any flashcard deck → choose a study mode',
+    tip: 'Cards use the FSRS-4.5 algorithm — scientifically proven to schedule reviews right before you forget.',
+    actionLabel: 'Open deck library',
+    href: '/decks',
   },
   {
     icon: '📊',
     title: 'Track your progress',
-    desc: 'Your quiz scores, study streaks, and weak areas are tracked automatically. Use the Planner to schedule study sessions.',
-    highlight: 'Visit Analytics & Planner in the sidebar',
-    tip: 'Flashcards use spaced repetition (SM-2) to show you cards right before you forget them.',
+    desc: 'Build a daily streak, hit your card goals, and visualise your study history with a GitHub-style heatmap and 14-day workload forecast.',
+    highlight: 'Open a flashcard deck → tap Stats',
+    tip: 'Your 🔥 streak is shown in the sidebar. Keep it alive by reviewing at least one card every day!',
+    actionLabel: 'Open analytics',
+    href: '/analytics',
   },
   {
     icon: '🧮',
@@ -37,16 +64,20 @@ const STEPS = [
     desc: 'The Math page handles derivatives, integrals, limits, quadratics, matrices, and more — with full step-by-step explanations and interactive graphs.',
     highlight: 'Go to Math in the sidebar → type any expression',
     tip: 'You can also photograph a math problem and let AI extract it for you.',
+    actionLabel: 'Open math',
+    href: '/math',
   },
 ];
 
 export function OnboardingModal() {
+  const router = useRouter();
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState(0);
 
   useEffect(() => {
     try {
       if (!localStorage.getItem('kivora-onboarded')) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setVisible(true);
       }
     } catch { /* noop */ }
@@ -57,6 +88,12 @@ export function OnboardingModal() {
     setVisible(false);
   }
 
+  function jumpToCurrentStep() {
+    const currentStep = STEPS[step];
+    dismiss();
+    if (currentStep.href) router.push(currentStep.href);
+  }
+
   if (!visible) return null;
 
   const current = STEPS[step];
@@ -65,6 +102,11 @@ export function OnboardingModal() {
   return (
     <div className="ob-backdrop" onClick={e => { if (e.target === e.currentTarget) dismiss(); }}>
       <div className="ob-modal" role="dialog" aria-modal="true">
+        <div className="ob-topline">
+          <span className="ob-step-count">Step {step + 1} of {STEPS.length}</span>
+          <button className="ob-close" onClick={dismiss} aria-label="Close onboarding">✕</button>
+        </div>
+
         {/* Progress dots */}
         <div className="ob-dots">
           {STEPS.map((_, i) => (
@@ -100,11 +142,14 @@ export function OnboardingModal() {
         <div className="ob-actions">
           <button className="ob-skip" onClick={dismiss}>Skip tour</button>
           <div className="ob-nav">
+            {current.actionLabel && (
+              <button className="ob-jump" onClick={jumpToCurrentStep}>{current.actionLabel}</button>
+            )}
             {step > 0 && (
               <button className="ob-back" onClick={() => setStep(s => s - 1)}>← Back</button>
             )}
             {isLast ? (
-              <button className="ob-primary" onClick={dismiss}>Get started →</button>
+              <button className="ob-primary" onClick={jumpToCurrentStep}>Get started →</button>
             ) : (
               <button className="ob-primary" onClick={() => setStep(s => s + 1)}>Next →</button>
             )}
@@ -126,6 +171,28 @@ export function OnboardingModal() {
           padding: 32px; display: flex; flex-direction: column; gap: 24px;
           box-shadow: 0 24px 80px rgba(0,0,0,0.35);
           animation: slideUp 0.25s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        .ob-topline {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .ob-step-count {
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+        }
+        .ob-close {
+          width: 32px;
+          height: 32px;
+          border-radius: 999px;
+          border: 1px solid var(--border-subtle);
+          background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
+          color: var(--text-secondary);
+          cursor: pointer;
         }
         @keyframes slideUp { from { transform: translateY(24px) scale(0.97); opacity: 0; } to { transform: none; opacity: 1; } }
         .ob-dots { display: flex; justify-content: center; gap: 8px; }
@@ -167,11 +234,13 @@ export function OnboardingModal() {
         .ob-skip { background: none; border: none; font-size: 13px; color: var(--text-muted); cursor: pointer; padding: 4px 8px; }
         .ob-skip:hover { color: var(--text-secondary); }
         .ob-nav { display: flex; align-items: center; gap: 8px; }
+        .ob-jump,
         .ob-back {
           padding: 9px 16px; border-radius: 10px; border: 1.5px solid var(--border-subtle);
           background: transparent; color: var(--text-secondary); font-size: 13px;
           font-weight: 500; cursor: pointer; transition: all 0.12s;
         }
+        .ob-jump:hover,
         .ob-back:hover { border-color: var(--primary); color: var(--primary); }
         .ob-primary {
           padding: 10px 22px; border-radius: 10px; border: none;

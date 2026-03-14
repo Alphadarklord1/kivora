@@ -1,12 +1,24 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { buildRagContext } from '@/lib/rag/retrieve';
+import { queryIndexedDocument } from '@/lib/rag/index-store';
 
-interface Message { role: 'user' | 'assistant'; content: string }
+interface MessageSource {
+  label: string;
+  preview: string;
+}
+
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: MessageSource[];
+}
 
 interface Props {
   extractedText: string;
   fileName?: string;
+  fileId?: string;
 }
 
 /* Minimal markdown → HTML for chat bubbles */
@@ -28,13 +40,21 @@ const STARTER_QUESTIONS = [
   "What is the author's conclusion?",
 ];
 
-export function ChatPanel({ extractedText, fileName }: Props) {
+export function ChatPanel({ extractedText, fileName, fileId }: Props) {
   const [messages,  setMessages]  = useState<Message[]>([]);
   const [input,     setInput]     = useState('');
   const [streaming, setStreaming] = useState(false);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const abortRef  = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function copyMessage(text: string, idx: number) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 1800);
+    }).catch(() => {});
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -62,10 +82,20 @@ export function ChatPanel({ extractedText, fileName }: Props) {
         ? (localStorage.getItem('kivora_ollama_model') ?? 'mistral')
         : 'mistral';
 
+      const retrievedSources = extractedText && fileId
+        ? await queryIndexedDocument(fileId, extractedText, q, 5).catch(() => [])
+        : [];
+
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: nextMessages, context: extractedText, model: ollamaModel }),
+        body: JSON.stringify({
+          messages: nextMessages,
+          fileId: fileId ?? null,
+          context: retrievedSources.length > 0 ? buildRagContext(retrievedSources) : extractedText,
+          sources: retrievedSources.map((source) => ({ label: source.label, preview: source.preview, text: source.text })),
+          model: ollamaModel,
+        }),
         signal: ctrl.signal,
       });
 
@@ -93,7 +123,18 @@ export function ChatPanel({ extractedText, fileName }: Props) {
           const t = line.trim();
           if (!t.startsWith('data: ')) continue;
           try {
-            const { token, done: isDone } = JSON.parse(t.slice(6));
+            const { token, done: isDone, sources } = JSON.parse(t.slice(6));
+            if (Array.isArray(sources) && sources.length > 0) {
+              setMessages(prev => {
+                const next = [...prev];
+                next[next.length - 1] = {
+                  ...(next[next.length - 1] ?? { role: 'assistant', content }),
+                  content,
+                  sources,
+                };
+                return next;
+              });
+            }
             if (isDone) break;
             content += token;
             setMessages(prev => {
@@ -125,18 +166,29 @@ export function ChatPanel({ extractedText, fileName }: Props) {
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', overflow: 'hidden' }}>
 
       {/* Context bar */}
-      <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)', flexShrink: 0 }}>
+      <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         {extractedText ? (
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)' }}>
-            💬 Chatting with: <strong>{fileName ?? 'document'}</strong>
-            <span style={{ color: 'var(--text-3)', marginLeft: 8 }}>
-              ≈{Math.round(extractedText.split(/\s+/).length / 100) * 100} words in context
+          <>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80', flexShrink: 0, boxShadow: '0 0 6px #4ade8080' }} />
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <strong>{fileName ?? 'Document'}</strong> in context
+              <span style={{ color: 'var(--text-3)', marginLeft: 6 }}>
+                ≈{(Math.round(extractedText.split(/\s+/).length / 100) * 100).toLocaleString()} words
+              </span>
             </span>
-          </span>
+          </>
         ) : (
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-            ⚠ No document loaded — open a file in <strong>Files</strong> and click <strong>⚡ Use for Generate</strong> first
-          </span>
+          <>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warning)', flexShrink: 0 }} />
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+              No document loaded — open a file in <strong style={{ color: 'var(--text-2)' }}>Files</strong> and click <strong style={{ color: 'var(--accent)' }}>⚡ Use</strong>
+            </span>
+          </>
+        )}
+        {messages.length > 0 && (
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, marginLeft: 'auto', flexShrink: 0 }} onClick={() => setMessages([])}>
+            ✕ Clear
+          </button>
         )}
       </div>
 
@@ -169,33 +221,64 @@ export function ChatPanel({ extractedText, fileName }: Props) {
         {messages.map((msg, i) => (
           <div
             key={i}
-            style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}
+            style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: 8 }}
           >
             {msg.role === 'assistant' && (
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)', color: '#fff', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginRight: 8, marginTop: 2 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                 K
               </div>
             )}
-            <div style={{
-              maxWidth: '78%',
-              padding: '10px 14px',
-              borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '4px 18px 18px 18px',
-              background: msg.role === 'user' ? 'var(--accent)' : 'var(--surface-2)',
-              color: msg.role === 'user' ? '#fff' : 'var(--text)',
-              fontSize: 'var(--text-sm)',
-              lineHeight: 1.65,
-              wordBreak: 'break-word',
-            }}>
-              {msg.role === 'assistant' ? (
-                <div dangerouslySetInnerHTML={{
-                  __html: mdToHtml(msg.content) +
-                    (streaming && i === messages.length - 1 && msg.content === ''
-                      ? '<span class="stream-cursor">▍</span>'
-                      : streaming && i === messages.length - 1
-                        ? '<span class="stream-cursor">▍</span>'
-                        : '')
-                }} />
-              ) : msg.content}
+            <div style={{ maxWidth: '78%', display: 'flex', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: 4 }}>
+              <div style={{
+                padding: '10px 14px',
+                borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '4px 18px 18px 18px',
+                background: msg.role === 'user' ? 'var(--accent)' : 'var(--surface-2)',
+                color: msg.role === 'user' ? '#fff' : 'var(--text)',
+                fontSize: 'var(--text-sm)',
+                lineHeight: 1.65,
+                wordBreak: 'break-word',
+              }}>
+                {msg.role === 'assistant' ? (
+                  <div dangerouslySetInnerHTML={{
+                    __html: mdToHtml(msg.content) +
+                      (streaming && i === messages.length - 1 ? '<span class="stream-cursor">▍</span>' : '')
+                  }} />
+                ) : msg.content}
+              </div>
+              {msg.role === 'assistant' && msg.content && !streaming && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+                  <button
+                    style={{ fontSize: 10, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}
+                    onClick={() => copyMessage(msg.content, i)}
+                  >
+                    {copiedIdx === i ? '✓ copied' : '📋 copy'}
+                  </button>
+                  {Array.isArray(msg.sources) && msg.sources.length > 0 && (
+                    <div style={{ display: 'grid', gap: 6, width: '100%' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                        Retrieved sources
+                      </div>
+                      {msg.sources.map((source) => (
+                        <div
+                          key={`${i}-${source.label}`}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: 10,
+                            border: '1px solid var(--border)',
+                            background: 'var(--surface)',
+                            fontSize: 11,
+                            color: 'var(--text-2)',
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          <strong style={{ color: 'var(--accent)' }}>{source.label}</strong>
+                          <span style={{ marginLeft: 6 }}>{source.preview}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -205,15 +288,6 @@ export function ChatPanel({ extractedText, fileName }: Props) {
 
       {/* Input bar */}
       <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', flexShrink: 0, background: 'var(--surface)' }}>
-        {messages.length > 0 && (
-          <button
-            className="btn btn-ghost btn-sm"
-            style={{ fontSize: 11, marginBottom: 8, color: 'var(--text-3)' }}
-            onClick={() => setMessages([])}
-          >
-            ✕ Clear conversation
-          </button>
-        )}
         <div style={{ display: 'flex', gap: 8 }}>
           <textarea
             ref={textareaRef}

@@ -1,7 +1,7 @@
 {
   "name": "Kivora",
   "short_name": "Kivora",
-  "description": "Your AI-powered study companion. Generate MCQs, summaries, quizzes, and study notes from any content.",
+  "description": "Offline-first study workspace with AI generation, flashcards, math tools, planner, and analytics.",
   "start_url": "/workspace",
   "id": "/workspace",
   "display": "standalone",
@@ -11,7 +11,7 @@
   "orientation": "any",
   "scope": "/",
   "lang": "en",
-  "dir": "ltr",
+  "dir": "auto",
   "prefer_related_applications": false,
   "icons": [
     {
@@ -54,12 +54,33 @@
       "url": "/library"
     },
     {
+      "name": "Planner",
+      "short_name": "Planner",
+      "description": "Review your study schedule and daily tasks",
+      "url": "/planner"
+    },
+    {
+      "name": "Math",
+      "short_name": "Math",
+      "description": "Open the math workspace and solver",
+      "url": "/math"
+    },
+    {
       "name": "Settings",
       "short_name": "Settings",
       "description": "Customize your experience",
       "url": "/settings"
     }
   ],
+  "share_target": {
+    "action": "/workspace",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "screenshots": [
     {
       "src": "/screenshots/workspace.png",

@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { InstallPrompt } from '@/components/pwa/InstallPrompt';
+import { ServiceWorkerRegistration } from '@/components/pwa/ServiceWorkerRegistration';
 
 const themeScript = `
 (function(){
@@ -82,6 +84,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#2563eb" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="Kivora" />
         <link
           href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&display=swap"
           rel="stylesheet"
@@ -90,7 +96,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <script dangerouslySetInnerHTML={{ __html: guestSessionScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <ServiceWorkerRegistration />
+        <InstallPrompt />
+      </body>
     </html>
   );
 }

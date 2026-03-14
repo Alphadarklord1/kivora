@@ -1,4 +1,6 @@
 import { NextRequest } from 'next/server';
+import { buildRagContext, retrieveFromIndex, retrieveRelevantChunks } from '@/lib/rag/retrieve';
+import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
 
 /**
  * POST /api/chat
@@ -14,11 +16,15 @@ export async function POST(req: NextRequest) {
 
   const {
     messages,
+    fileId,
     context,
+    sources: providedSources,
     model: clientModel,
   } = body as {
     messages?: Array<{ role: string; content: string }>;
+    fileId?: string;
     context?: string;
+    sources?: Array<{ label: string; preview: string; text: string }>;
     model?: string;
   };
 
@@ -32,15 +38,39 @@ export async function POST(req: NextRequest) {
     : (process.env.OLLAMA_MODEL ?? 'mistral');
 
   const encoder = new TextEncoder();
-  function sseChunk(token: string, done: boolean, source?: string): Uint8Array {
-    const payload = JSON.stringify({ token, done, ...(source ? { source } : {}) });
+  function sseChunk(token: string, done: boolean, source?: string, sources?: Array<{ label: string; preview: string }>): Uint8Array {
+    const payload = JSON.stringify({ token, done, ...(source ? { source } : {}), ...(sources ? { sources } : {}) });
     return encoder.encode(`data: ${payload}\n\n`);
   }
 
+  const lastQ = messages[messages.length - 1]?.content ?? '';
+  const persistedIndex = typeof fileId === 'string' && fileId.trim()
+    ? await getPersistedRagIndexForRequest(req, fileId.trim()).catch(() => undefined)
+    : undefined;
+  const sources = Array.isArray(providedSources) && providedSources.length > 0
+    ? providedSources.map((source, index) => ({
+        id: `provided-${index + 1}`,
+        start: 0,
+        end: source.text.length,
+        text: source.text,
+        preview: source.preview,
+        score: 0,
+        label: source.label || `S${index + 1}`,
+      }))
+    : persistedIndex
+      ? retrieveFromIndex(persistedIndex, lastQ, 5)
+    : context?.trim()
+      ? retrieveRelevantChunks(context, lastQ, 5)
+      : [];
+  const ragContext = sources.length > 0 ? buildRagContext(sources) : '';
+
   const sysContent = context?.trim()
-    ? `You are a helpful, accurate study assistant. The student has uploaded a document and will ask you questions about it. \
-Answer ONLY from the document context unless the student explicitly asks for outside knowledge. Be concise and educational.\n\n\
-DOCUMENT CONTEXT (first 8000 chars):\n${context.slice(0, 8000)}`
+    ? `You are a helpful, accurate study assistant. The student has uploaded a document and will ask you questions about it.
+Answer from the retrieved document sources first. If the sources are not enough, say that clearly instead of inventing details.
+When you use a source, cite it inline like [S1] or [S2].
+
+RETRIEVED DOCUMENT SOURCES:
+${ragContext}`
     : 'You are a helpful study assistant. Be accurate, concise, and educational.';
 
   const ollamaMessages = [
@@ -94,7 +124,7 @@ DOCUMENT CONTEXT (first 8000 chars):\n${context.slice(0, 8000)}`
               }
             }
           } finally {
-            controller.enqueue(sseChunk('', true, 'ollama'));
+            controller.enqueue(sseChunk('', true, 'ollama', sources.map(({ label, preview }) => ({ label, preview }))));
             controller.close();
           }
         },
@@ -104,9 +134,8 @@ DOCUMENT CONTEXT (first 8000 chars):\n${context.slice(0, 8000)}`
   } catch { /* fall through */ }
 
   // ── 2. Offline fallback ───────────────────────────────────────────────────
-  const lastQ = messages[messages.length - 1]?.content ?? '';
   const fallback = context?.trim()
-    ? `I can see your document, but the AI model isn't available to answer questions right now.\n\nTo enable AI chat, install Ollama from https://ollama.com and run:\n\`ollama pull mistral\`\n\nYour question: "${lastQ.slice(0, 120)}"`
+    ? `I found the most relevant document sections for your question, but the AI model is not available right now.\n\nRelevant sources:\n${sources.map(({ label, preview }) => `${label}: ${preview}`).join('\n')}\n\nTo enable AI chat, install Ollama from https://ollama.com and run:\n\`ollama pull mistral\``
     : `No AI model is available. Install Ollama from https://ollama.com and run: \`ollama pull mistral\``;
 
   const stream = new ReadableStream({
@@ -117,7 +146,7 @@ DOCUMENT CONTEXT (first 8000 chars):\n${context.slice(0, 8000)}`
         if (chunk) controller.enqueue(sseChunk(chunk, false));
         await new Promise(r => setTimeout(r, 0));
       }
-      controller.enqueue(sseChunk('', true, 'offline'));
+      controller.enqueue(sseChunk('', true, 'offline', sources.map(({ label, preview }) => ({ label, preview }))));
       controller.close();
     },
   });

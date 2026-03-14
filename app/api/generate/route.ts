@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { offlineGenerate, type ToolMode } from '@/lib/offline/generate';
+import { buildGenerationContext } from '@/lib/rag/generation-context';
+import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
 
 // Core modes supported by offline fallback
 const OFFLINE_MODES: ToolMode[] = [
@@ -25,11 +27,13 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: 'Invalid JSON.' }, { status: 400 }); }
 
-  const { mode, text, options, model: clientModel } = body as {
+  const { mode, text, options, model: clientModel, retrievalContext, fileId } = body as {
     mode?: string;
     text?: string;
     options?: Record<string, unknown>;
     model?: string;
+    retrievalContext?: string;
+    fileId?: string | null;
   };
 
   if (!mode || !VALID_MODES.includes(mode as AllModes)) {
@@ -48,6 +52,12 @@ export async function POST(req: NextRequest) {
 
   const trimmedText = text.trim();
   const currentMode = mode as AllModes;
+  const persistedIndex = typeof fileId === 'string' && fileId.trim()
+    ? await getPersistedRagIndexForRequest(req, fileId.trim()).catch(() => undefined)
+    : undefined;
+  const preparedText = typeof retrievalContext === 'string' && retrievalContext.trim()
+    ? retrievalContext.trim()
+    : buildGenerationContext(currentMode, trimmedText, options, persistedIndex);
 
   // ── 1. Ollama (open-source local LLM) ────────────────────────────────────
   const ollamaBase = process.env.OLLAMA_URL ?? 'http://localhost:11434';
@@ -55,7 +65,7 @@ export async function POST(req: NextRequest) {
     const ollamaModel = (typeof clientModel === 'string' && clientModel.trim())
       ? clientModel.trim()
       : (process.env.OLLAMA_MODEL ?? 'mistral');
-    const prompt = buildPrompt(currentMode, trimmedText, options);
+    const prompt = buildPrompt(currentMode, preparedText, options);
 
     // Try Ollama OpenAI-compatible endpoint first (works with most versions)
     const res = await fetch(`${ollamaBase}/v1/chat/completions`, {
@@ -65,7 +75,7 @@ export async function POST(req: NextRequest) {
         model: ollamaModel,
         messages: [
           { role: 'system', content: 'You are a study assistant. Be concise, accurate, and helpful.' },
-          { role: 'user', content: buildUserPrompt(currentMode, trimmedText, options) },
+          { role: 'user', content: buildUserPrompt(currentMode, preparedText, options) },
         ],
         max_tokens: 1600,
         temperature: 0.7,
@@ -110,7 +120,7 @@ export async function POST(req: NextRequest) {
   const llamaUrl = process.env.LLAMA_PROXY_URL;
   if (llamaUrl) {
     try {
-      const prompt = buildPrompt(currentMode, trimmedText, options);
+      const prompt = buildPrompt(currentMode, preparedText, options);
       const res = await fetch(`${llamaUrl}/completion`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -142,7 +152,7 @@ export async function POST(req: NextRequest) {
   }
 
   // AI-only modes (outline, exam) with no offline fallback — generate basic structure
-  const fallback = buildOfflineFallback(currentMode, trimmedText, options);
+  const fallback = buildOfflineFallback(currentMode, preparedText, options);
   return NextResponse.json({ mode, content: fallback, source: 'offline' });
 }
 

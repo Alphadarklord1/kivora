@@ -33,6 +33,7 @@ const nextConfig: NextConfig = {
   },
   // Turbopack configuration for Next.js 16+
   turbopack: {
+    root: __dirname,
     resolveAlias: {
       // Stub out Node.js modules for browser-only packages
       fs: { browser: './lib/stubs/fs.ts' },

@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
 import { offlineGenerate, type ToolMode } from '@/lib/offline/generate';
+import { buildGenerationContext } from '@/lib/rag/generation-context';
+import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
 
 const OFFLINE_MODES: ToolMode[] = [
   'summarize', 'rephrase', 'notes', 'quiz',
@@ -25,11 +27,13 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); }
   catch { return new Response('Invalid JSON', { status: 400 }); }
 
-  const { mode, text, options, model: clientModel } = body as {
+  const { mode, text, options, model: clientModel, fileId } = body as {
     mode?: string;
     text?: string;
     options?: Record<string, unknown>;
     model?: string;
+    retrievalContext?: string;
+    fileId?: string | null;
   };
 
   if (!mode || !VALID_MODES.includes(mode as AllModes)) {
@@ -42,6 +46,12 @@ export async function POST(req: NextRequest) {
 
   const trimmedText = text.trim();
   const currentMode = mode as AllModes;
+  const persistedIndex = typeof fileId === 'string' && fileId.trim()
+    ? await getPersistedRagIndexForRequest(req, fileId.trim()).catch(() => undefined)
+    : undefined;
+  const preparedContext = typeof body.retrievalContext === 'string' && body.retrievalContext.trim()
+    ? body.retrievalContext.trim()
+    : buildGenerationContext(currentMode, trimmedText, options, persistedIndex);
 
   const encoder = new TextEncoder();
 
@@ -56,7 +66,7 @@ export async function POST(req: NextRequest) {
     ? clientModel.trim()
     : (process.env.OLLAMA_MODEL ?? 'mistral');
 
-  const userPrompt = buildUserPrompt(currentMode, trimmedText, options);
+  const userPrompt = buildUserPrompt(currentMode, preparedContext, options);
 
   try {
     // Try OpenAI-compatible streaming endpoint first
@@ -121,7 +131,7 @@ export async function POST(req: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: ollamaModel,
-        prompt: buildPrompt(currentMode, trimmedText, options),
+        prompt: buildPrompt(currentMode, preparedContext, options),
         stream: true,
         options: { num_predict: 1600, temperature: 0.7 },
       }),
@@ -212,6 +222,7 @@ function buildPrompt(mode: AllModes, text: string, options?: Record<string, unkn
   const user = buildUserPrompt(mode, text, options);
   return `<|im_start|>system\n${sys}<|im_end|>\n<|im_start|>user\n${user}<|im_end|>\n<|im_start|>assistant\n`;
 }
+
 
 function buildUserPrompt(mode: AllModes, text: string, options?: Record<string, unknown>): string {
   const count = (options?.count as number | undefined) ?? 5;
