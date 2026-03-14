@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { quizAttempts, files, libraryItems, srsDecks, srsPreferences, srsReviewHistory } from '@/lib/db/schema';
-import { eq, count, avg, desc, gte } from 'drizzle-orm';
+import { eq, count, avg, desc } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/session';
 import type { SRSDeck } from '@/lib/srs/sm2';
 

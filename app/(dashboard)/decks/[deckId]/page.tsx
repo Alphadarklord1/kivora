@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { deleteDeck, loadDecks, type SRSDeck } from '@/lib/srs/sm2';
-import { buildDeckQuizContent, deckToContent, persistDeckLocally, syncDeckToCloud } from '@/lib/srs/deck-utils';
+import {
+  buildDeckQuizContent,
+  deckToContent,
+  exportDeckApkg,
+  exportDeckCsv,
+  persistDeckLocally,
+  syncDeckToCloud,
+} from '@/lib/srs/deck-utils';
 import type { GeneratedContent } from '@/lib/offline/generate';
 import { FlashcardView } from '@/components/workspace/views/FlashcardView';
 import { InteractiveQuiz } from '@/components/workspace/InteractiveQuiz';
@@ -17,37 +24,6 @@ type DeckOutput =
 function formatDate(iso?: string) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function exportDeckCsv(deck: SRSDeck) {
-  const rows = ['Front,Back', ...deck.cards.map((card) => `"${card.front.replace(/"/g, '""')}","${card.back.replace(/"/g, '""')}"`)];
-  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `${deck.name.replace(/[^a-z0-9]/gi, '_') || 'deck'}.csv`;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-async function exportDeckApkg(deck: SRSDeck) {
-  const res = await fetch('/api/srs/export', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      deckName: deck.name,
-      description: deck.description ?? '',
-      cards: deck.cards.map((card) => ({ id: card.id, front: card.front, back: card.back })),
-    }),
-  });
-  if (!res.ok) throw new Error('Anki export failed');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `${deck.name.replace(/[^a-z0-9]/gi, '_') || 'deck'}.apkg`;
-  anchor.click();
-  URL.revokeObjectURL(url);
 }
 
 export default function DeckDetailPage() {
@@ -378,7 +354,7 @@ export default function DeckDetailPage() {
             <h2>Study deck</h2>
             <p>Use the same review, write, test, match, and stats modes as the rest of the SRS system.</p>
           </div>
-          <button className={styles.inlineAction} onClick={() => void syncDeckToCloud(deck).then(() => toast('Deck synced', 'success'))}>
+          <button className={styles.inlineAction} onClick={() => void syncDeckToCloud(deck).then((ok) => toast(ok ? 'Deck synced' : 'Deck saved locally only', ok ? 'success' : 'warning'))}>
             Sync now
           </button>
         </div>

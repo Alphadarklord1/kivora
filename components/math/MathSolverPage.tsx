@@ -253,7 +253,6 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
   const [showTable, setShowTable] = useState(false);
   const [graphError, setGraphError] = useState('');
   const [tableX, setTableX] = useState('-5,-4,-3,-2,-1,0,1,2,3,4,5');
-  const [themeVersion, setThemeVersion] = useState(0);
   const graphRef = useRef<HTMLDivElement>(null);
 
   const renderGraph = useCallback(() => {
@@ -305,7 +304,7 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
         setGraphError(error instanceof Error ? error.message : 'Could not render graph');
       }
     }).catch(() => setGraphError('function-plot not available'));
-  }, [expressions, showGrid, showZeros, xMin, xMax, yMin, yMax, themeVersion]);
+  }, [expressions, showGrid, showZeros, xMin, xMax, yMin, yMax]);
 
   useEffect(() => {
     const handle = setTimeout(renderGraph, 120);
@@ -314,10 +313,12 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const observer = new MutationObserver(() => setThemeVersion((prev) => prev + 1));
+    const observer = new MutationObserver(() => {
+      renderGraph();
+    });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
     return () => observer.disconnect();
-  }, []);
+  }, [renderGraph]);
 
   useEffect(() => {
     if (!initialExpr?.trim()) return;
@@ -703,7 +704,7 @@ function SolverPanel({ onGraphExpr }: { onGraphExpr: (expr: string) => void }) {
     });
   }
 
-  async function useRecentFile() {
+  async function loadRecentFileContext() {
     if (!recentCandidate) return;
     setRecentLoading(true);
     const resolved = await recentCandidateToContext(recentCandidate);
@@ -891,7 +892,7 @@ function SolverPanel({ onGraphExpr }: { onGraphExpr: (expr: string) => void }) {
                   <strong>{recentCandidate.fileName}</strong>
                   <small>Use your most recent workspace file to ground math explanations and practice.</small>
                 </div>
-                <button className="ms-context-cta" onClick={() => void useRecentFile()} disabled={recentLoading}>
+                <button className="ms-context-cta" onClick={() => void loadRecentFileContext()} disabled={recentLoading}>
                   {recentLoading ? 'Loading…' : 'Use most recent file'}
                 </button>
               </div>

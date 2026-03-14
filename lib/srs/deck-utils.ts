@@ -64,15 +64,54 @@ export function persistDeckLocally(deck: SRSDeck): SRSDeck {
   return deck;
 }
 
-export async function syncDeckToCloud(deck: SRSDeck): Promise<void> {
+function deckDownloadName(deck: SRSDeck, extension: 'csv' | 'apkg') {
+  const safe = deck.name.replace(/[^a-z0-9]/gi, '_') || 'deck';
+  return `${safe}.${extension}`;
+}
+
+export function exportDeckCsv(deck: SRSDeck) {
+  const rows = ['Front,Back', ...deck.cards.map((card) => `"${card.front.replace(/"/g, '""')}","${card.back.replace(/"/g, '""')}"`)];
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = deckDownloadName(deck, 'csv');
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function exportDeckApkg(deck: SRSDeck): Promise<void> {
+  const res = await fetch('/api/srs/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      deckName: deck.name,
+      description: deck.description ?? '',
+      cards: deck.cards.map((card) => ({ id: card.id, front: card.front, back: card.back })),
+    }),
+  });
+  if (!res.ok) throw new Error('Anki export failed');
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = deckDownloadName(deck, 'apkg');
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function syncDeckToCloud(deck: SRSDeck): Promise<boolean> {
   try {
-    await fetch('/api/srs', {
+    const res = await fetch('/api/srs', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deck }),
     });
+    return res.ok;
   } catch {
     // Leave local deck storage as the fallback source of truth for this session.
+    return false;
   }
 }
 

@@ -111,11 +111,11 @@ export default function DeckLibraryPage() {
     if (!deck) throw new Error('Could not parse deck cards');
 
     persistDeckLocally(deck);
-    await syncDeckToCloud(deck);
+    const synced = await syncDeckToCloud(deck);
     setLastImported(deck);
     setImportUrl('');
     await refreshMyDecks();
-    toast(`Imported "${deck.name}"`, 'success');
+    toast(synced ? `Imported "${deck.name}"` : `Imported "${deck.name}" locally`, synced ? 'success' : 'warning');
     router.push(`/decks/${deck.id}?imported=1`);
   }
 

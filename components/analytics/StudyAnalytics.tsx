@@ -284,7 +284,7 @@ function StatCard({ icon, label, value, unit, accent, detail }: {
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ quizStats, planStats, weakAreas, insights, usage, deckStats }: {
+function OverviewTab({ quizStats, planStats: _planStats, weakAreas, insights, usage, deckStats }: {
   quizStats: QuizStats | null;
   planStats: PlanStats | null;
   weakAreas: WeakArea[];
@@ -489,11 +489,11 @@ function OverviewTab({ quizStats, planStats, weakAreas, insights, usage, deckSta
 
 // ─── Scores Tab ───────────────────────────────────────────────────────────────
 
-function ScoresTab({ quizStats, activity }: {
+function ScoresTab({ quizStats, activity: _activity }: {
   quizStats: QuizStats | null;
   activity: Activity | null;
 }) {
-  const recentScores = quizStats?.recentScores ?? [];
+  const recentScores = useMemo(() => quizStats?.recentScores ?? [], [quizStats?.recentScores]);
   const byMode = (quizStats?.byMode ?? {}) as Record<string, { attempts: number; avgScore: number; totalQuestions: number }>;
 
   // Build score line chart data from recent scores
@@ -660,7 +660,6 @@ function ScoresTab({ quizStats, activity }: {
 
 // ─── Activity Tab ─────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ActivityTab({ activity, period: _period }: {
   activity: Activity | null;
   period: number;

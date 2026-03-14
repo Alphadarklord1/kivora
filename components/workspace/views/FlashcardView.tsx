@@ -9,7 +9,7 @@ import {
   type SRSCard, type SRSDeck, type StudySession, type SRSReviewEvent,
 } from '@/lib/srs/sm2';
 import { parseFlashcards } from '@/lib/srs/parse';
-import { deckToContent } from '@/lib/srs/deck-utils';
+import { deckToContent, exportDeckApkg, exportDeckCsv, syncDeckToCloud } from '@/lib/srs/deck-utils';
 import { useI18n } from '@/lib/i18n/useI18n';
 import { mdToHtml } from '@/lib/utils/md';
 import { idbStore } from '@/lib/idb';
@@ -72,36 +72,6 @@ function buildTestQuestions(deck: SRSDeck): TestQuestion[] {
   });
 }
 
-// ── CSV export ────────────────────────────────────────────────────────────────
-function exportCSV(deck: SRSDeck) {
-  const rows = ['Front,Back', ...deck.cards.map(c => `"${c.front.replace(/"/g, '""')}","${c.back.replace(/"/g, '""')}"`)];
-  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `${deck.name.replace(/[^a-z0-9]/gi, '_')}.csv`; a.click();
-  URL.revokeObjectURL(url);
-}
-
-async function exportApkg(deck: SRSDeck) {
-  const res = await fetch('/api/srs/export', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      deckName: deck.name,
-      description: deck.description ?? '',
-      cards: deck.cards.map((card) => ({ id: card.id, front: card.front, back: card.back })),
-    }),
-  });
-  if (!res.ok) throw new Error('Anki export failed');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${deck.name.replace(/[^a-z0-9]/gi, '_') || 'deck'}.apkg`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 // ── TTS ───────────────────────────────────────────────────────────────────────
 function speak(text: string) {
   if (typeof window === 'undefined' || !window.speechSynthesis) return;
@@ -116,9 +86,7 @@ async function syncDeck(deck: SRSDeck) {
   const last = syncCache.get(deck.id) ?? 0;
   if (Date.now() - last < 3000) return; // debounce 3s
   syncCache.set(deck.id, Date.now());
-  try {
-    await fetch('/api/srs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deck }) });
-  } catch { /* silently ignore offline */ }
+  await syncDeckToCloud(deck);
 }
 
 async function syncSession(cards: number) {
@@ -517,7 +485,6 @@ export function FlashcardView({
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, initialDeck?.id, title]);
 
   // Load images for current review card
@@ -578,25 +545,8 @@ export function FlashcardView({
     onDeckChange?.(next);
     void syncDeck(next);
   }, [onDeckChange]);
-
-  if (!initialDeck && rawCards.length === 0) return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
-  if (!deck) return null;
-
-  const stats        = getDeckStats(deck);
-  const today        = new Date().toISOString().split('T')[0];
-  const sessionCards = [...deck.cards.filter(c => c.nextReview <= today && c.repetitions > 0), ...deck.cards.filter(c => c.repetitions === 0)];
-  const allCards     = sessionCards.length > 0 ? sessionCards : deck.cards;
-  const totalSession = allCards.length;
-  const forecastPreview = getWorkloadForecast(deck, 7);
-  const forecastPreviewMax = Math.max(...forecastPreview, 1);
-  const retentionSummary = getDeckRetentionSummary(deck);
-
-  // Today's cards reviewed
-  const todaySession = sessions.find(s => s.date === today);
-  const todayCards   = todaySession?.cards ?? 0;
-  const goalPct      = Math.min(100, Math.round((todayCards / dailyGoal) * 100));
-
   const launchPhase = useCallback((nextPhase: Exclude<Phase, 'done' | 'edit-card' | 'preview'>) => {
+    if (!deck) return;
     switch (nextPhase) {
       case 'review':
         setSessionIdx(0);
@@ -659,10 +609,27 @@ export function FlashcardView({
   }, [deck]);
 
   useEffect(() => {
-    if (!requestedPhase) return;
+    if (!requestedPhase || !deck) return;
     launchPhase(requestedPhase);
     onRequestedPhaseHandled?.();
-  }, [launchPhase, onRequestedPhaseHandled, requestedPhase]);
+  }, [deck, launchPhase, onRequestedPhaseHandled, requestedPhase]);
+
+  if (!initialDeck && rawCards.length === 0) return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
+  if (!deck) return null;
+
+  const stats        = getDeckStats(deck);
+  const today        = new Date().toISOString().split('T')[0];
+  const sessionCards = [...deck.cards.filter(c => c.nextReview <= today && c.repetitions > 0), ...deck.cards.filter(c => c.repetitions === 0)];
+  const allCards     = sessionCards.length > 0 ? sessionCards : deck.cards;
+  const totalSession = allCards.length;
+  const forecastPreview = getWorkloadForecast(deck, 7);
+  const forecastPreviewMax = Math.max(...forecastPreview, 1);
+  const retentionSummary = getDeckRetentionSummary(deck);
+
+  // Today's cards reviewed
+  const todaySession = sessions.find(s => s.date === today);
+  const todayCards   = todaySession?.cards ?? 0;
+  const goalPct      = Math.min(100, Math.round((todayCards / dailyGoal) * 100));
 
   function doGrade(grade: 0 | 1 | 2 | 3) {
     const activeDeck = deck!;
@@ -911,8 +878,8 @@ export function FlashcardView({
 
         {/* ── Compact tools / share row ─── */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => exportCSV(deck)}>⬇ {t('Export CSV')}</button>
-          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { void exportApkg(deck); }}>📦 {t('Export Anki')}</button>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => exportDeckCsv(deck)}>⬇ {t('Export CSV')}</button>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { void exportDeckApkg(deck); }}>📦 {t('Export Anki')}</button>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px', color: shareStatus==='done'?'#52b788':shareStatus==='error'?'#ef4444':undefined }} disabled={shareStatus==='loading'} onClick={handleShare}>
             {shareStatus==='loading'?'⏳':shareStatus==='done'?`✓ ${t('Shared')}`:shareStatus==='error'?`✗ ${t('Error')}`:`🔗 ${t('Share')}`}
           </button>
@@ -1072,6 +1039,7 @@ export function FlashcardView({
             {/* Image section */}
             {(face === 'front' ? frontImgUrl || editFrontImg : backImgUrl || editBackImg) ? (
               <div style={{ position:'relative', display:'inline-block', marginTop:6 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={face === 'front' ? (frontImgUrl ?? '') : (backImgUrl ?? '')} alt="" style={imgStyle} />
                 <button style={{ position:'absolute', top:4, right:4, background:'#ef4444cc', color:'#fff', border:'none', borderRadius:4, padding:'2px 6px', fontSize:10, cursor:'pointer' }} onClick={() => removeImg(face)}>✕</button>
               </div>
@@ -1547,12 +1515,14 @@ export function FlashcardView({
         <div className={`flashcard${flip ? ' flipped' : ''}`} style={{ minHeight:200 }}>
           <div className="flashcard-face">
             <div className="flashcard-label">{t('Front')}</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             {reviewFrontUrl && <img src={reviewFrontUrl} alt="" style={{ maxWidth:'100%', maxHeight:120, objectFit:'contain', borderRadius:8, marginBottom:8 }} />}
             <div className="flashcard-text">{card.front}</div>
             {!flip && <small style={{ marginTop:'auto', color:'var(--text-3)', paddingTop:12 }}>{t('Tap to reveal · swipe to grade')}</small>}
           </div>
           <div className="flashcard-face flashcard-back">
             <div className="flashcard-label">{t('Back')}</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             {reviewBackUrl && <img src={reviewBackUrl} alt="" style={{ maxWidth:'100%', maxHeight:120, objectFit:'contain', borderRadius:8, marginBottom:8 }} />}
             <div className="flashcard-text">{card.back}</div>
             {ttsEnabled && <button style={{ marginTop:'auto', background:'none', border:'none', color:'var(--text-3)', cursor:'pointer', fontSize:12 }} onClick={e => { e.stopPropagation(); speak(card.back); }}>🔊</button>}
