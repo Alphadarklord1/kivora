@@ -10,7 +10,10 @@ export type MathCategoryConfig = {
 
 export const MATH_CATEGORY_ORDER: MathCategoryId[] = [
   'algebra',
+  'geometry',
   'calculus',
+  'trigonometry',
+  'sequences-series',
   'linear-algebra',
   'statistics',
   'vectors',
@@ -21,13 +24,29 @@ export const MATH_CATEGORIES: Record<MathCategoryId, MathCategoryConfig> = {
   algebra: {
     id: 'algebra',
     label: 'Algebra',
-    supportedActions: ['Solve equation', 'Simplify expression', 'Factor / expand'],
-    practicePrompt: 'Create algebra practice questions with worked answers and one harder extension question.',
+    supportedActions: ['Solve equation', 'Quadratic roots', 'Systems', 'Inequalities', 'Simplify expression', 'Factor / expand'],
+    practicePrompt: 'Create algebra practice questions with worked answers, one inequality, and one harder extension question.',
     examples: [
       { expr: '2x + 5 = 11', desc: 'Solve a linear equation' },
+      { expr: '2x + 5 <= 11', desc: 'Solve a linear inequality' },
       { expr: 'simplify (x^2 - 4) / (x - 2)', desc: 'Simplify a rational expression' },
       { expr: 'expand (x + 3)(x - 1)', desc: 'Expand brackets' },
+      { expr: 'x^2 - 5x + 6 = 0', desc: 'Solve a quadratic equation' },
+      { expr: 'system x + y = 3; x - y = 1', desc: 'Solve simultaneous equations' },
       { expr: 'factor x^2 - 5x + 6', desc: 'Factor a quadratic expression' },
+    ],
+  },
+  geometry: {
+    id: 'geometry',
+    label: 'Geometry',
+    supportedActions: ['Pythagorean theorem', 'Distance', 'Circle area', 'Triangle area'],
+    practicePrompt: 'Create geometry practice for high-school and first-year undergraduate students with diagrams described in words, worked answers, and one applied measurement problem.',
+    examples: [
+      { expr: 'hypotenuse 3 4', desc: 'Use the Pythagorean theorem' },
+      { expr: 'distance (0,0) (3,4)', desc: 'Find the distance between two points' },
+      { expr: 'area circle radius 5', desc: 'Compute the area of a circle' },
+      { expr: 'circumference circle radius 5', desc: 'Find a circle circumference' },
+      { expr: 'area triangle base 10 height 4', desc: 'Compute triangle area' },
     ],
   },
   calculus: {
@@ -37,9 +56,34 @@ export const MATH_CATEGORIES: Record<MathCategoryId, MathCategoryConfig> = {
     practicePrompt: 'Create calculus practice problems with short worked solutions and one conceptual check.',
     examples: [
       { expr: 'derivative of x^3', desc: 'Differentiate a power' },
-      { expr: 'integral of sin(x)', desc: 'Find an antiderivative' },
+      { expr: 'integral of sin(x) dx', desc: 'Find an antiderivative' },
+      { expr: 'integral from 0 to pi of sin(x) dx', desc: 'Evaluate a definite integral' },
       { expr: 'limit x->0 of sin(x)/x', desc: 'Evaluate a classic limit' },
       { expr: 'derivative of x^2 + 2x + 1', desc: 'Differentiate a polynomial' },
+    ],
+  },
+  trigonometry: {
+    id: 'trigonometry',
+    label: 'Trigonometry',
+    supportedActions: ['Exact values', 'Trig identities', 'Angles', 'Graphs'],
+    practicePrompt: 'Create high-school and first-year undergraduate trigonometry practice with short worked answers and one identity check.',
+    examples: [
+      { expr: 'sin(pi/6)', desc: 'Evaluate an exact trig value' },
+      { expr: 'cos(pi/3)', desc: 'Work with common angles' },
+      { expr: 'sin(pi/6)^2 + cos(pi/6)^2', desc: 'Check a trig identity' },
+      { expr: 'tan(pi/4)', desc: 'Evaluate tangent at a standard angle' },
+    ],
+  },
+  'sequences-series': {
+    id: 'sequences-series',
+    label: 'Sequences & Series',
+    supportedActions: ['Arithmetic nth term', 'Arithmetic sum', 'Geometric nth term', 'Geometric sum'],
+    practicePrompt: 'Create sequence and series practice for school and first-year undergraduate students with nth-term questions, finite sums, and one interpretation question.',
+    examples: [
+      { expr: 'arithmetic nth 3 2 10', desc: 'Find the 10th term of an arithmetic sequence' },
+      { expr: 'arithmetic sum 3 2 10', desc: 'Find a finite arithmetic series sum' },
+      { expr: 'geometric nth 2 3 5', desc: 'Find the 5th term of a geometric sequence' },
+      { expr: 'geometric sum 2 3 5', desc: 'Find a finite geometric series sum' },
     ],
   },
   'linear-algebra': {
@@ -56,12 +100,14 @@ export const MATH_CATEGORIES: Record<MathCategoryId, MathCategoryConfig> = {
   statistics: {
     id: 'statistics',
     label: 'Statistics',
-    supportedActions: ['Mean', 'Median', 'Variance', 'Standard deviation'],
-    practicePrompt: 'Generate statistics practice from small datasets with answer keys and one interpretation question.',
+    supportedActions: ['Mean', 'Median', 'Variance', 'Standard deviation', 'Combinations', 'Permutations'],
+    practicePrompt: 'Generate high-school and first-year undergraduate statistics practice from small datasets, counting methods, and one interpretation question.',
     examples: [
       { expr: 'mean([4, 7, 13, 2, 8])', desc: 'Compute a mean' },
       { expr: 'median([4, 7, 13, 2, 8])', desc: 'Find a median' },
       { expr: 'std([4, 7, 13, 2, 8])', desc: 'Compute a standard deviation' },
+      { expr: 'combinations(5, 2)', desc: 'Count combinations' },
+      { expr: 'permutations(5, 2)', desc: 'Count ordered arrangements' },
     ],
   },
   vectors: {
@@ -89,7 +135,7 @@ export const MATH_CATEGORIES: Record<MathCategoryId, MathCategoryConfig> = {
 };
 
 export const MATH_SYMBOL_GROUPS: Array<{
-  id: 'basic' | 'algebra' | 'calculus' | 'matrices' | 'vectors' | 'greek';
+  id: 'basic' | 'algebra' | 'calculus' | 'trigonometry' | 'matrices' | 'vectors' | 'greek';
   label: string;
   symbols: Array<{ label: string; insert: string }>;
 }> = [
@@ -125,14 +171,28 @@ export const MATH_SYMBOL_GROUPS: Array<{
     id: 'calculus',
     label: 'Calculus',
     symbols: [
-      { label: 'd/dx', insert: 'derivative of ' },
-      { label: '∫', insert: 'integral of ' },
-      { label: '∫ₐᵇ', insert: 'integral from a to b of ' },
-      { label: 'lim', insert: 'limit x->0 of ' },
+      { label: 'd/dx', insert: 'derivative of ()' },
+      { label: '∫', insert: 'integral of () dx' },
+      { label: '∫ₐᵇ', insert: 'integral from a to b of () dx' },
+      { label: 'lim', insert: 'limit x->0 of ()' },
       { label: 'sin', insert: 'sin()' },
       { label: 'cos', insert: 'cos()' },
       { label: 'tan', insert: 'tan()' },
       { label: 'ln', insert: 'log()' },
+    ],
+  },
+  {
+    id: 'trigonometry',
+    label: 'Trigonometry',
+    symbols: [
+      { label: 'sin', insert: 'sin()' },
+      { label: 'cos', insert: 'cos()' },
+      { label: 'tan', insert: 'tan()' },
+      { label: 'sin²+cos²', insert: 'sin()^2 + cos()^2' },
+      { label: 'π/6', insert: 'pi/6' },
+      { label: 'π/4', insert: 'pi/4' },
+      { label: 'π/3', insert: 'pi/3' },
+      { label: 'θ', insert: 'theta' },
     ],
   },
   {

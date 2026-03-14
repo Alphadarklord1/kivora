@@ -27,7 +27,7 @@ const STEPS = [
     title: 'Generate AI study content',
     desc: 'Select any uploaded file and instantly generate: summaries, quizzes, flashcards, MCQs, notes, and more — using AI that runs locally.',
     highlight: 'Select a file → choose a tool from the right panel',
-    tip: 'Works offline too! Install a local AI model from the AI Models page.',
+    tip: 'Works offline too! Install a local AI model from the Models & Downloads page.',
     actionLabel: 'Open workspace tools',
     href: '/workspace',
   },

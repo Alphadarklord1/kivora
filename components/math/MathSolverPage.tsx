@@ -164,6 +164,57 @@ function normalizeInputForPreview(input: string) {
     .trim();
 }
 
+type PreparedGraphExpression = {
+  fn: string;
+  label: string;
+  kind: 'standard' | 'implicit';
+  evaluationExpr?: string;
+  supportsDerivative: boolean;
+};
+
+function prepareGraphExpression(raw: string): PreparedGraphExpression | null {
+  const expr = raw.trim();
+  if (!expr) return null;
+
+  const relation = expr.match(/^(.+?)=(.+)$/);
+  if (relation) {
+    const lhs = relation[1].trim();
+    const rhs = relation[2].trim();
+
+    if (/^y$/i.test(lhs)) {
+      return { fn: rhs, label: `y = ${rhs}`, kind: 'standard', evaluationExpr: rhs, supportsDerivative: true };
+    }
+    if (/^y$/i.test(rhs)) {
+      return { fn: lhs, label: `${lhs} = y`, kind: 'standard', evaluationExpr: lhs, supportsDerivative: true };
+    }
+
+    return {
+      fn: `(${lhs}) - (${rhs})`,
+      label: `${lhs} = ${rhs}`,
+      kind: 'implicit',
+      supportsDerivative: false,
+    };
+  }
+
+  return {
+    fn: expr,
+    label: expr,
+    kind: 'standard',
+    evaluationExpr: expr,
+    supportsDerivative: true,
+  };
+}
+
+function evaluateGraphExpressionAt(prepared: PreparedGraphExpression, x: number) {
+  if (prepared.kind !== 'standard' || !prepared.evaluationExpr) return '—';
+  try {
+    const evaluated = math.evaluate(prepared.evaluationExpr, { x });
+    return typeof evaluated === 'number' ? Number(evaluated.toFixed(4)).toString() : String(evaluated);
+  } catch {
+    return '—';
+  }
+}
+
 async function loadMostRecentCandidate(): Promise<RecentFileCandidate | null> {
   try {
     const res = await fetch('/api/recent?limit=1', { cache: 'no-store' });
@@ -274,17 +325,24 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
         const data: object[] = [];
 
         for (const entry of active) {
-          const expr = entry.expr.trim();
-          data.push({ fn: expr, color: entry.color, graphType: 'polyline' });
-          if (entry.showDerivative) {
+          const prepared = prepareGraphExpression(entry.expr);
+          if (!prepared) continue;
+
+          data.push({
+            fn: prepared.fn,
+            color: entry.color,
+            graphType: prepared.kind === 'standard' ? 'polyline' : undefined,
+            fnType: prepared.kind === 'implicit' ? 'implicit' : undefined,
+          });
+          if (entry.showDerivative && prepared.supportsDerivative) {
             data.push({
-              fn: expr,
-              derivative: { fn: expr, updateOnMouseMove: false },
+              fn: prepared.fn,
+              derivative: { fn: prepared.fn, updateOnMouseMove: false },
               color: `${entry.color}99`,
             });
           }
-          if (showZeros) {
-            data.push({ fn: expr, color: entry.color, fnType: 'x', graphType: 'scatter' });
+          if (showZeros && prepared.kind === 'standard') {
+            data.push({ fn: prepared.fn, color: entry.color, fnType: 'x', graphType: 'scatter' });
           }
         }
 
@@ -301,7 +359,10 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
         });
         applyGraphTheme(target);
       } catch (error) {
-        setGraphError(error instanceof Error ? error.message : 'Could not render graph');
+        const message = error instanceof Error ? error.message : 'Could not render graph';
+        setGraphError(message.includes('builtIn sampler')
+          ? 'This graph includes a relation like x = 2 or x^2 + y^2 = 25. Kivora now switches those to equation mode, but this entry still needs a cleaner relation.'
+          : message);
       }
     }).catch(() => setGraphError('function-plot not available'));
   }, [expressions, showGrid, showZeros, xMin, xMax, yMin, yMax]);
@@ -333,17 +394,13 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
   const tableRows = useMemo(() => {
     if (!showTable) return [];
     const xs = tableX.split(',').map((part) => Number(part.trim())).filter((value) => Number.isFinite(value));
-    const active = expressions.filter((entry) => entry.enabled && entry.expr.trim());
+    const active = expressions
+      .filter((entry) => entry.enabled && entry.expr.trim())
+      .map((entry) => ({ entry, prepared: prepareGraphExpression(entry.expr) }))
+      .filter((item) => item.prepared);
     return xs.map((x) => ({
       x,
-      values: active.map((entry) => {
-        try {
-          const evaluated = math.evaluate(entry.expr, { x });
-          return typeof evaluated === 'number' ? Number(evaluated.toFixed(4)).toString() : String(evaluated);
-        } catch {
-          return '—';
-        }
-      }),
+      values: active.map(({ prepared }) => evaluateGraphExpressionAt(prepared!, x)),
     }));
   }, [expressions, showTable, tableX]);
 
@@ -374,6 +431,14 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
   }
 
   const activeCount = expressions.filter((entry) => entry.enabled && entry.expr.trim()).length;
+  const zeroAxisX = useMemo(() => {
+    if (xMin >= 0 || xMax <= 0) return null;
+    return ((0 - xMin) / (xMax - xMin)) * 100;
+  }, [xMax, xMin]);
+  const zeroAxisY = useMemo(() => {
+    if (yMin >= 0 || yMax <= 0) return null;
+    return 100 - (((0 - yMin) / (yMax - yMin)) * 100);
+  }, [yMax, yMin]);
 
   return (
     <div className="graph-shell">
@@ -386,31 +451,42 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
           <button className="graph-add-btn" onClick={() => addExpression()}>＋ Add</button>
         </div>
 
-        {expressions.map((entry, index) => (
-          <div key={entry.id} className={`graph-row${activeExpressionId === entry.id ? ' active' : ''}`}>
-            <button
-              className="graph-color-chip"
-              style={{ background: entry.color }}
-              title={entry.enabled ? 'Hide expression' : 'Show expression'}
-              onClick={() => updateExpression(entry.id, { enabled: !entry.enabled })}
-            />
-            <button className="graph-index" onClick={() => setActiveExpressionId(entry.id)}>{index + 1}</button>
-            <div className="graph-input-wrap">
-              <input
-                className="graph-input"
-                value={entry.expr}
-                onChange={(e) => updateExpression(entry.id, { expr: e.target.value, enabled: e.target.value.trim().length > 0 })}
-                onFocus={() => setActiveExpressionId(entry.id)}
-                placeholder={index === 0 ? 'x^2' : 'f(x)'}
-                spellCheck={false}
+        {expressions.map((entry, index) => {
+          const prepared = prepareGraphExpression(entry.expr);
+          const derivativeDisabled = prepared?.supportsDerivative === false;
+          return (
+            <div key={entry.id} className={`graph-row${activeExpressionId === entry.id ? ' active' : ''}`}>
+              <button
+                className="graph-color-chip"
+                style={{ background: entry.color }}
+                title={entry.enabled ? 'Hide expression' : 'Show expression'}
+                onClick={() => updateExpression(entry.id, { enabled: !entry.enabled })}
               />
-              <div className="graph-row-actions">
-                <button className={`graph-derivative${entry.showDerivative ? ' on' : ''}`} onClick={() => updateExpression(entry.id, { showDerivative: !entry.showDerivative })}>f′</button>
-                <button className="graph-remove" onClick={() => removeExpression(entry.id)}>✕</button>
+              <button className="graph-index" onClick={() => setActiveExpressionId(entry.id)}>{index + 1}</button>
+              <div className="graph-input-wrap">
+                <input
+                  className="graph-input"
+                  value={entry.expr}
+                  onChange={(e) => updateExpression(entry.id, { expr: e.target.value, enabled: e.target.value.trim().length > 0 })}
+                  onFocus={() => setActiveExpressionId(entry.id)}
+                  placeholder={index === 0 ? 'y = x^2' : 'f(x) or x^2 + y^2 = 25'}
+                  spellCheck={false}
+                />
+                <div className="graph-row-actions">
+                  <button
+                    className={`graph-derivative${entry.showDerivative ? ' on' : ''}`}
+                    onClick={() => updateExpression(entry.id, { showDerivative: !entry.showDerivative })}
+                    disabled={derivativeDisabled}
+                    title={derivativeDisabled ? 'Derivative is available for y = f(x) entries' : 'Show derivative'}
+                  >
+                    f′
+                  </button>
+                  <button className="graph-remove" onClick={() => removeExpression(entry.id)}>✕</button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         <div className="graph-sidebar-section">
           <div className="graph-sidebar-subtitle">View</div>
@@ -435,7 +511,7 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
 
           <div className="graph-toggle-list">
             <label><input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} /> Grid</label>
-            <label><input type="checkbox" checked={showZeros} onChange={(e) => setShowZeros(e.target.checked)} /> Zeros</label>
+            <label><input type="checkbox" checked={showZeros} onChange={(e) => setShowZeros(e.target.checked)} /> Roots / intercepts</label>
             <label><input type="checkbox" checked={showTable} onChange={(e) => setShowTable(e.target.checked)} /> Value table</label>
           </div>
         </div>
@@ -443,7 +519,7 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
         <div className="graph-sidebar-section">
           <div className="graph-sidebar-subtitle">Quick presets</div>
           <div className="graph-preset-grid">
-            {['x^2', 'sin(x)', 'cos(x)', 'tan(x)', '1/x', 'exp(x)', 'log(x)', 'abs(x)'].map((preset) => (
+            {['y = x^2', 'y = sin(x)', 'y = cos(x)', 'y = tan(x)', 'x = 2', 'x^2 + y^2 = 25', 'y = exp(x)', 'y = abs(x)'].map((preset) => (
               <button key={preset} className="graph-preset" onClick={() => addExpression(preset)}>{preset}</button>
             ))}
           </div>
@@ -459,11 +535,16 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
           </div>
           <div className="graph-toolbar-meta">
             <span>{activeCount} active expression{activeCount === 1 ? '' : 's'}</span>
+            <span>Type `y = ...` or full equations like `x^2 + y^2 = 25`</span>
             <span>Drag to pan · Scroll to zoom</span>
           </div>
         </div>
 
-        <div ref={graphRef} className="graph-canvas" />
+        <div className="graph-canvas-wrap">
+          <div ref={graphRef} className="graph-canvas" />
+          {zeroAxisX !== null ? <div className="graph-zero-axis vertical" style={{ left: `${zeroAxisX}%` }} /> : null}
+          {zeroAxisY !== null ? <div className="graph-zero-axis horizontal" style={{ top: `${zeroAxisY}%` }} /> : null}
+        </div>
         {graphError && <div className="graph-error">{graphError}</div>}
 
         {showTable && tableRows.length > 0 && (
@@ -476,8 +557,12 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
               <thead>
                 <tr>
                   <th>x</th>
-                  {expressions.filter((entry) => entry.enabled && entry.expr.trim()).map((entry) => (
-                    <th key={entry.id} style={{ color: entry.color }}>{entry.expr}</th>
+                  {expressions
+                    .filter((entry) => entry.enabled && entry.expr.trim())
+                    .map((entry) => ({ entry, prepared: prepareGraphExpression(entry.expr) }))
+                    .filter((item) => item.prepared)
+                    .map(({ entry, prepared }) => (
+                      <th key={entry.id} style={{ color: entry.color }}>{prepared!.label}</th>
                   ))}
                 </tr>
               </thead>
@@ -511,6 +596,7 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
         .graph-row-actions { display: flex; gap: 6px; }
         .graph-derivative, .graph-remove { border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-muted); padding: 6px 8px; cursor: pointer; }
         .graph-derivative.on { background: var(--primary); color: white; border-color: var(--primary); }
+        .graph-derivative:disabled { opacity: 0.45; cursor: not-allowed; }
         .graph-sidebar-section { padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); }
         .graph-sidebar-subtitle { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 700; margin-bottom: 10px; }
         .graph-domain-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -526,7 +612,11 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
         .graph-toolbar-btn { border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); border-radius: 10px; padding: 8px 12px; cursor: pointer; }
         .graph-toolbar-btn.primary { background: var(--primary); color: white; border-color: var(--primary); }
         .graph-toolbar-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
-        .graph-canvas { flex: 1; min-height: 420px; }
+        .graph-canvas-wrap { position: relative; flex: 1; min-height: 420px; background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 92%, transparent), var(--bg-surface)); }
+        .graph-canvas { position: absolute; inset: 0; }
+        .graph-zero-axis { position: absolute; pointer-events: none; background: color-mix(in srgb, var(--text-primary) 38%, transparent); }
+        .graph-zero-axis.vertical { top: 0; bottom: 0; width: 1.5px; transform: translateX(-0.75px); }
+        .graph-zero-axis.horizontal { left: 0; right: 0; height: 1.5px; transform: translateY(-0.75px); }
         .graph-error { margin: 12px 18px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(239,68,68,0.25); background: rgba(239,68,68,0.08); color: #ef4444; font-size: 13px; }
         .graph-table-wrap { border-top: 1px solid var(--border-subtle); background: var(--bg-elevated); padding: 14px 18px 18px; }
         .graph-table-header { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
@@ -686,8 +776,25 @@ function SolverPanel({ onGraphExpr }: { onGraphExpr: (expr: string) => void }) {
   const previewLatex = useMemo(() => formatMathExpression(normalizeInputForPreview(input || '')), [input]);
   const categoryConfig = MATH_CATEGORIES[activeCategory];
 
+  useEffect(() => {
+    const preferredGroup: Partial<Record<MathCategoryId, SymbolGroupId>> = {
+      algebra: 'algebra',
+      geometry: 'basic',
+      calculus: 'calculus',
+      trigonometry: 'trigonometry',
+      'sequences-series': 'algebra',
+      vectors: 'vectors',
+      matrices: 'matrices',
+      'linear-algebra': 'matrices',
+    };
+    const nextGroup = preferredGroup[activeCategory];
+    if (nextGroup) setSymbolGroup(nextGroup);
+  }, [activeCategory]);
+
   function insertSymbol(symbol: string) {
     const target = inputRef.current;
+    const placeholderIndex = symbol.indexOf('()');
+    const caretOffset = placeholderIndex >= 0 ? placeholderIndex + 1 : symbol.length;
     if (!target) {
       setInput((prev) => `${prev}${symbol}`);
       return;
@@ -699,7 +806,7 @@ function SolverPanel({ onGraphExpr }: { onGraphExpr: (expr: string) => void }) {
     setInput(next);
     requestAnimationFrame(() => {
       target.focus();
-      const caret = start + symbol.length;
+      const caret = start + caretOffset;
       target.setSelectionRange(caret, caret);
     });
   }
@@ -904,7 +1011,7 @@ function SolverPanel({ onGraphExpr }: { onGraphExpr: (expr: string) => void }) {
                 className="ms-input"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Examples: 2x + 5 = 11, derivative of x^3, integral of sin(x), dot product [3,2] [1,4]"
+                placeholder="Examples: 2x + 5 <= 11, x^2 - 5x + 6 = 0, hypotenuse 3 4, arithmetic nth 3 2 10"
                 spellCheck={false}
               />
               <button className="ms-solve-btn" onClick={() => void handleSolve()} disabled={loading || !input.trim()}>
@@ -918,12 +1025,15 @@ function SolverPanel({ onGraphExpr }: { onGraphExpr: (expr: string) => void }) {
               <div className="ms-preview">
                 <div className="ms-preview-head">
                   <span className="ms-preview-label">Preview</span>
-                  <span className="ms-preview-hint">Formatted math symbols before solving</span>
+                  <span className="ms-preview-hint">Rendered notation before solving</span>
                 </div>
                 <div className="ms-preview-latex">
                   <LatexBlock latex={previewLatex} display />
                 </div>
-                <div className="ms-preview-raw">{normalizeInputForPreview(input)}</div>
+                <div className="ms-preview-raw">
+                  <span className="ms-preview-raw-label">Input syntax</span>
+                  <code>{normalizeInputForPreview(input)}</code>
+                </div>
               </div>
             )}
 
@@ -974,8 +1084,8 @@ function SolverPanel({ onGraphExpr }: { onGraphExpr: (expr: string) => void }) {
           {!result && !loading && (
             <div className="ms-empty">
               <span className="ms-empty-icon">𝑓(x)</span>
-              <p>Enter a problem, use the math keyboard, and solve it with steps.</p>
-              <p className="ms-empty-hint">Then explain the concept, send it to the graph tab, or generate practice questions.</p>
+              <p>Enter algebra, geometry, trigonometry, sequences, calculus, matrix, or statistics problems and solve them with steps.</p>
+              <p className="ms-empty-hint">Then explain the concept, send graphable work to the graph tab, or generate practice questions grounded in your course file.</p>
             </div>
           )}
 
@@ -1082,7 +1192,9 @@ function SolverPanel({ onGraphExpr }: { onGraphExpr: (expr: string) => void }) {
         .ms-preview-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
         .ms-preview-hint { font-size: 11px; color: var(--text-muted); }
         .ms-preview-latex { display: flex; justify-content: center; min-height: 52px; padding: 8px 4px 10px; overflow-x: auto; }
-        .ms-preview-raw { padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--bg-elevated) 82%, transparent); border: 1px solid var(--border-subtle); font-size: 12px; line-height: 1.55; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; white-space: pre-wrap; word-break: break-word; }
+        .ms-preview-raw { display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--bg-elevated) 82%, transparent); border: 1px solid var(--border-subtle); font-size: 12px; line-height: 1.55; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; }
+        .ms-preview-raw-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-family: var(--font-sans, inherit); }
+        .ms-preview-raw code { font-family: 'JetBrains Mono', monospace; }
         .ms-keyboard-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
         .ms-keyboard-tab { border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-muted); border-radius: 999px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
         .ms-keyboard-tab.active { background: var(--primary); color: white; border-color: var(--primary); }

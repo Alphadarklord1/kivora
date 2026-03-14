@@ -24,12 +24,13 @@ export default function SettingsPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const [saved, setSaved] = useState(false);
-  const [activeModel, setActiveModel] = useState(DEFAULT_MODEL);
+  const [activeModel, setActiveModel] = useState(() => {
+    if (typeof window === 'undefined') return DEFAULT_MODEL;
+    return localStorage.getItem(OLLAMA_MODEL_KEY) || DEFAULT_MODEL;
+  });
   const [ollamaStatus, setOllamaStatus] = useState<'checking' | 'ok' | 'none'>('checking');
 
   useEffect(() => {
-    const stored = localStorage.getItem(OLLAMA_MODEL_KEY);
-    if (stored) setActiveModel(stored);
     // Quick Ollama check
     const base = process.env.NEXT_PUBLIC_OLLAMA_URL ?? 'http://localhost:11434';
     fetch(`${base}/api/version`, { signal: AbortSignal.timeout(2500) })
@@ -191,7 +192,7 @@ export default function SettingsPage() {
           </div>
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', margin: 0 }}>
             Make sure the selected model is installed via <code>ollama pull {activeModel}</code>.
-            Visit the <a href="/models" style={{ color: 'var(--accent)' }}>AI Models</a> page to install models.
+            Visit the <a href="/models" style={{ color: 'var(--accent)' }}>Models & Downloads</a> page to install models.
           </p>
         </div>
       </section>

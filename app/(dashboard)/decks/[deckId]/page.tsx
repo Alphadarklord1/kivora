@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { deleteDeck, loadDecks, type SRSDeck } from '@/lib/srs/sm2';
+import { createCard, deleteDeck, loadDecks, saveDeck, type SRSDeck } from '@/lib/srs/sm2';
 import {
   buildDeckQuizContent,
   deckToContent,
@@ -20,6 +20,8 @@ import styles from './page.module.css';
 type DeckOutput =
   | { kind: 'quiz'; title: string; content: string; quiz: GeneratedContent }
   | { kind: 'summarize' | 'exam' | 'explanation'; title: string; content: string };
+
+type EditableCard = { id: string; front: string; back: string };
 
 function formatDate(iso?: string) {
   if (!iso) return '—';
@@ -46,14 +48,26 @@ export default function DeckDetailPage() {
   const [explaining, setExplaining] = useState(false);
   const [generating, setGenerating] = useState<'quiz' | 'summarize' | 'exam' | null>(null);
   const [output, setOutput] = useState<DeckOutput | null>(null);
+  const [editingMeta, setEditingMeta] = useState(false);
+  const [savingDeckState, setSavingDeckState] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [descriptionDraft, setDescriptionDraft] = useState('');
+  const [cardDrafts, setCardDrafts] = useState<EditableCard[]>([]);
 
   const deckContent = useMemo(() => (deck ? deckToContent(deck) : ''), [deck]);
+
+  const hydrateDrafts = useCallback((nextDeck: SRSDeck | null) => {
+    setNameDraft(nextDeck?.name ?? '');
+    setDescriptionDraft(nextDeck?.description ?? '');
+    setCardDrafts((nextDeck?.cards ?? []).map((card) => ({ id: card.id, front: card.front, back: card.back })));
+  }, []);
 
   const loadDeck = useCallback(async () => {
     setLoading(true);
     const localDeck = loadDecks().find((candidate) => candidate.id === deckId) ?? null;
     if (localDeck) {
       setDeck(localDeck);
+      hydrateDrafts(localDeck);
       setMissing(false);
     }
 
@@ -63,6 +77,7 @@ export default function DeckDetailPage() {
         const remoteDeck = await res.json() as SRSDeck;
         persistDeckLocally(remoteDeck);
         setDeck(remoteDeck);
+        hydrateDrafts(remoteDeck);
         setMissing(false);
       } else if (!localDeck && res.status === 404) {
         setMissing(true);
@@ -72,11 +87,21 @@ export default function DeckDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [deckId]);
+  }, [deckId, hydrateDrafts]);
 
   useEffect(() => {
     void loadDeck();
   }, [loadDeck]);
+
+  async function applyDeckUpdate(nextDeck: SRSDeck, successMessage: string) {
+    setSavingDeckState(true);
+    saveDeck(nextDeck);
+    setDeck(nextDeck);
+    hydrateDrafts(nextDeck);
+    const synced = await syncDeckToCloud(nextDeck);
+    toast(synced ? successMessage : `${successMessage} (saved locally)`, synced ? 'success' : 'warning');
+    setSavingDeckState(false);
+  }
 
   async function saveDeckOutput(mode: 'quiz' | 'summarize' | 'exam', content: string) {
     if (!deck) return;
@@ -222,6 +247,51 @@ export default function DeckDetailPage() {
     router.push('/decks');
   }
 
+  async function handleSaveDeckEdits() {
+    if (!deck) return;
+    const trimmedName = nameDraft.trim();
+    const trimmedCards = cardDrafts
+      .map((card) => ({ ...card, front: card.front.trim(), back: card.back.trim() }))
+      .filter((card) => card.front && card.back);
+
+    if (!trimmedName) {
+      toast('Deck name cannot be empty', 'error');
+      return;
+    }
+    if (trimmedCards.length === 0) {
+      toast('Add at least one valid card', 'error');
+      return;
+    }
+
+    const nextDeck: SRSDeck = {
+      ...deck,
+      name: trimmedName,
+      description: descriptionDraft.trim(),
+      cards: deck.cards
+        .map((existing) => {
+          const draft = trimmedCards.find((card) => card.id === existing.id);
+          return draft ? { ...existing, front: draft.front, back: draft.back } : null;
+        })
+        .filter(Boolean) as SRSDeck['cards'],
+    };
+
+    const newCards = trimmedCards.filter((card) => !deck.cards.some((existing) => existing.id === card.id));
+    nextDeck.cards = [
+      ...nextDeck.cards,
+      ...newCards.map((card) => createCard(card.id, card.front, card.back)),
+    ];
+
+    await applyDeckUpdate(nextDeck, 'Deck updated');
+    setEditingMeta(false);
+  }
+
+  function addDraftCard() {
+    setCardDrafts((current) => [
+      ...current,
+      { id: `draft-${crypto.randomUUID().slice(0, 8)}`, front: '', back: '' },
+    ]);
+  }
+
   if (loading && !deck) {
     return <div className={styles.emptyState}>Loading deck…</div>;
   }
@@ -243,10 +313,19 @@ export default function DeckDetailPage() {
       <section className={styles.hero}>
         <div>
           <p className={styles.eyebrow}>Deck Viewer</p>
-          <h1>{deck.name}</h1>
-          <p className={styles.description}>
-            {deck.description || 'Open the deck, review cards with FSRS study modes, and generate quiz, summary, and exam outputs from the same source material.'}
-          </p>
+          {editingMeta ? (
+            <div className={styles.editorMeta}>
+              <input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} className={styles.metaInput} />
+              <textarea value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} className={styles.metaTextarea} rows={3} />
+            </div>
+          ) : (
+            <>
+              <h1>{deck.name}</h1>
+              <p className={styles.description}>
+                {deck.description || 'Open the deck, review cards with FSRS study modes, and generate quiz, summary, and exam outputs from the same source material.'}
+              </p>
+            </>
+          )}
 
           <div className={styles.metaList}>
             <span>{deck.cards.length} cards</span>
@@ -256,37 +335,34 @@ export default function DeckDetailPage() {
             <span>Last studied {formatDate(deck.lastStudied)}</span>
           </div>
 
-          <div className={styles.actions}>
-            <button className={styles.primaryButton} onClick={() => openStudy('review')}>
-              Study deck
-            </button>
-            <button className={styles.secondaryButton} disabled={!!generating} onClick={() => void handleGenerateQuiz()}>
-              {generating === 'quiz' ? 'Generating…' : 'Generate quiz'}
-            </button>
-            <button className={styles.secondaryButton} disabled={!!generating} onClick={() => void handleGenerate('summarize')}>
-              {generating === 'summarize' ? 'Generating…' : 'Generate summary'}
-            </button>
-            <button className={styles.secondaryButton} disabled={!!generating} onClick={() => void handleGenerate('exam')}>
-              {generating === 'exam' ? 'Generating…' : 'Generate exam'}
-            </button>
-            <button className={styles.secondaryButton} disabled={explaining} onClick={() => void handleExplain()}>
-              {explaining ? 'Explaining…' : 'Explain this deck'}
-            </button>
-            <button className={styles.secondaryButton} disabled={publishing} onClick={() => void handlePublish()}>
-              {publishing ? 'Publishing…' : 'Publish'}
-            </button>
-            <button className={styles.secondaryButton} onClick={() => exportDeckCsv(deck)}>
-              Export CSV
-            </button>
-            <button className={styles.secondaryButton} onClick={() => { void exportDeckApkg(deck).catch(() => toast('Anki export failed', 'error')); }}>
-              Export Anki
-            </button>
-            <button className={styles.secondaryButton} onClick={() => studyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-              Edit deck
-            </button>
-            <button className={styles.dangerButton} onClick={() => void handleDeleteDeck()}>
-              Delete
-            </button>
+          <div className={styles.actionGroups}>
+            <div className={styles.actionGroup}>
+              <span className={styles.groupLabel}>Study</span>
+              <div className={styles.actions}>
+                <button className={styles.primaryButton} onClick={() => openStudy('review')}>Study deck</button>
+                <button className={styles.secondaryButton} onClick={() => openStudy('learn')}>Learn</button>
+                <button className={styles.secondaryButton} onClick={() => openStudy('test')}>Test</button>
+              </div>
+            </div>
+            <div className={styles.actionGroup}>
+              <span className={styles.groupLabel}>Tools</span>
+              <div className={styles.actions}>
+                <button className={styles.secondaryButton} disabled={!!generating} onClick={() => void handleGenerateQuiz()}>{generating === 'quiz' ? 'Generating…' : 'Quiz'}</button>
+                <button className={styles.secondaryButton} disabled={!!generating} onClick={() => void handleGenerate('summarize')}>{generating === 'summarize' ? 'Generating…' : 'Summary'}</button>
+                <button className={styles.secondaryButton} disabled={!!generating} onClick={() => void handleGenerate('exam')}>{generating === 'exam' ? 'Generating…' : 'Exam'}</button>
+                <button className={styles.secondaryButton} disabled={explaining} onClick={() => void handleExplain()}>{explaining ? 'Explaining…' : 'Explain'}</button>
+              </div>
+            </div>
+            <div className={styles.actionGroup}>
+              <span className={styles.groupLabel}>Publish & Export</span>
+              <div className={styles.actions}>
+                <button className={styles.secondaryButton} disabled={publishing} onClick={() => void handlePublish()}>{publishing ? 'Publishing…' : 'Publish'}</button>
+                <button className={styles.secondaryButton} onClick={() => exportDeckCsv(deck)}>Export CSV</button>
+                <button className={styles.secondaryButton} onClick={() => { void exportDeckApkg(deck).catch(() => toast('Anki export failed', 'error')); }}>Export Anki</button>
+                <button className={styles.secondaryButton} onClick={() => setEditingMeta((current) => !current)}>{editingMeta ? 'Close edit' : 'Edit deck'}</button>
+                <button className={styles.dangerButton} onClick={() => void handleDeleteDeck()}>Delete</button>
+              </div>
+            </div>
           </div>
 
           {publicUrl && (
@@ -321,7 +397,7 @@ export default function DeckDetailPage() {
           <div className={styles.bannerActions}>
             <button className={styles.primaryButton} onClick={() => openStudy('review')}>Study deck</button>
             <button className={styles.secondaryButton} onClick={() => void handleGenerateQuiz()}>Generate quiz</button>
-            <button className={styles.secondaryButton} onClick={() => studyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Edit deck</button>
+            <button className={styles.secondaryButton} onClick={() => setEditingMeta(true)}>Edit deck</button>
           </div>
         </section>
       )}
@@ -341,12 +417,60 @@ export default function DeckDetailPage() {
           {output.kind === 'quiz' ? (
             <InteractiveQuiz content={output.quiz} deckId={deck.id} onClose={() => setOutput(null)} />
           ) : (
-            <div className={styles.generatedText}>
-              {output.content}
-            </div>
+            <div className={styles.generatedText}>{output.content}</div>
           )}
         </section>
       )}
+
+      <section className={styles.editorCard}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <h2>Deck editor</h2>
+            <p>Rename the deck, revise the description, and edit cards inline before jumping into study mode.</p>
+          </div>
+          <div className={styles.actions}>
+            <button className={styles.secondaryButton} onClick={addDraftCard}>Add card</button>
+            <button className={styles.primaryButton} disabled={savingDeckState} onClick={() => void handleSaveDeckEdits()}>
+              {savingDeckState ? 'Saving…' : 'Save deck'}
+            </button>
+          </div>
+        </div>
+
+        <div className={styles.editorFields}>
+          <div>
+            <label className={styles.fieldLabel}>Deck name</label>
+            <input className={styles.metaInput} value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} />
+          </div>
+          <div>
+            <label className={styles.fieldLabel}>Description</label>
+            <textarea className={styles.metaTextarea} rows={3} value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} />
+          </div>
+        </div>
+
+        <div className={styles.cardEditorList}>
+          {cardDrafts.map((card, index) => (
+            <div key={card.id} className={styles.cardEditorRow}>
+              <div className={styles.cardOrdinal}>#{index + 1}</div>
+              <input
+                className={styles.cardInput}
+                value={card.front}
+                onChange={(event) => setCardDrafts((current) => current.map((draft) => draft.id === card.id ? { ...draft, front: event.target.value } : draft))}
+                placeholder="Front"
+              />
+              <textarea
+                className={styles.cardTextarea}
+                rows={2}
+                value={card.back}
+                onChange={(event) => setCardDrafts((current) => current.map((draft) => draft.id === card.id ? { ...draft, back: event.target.value } : draft))}
+                placeholder="Back"
+              />
+              <button className={styles.inlineAction} onClick={() => setCardDrafts((current) => current.filter((draft) => draft.id !== card.id))}>
+                Delete
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section ref={studyRef} className={styles.studyCard}>
         <div className={styles.sectionHeader}>
@@ -364,7 +488,10 @@ export default function DeckDetailPage() {
           title={deck.name}
           requestedPhase={requestedPhase}
           onRequestedPhaseHandled={() => setRequestedPhase(null)}
-          onDeckChange={setDeck}
+          onDeckChange={(nextDeck) => {
+            setDeck(nextDeck);
+            hydrateDrafts(nextDeck);
+          }}
           showBrowseButton={false}
         />
       </section>

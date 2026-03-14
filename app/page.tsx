@@ -13,7 +13,7 @@ export default function RootPage() {
         </Link>
 
         <div className={styles.topbarActions}>
-          <Link href="/downloads" className={styles.secondaryAction}>
+          <Link href="/models?tab=downloads" className={styles.secondaryAction}>
             Download Desktop
           </Link>
           <Link href="/login" className={styles.secondaryAction}>
@@ -242,7 +242,7 @@ export default function RootPage() {
             <Link href="/workspace" className={styles.primaryActionLarge}>
               Continue as Guest
             </Link>
-            <Link href="/downloads" className={styles.secondaryActionLarge}>
+            <Link href="/models?tab=downloads" className={styles.secondaryActionLarge}>
               Download Kivora
             </Link>
           </div>

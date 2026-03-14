@@ -15,9 +15,8 @@ const NAV = [
   { href: '/library',   label: 'Library',   icon: '🗂️' },
   { href: '/decks',     label: 'Decks',     icon: '🃏' },
   { href: '/analytics', label: 'Analytics', icon: '📊' },
-  { href: '/models',    label: 'AI Models', icon: '🤖' },
+  { href: '/models',    label: 'Models & Downloads', icon: '🤖' },
   { href: '/sharing',   label: 'Sharing',   icon: '🔗' },
-  { href: '/downloads', label: 'Download',  icon: '⬇️' },
   { href: '/settings',  label: 'Settings',  icon: '⚙️' },
   { href: '/report',    label: 'Report',    icon: '🩺' },
 ];
@@ -33,6 +32,7 @@ function SidebarAvatar({ src, name, email }: { src?: string | null; name?: strin
   })();
   const hue = Array.from(email ?? '').reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
   if (src) {
+    // eslint-disable-next-line @next/next/no-img-element
     return <img src={src} alt={letters} style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
   }
   return (
