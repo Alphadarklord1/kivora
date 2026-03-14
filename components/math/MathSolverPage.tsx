@@ -156,6 +156,55 @@ async function verifyWithAI(problem: string, computedAnswer: string): Promise<st
   }
 }
 
+function cssVar(name: string, fallback: string) {
+  if (typeof window === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+function applyGraphTheme(container: HTMLDivElement) {
+  const svg = container.querySelector('svg');
+  if (!svg) return;
+
+  const bgSurface = cssVar('--bg-surface', '#0b1220');
+  const bgElevated = cssVar('--bg-elevated', '#101827');
+  const border = cssVar('--border-subtle', 'rgba(148, 163, 184, 0.24)');
+  const textMuted = cssVar('--text-muted', '#94a3b8');
+  const textPrimary = cssVar('--text-primary', '#e5e7eb');
+  const primary = cssVar('--primary', '#6366f1');
+  const gridStroke = 'rgba(148, 163, 184, 0.18)';
+
+  (svg as SVGSVGElement).style.display = 'block';
+  (svg as SVGSVGElement).style.width = '100%';
+  (svg as SVGSVGElement).style.height = '100%';
+  (svg as SVGSVGElement).style.background = `linear-gradient(180deg, ${bgElevated}, ${bgSurface})`;
+  (svg as SVGSVGElement).style.borderRadius = '18px';
+
+  container.querySelectorAll('.x.axis text, .y.axis text').forEach((node) => {
+    (node as SVGElement).setAttribute('fill', textMuted);
+  });
+
+  container.querySelectorAll('.x.axis line, .y.axis line, .x.axis path, .y.axis path').forEach((node) => {
+    (node as SVGElement).setAttribute('stroke', border);
+  });
+
+  container.querySelectorAll('.x.grid .tick line, .y.grid .tick line, .grid line').forEach((node) => {
+    (node as SVGElement).setAttribute('stroke', gridStroke);
+  });
+
+  container.querySelectorAll('.tip line, .tip path').forEach((node) => {
+    (node as SVGElement).setAttribute('stroke', primary);
+  });
+
+  container.querySelectorAll('.tip text').forEach((node) => {
+    (node as SVGElement).setAttribute('fill', textPrimary);
+  });
+
+  container.querySelectorAll('path.line').forEach((node) => {
+    (node as SVGElement).setAttribute('stroke-width', '2.8');
+  });
+}
+
 // ─── Graph Panel ──────────────────────────────────────────────────────────
 
 function GraphPanel({ initialExpr }: { initialExpr?: string }) {
@@ -176,6 +225,7 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
   const [showTable, setShowTable] = useState(false);
   const [tableX, setTableX] = useState('-5,-4,-3,-2,-1,0,1,2,3,4,5');
   const [graphError, setGraphError] = useState('');
+  const [themeVersion, setThemeVersion] = useState(0);
   const graphRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -223,19 +273,27 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
           data,
           tip: { xLine: true, yLine: true },
         });
+        applyGraphTheme(container);
       } catch (err) {
         setGraphError(String(err));
       }
     }).catch(() => {
       setGraphError('function-plot not available');
     });
-  }, [fns, xMin, xMax, yMin, yMax, showGrid, showZeros]);
+  }, [fns, xMin, xMax, yMin, yMax, showGrid, showZeros, themeVersion]);
 
   useEffect(() => {
     if (plotRef.current) clearTimeout(plotRef.current);
     plotRef.current = setTimeout(renderGraph, 250);
     return () => { if (plotRef.current) clearTimeout(plotRef.current); };
   }, [renderGraph]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const observer = new MutationObserver(() => setThemeVersion(v => v + 1));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
+    return () => observer.disconnect();
+  }, []);
 
   // Update when initialExpr changes (from solver)
   useEffect(() => {
@@ -268,6 +326,29 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
 
   const updateFn = (id: string, patch: Partial<GraphFn>) => {
     setFns(prev => prev.map(f => f.id === id ? { ...f, ...patch } : f));
+  };
+
+  const activeFns = fns.filter(f => f.enabled && f.expr.trim());
+
+  const zoomIn = () => {
+    setXMin(v => v * 0.78);
+    setXMax(v => v * 0.78);
+    setYMin(v => v * 0.78);
+    setYMax(v => v * 0.78);
+  };
+
+  const zoomOut = () => {
+    setXMin(v => v * 1.28);
+    setXMax(v => v * 1.28);
+    setYMin(v => v * 1.28);
+    setYMax(v => v * 1.28);
+  };
+
+  const resetView = () => {
+    setXMin(-10);
+    setXMax(10);
+    setYMin(-10);
+    setYMax(10);
   };
 
   return (
@@ -366,6 +447,17 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
 
       {/* Right: canvas + table */}
       <div className="graph-main">
+        <div className="graph-toolbar">
+          <div className="graph-toolbar-left">
+            <button className="graph-toolbar-btn primary" onClick={resetView}>Home</button>
+            <button className="graph-toolbar-btn" onClick={zoomIn}>＋</button>
+            <button className="graph-toolbar-btn" onClick={zoomOut}>－</button>
+          </div>
+          <div className="graph-toolbar-meta">
+            <span>{activeFns.length} active function{activeFns.length !== 1 ? 's' : ''}</span>
+            <span>Drag to pan · Scroll to zoom</span>
+          </div>
+        </div>
         <div ref={graphRef} className="graph-canvas" />
         {graphError && (
           <div className="graph-error">Could not render: {graphError}</div>
@@ -494,9 +586,83 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
         .graph-main {
           flex: 1; display: flex; flex-direction: column; overflow: hidden;
         }
+        .graph-toolbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 12px 16px;
+          border-bottom: 1px solid var(--border-subtle);
+          background: color-mix(in srgb, var(--bg-elevated) 90%, transparent);
+        }
+        .graph-toolbar-left {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .graph-toolbar-btn {
+          min-width: 38px;
+          height: 34px;
+          padding: 0 12px;
+          border-radius: 10px;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+          color: var(--text-primary);
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: border-color 0.15s, transform 0.15s, background 0.15s;
+        }
+        .graph-toolbar-btn:hover {
+          border-color: var(--primary);
+          transform: translateY(-1px);
+        }
+        .graph-toolbar-btn.primary {
+          background: color-mix(in srgb, var(--primary) 14%, var(--bg-surface));
+          border-color: color-mix(in srgb, var(--primary) 32%, transparent);
+          color: var(--primary);
+        }
+        .graph-toolbar-meta {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          font-size: 11px;
+          color: var(--text-muted);
+        }
+        .graph-toolbar-meta span:first-child {
+          color: var(--text-primary);
+          font-weight: 600;
+        }
         .graph-canvas {
           flex: 1; min-height: 0; overflow: hidden;
-          background: var(--bg-surface);
+          background: linear-gradient(180deg, var(--bg-elevated), var(--bg-surface));
+          position: relative;
+        }
+        .graph-canvas :global(svg) {
+          display: block;
+          width: 100% !important;
+          height: 100% !important;
+        }
+        .graph-canvas :global(.x.axis text),
+        .graph-canvas :global(.y.axis text) {
+          font-size: 11px;
+          fill: var(--text-muted);
+        }
+        .graph-canvas :global(.x.axis line),
+        .graph-canvas :global(.y.axis line),
+        .graph-canvas :global(.x.axis path),
+        .graph-canvas :global(.y.axis path) {
+          stroke: var(--border-subtle);
+        }
+        .graph-canvas :global(.x.grid .tick line),
+        .graph-canvas :global(.y.grid .tick line),
+        .graph-canvas :global(.grid line) {
+          stroke: rgba(148, 163, 184, 0.18);
+        }
+        .graph-canvas :global(path.line) {
+          stroke-width: 2.8;
         }
         .graph-error {
           padding: 8px 16px; font-size: 12px; color: #ef4444;
@@ -534,6 +700,13 @@ function GraphPanel({ initialExpr }: { initialExpr?: string }) {
         @media (max-width: 780px) {
           .graph-shell { flex-direction: column; }
           .graph-sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border-subtle); max-height: 40vh; }
+          .graph-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .graph-toolbar-meta {
+            justify-content: flex-start;
+          }
         }
       `}</style>
     </div>
@@ -753,6 +926,7 @@ function SolverPanel({ onGraphExpr }: { onGraphExpr: (expr: string) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const ocrInputRef = useRef<HTMLInputElement>(null);
   const categories = Object.keys(EXAMPLE_PROBLEMS);
+  const previewLatex = useMemo(() => safeLatex(input.trim()), [input]);
 
   const handleOCR = useCallback(async (file: File) => {
     setOcrLoading(true);
@@ -868,10 +1042,14 @@ function SolverPanel({ onGraphExpr }: { onGraphExpr: (expr: string) => void }) {
             )}
             {input.trim() && (
               <div className="ms-preview">
-                <span className="ms-preview-label">Preview</span>
-                <div className="ms-preview-latex">
-                  <KaTeX latex={safeLatex(input)} display />
+                <div className="ms-preview-head">
+                  <span className="ms-preview-label">Preview</span>
+                  <span className="ms-preview-hint">Interpreted math input</span>
                 </div>
+                <div className="ms-preview-latex">
+                  <KaTeX latex={previewLatex} display />
+                </div>
+                <div className="ms-preview-raw">{input.trim()}</div>
               </div>
             )}
             <div className="ms-shortcuts">
@@ -1017,9 +1195,50 @@ function SolverPanel({ onGraphExpr }: { onGraphExpr: (expr: string) => void }) {
         .ms-ocr-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .ms-ocr-btn.loading { animation: spin 0.8s linear infinite; }
         .ms-ocr-error { font-size: 11px; color: #ef4444; padding: 5px 2px; margin-top: 4px; line-height: 1.4; }
-        .ms-preview { margin-top: 10px; padding: 8px 12px; background: var(--bg-surface); border-radius: 10px; border: 1px solid var(--border-subtle); overflow-x: auto; }
-        .ms-preview-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 4px; }
-        .ms-preview-latex { display: flex; justify-content: center; padding: 4px 0; }
+        .ms-preview {
+          margin-top: 10px;
+          padding: 12px 14px;
+          background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 7%, var(--bg-surface)), var(--bg-surface));
+          border-radius: 14px;
+          border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border-subtle));
+          overflow-x: auto;
+        }
+        .ms-preview-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 8px;
+        }
+        .ms-preview-label {
+          font-size: 10px;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          display: block;
+        }
+        .ms-preview-hint {
+          font-size: 11px;
+          color: var(--text-muted);
+        }
+        .ms-preview-latex {
+          display: flex;
+          justify-content: center;
+          padding: 8px 4px 10px;
+          min-height: 56px;
+        }
+        .ms-preview-raw {
+          padding: 8px 10px;
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+          border: 1px solid var(--border-subtle);
+          font-size: 12px;
+          line-height: 1.55;
+          color: var(--text-secondary);
+          font-family: 'JetBrains Mono', monospace;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
         .ms-shortcuts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
         .ms-shortcut { padding: 3px 9px; border-radius: 7px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); font-size: 12px; font-family: monospace; cursor: pointer; transition: all 0.1s; }
         .ms-shortcut:hover { border-color: var(--primary); color: var(--primary); }

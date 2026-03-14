@@ -60,6 +60,17 @@ export function FolderPanel({
 
   useEffect(() => { load(); }, [load, refreshKey]);
 
+  useEffect(() => {
+    function handleCreateFolderRequest() {
+      if (collapsed) onToggleCollapse?.();
+      setCreatingFolder(true);
+      setTimeout(() => folderInputRef.current?.focus(), 80);
+    }
+
+    window.addEventListener('kivora:create-folder', handleCreateFolderRequest);
+    return () => window.removeEventListener('kivora:create-folder', handleCreateFolderRequest);
+  }, [collapsed, onToggleCollapse]);
+
   // ── Folder CRUD ───────────────────────────────────────────────────────
 
   async function createFolder(e: React.FormEvent) {
@@ -292,7 +303,22 @@ export function FolderPanel({
     >
       {/* Header */}
       <div className="panel-header">
-        <span className="panel-title">📚 Folders</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+          <span className="panel-title">Folders</span>
+          <span
+            className="badge"
+            style={{
+              flexShrink: 0,
+              minWidth: 22,
+              paddingInline: 8,
+              justifyContent: 'center',
+              borderRadius: 999,
+              fontSize: 11,
+            }}
+          >
+            {folders.length}
+          </span>
+        </div>
         <button className="btn-icon" title="New folder"
           onClick={() => {
             setCreatingFolder(c => !c);

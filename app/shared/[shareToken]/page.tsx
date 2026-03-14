@@ -361,20 +361,88 @@ function TopicContent({ content, getFileTypeIcon }: { content: Record<string, un
   );
 }
 
+function parseFlashcardsSimple(content: string): Array<{ front: string; back: string }> {
+  // Format 1: pipe-separated "Front: ... | Back: ..."
+  const pipeLines = content
+    .split(/\n/)
+    .map(l => l.replace(/^\d+[.)]\s*/, '').trim())
+    .filter(l => /front:/i.test(l) && /back:/i.test(l));
+  if (pipeLines.length > 0) {
+    return pipeLines.map(l => ({
+      front: (l.match(/front:\s*(.*?)(?:\s*\|\s*back:|$)/i)?.[1] ?? '').trim(),
+      back:  (l.match(/back:\s*(.*?)$/i)?.[1] ?? '').trim(),
+    })).filter(c => c.front);
+  }
+  // Format 2: --- separated blocks
+  return content
+    .split(/---+/)
+    .map(block => ({
+      front: block.match(/\*?\*?Front:\*?\*?\s*([\s\S]*?)(?=\*?\*?Back:|$)/i)?.[1]?.trim() ?? '',
+      back:  block.match(/\*?\*?Back:\*?\*?\s*([\s\S]*?)$/i)?.[1]?.trim() ?? '',
+    }))
+    .filter(c => c.front);
+}
+
+function FlashcardGrid({ content, title }: { content: string; title?: string }) {
+  const [flipped, setFlipped] = useState<Record<number, boolean>>({});
+  const cards = parseFlashcardsSimple(content);
+
+  if (cards.length === 0) return <pre className="content-preview">{content}</pre>;
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>
+        {title && <strong style={{ color: 'inherit' }}>{title} · </strong>}
+        {cards.length} cards — click any card to flip
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
+        {cards.map((card, i) => (
+          <div
+            key={i}
+            onClick={() => setFlipped(f => ({ ...f, [i]: !f[i] }))}
+            style={{
+              background: flipped[i] ? '#e8f5e9' : '#f0f4ff',
+              border: '1px solid',
+              borderColor: flipped[i] ? '#a5d6a7' : '#c5d3f7',
+              borderRadius: 10,
+              padding: '14px 16px',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              minHeight: 80,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+            }}
+          >
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: flipped[i] ? '#388e3c' : '#3f5fbd', marginBottom: 6 }}>
+              {flipped[i] ? 'Back' : 'Front'}
+            </div>
+            <div style={{ fontSize: 14, lineHeight: 1.4, color: '#1a1a2e' }}>
+              {flipped[i] ? card.back : card.front}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function LibraryContent({ content }: { content: Record<string, unknown> }) {
   const mode = content.mode as string;
   const textContent = content.content as string;
+  const metadata = content.metadata as Record<string, unknown> | undefined;
 
   const getModeLabel = (mode: string) => {
     const labels: Record<string, string> = {
-      assignment: 'Assignment',
-      summarize: 'Summary',
-      mcq: 'Multiple Choice Questions',
-      quiz: 'Quiz',
-      pop: 'Pop Quiz',
-      notes: 'Study Notes',
-      rephrase: 'Rephrase',
-      math: 'Math Solution',
+      assignment:  'Assignment',
+      summarize:   'Summary',
+      mcq:         'Multiple Choice Questions',
+      quiz:        'Quiz',
+      pop:         'Pop Quiz',
+      notes:       'Study Notes',
+      rephrase:    'Rephrase',
+      math:        'Math Solution',
+      flashcards:  '🃏 Flashcard Deck',
     };
     return labels[mode] || mode;
   };
@@ -382,7 +450,11 @@ function LibraryContent({ content }: { content: Record<string, unknown> }) {
   return (
     <div className="library-content">
       <div className="library-badge">{getModeLabel(mode)}</div>
-      <pre className="content-preview">{textContent}</pre>
+      {mode === 'flashcards' ? (
+        <FlashcardGrid content={textContent} title={metadata?.title as string | undefined} />
+      ) : (
+        <pre className="content-preview">{textContent}</pre>
+      )}
     </div>
   );
 }

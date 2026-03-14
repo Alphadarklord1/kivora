@@ -28,6 +28,19 @@ function mdToHtml(md: string): string {
 
 type ViewMode = 'edit' | 'preview' | 'split';
 
+// Static toolbar config — labels and styles only; actions are passed at render time
+const TOOLBAR_BTNS: Array<{ label: string; title: string; actionKey: string; style?: React.CSSProperties }> = [
+  { label: 'B',   title: 'Bold (Ctrl+B)',     actionKey: 'bold',    style: { fontWeight: 700 } },
+  { label: 'I',   title: 'Italic (Ctrl+I)',    actionKey: 'italic',  style: { fontStyle: 'italic' } },
+  { label: 'H1',  title: 'Heading 1',          actionKey: 'h1' },
+  { label: 'H2',  title: 'Heading 2',          actionKey: 'h2' },
+  { label: 'H3',  title: 'Heading 3',          actionKey: 'h3' },
+  { label: '•',   title: 'Bullet list',        actionKey: 'bullet' },
+  { label: '1.',  title: 'Numbered list',      actionKey: 'numbered' },
+  { label: '</>',  title: 'Inline code',       actionKey: 'code' },
+  { label: '---', title: 'Horizontal divider', actionKey: 'divider' },
+];
+
 export function NotesPanel({ folderId, injectContent, onInjectConsumed }: Props) {
   const [content,  setContent]  = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('edit');
@@ -38,14 +51,15 @@ export function NotesPanel({ folderId, injectContent, onInjectConsumed }: Props)
   // Storage key per folder (or global if no folder)
   const storageKey = folderId ? `${STORAGE_PREFIX}${folderId}` : `${STORAGE_PREFIX}global`;
 
-  // Load saved notes on mount / folder change
+  /* eslint-disable react-hooks/set-state-in-effect */
+  // Load saved notes on mount / folder change — setState from localStorage init is intentional
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null;
     setContent(saved ?? '');
     setSaved(true);
   }, [storageKey]);
 
-  // Inject AI-generated content when requested
+  // Inject AI-generated content when requested — responding to parent props is intentional
   useEffect(() => {
     if (!injectContent) return;
     setContent(prev => {
@@ -55,6 +69,7 @@ export function NotesPanel({ folderId, injectContent, onInjectConsumed }: Props)
     setSaved(false);
     onInjectConsumed?.();
   }, [injectContent, onInjectConsumed]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Debounced save to localStorage
   const debouncedSave = useCallback((text: string) => {
@@ -117,6 +132,28 @@ export function NotesPanel({ folderId, injectContent, onInjectConsumed }: Props)
     if (typeof window !== 'undefined') localStorage.removeItem(storageKey);
   }
 
+  // Toolbar action map — defined as stable functions, not inline in JSX
+  function insertDivider() {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const { selectionStart: s, value: v } = ta;
+    const next = v.slice(0,s) + '\n---\n' + v.slice(s);
+    setContent(next); setSaved(false); debouncedSave(next);
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(s + 5, s + 5); }, 0);
+  }
+
+  const toolbarActions: Record<string, () => void> = {
+    bold:     () => wrap('**', '**', 'bold text'),
+    italic:   () => wrap('*', '*', 'italic text'),
+    h1:       () => insertLine('# '),
+    h2:       () => insertLine('## '),
+    h3:       () => insertLine('### '),
+    bullet:   () => insertLine('- '),
+    numbered: () => insertLine('1. '),
+    code:     () => wrap('`', '`', 'code'),
+    divider:  insertDivider,
+  };
+
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
 
   return (
@@ -134,21 +171,11 @@ export function NotesPanel({ folderId, injectContent, onInjectConsumed }: Props)
         flexWrap: 'wrap',
       }}>
         {/* Formatting buttons */}
-        {[
-          { label: 'B',   title: 'Bold (Ctrl+B)',          action: () => wrap('**', '**', 'bold text'),       style: { fontWeight: 700 } },
-          { label: 'I',   title: 'Italic (Ctrl+I)',         action: () => wrap('*', '*', 'italic text'),       style: { fontStyle: 'italic' } },
-          { label: 'H1',  title: 'Heading 1',               action: () => insertLine('# ') },
-          { label: 'H2',  title: 'Heading 2',               action: () => insertLine('## ') },
-          { label: 'H3',  title: 'Heading 3',               action: () => insertLine('### ') },
-          { label: '•',   title: 'Bullet list',             action: () => insertLine('- ') },
-          { label: '1.',  title: 'Numbered list',           action: () => insertLine('1. ') },
-          { label: '</>',  title: 'Inline code',            action: () => wrap('`', '`', 'code') },
-          { label: '---', title: 'Horizontal divider',      action: () => { const ta = textareaRef.current; if (!ta) return; const { selectionStart: s, value: v } = ta; const next = v.slice(0,s) + '\n---\n' + v.slice(s); setContent(next); setSaved(false); debouncedSave(next); } },
-        ].map(btn => (
+        {TOOLBAR_BTNS.map(btn => (
           <button
             key={btn.label}
             title={btn.title}
-            onClick={btn.action}
+            onClick={toolbarActions[btn.actionKey]}
             style={{
               padding: '2px 7px',
               background: 'var(--surface)',

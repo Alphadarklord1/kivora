@@ -1,5 +1,6 @@
 import { pgTable, text, timestamp, uuid, boolean, integer, jsonb, primaryKey, uniqueIndex } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+import type { RAGIndex } from '@/lib/rag/retrieve';
 
 // ============ USERS & AUTH ============
 
@@ -131,6 +132,22 @@ export const recentFiles = pgTable('recent_files', {
   accessedAt: timestamp('accessed_at').defaultNow().notNull(),
 });
 
+// ============ RAG FILE INDEXES ============
+
+export const ragFileIndexes = pgTable('rag_file_indexes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  fileId: uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
+  signature: text('signature').notNull(),
+  embeddingVersion: text('embedding_version').notNull(),
+  chunkCount: integer('chunk_count').notNull().default(0),
+  indexData: jsonb('index_data').$type<RAGIndex>().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  userFileUnique: uniqueIndex('rag_file_indexes_user_file_uq').on(table.userId, table.fileId),
+}));
+
 // ============ SHARING ============
 
 export const shares = pgTable('shares', {
@@ -219,6 +236,48 @@ export const quizAttemptsRelations = relations(quizAttempts, ({ one }) => ({
     references: [files.id],
   }),
 }));
+
+// ============ SRS CLOUD SYNC ============
+
+export const srsDecks = pgTable('srs_decks', {
+  id:        text('id').primaryKey(),                                                  // client-generated deck ID
+  userId:    uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  deckData:  jsonb('deck_data').notNull(),                                              // full SRSDeck JSON blob
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const studySessions = pgTable('study_sessions', {
+  id:             uuid('id').defaultRandom().primaryKey(),
+  userId:         uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  date:           text('date').notNull(),                                               // YYYY-MM-DD
+  cardsReviewed:  integer('cards_reviewed').notNull().default(0),
+  minutesStudied: integer('minutes_studied').notNull().default(0),
+  createdAt:      timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  userDateUnique: uniqueIndex('study_sessions_user_date_uq').on(t.userId, t.date),
+}));
+
+export const srsPreferences = pgTable('srs_preferences', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  dailyGoal: integer('daily_goal').notNull().default(20),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const srsReviewHistory = pgTable('srs_review_history', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  deckId: text('deck_id').notNull(),
+  cardId: text('card_id').notNull(),
+  grade: integer('grade').notNull(),
+  correct: boolean('correct').notNull().default(false),
+  reviewedAt: timestamp('reviewed_at').defaultNow().notNull(),
+  nextReview: text('next_review').notNull(),
+  interval: integer('interval').notNull().default(1),
+  elapsedDays: integer('elapsed_days').notNull().default(0),
+  stability: integer('stability'),
+  difficulty: integer('difficulty'),
+});
 
 // ============ STUDY PLANS ============
 

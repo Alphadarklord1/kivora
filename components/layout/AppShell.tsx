@@ -1,17 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useSettings } from '@/providers/SettingsProvider';
 import { OnboardingModal } from './OnboardingModal';
+import { getStreak } from '@/lib/srs/sm2';
 
 const NAV = [
   { href: '/workspace', label: 'Workspace', icon: '📚' },
   { href: '/planner',   label: 'Planner',   icon: '📅' },
   { href: '/math',      label: 'Math',      icon: '∑'  },
   { href: '/library',   label: 'Library',   icon: '🗂️' },
+  { href: '/decks',     label: 'Decks',     icon: '🃏' },
   { href: '/analytics', label: 'Analytics', icon: '📊' },
   { href: '/models',    label: 'AI Models', icon: '🤖' },
   { href: '/sharing',   label: 'Sharing',   icon: '🔗' },
@@ -46,6 +48,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const { settings, updateSetting } = useSettings();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [streak, setStreak] = useState(0);
+
+  useEffect(() => {
+    // Read streak from localStorage on mount (client-side only, no external subscription)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    try { setStreak(getStreak()); } catch { /* noop */ }
+  }, []);
 
   function toggleTheme() {
     updateSetting('theme', settings.theme === 'dark' ? 'light' : 'dark');
@@ -59,8 +69,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell">
       <OnboardingModal />
+
+      {/* Mobile header bar */}
+      <div className="mobile-header">
+        <button
+          className="mobile-hamburger"
+          onClick={() => setMobileOpen(o => !o)}
+          aria-label="Open navigation"
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+        <div className="mobile-header-logo">
+          <div className="mobile-header-logo-mark">K</div>
+          <span>Kivora</span>
+        </div>
+      </div>
+
+      {/* Overlay */}
+      <div
+        className={`mobile-overlay${mobileOpen ? ' visible' : ''}`}
+        onClick={() => setMobileOpen(false)}
+      />
+
       {/* Sidebar */}
-      <nav className={`sidebar${collapsed ? ' collapsed' : ''}`}>
+      <nav className={`sidebar${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo-mark">K</div>
           {!collapsed && <span className="sidebar-logo-name">Kivora</span>}
@@ -84,12 +118,39 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               href={item.href}
               className={`nav-item${pathname?.startsWith(item.href) ? ' active' : ''}`}
               title={collapsed ? item.label : undefined}
+              onClick={() => setMobileOpen(false)}
             >
               <span className="nav-icon">{item.icon}</span>
               {!collapsed && <span className="nav-label">{item.label}</span>}
             </Link>
           ))}
         </div>
+
+        {/* Streak badge */}
+        {streak > 0 && (
+          <div
+            title={`${streak}-day study streak!`}
+            style={{
+              margin: '8px 8px 4px',
+              padding: collapsed ? '6px 0' : '6px 10px',
+              borderRadius: 8,
+              background: 'linear-gradient(135deg,#ff6b35 0%,#f7931e 100%)',
+              color: '#fff',
+              fontWeight: 700,
+              fontSize: 12,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              gap: 6,
+              cursor: 'default',
+              userSelect: 'none',
+              boxShadow: '0 2px 6px rgba(255,107,53,0.35)',
+            }}
+          >
+            <span style={{ fontSize: 16 }}>🔥</span>
+            {!collapsed && <span>{streak} day{streak !== 1 ? 's' : ''}</span>}
+          </div>
+        )}
 
         <div className="sidebar-footer">
           <button

@@ -6,6 +6,11 @@ const OFFLINE_URL = '/offline.html';
 const PRECACHE_URLS = [
   '/',
   '/offline.html',
+  '/manifest.json',
+  '/icons/icon.svg',
+  '/icons/icon-192x192.svg',
+  '/icons/icon-512x512.svg',
+  '/icons/icon-maskable.svg',
 ];
 
 // Install event - cache essential files

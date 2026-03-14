@@ -5,15 +5,20 @@ import { useToast } from '@/providers/ToastProvider';
 import { idbStore } from '@/lib/idb';
 import { extractTextFromBlob } from '@/lib/pdf/extract';
 import type { ToolMode } from '@/lib/offline/generate';
+import { deleteRagIndex, ensureRagIndex } from '@/lib/rag/index-store';
+import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteLocalFile, listLocalFiles, upsertLocalFile } from '@/lib/files/local-files';
-import { solveOffline } from '@/lib/math/offline-solver';
-import type { MathSolution } from '@/lib/math/offline-solver';
-import { MathRenderer, MathText } from '@/components/math/MathRenderer';
-import { createCard, gradeCard, getDeckStats, loadDecks, saveDeck, deleteDeck, type SRSDeck } from '@/lib/srs/sm2';
+import { getDeckStats, loadDecks, deleteDeck, type SRSDeck } from '@/lib/srs/sm2';
 import { ChatPanel } from '@/components/workspace/ChatPanel';
 import { NotesPanel } from '@/components/workspace/NotesPanel';
 import { ExamPlannerPanel } from '@/components/workspace/ExamPlannerPanel';
+import { MCQView } from '@/components/workspace/views/MCQView';
+import { PracticeView } from '@/components/workspace/views/PracticeView';
+import { FlashcardView } from '@/components/workspace/views/FlashcardView';
+import { ExamView } from '@/components/workspace/views/ExamView';
+import { FocusPanel } from '@/components/workspace/views/FocusPanel';
+import { mdToHtml } from '@/lib/utils/md';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -49,7 +54,7 @@ const GENERATE_TABS = [
 ] as const;
 
 type GenMode    = (typeof GENERATE_TABS)[number]['id'];
-type MainTab    = 'files' | 'generate' | 'chat' | 'notes' | 'math' | 'focus' | 'library' | 'planner';
+type MainTab    = 'files' | 'generate' | 'chat' | 'notes' | 'focus' | 'library' | 'planner';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -81,1288 +86,10 @@ function wordCount(text: string) {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
-function mdToHtml(md: string): string {
-  return md
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/^(#{1,3})\s+(.+)/gm, (_, h, t) => `<h${h.length} style="margin:14px 0 6px">${t}</h${h.length}>`)
-    .replace(/^[•\-]\s+(.+)/gm, '<li style="margin:3px 0">$1</li>')
-    .replace(/(<li[^>]*>[\s\S]*?<\/li>)/g, '<ul style="padding-left:20px;margin:8px 0">$1</ul>')
-    .replace(/\n/g, '<br/>');
-}
 
-// ── MCQ renderer ───────────────────────────────────────────────────────────
-
-function MCQView({ content }: { content: string }) {
-  const [selected, setSelected] = useState<Record<number, string>>({});
-  const [revealed, setRevealed] = useState<Record<number, boolean>>({});
-  const [score,    setScore]    = useState<number | null>(null);
-
-  const blocks = content
-    .split(/\n(?=\*?\*?Q\d+[\.\)])/i)
-    .map(b => b.trim())
-    .filter(b => /Q\d+/i.test(b) && b.length > 10);
-
-  if (blocks.length === 0)
-    return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
-
-  function revealAll() {
-    const r: Record<number, boolean> = {};
-    blocks.forEach((_, i) => { r[i] = true; });
-    setRevealed(r);
-    let correct = 0;
-    blocks.forEach((block, qi) => {
-      const ans = block.match(/✓\s*([A-D])\)?/)?.[1]
-        ?? block.match(/Answer:\s*([A-D])\b/i)?.[1];
-      if (ans && selected[qi] === ans) correct++;
-    });
-    setScore(correct);
-  }
-
-  return (
-    <div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {blocks.map((block, qi) => {
-          const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-          const stem  = lines[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '');
-          const opts  = lines.filter(l => /^[A-D]\)/.test(l));
-          const ans   = block.match(/✓\s*([A-D])\)?/)?.[1] ?? block.match(/Answer:\s*([A-D])\b/i)?.[1];
-          const isRev = revealed[qi];
-          return (
-            <div key={qi} className="quiz-card">
-              <div className="quiz-q-num">Q{qi + 1} of {blocks.length}</div>
-              <div className="quiz-q-text">{stem}</div>
-              <div className="quiz-options">
-                {opts.map((opt, oi) => {
-                  const letter = opt.match(/^([A-D])\)/)?.[1] ?? '';
-                  const text   = opt.replace(/^[A-D]\)\s*/, '');
-                  const isSel  = selected[qi] === letter;
-                  let cls = 'quiz-option';
-                  if (isRev) { if (letter === ans) cls += ' correct'; else if (isSel) cls += ' wrong'; }
-                  else if (isSel) cls += ' selected';
-                  return (
-                    <div key={oi} className={cls}
-                      onClick={() => { if (!isRev) setSelected(p => ({ ...p, [qi]: letter })); }}>
-                      <span className="quiz-opt-letter">{letter}</span>
-                      <span>{text}</span>
-                      {isRev && letter === ans && <span style={{ marginLeft: 'auto' }}>✓</span>}
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                {!isRev && selected[qi] && (
-                  <button className="btn btn-sm btn-primary"
-                    onClick={() => setRevealed(p => ({ ...p, [qi]: true }))}>Check answer</button>
-                )}
-                {!isRev && !selected[qi] && (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>Select an option</span>
-                )}
-                {isRev && ans && (
-                  <div className="quiz-answer">
-                    {selected[qi] === ans ? '🎉 Correct!' : `✗ Correct: ${ans}`}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div style={{ marginTop: 18, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button className="btn btn-sm btn-secondary" onClick={revealAll}>Reveal all answers</button>
-        {score !== null && (
-          <div className={`badge ${score === blocks.length ? 'badge-success' : score >= blocks.length / 2 ? 'badge-accent' : 'badge-danger'}`}
-            style={{ fontSize: 'var(--text-sm)', padding: '4px 12px' }}>
-            Score: {score} / {blocks.length}
-          </div>
-        )}
-        <button className="btn btn-sm btn-ghost"
-          onClick={() => { setSelected({}); setRevealed({}); setScore(null); }}>Reset</button>
-      </div>
-    </div>
-  );
-}
-
-// ── Flashcard renderer ─────────────────────────────────────────────────────
-
-// ── Flashcard parser ───────────────────────────────────────────────────────
-function parseFlashcards(content: string): Array<{ front: string; back: string }> {
-  // Format 1: "Front: ... | Back: ..." (pipe-separated on one line)
-  const pipeLines = content
-    .split(/\n/)
-    .map(l => l.replace(/^\d+[.)]\s*/, '').trim())
-    .filter(l => /front:/i.test(l) && /back:/i.test(l));
-  if (pipeLines.length > 0) {
-    return pipeLines.map(l => ({
-      front: (l.match(/front:\s*(.*?)(?:\s*\|\s*back:|$)/i)?.[1] ?? '').trim(),
-      back:  (l.match(/back:\s*(.*?)$/i)?.[1] ?? '').trim(),
-    })).filter(c => c.front);
-  }
-  // Format 2: blocks separated by --- with Front: / Back: labels
-  return content
-    .split(/---+/)
-    .map(block => ({
-      front: block.match(/\*?\*?Front:\*?\*?\s*([\s\S]*?)(?=\*?\*?Back:|$)/i)?.[1]?.trim() ?? '',
-      back:  block.match(/\*?\*?Back:\*?\*?\s*([\s\S]*?)$/i)?.[1]?.trim() ?? '',
-    }))
-    .filter(c => c.front);
-}
-
-// ── Practice problem renderer (hints + solution reveal) ────────────────────
-
-function PracticeView({ content }: { content: string }) {
-  const [hintsShown,   setHintsShown]   = useState(0);
-  const [showSolution, setShowSolution] = useState(false);
-  const [answer,       setAnswer]       = useState('');
-  const [submitted,    setSubmitted]    = useState(false);
-
-  // Parse sections: ## Problem / ## Hint N / ## Solution
-  const sections: Record<string, string> = {};
-  let current = '';
-  for (const line of content.split('\n')) {
-    const m = line.match(/^##\s+(.+)$/);
-    if (m) { current = m[1].trim(); sections[current] = ''; }
-    else if (current) sections[current] = (sections[current] + '\n' + line).trimStart();
-  }
-
-  const problem  = sections['Problem'] ?? content;
-  const hints    = [1, 2, 3].map(n => sections[`Hint ${n}`]).filter(Boolean);
-  const solution = sections['Solution'] ?? '';
-
-  if (!problem.trim())
-    return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 640, margin: '0 auto' }}>
-      {/* Problem */}
-      <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 12, padding: '16px 20px' }}>
-        <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--accent)', marginBottom: 8 }}>📋 Problem</div>
-        <div className="tool-output" style={{ margin: 0, padding: 0, background: 'none', border: 'none' }}
-          dangerouslySetInnerHTML={{ __html: mdToHtml(problem) }} />
-      </div>
-
-      {/* Self-assessment answer box */}
-      {!showSolution && (
-        <div>
-          <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>
-            Your answer (optional — for self-assessment)
-          </label>
-          <textarea value={answer} onChange={e => setAnswer(e.target.value)} rows={3}
-            placeholder="Write your working here before revealing hints or the solution…"
-            style={{ width: '100%', padding: '10px 12px', background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 8, color: 'var(--text)', fontSize: 'var(--text-sm)', fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }} />
-          {answer.trim() && !submitted && (
-            <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={() => setSubmitted(true)}>✓ Lock in answer</button>
-          )}
-          {submitted && (
-            <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--accent)' }}>✓ Answer locked — compare with solution when ready</div>
-          )}
-        </div>
-      )}
-
-      {/* Hints */}
-      {hints.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {hints.slice(0, hintsShown).map((hint, i) => (
-            <div key={i} style={{ background: 'color-mix(in srgb, #f59e0b 8%, var(--surface))', border: '1px solid color-mix(in srgb, #f59e0b 25%, transparent)', borderRadius: 10, padding: '12px 16px' }}>
-              <div style={{ fontWeight: 700, fontSize: 'var(--text-xs)', color: '#f59e0b', marginBottom: 6 }}>💡 Hint {i + 1}</div>
-              <div className="tool-output" style={{ margin: 0, padding: 0, background: 'none', border: 'none', fontSize: 'var(--text-sm)' }}
-                dangerouslySetInnerHTML={{ __html: mdToHtml(hint) }} />
-            </div>
-          ))}
-          {hintsShown < hints.length && !showSolution && (
-            <button className="btn btn-ghost btn-sm" onClick={() => setHintsShown(h => h + 1)}
-              style={{ alignSelf: 'flex-start', color: '#f59e0b', border: '1px solid color-mix(in srgb, #f59e0b 30%, transparent)' }}>
-              💡 Show hint {hintsShown + 1} of {hints.length}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Solution */}
-      {showSolution && solution ? (
-        <div style={{ background: 'color-mix(in srgb, #52b788 8%, var(--surface))', border: '1px solid color-mix(in srgb, #52b788 30%, transparent)', borderRadius: 12, padding: '14px 18px' }}>
-          <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: '#52b788', marginBottom: 8 }}>✅ Solution</div>
-          <div className="tool-output" style={{ margin: 0, padding: 0, background: 'none', border: 'none' }}
-            dangerouslySetInnerHTML={{ __html: mdToHtml(solution) }} />
-        </div>
-      ) : !showSolution && (
-        <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }}
-          onClick={() => { setHintsShown(hints.length); setShowSolution(true); }}>
-          ✅ Reveal solution
-        </button>
-      )}
-
-      {showSolution && (
-        <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', marginTop: 4 }}
-          onClick={() => { setHintsShown(0); setShowSolution(false); setAnswer(''); setSubmitted(false); }}>
-          ↺ Reset
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ── SM-2 Flashcard view ────────────────────────────────────────────────────
-function FlashcardView({ content }: { content: string }) {
-  const rawCards = parseFlashcards(content);
-
-  // SRS deck state (persisted in localStorage)
-  const [deck,       setDeck]       = useState<SRSDeck | null>(null);
-  const [sessionIdx, setSessionIdx] = useState(0);
-  const [flip,       setFlip]       = useState(false);
-  const [phase,      setPhase]      = useState<'preview' | 'review' | 'done' | 'match' | 'learn'>('preview');
-  const [graded,     setGraded]     = useState<number[]>([]); // grades for session
-  // Match game state
-  const [matchSelected, setMatchSelected] = useState<string | null>(null); // selected term id
-  const [matchPaired,   setMatchPaired]   = useState<Set<string>>(new Set()); // paired term ids
-  const [matchFlash,    setMatchFlash]    = useState<{ id: string; ok: boolean } | null>(null);
-  const [matchStart,    setMatchStart]    = useState(0);
-  const [matchEnd,      setMatchEnd]      = useState(0);
-  const [matchShuffledDefs, setMatchShuffledDefs] = useState<Array<{ id: string; text: string }>>([]);
-  // Learn mode state
-  const [learnIdx,      setLearnIdx]      = useState(0);
-  const [learnQueue,    setLearnQueue]    = useState<string[]>([]); // card ids remaining
-  const [learnOptions,  setLearnOptions]  = useState<string[]>([]);
-  const [learnPicked,   setLearnPicked]   = useState<string | null>(null);
-  const [learnCorrect,  setLearnCorrect]  = useState(0);
-  const [learnTotal,    setLearnTotal]    = useState(0);
-
-  // Build/load the deck when content changes
-  useEffect(() => {
-    if (rawCards.length === 0) return;
-    const deckId = 'deck-' + btoa(content.slice(0, 80)).replace(/[^a-z0-9]/gi, '').slice(0, 20);
-    const existing = loadDecks().find(d => d.id === deckId);
-    if (existing) {
-      setDeck(existing);
-    } else {
-      const newDeck: SRSDeck = {
-        id: deckId,
-        name: `Flashcards (${rawCards.length} cards)`,
-        cards: rawCards.map((c, i) => createCard(`${deckId}-${i}`, c.front, c.back)),
-        createdAt: new Date().toISOString(),
-      };
-      saveDeck(newDeck);
-      setDeck(newDeck);
-    }
-    setSessionIdx(0); setFlip(false); setPhase('preview'); setGraded([]);
-    setMatchSelected(null); setMatchPaired(new Set()); setMatchFlash(null); setMatchEnd(0);
-    setLearnIdx(0); setLearnQueue([]); setLearnPicked(null); setLearnCorrect(0); setLearnTotal(0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content]);
-
-  if (rawCards.length === 0)
-    return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
-
-  if (!deck) return null;
-
-  const stats = getDeckStats(deck);
-  // Session cards: due today first, then new cards
-  const today = new Date().toISOString().split('T')[0];
-  const sessionCards = [
-    ...deck.cards.filter(c => c.nextReview <= today && c.repetitions > 0),
-    ...deck.cards.filter(c => c.repetitions === 0),
-  ];
-  const totalSession = sessionCards.length || deck.cards.length;
-  const allCards = sessionCards.length > 0 ? sessionCards : deck.cards;
-
-  function doGrade(grade: 0 | 1 | 2 | 3) {
-    const card = allCards[sessionIdx];
-    const updated = gradeCard(card, grade);
-    const nextDeck: SRSDeck = {
-      ...deck!,
-      cards: deck!.cards.map(c => c.id === updated.id ? updated : c),
-      lastStudied: new Date().toISOString(),
-    };
-    saveDeck(nextDeck);
-    setDeck(nextDeck);
-    setGraded(p => [...p, grade]);
-    setFlip(false);
-    if (sessionIdx + 1 >= allCards.length) {
-      setTimeout(() => setPhase('done'), 100);
-    } else {
-      setTimeout(() => setSessionIdx(i => i + 1), 120);
-    }
-  }
-
-  // GRADE_META
-  const GRADES: Array<{ grade: 0|1|2|3; label: string; hint: string; color: string }> = [
-    { grade: 0, label: 'Again',  hint: 'Forgot — review tomorrow',       color: '#e05252' },
-    { grade: 1, label: 'Hard',   hint: 'Recalled with effort',           color: '#f59e0b' },
-    { grade: 2, label: 'Good',   hint: 'Recalled correctly',             color: '#4f86f7' },
-    { grade: 3, label: 'Easy',   hint: 'Instant recall — longer gap',    color: '#52b788' },
-  ];
-
-  // ── Done screen ──────────────────────────────────────────────────────
-  if (phase === 'done') {
-    const correct = graded.filter(g => g >= 2).length;
-    const pct = Math.round((correct / graded.length) * 100);
-    const nextStats = getDeckStats({ ...deck!, cards: deck!.cards });
-    return (
-      <div style={{ textAlign: 'center', padding: '32px 20px', maxWidth: 480, margin: '0 auto' }}>
-        <div style={{ fontSize: 48, marginBottom: 12 }}>{pct >= 80 ? '🎉' : pct >= 50 ? '📚' : '💪'}</div>
-        <h3 style={{ margin: '0 0 6px' }}>Session complete!</h3>
-        <p style={{ color: 'var(--text-3)', margin: '0 0 20px' }}>
-          {correct}/{graded.length} recalled correctly ({pct}%)
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 24, fontSize: 'var(--text-sm)' }}>
-          {[
-            { label: 'New',      val: nextStats.new,      color: '#4f86f7' },
-            { label: 'Learning', val: nextStats.learning, color: '#f59e0b' },
-            { label: 'Mature',   val: nextStats.mature,   color: '#52b788' },
-          ].map(s => (
-            <div key={s.label} style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10, padding: '10px 8px' }}>
-              <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', color: s.color }}>{s.val}</div>
-              <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-        {nextStats.due > 0 && (
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 16 }}>
-            {nextStats.due} card{nextStats.due !== 1 ? 's' : ''} still due today
-          </div>
-        )}
-        <button className="btn btn-primary btn-sm" onClick={() => {
-          setSessionIdx(0); setFlip(false); setGraded([]);
-          setPhase(nextStats.due > 0 ? 'review' : 'preview');
-        }}>
-          {nextStats.due > 0 ? `Review ${nextStats.due} remaining` : 'Browse all cards'}
-        </button>
-      </div>
-    );
-  }
-
-  // ── Preview (browse all) mode ────────────────────────────────────────
-  if (phase === 'preview') {
-    return (
-      <div style={{ maxWidth: 560, margin: '0 auto' }}>
-        {/* Deck stats bar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>
-            📇 {deck.name}
-          </span>
-          {[
-            { label: `${stats.new} new`,      color: '#4f86f7' },
-            { label: `${stats.learning} learning`, color: '#f59e0b' },
-            { label: `${stats.mature} mature`, color: '#52b788' },
-          ].map(b => (
-            <span key={b.label} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 12, background: `${b.color}22`, color: b.color, fontWeight: 600 }}>
-              {b.label}
-            </span>
-          ))}
-          {stats.due > 0 && (
-            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 12, background: 'var(--accent-subtle, rgba(79,134,247,0.12))', color: 'var(--accent)', fontWeight: 700, marginLeft: 'auto' }}>
-              {stats.due} due today
-            </span>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <button className="btn btn-primary btn-sm" style={{ flex: 1 }}
-            onClick={() => { setSessionIdx(0); setFlip(false); setGraded([]); setPhase('review'); }}>
-            {stats.due > 0 ? `▶ Study ${stats.due} due` : `▶ Study all`}
-          </button>
-          <button className="btn btn-ghost btn-sm" title="Match game — pair terms with definitions"
-            onClick={() => {
-              // Shuffle definitions
-              const defs = [...deck.cards].sort(() => Math.random() - 0.5).map(c => ({ id: c.id, text: c.back }));
-              setMatchShuffledDefs(defs);
-              setMatchSelected(null); setMatchPaired(new Set()); setMatchFlash(null);
-              setMatchStart(Date.now()); setMatchEnd(0);
-              setPhase('match');
-            }}>
-            🎮 Match
-          </button>
-          <button className="btn btn-ghost btn-sm" title="Learn mode — adaptive MCQ until 100%"
-            onClick={() => {
-              const ids = deck.cards.map(c => c.id);
-              // Shuffle for learn queue
-              const shuffled = [...ids].sort(() => Math.random() - 0.5);
-              setLearnQueue(shuffled); setLearnIdx(0); setLearnPicked(null);
-              setLearnCorrect(0); setLearnTotal(ids.length);
-              setPhase('learn');
-            }}>
-            🎓 Learn
-          </button>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8 }}>
-          {deck.cards.map((c, i) => {
-            const maturity = c.repetitions === 0 ? 'new' : c.interval >= 21 ? 'mature' : 'learning';
-            const colors = { new: '#4f86f7', learning: '#f59e0b', mature: '#52b788' };
-            return (
-              <div key={c.id}
-                style={{ background: 'var(--surface)', border: `1px solid var(--border-2)`, borderRadius: 8, padding: '8px 10px', cursor: 'pointer', fontSize: 'var(--text-xs)', borderLeft: `3px solid ${colors[maturity]}` }}
-                onClick={() => { setSessionIdx(i); setFlip(false); setPhase('review'); }}>
-                <div style={{ fontWeight: 600, marginBottom: 3 }}>{c.front}</div>
-                <div style={{ color: 'var(--text-3)', marginBottom: 4 }}>{c.back}</div>
-                {c.repetitions > 0 && (
-                  <div style={{ color: 'var(--text-3)', fontSize: 10 }}>
-                    Next: {c.nextReview} · {Math.round((c.correctReviews / Math.max(1, c.totalReviews)) * 100)}% accuracy
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Match game mode ───────────────────────────────────────────────────
-  if (phase === 'match') {
-    const allMatched = matchPaired.size === deck.cards.length;
-    const elapsed    = matchEnd > 0 ? Math.round((matchEnd - matchStart) / 1000) : Math.round((Date.now() - matchStart) / 1000);
-
-    function handleMatchTerm(cardId: string) {
-      if (matchPaired.has(cardId)) return;
-      if (matchSelected === cardId) { setMatchSelected(null); return; }
-      if (!matchSelected) { setMatchSelected(cardId); return; }
-      // matchSelected is a termId, cardId is a defId — but in our UI both columns use card.id
-      // Check if selected term matches this definition
-      if (matchSelected === cardId) { setMatchSelected(null); return; }
-      // correct pair: both columns reference same card id
-      setMatchFlash({ id: cardId, ok: true });
-      setMatchFlash({ id: matchSelected, ok: true });
-      setTimeout(() => {
-        setMatchPaired(prev => { const next = new Set(prev); next.add(cardId); return next; });
-        setMatchSelected(null); setMatchFlash(null);
-        if (deck && matchPaired.size + 1 === deck.cards.length) setMatchEnd(Date.now());
-      }, 300);
-    }
-
-    function handleMatchDef(cardId: string) {
-      if (matchPaired.has(cardId)) return;
-      if (!matchSelected) return;
-      if (matchSelected === cardId) {
-        // Correct match
-        setMatchFlash({ id: cardId, ok: true });
-        setTimeout(() => {
-          setMatchPaired(prev => { const next = new Set(prev); next.add(cardId); return next; });
-          setMatchSelected(null); setMatchFlash(null);
-          if (deck && matchPaired.size + 1 === deck.cards.length) setMatchEnd(Date.now());
-        }, 300);
-      } else {
-        // Wrong match
-        setMatchFlash({ id: cardId, ok: false });
-        setTimeout(() => { setMatchFlash(null); }, 600);
-      }
-    }
-
-    const shuffledTerms = deck.cards; // terms in original order, defs shuffled
-
-    return (
-      <div style={{ maxWidth: 640, margin: '0 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>🎮 Match Game</span>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-            {matchPaired.size}/{deck.cards.length} matched
-          </span>
-          {!allMatched && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginLeft: 'auto' }}>⏱ {elapsed}s</span>}
-          <button className="btn-icon" style={{ fontSize: 11, color: 'var(--text-3)' }} onClick={() => setPhase('preview')}>✕</button>
-        </div>
-
-        {allMatched ? (
-          <div style={{ textAlign: 'center', padding: '32px 20px' }}>
-            <div style={{ fontSize: 48, marginBottom: 10 }}>🎉</div>
-            <h3 style={{ margin: '0 0 6px' }}>All matched!</h3>
-            <p style={{ color: 'var(--text-3)' }}>Completed in {elapsed} seconds</p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16 }}>
-              <button className="btn btn-primary btn-sm" onClick={() => {
-                const defs = [...deck.cards].sort(() => Math.random() - 0.5).map(c => ({ id: c.id, text: c.back }));
-                setMatchShuffledDefs(defs); setMatchSelected(null); setMatchPaired(new Set());
-                setMatchFlash(null); setMatchStart(Date.now()); setMatchEnd(0);
-              }}>↺ Play again</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setPhase('preview')}>← Back</button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {/* Terms column */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: 1 }}>Terms</div>
-              {shuffledTerms.map(c => {
-                const paired  = matchPaired.has(c.id);
-                const selTerm = matchSelected === c.id;
-                const flash   = matchFlash?.id === c.id;
-                return (
-                  <div key={c.id}
-                    onClick={() => !paired && handleMatchTerm(c.id)}
-                    style={{
-                      padding: '10px 12px', borderRadius: 8, cursor: paired ? 'default' : 'pointer',
-                      fontSize: 'var(--text-xs)', lineHeight: 1.4, transition: 'all 0.15s',
-                      background: paired ? 'color-mix(in srgb, #52b788 15%, var(--surface))' : selTerm ? 'var(--accent)' : flash ? (matchFlash?.ok ? '#52b78820' : '#ef444420') : 'var(--surface-2)',
-                      color: paired ? '#52b788' : selTerm ? '#fff' : 'var(--text)',
-                      border: `1px solid ${paired ? '#52b78840' : selTerm ? 'var(--accent)' : 'var(--border-2)'}`,
-                      opacity: paired ? 0.6 : 1,
-                    }}>
-                    {paired ? '✓ ' : ''}{c.front}
-                  </div>
-                );
-              })}
-            </div>
-            {/* Definitions column (shuffled) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: 1 }}>Definitions</div>
-              {matchShuffledDefs.map(def => {
-                const paired = matchPaired.has(def.id);
-                const flash  = matchFlash?.id === def.id;
-                const active = !!matchSelected && !paired;
-                return (
-                  <div key={def.id}
-                    onClick={() => !paired && active && handleMatchDef(def.id)}
-                    style={{
-                      padding: '10px 12px', borderRadius: 8,
-                      cursor: (!paired && active) ? 'pointer' : 'default',
-                      fontSize: 'var(--text-xs)', lineHeight: 1.4, transition: 'all 0.15s',
-                      background: paired ? 'color-mix(in srgb, #52b788 15%, var(--surface))' : flash ? (matchFlash?.ok ? '#52b78820' : '#ef444420') : active ? 'var(--surface)' : 'var(--surface-2)',
-                      color: paired ? '#52b788' : flash && !matchFlash?.ok ? '#ef4444' : 'var(--text)',
-                      border: `1px solid ${paired ? '#52b78840' : flash && !matchFlash?.ok ? '#ef4444' : active ? 'var(--accent)' : 'var(--border-2)'}`,
-                      opacity: paired ? 0.6 : 1,
-                      transform: flash && !matchFlash?.ok ? 'translateX(-4px)' : 'none',
-                    }}>
-                    {paired ? '✓ ' : ''}{def.text}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // ── Learn mode ────────────────────────────────────────────────────────
-  if (phase === 'learn') {
-    const learnDone = learnQueue.length === 0;
-
-    function buildOptions(cardId: string): string[] {
-      const correct    = deck!.cards.find(c => c.id === cardId)?.back ?? '';
-      const distractors = deck!.cards
-        .filter(c => c.id !== cardId)
-        .map(c => c.back)
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 3);
-      return [correct, ...distractors].sort(() => Math.random() - 0.5);
-    }
-
-    const currentCardId = learnQueue[learnIdx] ?? null;
-    const currentCard   = deck.cards.find(c => c.id === currentCardId) ?? null;
-    // Keep options stable via learnOptions state; rebuild when queue changes
-    const learnOpts = learnOptions.length === 4
-      ? learnOptions
-      : (currentCardId ? buildOptions(currentCardId) : []);
-
-    function pickAnswer(opt: string) {
-      if (learnPicked) return;
-      setLearnPicked(opt);
-      const correct = currentCard?.back ?? '';
-      const isRight = opt === correct;
-      const nextId  = isRight ? null : currentCardId!;
-      setTimeout(() => {
-        setLearnQueue(prev => {
-          const without = prev.filter((_, i) => i !== learnIdx);
-          return nextId ? [...without, nextId] : without;
-        });
-        if (isRight) setLearnCorrect(p => p + 1);
-        setLearnIdx(0);
-        setLearnPicked(null);
-        // Rebuild options for next card
-        const nextCardId = learnQueue[learnIdx + (learnIdx + 1 < learnQueue.length ? 1 : 0)];
-        if (nextCardId && nextCardId !== currentCardId) setLearnOptions(buildOptions(nextCardId));
-        else setLearnOptions([]);
-      }, 900);
-    }
-
-    if (learnDone) {
-      const acc = Math.round((learnCorrect / learnTotal) * 100);
-      return (
-        <div style={{ textAlign: 'center', padding: '32px 20px', maxWidth: 480, margin: '0 auto' }}>
-          <div style={{ fontSize: 48, marginBottom: 10 }}>{acc === 100 ? '🎉' : acc >= 70 ? '📚' : '💪'}</div>
-          <h3 style={{ margin: '0 0 6px' }}>Learn complete!</h3>
-          <p style={{ color: 'var(--text-3)' }}>You got all {learnTotal} cards right</p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16 }}>
-            <button className="btn btn-primary btn-sm" onClick={() => {
-              const ids = deck!.cards.map(c => c.id).sort(() => Math.random() - 0.5);
-              setLearnQueue(ids); setLearnIdx(0); setLearnPicked(null);
-              setLearnCorrect(0); setLearnTotal(ids.length); setLearnOptions([]);
-            }}>↺ Restart</button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setPhase('preview')}>← Back</button>
-          </div>
-        </div>
-      );
-    }
-
-    if (!currentCard) return null;
-    const learnPct = Math.round(((learnTotal - learnQueue.length) / learnTotal) * 100);
-
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 540, margin: '0 auto' }}>
-        {/* Progress */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ flex: 1, height: 5, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
-            <div style={{ width: `${learnPct}%`, height: '100%', borderRadius: 3, background: '#52b788', transition: 'width 0.4s' }} />
-          </div>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-            {learnTotal - learnQueue.length}/{learnTotal}
-          </span>
-          <button className="btn-icon" style={{ fontSize: 11, color: 'var(--text-3)' }} onClick={() => setPhase('preview')}>✕</button>
-        </div>
-
-        {/* Card front */}
-        <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 12, padding: '20px 24px', textAlign: 'center', minHeight: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ fontWeight: 600, fontSize: 'var(--text-base)', lineHeight: 1.5 }}>{currentCard.front}</div>
-        </div>
-
-        {/* Options */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          {learnOpts.map((opt, i) => {
-            const isCorrect = opt === currentCard.back;
-            const isPicked  = learnPicked === opt;
-            let bg = 'var(--surface-2)';
-            let col = 'var(--text)';
-            let border = 'var(--border-2)';
-            if (isPicked && isCorrect) { bg = 'color-mix(in srgb,#52b788 20%,var(--surface))'; col = '#52b788'; border = '#52b788'; }
-            if (isPicked && !isCorrect) { bg = 'color-mix(in srgb,#ef4444 20%,var(--surface))'; col = '#ef4444'; border = '#ef4444'; }
-            if (learnPicked && !isPicked && isCorrect) { bg = 'color-mix(in srgb,#52b788 20%,var(--surface))'; col = '#52b788'; border = '#52b788'; }
-            return (
-              <div key={i} onClick={() => pickAnswer(opt)}
-                style={{ padding: '12px 14px', borderRadius: 10, cursor: learnPicked ? 'default' : 'pointer', background: bg, color: col, border: `1px solid ${border}`, fontSize: 'var(--text-sm)', lineHeight: 1.4, transition: 'all 0.15s', fontWeight: isPicked ? 600 : 400 }}>
-                {String.fromCharCode(65 + i)}. {opt}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Review mode ──────────────────────────────────────────────────────
-  const card = allCards[Math.min(sessionIdx, allCards.length - 1)];
-  const reviewPct = Math.round((sessionIdx / totalSession) * 100);
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 540, margin: '0 auto' }}>
-      {/* Progress bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ flex: 1, height: 5, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
-          <div style={{ width: `${reviewPct}%`, height: '100%', borderRadius: 3, background: 'var(--accent)', transition: 'width 0.4s' }} />
-        </div>
-        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-          {sessionIdx + 1}/{totalSession}
-        </span>
-        <button className="btn-icon" style={{ fontSize: 11, color: 'var(--text-3)' }}
-          title="Back to overview" onClick={() => { setPhase('preview'); }}>✕</button>
-      </div>
-
-      {/* Card */}
-      <div className="flashcard-wrap" style={{ minHeight: 200 }} onClick={() => !flip && setFlip(true)}>
-        <div className={`flashcard${flip ? ' flipped' : ''}`} style={{ minHeight: 200 }}>
-          <div className="flashcard-face">
-            <div className="flashcard-label">Front</div>
-            <div className="flashcard-text">{card.front}</div>
-            {!flip && <small style={{ marginTop: 'auto', color: 'var(--text-3)', paddingTop: 12 }}>Click to reveal answer</small>}
-          </div>
-          <div className="flashcard-face flashcard-back">
-            <div className="flashcard-label">Back</div>
-            <div className="flashcard-text">{card.back}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Grade buttons — only shown after flip */}
-      {flip ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-          {GRADES.map(g => (
-            <button key={g.grade}
-              onClick={() => doGrade(g.grade)}
-              title={g.hint}
-              style={{
-                border: 'none', borderRadius: 8, padding: '8px 4px', cursor: 'pointer',
-                background: `${g.color}18`, color: g.color, fontWeight: 600, fontSize: 'var(--text-xs)',
-                transition: 'background 0.12s',
-              }}>
-              {g.label}
-              <div style={{ fontWeight: 400, fontSize: 10, opacity: 0.8, marginTop: 2 }}>{g.hint.split('—')[0].trim()}</div>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => setFlip(true)}>Show answer</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Exam renderer (timed exam with score) ──────────────────────────────────
-
-function ExamView({ content, onDone }: { content: string; onDone?: (score: number, total: number) => void }) {
-  const blocks = content
-    .split(/\n(?=\*?\*?Q\d+[\.\)])/i)
-    .map(b => b.trim())
-    .filter(b => /Q\d+/i.test(b) && b.length > 10);
-
-  const [phase,    setPhase]    = useState<'setup' | 'exam' | 'results'>('setup');
-  const [minutes,  setMinutes]  = useState(Math.max(5, Math.ceil(blocks.length * 1.5)));
-  const [secsLeft, setSecsLeft] = useState(0);
-  const [answers,  setAnswers]  = useState<Record<number, string>>({});
-  const [score,    setScore]    = useState<{ correct: number; total: number; weak: string[] } | null>(null);
-
-  useEffect(() => {
-    if (phase !== 'exam') return;
-    const timer = setInterval(() => {
-      setSecsLeft(s => {
-        if (s <= 1) { clearInterval(timer); submitExam(); return 0; }
-        return s - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
-
-  function startExam() {
-    setSecsLeft(minutes * 60);
-    setAnswers({});
-    setScore(null);
-    setPhase('exam');
-  }
-
-  function submitExam() {
-    let correct = 0;
-    const weak: string[] = [];
-    blocks.forEach((block, qi) => {
-      const ans = block.match(/✓\s*([A-D])\)?/)?.[1] ?? block.match(/Answer:\s*([A-D])\b/i)?.[1];
-      const stem = block.split('\n')[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '').slice(0, 40);
-      if (ans && answers[qi] === ans) correct++;
-      else weak.push(stem + '…');
-    });
-    setScore({ correct, total: blocks.length, weak: weak.slice(0, 5) });
-    setPhase('results');
-    onDone?.(correct, blocks.length);
-  }
-
-  const mm = String(Math.floor(secsLeft / 60)).padStart(2, '0');
-  const ss = String(secsLeft % 60).padStart(2, '0');
-  const pct = blocks.length > 0 ? Math.round((Object.keys(answers).length / blocks.length) * 100) : 0;
-
-  if (phase === 'setup') {
-    return (
-      <div style={{ maxWidth: 440, margin: '0 auto', padding: 24, textAlign: 'center' }}>
-        <div style={{ fontSize: 48, marginBottom: 12 }}>🏆</div>
-        <h3 style={{ margin: '0 0 6px' }}>Exam Simulator</h3>
-        <p style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', marginBottom: 24 }}>
-          {blocks.length} questions · timed exam with scoring
-        </p>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', marginBottom: 20, fontSize: 'var(--text-sm)' }}>
-          Time limit:
-          <input type="number" value={minutes} min={1} max={180}
-            onChange={e => setMinutes(Math.max(1, +e.target.value))}
-            style={{ width: 64, textAlign: 'center' }} /> minutes
-        </label>
-        <button className="btn btn-primary" style={{ padding: '10px 32px', fontSize: 'var(--text-base)' }}
-          onClick={startExam}>
-          Start Exam →
-        </button>
-      </div>
-    );
-  }
-
-  if (phase === 'results' && score) {
-    const pctScore = Math.round((score.correct / score.total) * 100);
-    return (
-      <div style={{ maxWidth: 520, margin: '0 auto', padding: 20 }}>
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <div style={{ fontSize: 52, marginBottom: 8 }}>
-            {pctScore >= 80 ? '🎉' : pctScore >= 60 ? '📚' : '💪'}
-          </div>
-          <h3 style={{ margin: '0 0 6px', fontSize: 'var(--text-2xl)' }}>{pctScore}%</h3>
-          <div className={`badge ${pctScore >= 80 ? 'badge-success' : pctScore >= 60 ? 'badge-accent' : 'badge-danger'}`}
-            style={{ fontSize: 'var(--text-sm)', padding: '4px 14px' }}>
-            {score.correct} / {score.total} correct
-          </div>
-        </div>
-        {score.weak.length > 0 && (
-          <div style={{ background: 'var(--danger-bg)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
-            <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--danger)', marginBottom: 6 }}>
-              ⚠ Areas to review:
-            </div>
-            {score.weak.map((w, i) => (
-              <div key={i} style={{ fontSize: 'var(--text-xs)', color: 'var(--danger)', marginTop: 3 }}>• {w}</div>
-            ))}
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20 }}>
-          <button className="btn btn-primary" onClick={startExam}>Retake Exam</button>
-          <button className="btn btn-ghost" onClick={() => setPhase('setup')}>Change settings</button>
-        </div>
-      </div>
-    );
-  }
-
-  // Exam in progress
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Exam header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', color: secsLeft < 60 ? 'var(--danger)' : 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>
-          ⏱ {mm}:{ss}
-        </div>
-        <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
-          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: 'var(--accent)', transition: 'width 0.3s' }} />
-        </div>
-        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-          {Object.keys(answers).length}/{blocks.length} answered
-        </span>
-        <button className="btn btn-sm btn-primary" onClick={submitExam}>Submit</button>
-      </div>
-
-      {/* Questions */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {blocks.map((block, qi) => {
-          const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-          const stem  = lines[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '');
-          const opts  = lines.filter(l => /^[A-D]\)/.test(l));
-          return (
-            <div key={qi} className="quiz-card">
-              <div className="quiz-q-num">Q{qi + 1}</div>
-              <div className="quiz-q-text">{stem}</div>
-              <div className="quiz-options">
-                {opts.map((opt, oi) => {
-                  const letter = opt.match(/^([A-D])\)/)?.[1] ?? '';
-                  const text   = opt.replace(/^[A-D]\)\s*/, '');
-                  const isSel  = answers[qi] === letter;
-                  return (
-                    <div key={oi} className={`quiz-option${isSel ? ' selected' : ''}`}
-                      onClick={() => setAnswers(p => ({ ...p, [qi]: letter }))}>
-                      <span className="quiz-opt-letter">{letter}</span>
-                      <span>{text}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── Math Solver panel ──────────────────────────────────────────────────────
-
-const MATH_EXAMPLES = [
-  { label: 'Derivative', q: "Find the derivative of x^3 + 2x^2 - 5x + 3" },
-  { label: 'Integral',   q: "Integrate x^2 + 3x - 1 dx" },
-  { label: 'Quadratic',  q: "Solve x^2 - 5x + 6 = 0" },
-  { label: 'Linear Eq',  q: "Solve 3x + 7 = 22" },
-  { label: 'Limit',      q: "Find the limit as x approaches 2 of (x^2 - 4)/(x - 2)" },
-  { label: 'Arithmetic', q: "Calculate (15 * 4 + sqrt(81)) / 3" },
-];
-
-function MathPanel() {
-  const { toast } = useToast();
-  const [problem,   setProblem]   = useState('');
-  const [solution,  setSolution]  = useState<MathSolution | null>(null);
-  const [solving,   setSolving]   = useState(false);
-  const [history,   setHistory]   = useState<MathSolution[]>([]);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  function solve() {
-    const p = problem.trim();
-    if (!p) return;
-    setSolving(true);
-    setSolution(null);
-    try {
-      const sol = solveOffline(p);
-      setSolution(sol);
-      setHistory(h => [sol, ...h].slice(0, 10));
-    } catch (e) {
-      toast('Could not solve: ' + (e instanceof Error ? e.message : 'Unknown error'), 'error');
-    } finally {
-      setSolving(false);
-    }
-  }
-
-  function copyResult() {
-    if (!solution) return;
-    const text = [
-      `Problem: ${solution.problem}`,
-      `Type: ${solution.problemType}`,
-      '',
-      'Steps:',
-      ...solution.steps.map(s => `${s.step}. ${s.description}: ${s.expression}\n   ${s.explanation}`),
-      '',
-      `Answer: ${solution.finalAnswer}`,
-    ].join('\n');
-    navigator.clipboard.writeText(text).then(() => toast('Copied!', 'success'));
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-      {/* Input */}
-      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 'var(--text-base)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-          🧮 Math Solver
-          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 400, color: 'var(--text-3)' }}>
-            Derivatives · Integrals · Algebra · Limits · Arithmetic
-          </span>
-        </div>
-        <textarea
-          ref={textareaRef}
-          rows={2}
-          placeholder="Type a math problem, e.g.  Find the derivative of x^3 + 2x - 5"
-          value={problem}
-          onChange={e => setProblem(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); solve(); } }}
-          style={{
-            width: '100%', resize: 'none',
-            background: 'var(--surface)', border: '1.5px solid var(--border-2)',
-            borderRadius: 10, padding: '10px 14px',
-            fontSize: 'var(--text-sm)', lineHeight: 1.6, color: 'var(--text)', fontFamily: 'inherit',
-          }}
-        />
-        <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button className="btn btn-primary btn-sm" onClick={solve} disabled={!problem.trim() || solving}>
-            {solving ? '⏳ Solving…' : '= Solve'}
-          </button>
-          {solution && (
-            <>
-              <button className="btn btn-ghost btn-sm" onClick={() => { setSolution(null); setProblem(''); }}>Clear</button>
-              <button className="btn btn-ghost btn-sm" onClick={copyResult}>📋 Copy</button>
-            </>
-          )}
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginLeft: 'auto' }}>
-            Press Enter to solve · Shift+Enter for new line
-          </span>
-        </div>
-        {/* Examples */}
-        <div style={{ display: 'flex', gap: 5, marginTop: 10, flexWrap: 'wrap' }}>
-          {MATH_EXAMPLES.map(ex => (
-            <button key={ex.label}
-              className="btn btn-ghost btn-sm"
-              style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12 }}
-              onClick={() => { setProblem(ex.q); setSolution(null); textareaRef.current?.focus(); }}>
-              {ex.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Solution */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px' }}>
-        {!solution && !solving && !history.length && (
-          <div className="empty-state" style={{ padding: '48px 20px' }}>
-            <div className="empty-icon">🧮</div>
-            <h3>Math Solver</h3>
-            <p>Enter any math problem above — algebra, calculus, limits, and more. Step-by-step solutions shown.</p>
-          </div>
-        )}
-
-        {solving && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 60 }}>
-            <div style={{ width: 20, height: 20, border: '2.5px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-            <span style={{ color: 'var(--text-3)' }}>Solving…</span>
-          </div>
-        )}
-
-        {solution && (
-          <div className="math-solution">
-            {/* Problem header */}
-            <div className="math-sol-header">
-              <div className="math-sol-type">{solution.problemType.replace(/-/g, ' ')}</div>
-              <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>
-                <MathText>{solution.problem}</MathText>
-              </div>
-            </div>
-
-            {/* Steps */}
-            {solution.steps.length > 0 && (
-              <div style={{ marginTop: 16 }}>
-                <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3)', marginBottom: 10 }}>
-                  Step-by-step solution
-                </div>
-                {solution.steps.map(step => (
-                  <div key={step.step} className="math-step">
-                    <div className="math-step-num">{step.step}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', marginBottom: 4 }}>
-                        {step.description}
-                      </div>
-                      {step.expression && (
-                        <div className="math-expr">
-                          <MathRenderer math={step.expression} display={true} />
-                        </div>
-                      )}
-                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 4 }}>
-                        {step.explanation}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Final answer */}
-            <div className="math-answer">
-              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent)', marginBottom: 10 }}>
-                Final Answer
-              </div>
-              <div className="math-answer-expr">
-                <MathRenderer math={solution.finalAnswer} display={true} />
-              </div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 8 }}>
-                Plain text: {solution.finalAnswer}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* History */}
-        {!solution && history.length > 0 && (
-          <div>
-            <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3)', marginBottom: 10 }}>
-              Recent problems
-            </div>
-            {history.map((h, i) => (
-              <div key={i} className="math-history-item"
-                onClick={() => { setSolution(h); setProblem(h.problem); }}>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', textTransform: 'uppercase' }}>{h.problemType.replace(/-/g, ' ')}</div>
-                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, marginTop: 2 }}>{h.problem}</div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginTop: 4 }}>→ {h.finalAnswer}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Focus / Pomodoro panel ─────────────────────────────────────────────────
-
-type PomPhase = 'work' | 'short-break' | 'long-break';
-
-const POMODORO_PRESETS: Record<PomPhase, number> = {
-  'work': 25,
-  'short-break': 5,
-  'long-break': 15,
-};
-
-function FocusPanel() {
-  const { toast } = useToast();
-  const [phase,         setPhase]         = useState<PomPhase>('work');
-  const [customMins,    setCustomMins]     = useState<Record<PomPhase, number>>({ ...POMODORO_PRESETS });
-  const [secsLeft,      setSecsLeft]       = useState(POMODORO_PRESETS.work * 60);
-  const [running,       setRunning]        = useState(false);
-  const [sessions,      setSessions]       = useState(0);    // pomodoros completed today
-  const [todayTotal,    setTodayTotal]     = useState(0);    // total minutes studied today
-  const [task,          setTask]           = useState('');   // what are you studying?
-  const [showSettings,  setShowSettings]   = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const totalSecs    = customMins[phase] * 60;
-  const progress     = Math.max(0, Math.min(100, ((totalSecs - secsLeft) / totalSecs) * 100));
-  const mm           = String(Math.floor(secsLeft / 60)).padStart(2, '0');
-  const ss           = String(secsLeft % 60).padStart(2, '0');
-  const circumference = 2 * Math.PI * 54; // radius 54 on SVG
-
-  useEffect(() => {
-    if (running) {
-      intervalRef.current = setInterval(() => {
-        setSecsLeft(s => {
-          if (s <= 1) {
-            clearInterval(intervalRef.current!);
-            setRunning(false);
-            handlePhaseEnd();
-            return 0;
-          }
-          return s - 1;
-        });
-      }, 1000);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running]);
-
-  function handlePhaseEnd() {
-    if (phase === 'work') {
-      const newSessions = sessions + 1;
-      setSessions(newSessions);
-      setTodayTotal(t => t + customMins.work);
-      toast(`🎉 Pomodoro #${newSessions} complete! Take a break.`, 'success');
-      const next: PomPhase = newSessions % 4 === 0 ? 'long-break' : 'short-break';
-      switchPhase(next);
-    } else {
-      toast('Break over — back to work!', 'info');
-      switchPhase('work');
-    }
-  }
-
-  function switchPhase(p: PomPhase) {
-    setPhase(p);
-    setSecsLeft(customMins[p] * 60);
-    setRunning(false);
-  }
-
-  function reset() {
-    setSecsLeft(customMins[phase] * 60);
-    setRunning(false);
-  }
-
-  function skip() {
-    handlePhaseEnd();
-  }
-
-  const phaseColor: Record<PomPhase, string> = {
-    'work': 'var(--accent)',
-    'short-break': 'var(--success)',
-    'long-break': 'var(--purple)',
-  };
-
-  const strokeDash = circumference - (progress / 100) * circumference;
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'auto' }}>
-      <div style={{ maxWidth: 500, margin: '0 auto', padding: '24px 20px', width: '100%' }}>
-
-        {/* Phase selector */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 28, background: 'var(--surface)', borderRadius: 12, padding: 4 }}>
-          {(['work', 'short-break', 'long-break'] as PomPhase[]).map(p => (
-            <button key={p}
-              onClick={() => switchPhase(p)}
-              style={{
-                flex: 1, padding: '7px 4px', borderRadius: 9, border: 'none', cursor: 'pointer',
-                fontSize: 'var(--text-xs)', fontWeight: 600,
-                background: phase === p ? 'var(--bg)' : 'transparent',
-                color: phase === p ? phaseColor[p] : 'var(--text-3)',
-                boxShadow: phase === p ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
-                transition: 'all 0.15s',
-              }}>
-              {p === 'work' ? '🍅 Focus' : p === 'short-break' ? '☕ Short break' : '🌿 Long break'}
-            </button>
-          ))}
-        </div>
-
-        {/* Ring timer */}
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 28 }}>
-          <svg width={140} height={140} style={{ transform: 'rotate(-90deg)' }}>
-            <circle cx={70} cy={70} r={54} fill="none" stroke="var(--surface-2)" strokeWidth={8} />
-            <circle cx={70} cy={70} r={54} fill="none"
-              stroke={phaseColor[phase]}
-              strokeWidth={8}
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={strokeDash}
-              style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.3s' }}
-            />
-          </svg>
-          <div style={{ position: 'absolute', textAlign: 'center' }}>
-            <div style={{
-              fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em',
-              fontVariantNumeric: 'tabular-nums',
-              color: running ? phaseColor[phase] : 'var(--text)',
-              animation: running ? 'timer-pulse 2s ease-in-out infinite' : 'none',
-            }}>
-              {mm}:{ss}
-            </div>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2, textTransform: 'capitalize' }}>
-              {phase.replace('-', ' ')}
-            </div>
-          </div>
-        </div>
-
-        {/* Controls */}
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 24 }}>
-          <button className="btn btn-ghost btn-sm" onClick={reset}>↺ Reset</button>
-          <button
-            style={{
-              padding: '10px 36px', borderRadius: 50, border: 'none', cursor: 'pointer',
-              background: phaseColor[phase], color: '#fff',
-              fontSize: 'var(--text-base)', fontWeight: 700,
-              boxShadow: running ? `0 0 0 4px color-mix(in srgb, ${phaseColor[phase]} 25%, transparent)` : 'none',
-              transition: 'all 0.2s',
-            }}
-            onClick={() => setRunning(r => !r)}>
-            {running ? '⏸ Pause' : secsLeft < totalSecs ? '▶ Resume' : '▶ Start'}
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={skip} disabled={!running}>Skip →</button>
-        </div>
-
-        {/* Task input */}
-        <div style={{ marginBottom: 20 }}>
-          <input
-            type="text"
-            placeholder="What are you studying? (optional)"
-            value={task}
-            onChange={e => setTask(e.target.value)}
-            style={{
-              width: '100%', padding: '8px 14px', borderRadius: 10,
-              background: 'var(--surface)', border: '1px solid var(--border-2)',
-              fontSize: 'var(--text-sm)', color: 'var(--text)',
-            }}
-          />
-        </div>
-
-        {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
-          {[
-            { label: 'Pomodoros', value: sessions, icon: '🍅' },
-            { label: 'Min studied', value: todayTotal, icon: '⏱' },
-            { label: 'Goal today', value: '4 sessions', icon: '🎯' },
-          ].map(stat => (
-            <div key={stat.label} style={{
-              background: 'var(--surface)', border: '1px solid var(--border)',
-              borderRadius: 10, padding: '10px 12px', textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 20, marginBottom: 4 }}>{stat.icon}</div>
-              <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text)' }}>{stat.value}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' }}>{stat.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Custom durations */}
-        <div style={{ marginBottom: 16 }}>
-          <button className="btn btn-ghost btn-sm" style={{ fontSize: 'var(--text-xs)', width: '100%', justifyContent: 'center' }}
-            onClick={() => setShowSettings(s => !s)}>
-            {showSettings ? '▲ Hide settings' : '⚙ Customize durations'}
-          </button>
-          {showSettings && (
-            <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, padding: '14px', background: 'var(--surface)', borderRadius: 10 }}>
-              {(['work', 'short-break', 'long-break'] as PomPhase[]).map(p => (
-                <label key={p} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                  {p === 'work' ? 'Focus' : p === 'short-break' ? 'Short break' : 'Long break'} (min)
-                  <input type="number" value={customMins[p]} min={1} max={90}
-                    onChange={e => {
-                      const v = Math.max(1, +e.target.value);
-                      setCustomMins(prev => ({ ...prev, [p]: v }));
-                      if (phase === p) { setSecsLeft(v * 60); setRunning(false); }
-                    }}
-                    style={{ padding: '4px 8px', textAlign: 'center' }} />
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Study tips */}
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px' }}>
-          <div style={{ fontWeight: 600, fontSize: 'var(--text-xs)', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-            💡 Pomodoro tips
-          </div>
-          <ul style={{ margin: 0, paddingLeft: 16, fontSize: 'var(--text-xs)', color: 'var(--text-3)', lineHeight: 1.7 }}>
-            <li>Work in 25-min focused bursts with no distractions</li>
-            <li>Every 4 pomodoros, take a longer 15-min break</li>
-            <li>Note what you studied each session to track progress</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
+// ── View components (extracted to views/) ──────────────────────────────────
+// MCQView, PracticeView, FlashcardView, ExamView, and FocusPanel
+// are imported above from @/components/workspace/views/*
 
 // ── Inline file viewer ─────────────────────────────────────────────────────
 
@@ -1489,7 +216,14 @@ export function WorkspacePanel({
   const [editMode,      setEditMode]      = useState(false);
   const [streak,        setStreak]        = useState<number>(0);
   const [notesInject,   setNotesInject]   = useState<string | undefined>(undefined);
-  const abortRef = useRef<AbortController | null>(null);
+  const abortRef    = useRef<AbortController | null>(null);
+  const pasteRef    = useRef<HTMLTextAreaElement>(null);
+
+  function requestCreateFolder() {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('kivora:create-folder'));
+    }
+  }
 
   // ── Data loading ──────────────────────────────────────────────────────
 
@@ -1537,10 +271,22 @@ export function WorkspacePanel({
     }
   }, [mainTab, loadLib]);
 
+  // Auto-extract when a file is selected from the dropdown
+  useEffect(() => {
+    if (selFile && !extractedText && !extracting && !pasteMode) {
+      extractFromFile(selFile);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selFile?.id]);
+
   // ── File operations ───────────────────────────────────────────────────
 
   async function extractFromFile(file: FileRecord): Promise<string | null> {
-    if (file.content) { setExtractedText(file.content); return file.content; }
+    if (file.content) {
+      setExtractedText(file.content);
+      void ensureRagIndex(file.id, file.content);
+      return file.content;
+    }
     if (!file.localBlobId) { toast('No local file data.', 'error'); return null; }
     setExtracting(true);
     try {
@@ -1549,6 +295,7 @@ export function WorkspacePanel({
       const res = await extractTextFromBlob(payload.blob, file.name);
       if (res.error) { toast(res.error, 'error'); return null; }
       setExtractedText(res.text);
+      void ensureRagIndex(file.id, res.text);
       toast(`Extracted ${res.wordCount.toLocaleString()} words from "${file.name}"`, 'success');
       return res.text;
     } finally { setExtracting(false); }
@@ -1592,6 +339,7 @@ export function WorkspacePanel({
     e.stopPropagation();
     if (!confirm(`Delete "${file.name}"?`)) return;
     if (file.localBlobId) await idbStore.delete(file.localBlobId);
+    await deleteRagIndex(file.id).catch(() => {});
     deleteLocalFile(file.id);
     await fetch(`/api/files/${file.id}`, { method: 'DELETE' }).catch(() => {});
     setFiles(p => p.filter(f => f.id !== file.id));
@@ -1606,6 +354,9 @@ export function WorkspacePanel({
     let src = extractedText.trim();
     if (!src && selFile) src = (await extractFromFile(selFile))?.trim() ?? '';
     if (!src) { toast('Select a file or paste content first.', 'warning'); return; }
+    const retrievalContext = selFile
+      ? buildGenerationContext(mode as Parameters<typeof buildGenerationContext>[0], src, { count }, await ensureRagIndex(selFile.id, src).catch(() => undefined))
+      : buildGenerationContext(mode as Parameters<typeof buildGenerationContext>[0], src, { count });
 
     // Cancel any in-flight stream
     abortRef.current?.abort();
@@ -1625,7 +376,7 @@ export function WorkspacePanel({
       const res = await fetch('/api/generate/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, text: src, options: { count }, model: ollamaModel }),
+        body: JSON.stringify({ mode, text: src, fileId: selFile?.id ?? null, retrievalContext, options: { count }, model: ollamaModel }),
         signal: ctrl.signal,
       });
 
@@ -1633,7 +384,7 @@ export function WorkspacePanel({
         // Fallback to non-streaming route
         const fallback = await fetch('/api/generate', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode, text: src, options: { count }, model: ollamaModel }),
+          body: JSON.stringify({ mode, text: retrievalContext, fileId: selFile?.id ?? null, options: { count }, model: ollamaModel }),
         });
         const data = await fallback.json();
         setOutput(data.content ?? data.error ?? 'No output received.');
@@ -1770,18 +521,21 @@ export function WorkspacePanel({
       {/* Tab bar */}
       <div className="tab-bar" style={{ flexShrink: 0, overflowX: 'auto', flexWrap: 'nowrap' }}>
         {([
-          ['files',    `📁 Files${files.length ? ` (${files.length})` : ''}`],
-          ['generate', '⚡ Generate'],
-          ['chat',     '💬 Chat'],
-          ['notes',    '📓 Notes'],
-          ['math',     '🧮 Math'],
-          ['focus',    '🍅 Focus'],
-          ['planner',  '📅 Planner'],
-          ['library',  `🗂 Library${libItems.length ? ` (${libItems.length})` : ''}`],
-        ] as [MainTab, string][]).map(([id, label]) => (
+          ['files',    '📁', 'Files', files.length ? `(${files.length})` : ''],
+          ['generate', '⚡', 'Tools', ''],
+          ['chat',     '💬', 'Chat', ''],
+          ['notes',    '📓', 'Notes', ''],
+          ['focus',    '🍅', 'Focus', ''],
+          ['planner',  '📅', 'Planner', ''],
+          ['library',  '🗂', 'Library', libItems.length ? `(${libItems.length})` : ''],
+        ] as [MainTab, string, string, string][]).map(([id, icon, label, meta]) => (
           <button key={id} className={`tab-btn${mainTab === id ? ' active' : ''}`}
             onClick={() => setMainTab(id)}>
-            {label}
+            <span className="tab-btn-content">
+              <span className="tab-btn-icon" aria-hidden="true">{icon}</span>
+              <span className="tab-btn-text">{label}</span>
+              {meta && <span className="tab-btn-meta">{meta}</span>}
+            </span>
           </button>
         ))}
       </div>
@@ -1796,12 +550,21 @@ export function WorkspacePanel({
               flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
               borderRight: viewFile ? '1px solid var(--border)' : 'none',
               transition: 'width 0.22s ease',
-            }}>
+              // On mobile, hide list when viewer is open
+            }} className={viewFile ? 'file-list-panel file-list-panel--has-viewer' : 'file-list-panel'}>
               {!selectedFolder ? (
                 <div className="empty-state" style={{ flex: 1 }}>
                   <div className="empty-icon">📂</div>
                   <h3>No folder selected</h3>
-                  <p>Pick a folder from the left sidebar to see and upload files.</p>
+                  <p>Start by creating a folder, then drop in a file and send it straight into Tools.</p>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <button className="btn btn-primary btn-sm" onClick={requestCreateFolder}>
+                      Create first folder
+                    </button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setMainTab('generate')}>
+                      Open tools
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -1854,12 +617,30 @@ export function WorkspacePanel({
                                 <div className="file-name" title={file.name}>{file.name}</div>
                                 <div className="file-meta">{fmt(file.fileSize)}{file.fileSize ? ' · ' : ''}{fmtDate(file.createdAt)}</div>
                               </div>
-                              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                                 {!isMissing && (
-                                  <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}
-                                    onClick={e => { e.stopPropagation(); setViewFile(file); }}>View</button>
+                                  <>
+                                    <button
+                                      className="btn btn-primary btn-sm"
+                                      style={{ fontSize: 11, padding: '2px 8px' }}
+                                      title="Extract text and open in Generate"
+                                      onClick={async () => {
+                                        const text = await extractFromFile(file);
+                                        if (text) {
+                                          setSelFile(file);
+                                          setMainTab('generate');
+                                        }
+                                      }}>
+                                      ⚡ Use
+                                    </button>
+                                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}
+                                      onClick={() => setViewFile(v => v?.id === file.id ? null : file)}>
+                                      {viewFile?.id === file.id ? 'Close' : 'View'}
+                                    </button>
+                                  </>
                                 )}
                                 <button className="btn-icon" style={{ color: 'var(--danger)', width: 26, height: 26 }}
+                                  title={`Delete "${file.name}"`}
                                   onClick={e => deleteFile(e, file)}>✕</button>
                               </div>
                             </div>
@@ -1906,7 +687,7 @@ export function WorkspacePanel({
               )}
             </div>
             {viewFile && (
-              <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
+              <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }} className="file-viewer-panel">
                 <FileViewer file={viewFile} onClose={() => setViewFile(null)} onUseForTools={handleUseForTools} />
               </div>
             )}
@@ -2011,15 +792,26 @@ export function WorkspacePanel({
             {pasteMode && !extractedText && (
               <div style={{ padding: '12px 14px', flexShrink: 0 }}>
                 <textarea
+                  ref={pasteRef}
                   placeholder="Paste your notes, essay, textbook content, or any study material here…"
                   style={{ width: '100%', minHeight: 140, resize: 'vertical', background: 'var(--surface)', border: '1.5px solid var(--border-2)', borderRadius: 10, padding: '12px 14px', fontSize: 'var(--text-sm)', lineHeight: 1.6, color: 'var(--text)', fontFamily: 'inherit' }}
-                  onBlur={e => { if (e.target.value.trim()) setExtractedText(e.target.value.trim()); }}
+                  onKeyDown={e => {
+                    // Ctrl+Enter to confirm paste
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                      e.preventDefault();
+                      const v = pasteRef.current?.value.trim();
+                      if (v) setExtractedText(v);
+                    }
+                  }}
                 />
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                    <kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Ctrl+Enter</kbd> to confirm
+                  </span>
                   <button className="btn btn-primary btn-sm"
-                    onClick={e => {
-                      const ta = (e.currentTarget.closest('div')?.previousElementSibling as HTMLTextAreaElement);
-                      if (ta?.value.trim()) setExtractedText(ta.value.trim());
+                    onClick={() => {
+                      const v = pasteRef.current?.value.trim();
+                      if (v) setExtractedText(v);
                     }}>Use this text →</button>
                 </div>
               </div>
@@ -2036,13 +828,16 @@ export function WorkspacePanel({
 
               {(output || (generating && output)) && (
                 <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 18 }}>{currentGen.icon}</span>
                     <span style={{ fontWeight: 600 }}>{currentGen.label}</span>
-                    {selFile && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>from &ldquo;{selFile.name}&rdquo;</span>}
+                    {selFile && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160, whiteSpace: 'nowrap' }}>from &ldquo;{selFile.name}&rdquo;</span>}
+                    {!generating && output && (
+                      <span className="badge badge-accent" style={{ fontSize: 10 }}>{wordCount(output).toLocaleString()} words</span>
+                    )}
                     {generating && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginLeft: 4 }}>● streaming…</span>}
                     {!generating && streamSource === 'offline' && <span className="badge" style={{ fontSize: 10, opacity: 0.6 }}>offline</span>}
-                    {!generating && streamSource === 'ollama' && <span className="badge badge-accent" style={{ fontSize: 10 }}>AI</span>}
+                    {!generating && streamSource === 'ollama' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(74,222,128,0.15)', color: '#4ade80', borderColor: 'rgba(74,222,128,0.3)' }}>● AI</span>}
                     {/* Edit toggle — only for text modes, not while streaming */}
                     {!generating && (genMode === 'summarize' || genMode === 'notes' || genMode === 'rephrase' || genMode === 'outline' || genMode === 'assignment' || genMode === 'quiz') && (
                       <button
@@ -2070,7 +865,7 @@ export function WorkspacePanel({
                     ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) + '<span class="stream-cursor">▍</span>' }} />
                     : genMode === 'practice'   ? <PracticeView content={output} />
                     : genMode === 'mcq'        ? <MCQView content={output} />
-                    : genMode === 'flashcards' ? <FlashcardView content={output} />
+                    : genMode === 'flashcards' ? <FlashcardView content={output} title={selFile?.name} />
                     : genMode === 'exam'       ? <ExamView content={output} />
                     : <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) }} />
                   }
@@ -2130,7 +925,7 @@ export function WorkspacePanel({
 
         {/* ─────────────────── CHAT ──────────────────── */}
         {mainTab === 'chat' && (
-          <ChatPanel extractedText={extractedText} fileName={selFile?.name} />
+          <ChatPanel extractedText={extractedText} fileName={selFile?.name} fileId={selFile?.id} />
         )}
 
         {/* ─────────────────── NOTES ─────────────────── */}
@@ -2141,9 +936,6 @@ export function WorkspacePanel({
             onInjectConsumed={() => setNotesInject(undefined)}
           />
         )}
-
-        {/* ─────────────────── MATH ──────────────────── */}
-        {mainTab === 'math' && <MathPanel />}
 
         {/* ─────────────────── FOCUS ─────────────────── */}
         {mainTab === 'focus' && <FocusPanel />}
@@ -2248,9 +1040,20 @@ export function WorkspacePanel({
                         }}>✕</button>
                     </div>
                   </div>
-                  <div className="lib-item-preview" style={{ maxHeight: expanded ? 'none' : 80, overflow: expanded ? 'visible' : 'hidden', WebkitMaskImage: expanded ? 'none' : 'linear-gradient(to bottom, #000 60%, transparent)', maskImage: expanded ? 'none' : 'linear-gradient(to bottom, #000 60%, transparent)' }}>
-                    {item.content.slice(0, expanded ? undefined : 600)}{!expanded && item.content.length > 600 ? '…' : ''}
-                  </div>
+                  {item.mode === 'flashcards' ? (
+                    <div style={{ marginTop: 8 }}>
+                      {expanded
+                        ? <FlashcardView content={item.content} />
+                        : <div className="lib-item-preview" style={{ maxHeight: 80, overflow: 'hidden', WebkitMaskImage: 'linear-gradient(to bottom, #000 60%, transparent)', maskImage: 'linear-gradient(to bottom, #000 60%, transparent)' }}>
+                            {item.content.slice(0, 300)}…
+                          </div>
+                      }
+                    </div>
+                  ) : (
+                    <div className="lib-item-preview" style={{ maxHeight: expanded ? 'none' : 80, overflow: expanded ? 'visible' : 'hidden', WebkitMaskImage: expanded ? 'none' : 'linear-gradient(to bottom, #000 60%, transparent)', maskImage: expanded ? 'none' : 'linear-gradient(to bottom, #000 60%, transparent)' }}>
+                      {item.content.slice(0, expanded ? undefined : 600)}{!expanded && item.content.length > 600 ? '…' : ''}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
                       onClick={() => navigator.clipboard.writeText(item.content).then(() => toast('Copied!', 'success'))}>
