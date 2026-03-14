@@ -9,6 +9,7 @@ import {
   type SRSCard, type SRSDeck, type StudySession, type SRSReviewEvent,
 } from '@/lib/srs/sm2';
 import { parseFlashcards } from '@/lib/srs/parse';
+import { deckToContent, exportDeckApkg, exportDeckCsv, syncDeckToCloud } from '@/lib/srs/deck-utils';
 import { useI18n } from '@/lib/i18n/useI18n';
 import { mdToHtml } from '@/lib/utils/md';
 import { idbStore } from '@/lib/idb';
@@ -71,36 +72,6 @@ function buildTestQuestions(deck: SRSDeck): TestQuestion[] {
   });
 }
 
-// ── CSV export ────────────────────────────────────────────────────────────────
-function exportCSV(deck: SRSDeck) {
-  const rows = ['Front,Back', ...deck.cards.map(c => `"${c.front.replace(/"/g, '""')}","${c.back.replace(/"/g, '""')}"`)];
-  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `${deck.name.replace(/[^a-z0-9]/gi, '_')}.csv`; a.click();
-  URL.revokeObjectURL(url);
-}
-
-async function exportApkg(deck: SRSDeck) {
-  const res = await fetch('/api/srs/export', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      deckName: deck.name,
-      description: deck.description ?? '',
-      cards: deck.cards.map((card) => ({ id: card.id, front: card.front, back: card.back })),
-    }),
-  });
-  if (!res.ok) throw new Error('Anki export failed');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${deck.name.replace(/[^a-z0-9]/gi, '_') || 'deck'}.apkg`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 // ── TTS ───────────────────────────────────────────────────────────────────────
 function speak(text: string) {
   if (typeof window === 'undefined' || !window.speechSynthesis) return;
@@ -115,9 +86,7 @@ async function syncDeck(deck: SRSDeck) {
   const last = syncCache.get(deck.id) ?? 0;
   if (Date.now() - last < 3000) return; // debounce 3s
   syncCache.set(deck.id, Date.now());
-  try {
-    await fetch('/api/srs', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deck }) });
-  } catch { /* silently ignore offline */ }
+  await syncDeckToCloud(deck);
 }
 
 async function syncSession(cards: number) {
@@ -198,7 +167,23 @@ function StudyHeatmap({
 type Phase = 'preview' | 'review' | 'done' | 'match' | 'learn' | 'write' | 'test' | 'stats' | 'import' | 'edit-card';
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function FlashcardView({ content, title }: { content: string; title?: string }) {
+export function FlashcardView({
+  content = '',
+  title,
+  initialDeck = null,
+  requestedPhase = null,
+  onRequestedPhaseHandled,
+  onDeckChange,
+  showBrowseButton = true,
+}: {
+  content?: string;
+  title?: string;
+  initialDeck?: SRSDeck | null;
+  requestedPhase?: Exclude<Phase, 'done' | 'edit-card' | 'preview'> | null;
+  onRequestedPhaseHandled?: () => void;
+  onDeckChange?: (deck: SRSDeck) => void;
+  showBrowseButton?: boolean;
+}) {
   const router = useRouter();
   const { t, formatDate, formatNumber } = useI18n({
     'Flashcards ({count} cards)': 'بطاقات تعليمية ({count} بطاقة)',
@@ -336,8 +321,28 @@ export function FlashcardView({ content, title }: { content: string; title?: str
     'Submit': 'إرسال',
     'Correct': 'الصحيح',
     'Next': 'التالي',
+    // Review mode
+    'Show answer': 'أظهر الإجابة',
+    'Tap to reveal · swipe to grade': 'اضغط للكشف · اسحب للتقييم',
+    // Learn mode
+    'Learn': 'تعلّم',
+    'Learn complete!': 'اكتمل التعلم!',
+    'All {count} cards correct!': 'صحّحت جميع البطاقات ({count})!',
+    'Restart': 'إعادة البدء',
+    // Edit card
+    'Edit card': 'تعديل البطاقة',
+    'Add image': 'إضافة صورة',
+    'Save changes': 'حفظ التغييرات',
+    // Write mode results
+    '{correct}/{total} correct ({pct}%)': '{correct}/{total} صحيح ({pct}%)',
+    // Deck settings
+    'Deck settings': 'إعدادات المجموعة',
+    'Show settings': 'إظهار الإعدادات',
+    'Hide settings': 'إخفاء الإعدادات',
   });
-  const rawCards = parseFlashcards(content);
+  const rawCards = initialDeck
+    ? initialDeck.cards.map((card) => ({ front: card.front, back: card.back }))
+    : parseFlashcards(content);
 
   // Core SRS
   const [deck,       setDeck]       = useState<SRSDeck | null>(null);
@@ -410,16 +415,20 @@ export function FlashcardView({ content, title }: { content: string; title?: str
 
   // Load deck on content change
   useEffect(() => {
-    if (rawCards.length === 0) return;
-    const deckId   = stableDeckId(content.slice(0, 240));
-    const existing = loadDecks().find(d => d.id === deckId);
-    const d = existing ?? {
-      id: deckId, name: title?.trim() || t('Flashcards ({count} cards)', { count: formatNumber(rawCards.length) }),
+    const explicitDeck = initialDeck ? { ...initialDeck, cards: [...initialDeck.cards] } : null;
+    if (!explicitDeck && rawCards.length === 0) return;
+
+    const deckId   = explicitDeck?.id ?? stableDeckId(content.slice(0, 240));
+    const existing = explicitDeck ? loadDecks().find(d => d.id === explicitDeck.id) : loadDecks().find(d => d.id === deckId);
+    const d = existing ?? explicitDeck ?? {
+      id: deckId,
+      name: title?.trim() || t('Flashcards ({count} cards)', { count: formatNumber(rawCards.length) }),
       cards: rawCards.map((c, i) => createCard(`${deckId}-${i}`, c.front, c.back)),
       createdAt: new Date().toISOString(),
     };
     if (!existing) saveDeck(d);
     setDeck(d);
+    onDeckChange?.(d);
     setDescInput(d.description ?? '');
     setSessionIdx(0); setFlip(false); setPhase('preview'); setGraded([]);
     setMatchSelected(null); setMatchPaired(new Set()); setMatchFlash(null); setMatchEnd(0);
@@ -476,7 +485,7 @@ export function FlashcardView({ content, title }: { content: string; title?: str
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, title]);
+  }, [content, initialDeck?.id, title]);
 
   // Load images for current review card
   useEffect(() => {
@@ -501,7 +510,23 @@ export function FlashcardView({ content, title }: { content: string; title?: str
     if (!deck || shareStatus === 'loading') return;
     setShareStatus('loading');
     try {
-      const libRes = await fetch('/api/library', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'flashcards', content, metadata: { title: title ?? deck.name, cardCount: rawCards.length } }) });
+      const serializedDeck = deckToContent(deck);
+      const libRes = await fetch('/api/library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'flashcards',
+          content: serializedDeck,
+          metadata: {
+            title: title ?? deck.name,
+            description: deck.description ?? '',
+            cardCount: deck.cards.length,
+            sourceDeckId: deck.id,
+            sourceDeckName: deck.name,
+            savedFrom: initialDeck ? `/decks/${deck.id}` : '/workspace',
+          },
+        }),
+      });
       if (!libRes.ok) throw new Error();
       const libItem = await libRes.json();
       const shareRes = await fetch('/api/share', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ libraryItemId: libItem.id, permission: 'view' }) });
@@ -517,10 +542,79 @@ export function FlashcardView({ content, title }: { content: string; title?: str
   const saveDeckState = useCallback((next: SRSDeck) => {
     saveDeck(next);
     setDeck(next);
+    onDeckChange?.(next);
     void syncDeck(next);
-  }, []);
+  }, [onDeckChange]);
+  const launchPhase = useCallback((nextPhase: Exclude<Phase, 'done' | 'edit-card' | 'preview'>) => {
+    if (!deck) return;
+    switch (nextPhase) {
+      case 'review':
+        setSessionIdx(0);
+        setFlip(false);
+        setGraded([]);
+        setPhase('review');
+        break;
+      case 'write': {
+        const queue = [...deck.cards].sort(() => Math.random() - 0.5).map((card) => card.id);
+        setWriteQueue(queue);
+        setWriteIdx(0);
+        setWriteInput('');
+        setWriteRevealed(false);
+        setWriteScores([]);
+        setPhase('write');
+        break;
+      }
+      case 'test': {
+        const questions = buildTestQuestions(deck);
+        setTestQuestions(questions);
+        setTestAnswers({});
+        setTestIdx(0);
+        setTestDone(false);
+        setTestWritten('');
+        setPhase('test');
+        break;
+      }
+      case 'match': {
+        const defs = [...deck.cards].sort(() => Math.random() - 0.5).map((card) => ({ id: card.id, text: card.back }));
+        setMatchShuffledDefs(defs);
+        setMatchSelected(null);
+        setMatchPaired(new Set());
+        setMatchFlash(null);
+        setMatchStart(Date.now());
+        setMatchEnd(0);
+        setPhase('match');
+        break;
+      }
+      case 'learn': {
+        const queue = [...deck.cards.map((card) => card.id)].sort(() => Math.random() - 0.5);
+        setLearnQueue(queue);
+        setLearnIdx(0);
+        setLearnPicked(null);
+        setLearnCorrect(0);
+        setLearnTotal(queue.length);
+        setPhase('learn');
+        break;
+      }
+      case 'stats':
+        setSessions(loadSessions());
+        setStreak(getStreak());
+        setPhase('stats');
+        break;
+      case 'import':
+        setImportText('');
+        setImportError('');
+        setPhase('import');
+        break;
+    }
+  }, [deck]);
 
-  if (rawCards.length === 0) return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
+  useEffect(() => {
+    if (!requestedPhase || !deck) return;
+    launchPhase(requestedPhase);
+    onRequestedPhaseHandled?.();
+  }, [deck, launchPhase, onRequestedPhaseHandled, requestedPhase]);
+
+  if (!initialDeck && rawCards.length === 0) return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
   if (!deck) return null;
 
   const stats        = getDeckStats(deck);
@@ -644,6 +738,7 @@ export function FlashcardView({ content, title }: { content: string; title?: str
           description: publicDescription,
           cardCount: deck.cards.length,
           content: contentText,
+          sourceDeckId: deck.id,
         }),
       });
       const payload = await res.json().catch(() => null);
@@ -763,62 +858,39 @@ export function FlashcardView({ content, title }: { content: string; title?: str
           </div>
         )}
 
-        {/* Action grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 14 }}>
-          <button className="btn btn-primary btn-sm" onClick={() => { setSessionIdx(0); setFlip(false); setGraded([]); setPhase('review'); }}>
+        {/* ── Action grid: 4×2, perfectly symmetric ─── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
+          <button className="btn btn-primary btn-sm" onClick={() => launchPhase('review')}>
             {stats.due > 0 ? `▶ ${t('Study {count}', { count: formatNumber(stats.due) })}` : `▶ ${t('Study all')}`}
           </button>
-          <button className="btn btn-ghost btn-sm" title={t('Type the answer')} onClick={() => {
-            const s = [...deck.cards].sort(() => Math.random() - 0.5).map(c => c.id);
-            setWriteQueue(s); setWriteIdx(0); setWriteInput(''); setWriteRevealed(false); setWriteScores([]); setPhase('write');
-          }}>✍️ {t('Write')}</button>
-          <button className="btn btn-ghost btn-sm" title={t('Mixed test')} onClick={() => {
-            const qs = buildTestQuestions(deck);
-            setTestQuestions(qs); setTestAnswers({}); setTestIdx(0); setTestDone(false); setTestWritten(''); setPhase('test');
-          }}>🎯 {t('Test')}</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => {
-            const defs = [...deck.cards].sort(() => Math.random() - 0.5).map(c => ({ id: c.id, text: c.back }));
-            setMatchShuffledDefs(defs); setMatchSelected(null); setMatchPaired(new Set()); setMatchFlash(null); setMatchStart(Date.now()); setMatchEnd(0); setPhase('match');
-          }}>🎮 {t('Match Game')}</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => {
-            const s = [...deck.cards.map(c => c.id)].sort(() => Math.random() - 0.5);
-            setLearnQueue(s); setLearnIdx(0); setLearnPicked(null); setLearnCorrect(0); setLearnTotal(s.length); setPhase('learn');
-          }}>🎓 Learn</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => { setSessions(loadSessions()); setStreak(getStreak()); setPhase('stats'); }}>📊 {t('Stats')}</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => { setImportText(''); setImportError(''); setPhase('import'); }}>📥 {t('Import')}</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => router.push('/decks')}>🌐 {t('Browse')}</button>
-          <button className="btn btn-ghost btn-sm" disabled={shareStatus==='loading'} onClick={handleShare}
-            style={{ color: shareStatus==='done'?'#52b788':shareStatus==='error'?'#ef4444':undefined }}>
-            {shareStatus==='loading'?'⏳':shareStatus==='done'?`✓ ${t('Shared')}`:shareStatus==='error'?`✗ ${t('Error')}`:`🔗 ${t('Share')}`}
-          </button>
-          <button className="btn btn-ghost btn-sm" disabled={publicStatus==='loading'} onClick={publishPublicDeck}
-            style={{ color: publicStatus==='done'?'#52b788':publicStatus==='error'?'#ef4444':undefined }}>
-            {publicStatus==='loading' ? `⏳ ${t('Publishing')}` : publicStatus==='done' ? `✓ ${t('Public')}` : publicStatus==='error' ? `✗ ${t('Retry')}` : `🚀 ${t('Publish')}`}
-          </button>
+          <button className="btn btn-ghost btn-sm" title={t('Type the answer')} onClick={() => launchPhase('write')}>✍️ {t('Write')}</button>
+          <button className="btn btn-ghost btn-sm" title={t('Mixed test')} onClick={() => launchPhase('test')}>🎯 {t('Test')}</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('match')}>🎮 {t('Match Game')}</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('learn')}>🎓 {t('Learn')}</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('stats')}>📊 {t('Stats')}</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('import')}>📥 {t('Import')}</button>
+          {showBrowseButton ? (
+            <button className="btn btn-ghost btn-sm" onClick={() => router.push('/decks')}>🌐 {t('Browse')}</button>
+          ) : (
+            <span />
+          )}
         </div>
 
-        {shareStatus === 'done' && shareUrl && (
-          <div style={{ fontSize:'var(--text-xs)', color:'var(--text-3)', marginBottom:12, display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{shareUrl}</span>
-            <button className="btn btn-ghost btn-sm" style={{ padding:'2px 8px', fontSize:11, flexShrink:0 }} onClick={() => navigator.clipboard.writeText(shareUrl)}>📋 {t('Copy')}</button>
-          </div>
-        )}
-        {publicStatus === 'done' && publicUrl && (
-          <div style={{ fontSize:'var(--text-xs)', color:'var(--text-3)', marginBottom:12, display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{publicUrl}</span>
-            <button className="btn btn-ghost btn-sm" style={{ padding:'2px 8px', fontSize:11, flexShrink:0 }} onClick={() => navigator.clipboard.writeText(publicUrl)}>📋 {t('Copy')}</button>
-          </div>
-        )}
-
-        {/* Tools row */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 14, alignItems: 'center' }}>
-          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => exportCSV(deck)}>⬇ {t('Export CSV')}</button>
-          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { void exportApkg(deck); }}>📦 {t('Export Anki')}</button>
-          <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+        {/* ── Compact tools / share row ─── */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => exportDeckCsv(deck)}>⬇ {t('Export CSV')}</button>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { void exportDeckApkg(deck); }}>📦 {t('Export Anki')}</button>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px', color: shareStatus==='done'?'#52b788':shareStatus==='error'?'#ef4444':undefined }} disabled={shareStatus==='loading'} onClick={handleShare}>
+            {shareStatus==='loading'?'⏳':shareStatus==='done'?`✓ ${t('Shared')}`:shareStatus==='error'?`✗ ${t('Error')}`:`🔗 ${t('Share')}`}
+          </button>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px', color: publicStatus==='done'?'#52b788':publicStatus==='error'?'#ef4444':undefined }} disabled={publicStatus==='loading'} onClick={publishPublicDeck}>
+            {publicStatus==='loading' ? `⏳ ${t('Publishing')}` : publicStatus==='done' ? `✓ ${t('Public')}` : publicStatus==='error' ? `✗ ${t('Retry')}` : `🚀 ${t('Publish')}`}
+          </button>
+          <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginLeft: 'auto' }}>
             <input type="checkbox" checked={ttsEnabled} onChange={e => { setTtsEnabled(e.target.checked); try { localStorage.setItem('kivora-tts', e.target.checked ? '1' : '0'); } catch { /* noop */ } }} />
             {t('TTS on flip')}
           </label>
-          <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+          <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4 }}>
             {t('Daily goal')}:
             <input type="number" min={1} max={500} value={dailyGoal} style={{ width: 50, padding: '2px 4px', borderRadius: 4, border: '1px solid var(--border-2)', background: 'var(--surface)', color: 'var(--text)', fontSize: 11 }}
               onChange={e => {
@@ -836,17 +908,35 @@ export function FlashcardView({ content, title }: { content: string; title?: str
             />
           </label>
         </div>
+
+        {/* Inline URL feedback */}
+        {shareStatus === 'done' && shareUrl && (
+          <div style={{ fontSize:'var(--text-xs)', color:'var(--text-3)', marginBottom:10, display:'flex', alignItems:'center', gap:8, background:'var(--surface)', border:'1px solid var(--border-2)', borderRadius:8, padding:'6px 10px' }}>
+            <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{shareUrl}</span>
+            <button className="btn btn-ghost btn-sm" style={{ padding:'2px 8px', fontSize:11, flexShrink:0 }} onClick={() => navigator.clipboard.writeText(shareUrl)}>📋 {t('Copy')}</button>
+          </div>
+        )}
+        {publicStatus === 'done' && publicUrl && (
+          <div style={{ fontSize:'var(--text-xs)', color:'var(--text-3)', marginBottom:10, display:'flex', alignItems:'center', gap:8, background:'var(--surface)', border:'1px solid var(--border-2)', borderRadius:8, padding:'6px 10px' }}>
+            <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{publicUrl}</span>
+            <button className="btn btn-ghost btn-sm" style={{ padding:'2px 8px', fontSize:11, flexShrink:0 }} onClick={() => navigator.clipboard.writeText(publicUrl)}>📋 {t('Copy')}</button>
+          </div>
+        )}
+
+        {/* Description (publish) — shown only when publish flow is active */}
+        {(publicStatus === 'idle' || publicStatus === 'error') && (
+          <div style={{ marginBottom: 10 }}>
+            <input
+              value={publicDescription}
+              onChange={(e) => setPublicDescription(e.target.value)}
+              placeholder={t('Optional public deck description')}
+              style={{ width: '100%', fontSize: 12, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface)', color: 'var(--text)' }}
+            />
+          </div>
+        )}
+
+        {/* Deck description — always visible, saves on blur */}
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{t('Public deck description')}</div>
-          <input
-            value={publicDescription}
-            onChange={(e) => setPublicDescription(e.target.value)}
-            placeholder={t('Optional public deck description')}
-            style={{ width: '100%', fontSize: 12, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface)', color: 'var(--text)' }}
-          />
-        </div>
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{t('Deck description')}</div>
           <textarea
             value={descInput}
             onChange={(e) => setDescInput(e.target.value)}
@@ -857,7 +947,7 @@ export function FlashcardView({ content, title }: { content: string; title?: str
               }
             }}
             placeholder={t('Add a short description for this deck')}
-            style={{ width: '100%', minHeight: 72, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface)', color: 'var(--text)', fontSize: 12, resize: 'vertical' }}
+            style={{ width: '100%', minHeight: 60, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface)', color: 'var(--text)', fontSize: 12, resize: 'vertical' }}
           />
         </div>
         <div style={{ background:'var(--surface)', border:'1px solid var(--border-2)', borderRadius:12, padding:'12px 14px', marginBottom:14 }}>
@@ -936,12 +1026,12 @@ export function FlashcardView({ content, title }: { content: string; title?: str
     return (
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-          <span style={{ fontWeight:600, fontSize:'var(--text-sm)' }}>✏️ Edit card</span>
+          <span style={{ fontWeight:600, fontSize:'var(--text-sm)' }}>✏️ {t('Edit card')}</span>
           <button className="btn-icon" style={{ marginLeft:'auto', fontSize:11, color:'var(--text-3)' }} onClick={() => setPhase('preview')}>✕</button>
         </div>
         {(['front','back'] as const).map(face => (
           <div key={face} style={{ marginBottom: 14 }}>
-            <div style={{ fontSize:11, fontWeight:600, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:1, marginBottom:6 }}>{face}</div>
+            <div style={{ fontSize:11, fontWeight:600, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:1, marginBottom:6 }}>{face === 'front' ? t('Front') : t('Back')}</div>
             <textarea value={face === 'front' ? editFront : editBack}
               onChange={e => face === 'front' ? setEditFront(e.target.value) : setEditBack(e.target.value)}
               style={{ width:'100%', minHeight:70, padding:'8px 12px', borderRadius:10, border:'1.5px solid var(--border-2)', background:'var(--surface)', color:'var(--text)', fontSize:'var(--text-sm)', fontFamily:'inherit', boxSizing:'border-box', resize:'vertical', outline:'none', display:'block' }}
@@ -949,20 +1039,21 @@ export function FlashcardView({ content, title }: { content: string; title?: str
             {/* Image section */}
             {(face === 'front' ? frontImgUrl || editFrontImg : backImgUrl || editBackImg) ? (
               <div style={{ position:'relative', display:'inline-block', marginTop:6 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={face === 'front' ? (frontImgUrl ?? '') : (backImgUrl ?? '')} alt="" style={imgStyle} />
                 <button style={{ position:'absolute', top:4, right:4, background:'#ef4444cc', color:'#fff', border:'none', borderRadius:4, padding:'2px 6px', fontSize:10, cursor:'pointer' }} onClick={() => removeImg(face)}>✕</button>
               </div>
             ) : (
               <label style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:6, fontSize:11, color:'var(--accent)', cursor:'pointer' }}>
-                📷 Add image
+                📷 {t('Add image')}
                 <input type="file" accept="image/*" style={{ display:'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleImgUpload(face, f); }} />
               </label>
             )}
           </div>
         ))}
         <div style={{ display:'flex', gap:8, marginTop:8 }}>
-          <button className="btn btn-primary btn-sm" onClick={handleSave}>Save changes</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setPhase('preview')}>Cancel</button>
+          <button className="btn btn-primary btn-sm" onClick={handleSave}>{t('Save changes')}</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setPhase('preview')}>{t('Cancel')}</button>
         </div>
       </div>
     );
@@ -978,7 +1069,7 @@ export function FlashcardView({ content, title }: { content: string; title?: str
         <div style={{ textAlign:'center', padding:'32px 20px', maxWidth:480, margin:'0 auto' }}>
           <div style={{ fontSize:48, marginBottom:12 }}>{pct >= 80 ? '✍️' : '📝'}</div>
           <h3 style={{ margin:'0 0 6px' }}>{t('Write mode complete!')}</h3>
-          <p style={{ color:'var(--text-3)', margin:'0 0 16px' }}>{correct}/{writeScores.length} correct ({pct}%)</p>
+          <p style={{ color:'var(--text-3)', margin:'0 0 16px' }}>{t('{correct}/{total} correct ({pct}%)', { correct: formatNumber(correct), total: formatNumber(writeScores.length), pct: formatNumber(pct) })}</p>
           {missed.length > 0 && (
             <div style={{ textAlign:'left', marginBottom:20 }}>
               <div style={{ fontSize:11, fontWeight:600, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>{t('Review these ({count})', { count: formatNumber(missed.length) })}</div>
@@ -1293,9 +1384,8 @@ export function FlashcardView({ content, title }: { content: string; title?: str
     function handleMatchTerm(cardId: string) {
       if (matchPaired.has(cardId)) return;
       if (matchSelected === cardId) { setMatchSelected(null); return; }
-      if (!matchSelected) { setMatchSelected(cardId); return; }
-      setMatchFlash({ id: cardId, ok: true });
-      setTimeout(() => { setMatchPaired(prev => { const n=new Set(prev); n.add(cardId); return n; }); setMatchSelected(null); setMatchFlash(null); if (deck && matchPaired.size+1===deck.cards.length) setMatchEnd(Date.now()); }, 300);
+      // Whether nothing was selected or a different term was — just select this one
+      setMatchSelected(cardId);
     }
     function handleMatchDef(cardId: string) {
       if (matchPaired.has(cardId) || !matchSelected) return;
@@ -1367,11 +1457,11 @@ export function FlashcardView({ content, title }: { content: string; title?: str
       return (
         <div style={{ textAlign:'center', padding:'32px 20px', maxWidth:480, margin:'0 auto' }}>
           <div style={{ fontSize:48, marginBottom:10 }}>{acc===100?'🎉':acc>=70?'📚':'💪'}</div>
-          <h3 style={{ margin:'0 0 6px' }}>Learn complete!</h3>
-          <p style={{ color:'var(--text-3)' }}>All {learnTotal} cards correct</p>
+          <h3 style={{ margin:'0 0 6px' }}>{t('Learn complete!')}</h3>
+          <p style={{ color:'var(--text-3)' }}>{t('All {count} cards correct!', { count: formatNumber(learnTotal) })}</p>
           <div style={{ display:'flex', gap:10, justifyContent:'center', marginTop:16 }}>
-            <button className="btn btn-primary btn-sm" onClick={() => { const ids=deck!.cards.map(c=>c.id).sort(()=>Math.random()-.5); setLearnQueue(ids); setLearnIdx(0); setLearnPicked(null); setLearnCorrect(0); setLearnTotal(ids.length); setLearnOptions([]); }}>↺ Restart</button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setPhase('preview')}>← Back</button>
+            <button className="btn btn-primary btn-sm" onClick={() => { const ids=deck!.cards.map(c=>c.id).sort(()=>Math.random()-.5); setLearnQueue(ids); setLearnIdx(0); setLearnPicked(null); setLearnCorrect(0); setLearnTotal(ids.length); setLearnOptions([]); }}>↺ {t('Restart')}</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setPhase('preview')}>{`← ${t('Go back')}`}</button>
           </div>
         </div>
       );
@@ -1425,12 +1515,14 @@ export function FlashcardView({ content, title }: { content: string; title?: str
         <div className={`flashcard${flip ? ' flipped' : ''}`} style={{ minHeight:200 }}>
           <div className="flashcard-face">
             <div className="flashcard-label">{t('Front')}</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             {reviewFrontUrl && <img src={reviewFrontUrl} alt="" style={{ maxWidth:'100%', maxHeight:120, objectFit:'contain', borderRadius:8, marginBottom:8 }} />}
             <div className="flashcard-text">{card.front}</div>
-            {!flip && <small style={{ marginTop:'auto', color:'var(--text-3)', paddingTop:12 }}>Tap to reveal · swipe after reveal</small>}
+            {!flip && <small style={{ marginTop:'auto', color:'var(--text-3)', paddingTop:12 }}>{t('Tap to reveal · swipe to grade')}</small>}
           </div>
           <div className="flashcard-face flashcard-back">
             <div className="flashcard-label">{t('Back')}</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             {reviewBackUrl && <img src={reviewBackUrl} alt="" style={{ maxWidth:'100%', maxHeight:120, objectFit:'contain', borderRadius:8, marginBottom:8 }} />}
             <div className="flashcard-text">{card.back}</div>
             {ttsEnabled && <button style={{ marginTop:'auto', background:'none', border:'none', color:'var(--text-3)', cursor:'pointer', fontSize:12 }} onClick={e => { e.stopPropagation(); speak(card.back); }}>🔊</button>}
@@ -1439,17 +1531,20 @@ export function FlashcardView({ content, title }: { content: string; title?: str
       </div>
 
       {flip ? (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
           {GRADES.map(g => (
-            <button key={g.grade} onClick={() => doGrade(g.grade)} title={g.hint}
-              style={{ border:'none', borderRadius:8, padding:'8px 4px', cursor:'pointer', background:`${g.color}18`, color:g.color, fontWeight:600, fontSize:'var(--text-xs)', transition:'background 0.12s' }}>
-              {t(g.label)}<div style={{ fontWeight:400, fontSize:10, opacity:.8, marginTop:2 }}>{t(g.hint)}</div>
+            <button key={g.grade} onClick={() => doGrade(g.grade)} title={t(g.hint)}
+              style={{ border:`1.5px solid ${g.color}40`, borderRadius:10, padding:'12px 4px 10px', cursor:'pointer', background:`${g.color}14`, color:g.color, fontWeight:700, fontSize:'var(--text-sm)', transition:'all 0.12s', lineHeight:1.2 }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${g.color}28`; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = `${g.color}14`; (e.currentTarget as HTMLButtonElement).style.transform = ''; }}
+            >
+              {t(g.label)}<div style={{ fontWeight:400, fontSize:10, opacity:.75, marginTop:3, lineHeight:1.3 }}>{t(g.hint)}</div>
             </button>
           ))}
         </div>
       ) : (
         <div style={{ display:'flex', justifyContent:'center' }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setFlip(true); if (ttsEnabled) speak(card.back); }}>Show answer</button>
+          <button className="btn btn-secondary" style={{ minWidth: 160, padding: '10px 24px', fontSize: 'var(--text-base)', fontWeight: 600 }} onClick={() => { setFlip(true); if (ttsEnabled) speak(card.back); }}>{t('Show answer')}</button>
         </div>
       )}
     </div>

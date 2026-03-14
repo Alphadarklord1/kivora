@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import {
   useAnalytics,
+  type DeckStats,
   type QuizStats,
   type PlanStats,
   type WeakArea,
@@ -45,7 +46,7 @@ export function StudyAnalytics() {
   );
   if (!data) return null;
 
-  const { quizStats, planStats, weakAreas, activity, insights, usage } = data;
+  const { quizStats, planStats, weakAreas, activity, insights, usage, deckStats } = data;
 
   return (
     <div className="an-shell">
@@ -112,6 +113,13 @@ export function StudyAnalytics() {
           detail={`${usage?.libraryItems ?? 0} saved to library`}
         />
         <StatCard
+          icon="🃏"
+          label="Decks"
+          value={deckStats?.totalDecks ?? 0}
+          accent="#7c3aed"
+          detail={`${deckStats?.reviewedToday ?? 0}/${deckStats?.dailyGoal ?? 20} cards reviewed today`}
+        />
+        <StatCard
           icon="⏱️"
           label="Study Time"
           value={`${Math.round((quizStats?.totalTimeTaken ?? 0) / 60)}m`}
@@ -141,6 +149,7 @@ export function StudyAnalytics() {
           weakAreas={weakAreas}
           insights={insights}
           usage={usage}
+          deckStats={deckStats}
         />
       )}
       {activeTab === 'scores' && (
@@ -150,7 +159,7 @@ export function StudyAnalytics() {
         <ActivityTab activity={activity} period={period} />
       )}
       {activeTab === 'goals' && (
-        <GoalsTab planStats={planStats} weakAreas={weakAreas} />
+        <GoalsTab planStats={planStats} weakAreas={weakAreas} deckStats={deckStats} />
       )}
 
       <style jsx>{`
@@ -275,12 +284,13 @@ function StatCard({ icon, label, value, unit, accent, detail }: {
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ quizStats, planStats, weakAreas, insights, usage }: {
+function OverviewTab({ quizStats, planStats: _planStats, weakAreas, insights, usage, deckStats }: {
   quizStats: QuizStats | null;
   planStats: PlanStats | null;
   weakAreas: WeakArea[];
   insights: string[];
   usage: UsageStats | null;
+  deckStats: DeckStats;
 }) {
   const dist = quizStats?.scoreDistribution;
 
@@ -374,6 +384,35 @@ function OverviewTab({ quizStats, planStats, weakAreas, insights, usage }: {
         )}
       </div>
 
+      <div className="an-card wide">
+        <h3 className="card-title">Deck Performance</h3>
+        {deckStats.topDecks.length === 0 ? (
+          <p className="card-empty">No deck activity yet. Import a deck or generate flashcards to start tracking progress.</p>
+        ) : (
+          <div className="deck-list">
+            {deckStats.topDecks.map((deck) => (
+              <div key={deck.deckId} className="deck-item">
+                <div className="deck-head">
+                  <strong>{deck.name}</strong>
+                  <span>{deck.accuracy}%</span>
+                </div>
+                <div className="deck-meta">
+                  <span>{deck.totalCards} cards</span>
+                  <span>{deck.dueCards} due</span>
+                  <span>{deck.reviewedToday}/{deckStats.dailyGoal} today</span>
+                  <span>{deck.quizAttempts} quizzes</span>
+                </div>
+                <div className="weak-suggestion">
+                  {deck.weakConcepts.length > 0
+                    ? `Weak concepts: ${deck.weakConcepts.join(', ')}`
+                    : 'No weak concepts detected yet.'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* AI Insights */}
       {insights && insights.length > 0 && (
         <div className="an-card wide insights-card">
@@ -415,6 +454,30 @@ function OverviewTab({ quizStats, planStats, weakAreas, insights, usage }: {
         .tool-bar-bg { flex:1; height:8px; background:var(--bg-surface); border-radius:4px; overflow:hidden; }
         .tool-bar-fill { height:100%; border-radius:4px; background:var(--primary); transition:width 0.5s; }
         .tool-count { font-size:12px; font-weight:600; color:var(--text-muted); min-width:24px; text-align:right; }
+        .deck-list { display:grid; gap:12px; }
+        .deck-item {
+          padding: 14px 16px;
+          border-radius: 14px;
+          border: 1px solid var(--border-subtle);
+          background: color-mix(in srgb, var(--bg-surface) 74%, transparent);
+        }
+        .deck-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 6px;
+        }
+        .deck-head strong { font-size: 14px; color: var(--text-primary); }
+        .deck-head span { font-size: 14px; font-weight: 700; color: #7c3aed; }
+        .deck-meta {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-bottom: 6px;
+          font-size: 11px;
+          color: var(--text-muted);
+        }
         .insights-card { background:color-mix(in srgb, var(--primary) 5%, var(--bg-elevated)); }
         .insights-list { margin:0; padding:0 0 0 16px; display:flex; flex-direction:column; gap:6px; }
         .insight-item { font-size:14px; color:var(--text-secondary); line-height:1.6; }
@@ -426,11 +489,11 @@ function OverviewTab({ quizStats, planStats, weakAreas, insights, usage }: {
 
 // ─── Scores Tab ───────────────────────────────────────────────────────────────
 
-function ScoresTab({ quizStats, activity }: {
+function ScoresTab({ quizStats, activity: _activity }: {
   quizStats: QuizStats | null;
   activity: Activity | null;
 }) {
-  const recentScores = quizStats?.recentScores ?? [];
+  const recentScores = useMemo(() => quizStats?.recentScores ?? [], [quizStats?.recentScores]);
   const byMode = (quizStats?.byMode ?? {}) as Record<string, { attempts: number; avgScore: number; totalQuestions: number }>;
 
   // Build score line chart data from recent scores
@@ -597,7 +660,6 @@ function ScoresTab({ quizStats, activity }: {
 
 // ─── Activity Tab ─────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ActivityTab({ activity, period: _period }: {
   activity: Activity | null;
   period: number;
@@ -738,9 +800,10 @@ function ActivityTab({ activity, period: _period }: {
 
 // ─── Goals Tab ────────────────────────────────────────────────────────────────
 
-function GoalsTab({ planStats, weakAreas }: {
+function GoalsTab({ planStats, weakAreas, deckStats }: {
   planStats: PlanStats | null;
   weakAreas: WeakArea[];
+  deckStats: DeckStats;
 }) {
   const progress = planStats?.averageProgress ?? 0;
   const completedDays = planStats?.completedDays ?? 0;
@@ -825,8 +888,29 @@ function GoalsTab({ planStats, weakAreas }: {
         )}
       </div>
 
+      <div className="an-card">
+        <h3 className="card-title">Deck Goal Progress</h3>
+        {deckStats.topDecks.length === 0 ? (
+          <p className="card-empty">No deck goal data yet. Review a deck to start building daily progress.</p>
+        ) : (
+          <div className="goal-list">
+            {deckStats.topDecks.slice(0, 4).map((deck) => (
+              <div key={deck.deckId} className="goal-row">
+                <div className="goal-header">
+                  <span>{deck.name}</span>
+                  <strong>{deck.reviewedToday}/{deckStats.dailyGoal}</strong>
+                </div>
+                <div className="goal-bar-bg">
+                  <div className="goal-bar-fill" style={{ width: `${deck.goalProgress}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <style jsx>{`
-        .goals-grid { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-3); }
+        .goals-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:var(--space-3); }
         .an-card { background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:20px; padding:20px; box-shadow:var(--shadow-sm); }
         .card-title { margin:0 0 16px; font-size:15px; font-weight:600; }
         .card-empty { font-size:13px; color:var(--text-muted); margin:0; }
@@ -844,6 +928,12 @@ function GoalsTab({ planStats, weakAreas }: {
         .roadmap-time { display:block; font-size:11px; color:var(--text-muted); margin:1px 0; }
         .roadmap-tip { display:block; font-size:12px; color:var(--text-secondary); line-height:1.5; }
         .roadmap-acc { font-size:14px; font-weight:700; flex-shrink:0; }
+        .goal-list { display:flex; flex-direction:column; gap:12px; }
+        .goal-row { display:grid; gap:6px; }
+        .goal-header { display:flex; justify-content:space-between; gap:10px; font-size:12px; color:var(--text-secondary); }
+        .goal-header strong { color:var(--text-primary); }
+        .goal-bar-bg { height:8px; background:var(--bg-surface); border-radius:999px; overflow:hidden; }
+        .goal-bar-fill { height:100%; border-radius:999px; background:#7c3aed; transition:width 0.4s ease; }
         @media (max-width:768px) { .goals-grid { grid-template-columns:1fr; } }
       `}</style>
     </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { quizAttempts, files } from '@/lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 
 interface QuizAnswer {
@@ -24,10 +24,14 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = parseInt(searchParams.get('offset') || '0');
     const fileId = searchParams.get('fileId');
+    const deckId = searchParams.get('deckId');
 
     // Build query
     let attempts;
-    if (fileId) {
+    if (fileId || deckId) {
+      const filters = [eq(quizAttempts.userId, userId)];
+      if (fileId) filters.push(eq(quizAttempts.fileId, fileId));
+      if (deckId) filters.push(eq(quizAttempts.deckId, deckId));
       attempts = await db
         .select({
           id: quizAttempts.id,
@@ -39,11 +43,12 @@ export async function GET(request: NextRequest) {
           answers: quizAttempts.answers,
           createdAt: quizAttempts.createdAt,
           fileId: quizAttempts.fileId,
+          deckId: quizAttempts.deckId,
           fileName: files.name,
         })
         .from(quizAttempts)
         .leftJoin(files, eq(quizAttempts.fileId, files.id))
-        .where(eq(quizAttempts.fileId, fileId))
+        .where(and(...filters))
         .orderBy(desc(quizAttempts.createdAt))
         .limit(limit)
         .offset(offset);
@@ -59,6 +64,7 @@ export async function GET(request: NextRequest) {
           answers: quizAttempts.answers,
           createdAt: quizAttempts.createdAt,
           fileId: quizAttempts.fileId,
+          deckId: quizAttempts.deckId,
           fileName: files.name,
         })
         .from(quizAttempts)
@@ -105,7 +111,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { fileId, mode, totalQuestions, correctAnswers, timeTaken, answers } = body;
+    const { fileId, deckId, mode, totalQuestions, correctAnswers, timeTaken, answers } = body;
 
     // Validate required fields
     if (!mode || totalQuestions === undefined || correctAnswers === undefined) {
@@ -121,6 +127,7 @@ export async function POST(request: NextRequest) {
       .values({
         userId,
         fileId: fileId || null,
+        deckId: deckId || null,
         mode,
         totalQuestions,
         correctAnswers,

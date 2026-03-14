@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
-import { quizAttempts, files, libraryItems } from '@/lib/db/schema';
-import { eq, count, avg, desc, gte } from 'drizzle-orm';
+import { quizAttempts, files, libraryItems, srsDecks, srsPreferences, srsReviewHistory } from '@/lib/db/schema';
+import { eq, count, avg, desc } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/session';
+import type { SRSDeck } from '@/lib/srs/sm2';
 
 // ── Empty analytics scaffold (returned for guests + when DB is not configured) ──
 
@@ -32,6 +33,13 @@ function emptyAnalytics(period: number): Record<string, unknown> {
       totalFiles: 0, uploadedFiles: 0, generatedFiles: 0,
       libraryItems: 0, toolUsage: {}, periodGenerated: 0,
       periodUploads: 0, periodLibraryItems: 0,
+    },
+    deckStats: {
+      totalDecks: 0,
+      totalCards: 0,
+      dailyGoal: 20,
+      reviewedToday: 0,
+      topDecks: [],
     },
   };
 }
@@ -184,7 +192,7 @@ export async function GET(req: NextRequest) {
       }));
 
     // ── Tool usage from recent library items ──────────────────────────────
-    const recentLib = await db.select({ mode: libraryItems.mode })
+    const recentLib = await db.select({ mode: libraryItems.mode, metadata: libraryItems.metadata })
       .from(libraryItems)
       .where(eq(libraryItems.userId, userId))
       .orderBy(desc(libraryItems.createdAt))
@@ -194,6 +202,86 @@ export async function GET(req: NextRequest) {
     for (const item of recentLib) {
       if (item.mode) toolUsage[item.mode] = (toolUsage[item.mode] ?? 0) + 1;
     }
+
+    // ── Deck analytics ─────────────────────────────────────────────────────
+    const [deckRows, prefRows, reviewRows] = await Promise.all([
+      db.select().from(srsDecks).where(eq(srsDecks.userId, userId)),
+      db.select().from(srsPreferences).where(eq(srsPreferences.userId, userId)).limit(1),
+      db.select().from(srsReviewHistory).where(eq(srsReviewHistory.userId, userId)),
+    ]);
+
+    const dailyGoal = prefRows[0]?.dailyGoal ?? 20;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const periodReviewRows = reviewRows.filter((row) => row.reviewedAt && new Date(row.reviewedAt) >= since);
+
+    const deckStats = {
+      totalDecks: deckRows.length,
+      totalCards: deckRows.reduce((sum, row) => sum + (((row.deckData as SRSDeck)?.cards?.length) ?? 0), 0),
+      dailyGoal,
+      reviewedToday: periodReviewRows.filter((row) => row.reviewedAt?.toISOString?.().slice(0, 10) === todayStr).length,
+      topDecks: deckRows
+        .map((row) => {
+          const deck = row.deckData as SRSDeck;
+          const cards = Array.isArray(deck.cards) ? deck.cards : [];
+          const deckReviews = periodReviewRows.filter((review) => review.deckId === deck.id);
+          const deckQuizAttempts = periodAttempts.filter((attempt) => attempt.deckId === deck.id);
+          const reviewedToday = deckReviews.filter((review) => review.reviewedAt?.toISOString?.().slice(0, 10) === todayStr).length;
+          const deckStudyDays = new Set(
+            deckReviews
+              .map((review) => review.reviewedAt?.toISOString?.().slice(0, 10))
+              .filter((value): value is string => Boolean(value)),
+          ).size;
+          const dueCards = cards.filter((card) => card.nextReview <= todayStr).length;
+          const totalReviewsForDeck = cards.reduce((sum, card) => sum + card.totalReviews, 0);
+          const totalCorrectForDeck = cards.reduce((sum, card) => sum + card.correctReviews, 0);
+          const accuracy = totalReviewsForDeck > 0
+            ? Math.round((totalCorrectForDeck / totalReviewsForDeck) * 100)
+            : deckReviews.length > 0
+              ? Math.round((deckReviews.filter((review) => review.correct).length / deckReviews.length) * 100)
+              : 0;
+          const weakConcepts = [...cards]
+            .filter((card) => card.totalReviews > 0)
+            .sort((left, right) => {
+              const leftAccuracy = left.totalReviews > 0 ? left.correctReviews / left.totalReviews : 1;
+              const rightAccuracy = right.totalReviews > 0 ? right.correctReviews / right.totalReviews : 1;
+              return leftAccuracy - rightAccuracy;
+            })
+            .slice(0, 3)
+            .map((card) => card.front);
+          const generatedOutputs = recentLib.filter((item) => {
+            const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+            return metadata.sourceDeckId === deck.id;
+          }).length;
+
+          return {
+            deckId: deck.id,
+            name: deck.name,
+            totalCards: cards.length,
+            dueCards,
+            reviewedToday,
+            goalProgress: dailyGoal > 0 ? Math.min(100, Math.round((reviewedToday / dailyGoal) * 100)) : 0,
+            accuracy,
+            quizAttempts: deckQuizAttempts.length,
+            avgQuizScore: deckQuizAttempts.length > 0
+              ? Math.round(deckQuizAttempts.reduce((sum, attempt) => sum + (attempt.score ?? 0), 0) / deckQuizAttempts.length)
+              : 0,
+            studyDays: deckStudyDays,
+            generatedOutputs,
+            weakConcepts,
+            lastStudied: deck.lastStudied,
+            sourceLabel: deck.sourceLabel,
+          };
+        })
+        .sort((left, right) => {
+          const rightValue = right.reviewedToday + right.quizAttempts + right.generatedOutputs;
+          const leftValue = left.reviewedToday + left.quizAttempts + left.generatedOutputs;
+          if (rightValue !== leftValue) return rightValue - leftValue;
+          const rightDate = new Date(right.lastStudied ?? 0).getTime();
+          const leftDate = new Date(left.lastStudied ?? 0).getTime();
+          return rightDate - leftDate;
+        })
+        .slice(0, 6),
+    };
 
     // ── Insights ──────────────────────────────────────────────────────────
     const insights: string[] = [];
@@ -210,6 +298,15 @@ export async function GET(req: NextRequest) {
       if (weakAreas.length > 0 && weakAreas[0].accuracy < 60) {
         insights.push(`Your weakest area is "${weakAreas[0].topic}" at ${Math.round(weakAreas[0].accuracy)}%. Consider reviewing those materials.`);
       }
+    }
+
+    if (deckStats.totalDecks > 0) {
+      const topDeck = deckStats.topDecks[0];
+      insights.push(
+        topDeck
+          ? `Deck focus: "${topDeck.name}" has ${topDeck.dueCards} due cards and ${topDeck.accuracy}% accuracy.`
+          : 'Your decks are ready for review — open one and keep the streak alive.',
+      );
     }
 
     return NextResponse.json({
@@ -244,6 +341,7 @@ export async function GET(req: NextRequest) {
         periodUploads: 0,
         periodLibraryItems: 0,
       },
+      deckStats,
     });
   } catch (err) {
     console.error('[Analytics] GET failed:', err);

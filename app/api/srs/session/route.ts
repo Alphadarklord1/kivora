@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { studySessions } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, gte } from 'drizzle-orm';
 
 // POST /api/srs/session — upsert today's study session
 export async function POST(req: NextRequest) {
@@ -41,10 +41,11 @@ export async function GET(req: NextRequest) {
 
   try {
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 365);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
     const rows   = await db
       .select()
       .from(studySessions)
-      .where(eq(studySessions.userId, userId));
+      .where(and(eq(studySessions.userId, userId), gte(studySessions.date, cutoffStr)));
 
     // Compute streak
     const dateSet    = new Set(rows.filter(r => r.cardsReviewed > 0).map(r => r.date));

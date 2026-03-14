@@ -26,10 +26,11 @@ interface QuestionAnswer {
 interface InteractiveQuizProps {
   content: GeneratedContent;
   fileId?: string;
+  deckId?: string;
   onClose: () => void;
 }
 
-export function InteractiveQuiz({ content, fileId, onClose }: InteractiveQuizProps) {
+export function InteractiveQuiz({ content, fileId, deckId, onClose }: InteractiveQuizProps) {
   const [answers, setAnswers] = useState<Map<string, QuestionAnswer>>(new Map());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [verifying, setVerifying] = useState<string | null>(null);
@@ -76,6 +77,7 @@ export function InteractiveQuiz({ content, fileId, onClose }: InteractiveQuizPro
         credentials: 'include',
         body: JSON.stringify({
           fileId,
+          deckId,
           mode: content.mode,
           totalQuestions: total,
           correctAnswers: correct,
