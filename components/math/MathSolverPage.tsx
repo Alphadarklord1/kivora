@@ -20,6 +20,7 @@ type GraphExpression = {
   expr: string;
   color: string;
   enabled: boolean;
+  showDerivative: boolean;
 };
 
 type RecentMathItem = {
@@ -40,6 +41,18 @@ type RecentWorkspaceFile = {
 
 const GRAPH_COLORS = ['#2563eb', '#f97316', '#16a34a', '#dc2626', '#7c3aed', '#0891b2'];
 const HISTORY_KEY = 'kivora_math_history';
+const SOLVER_HINTS = [
+  '2x + 5 = 11',
+  'integral from 0 to pi of sin(x) dx',
+  'system x + y = 3; x - y = 1',
+  'dot product [3,2] [1,4]',
+] as const;
+const GRAPH_PRESETS = [
+  { label: 'Parabola', expr: 'y = x^2' },
+  { label: 'Sine wave', expr: 'y = sin(x)' },
+  { label: 'Circle', expr: 'x^2 + y^2 = 25' },
+  { label: 'Vertical line', expr: 'x = 2' },
+] as const;
 const TAB_LABELS: Record<MathTab, string> = {
   solver: 'Solver',
   graph: 'Graph',
@@ -173,7 +186,7 @@ function getThemePalette() {
   }
 
   const theme = document.documentElement.getAttribute('data-theme') ?? '';
-  const dark = theme === 'black' || theme === 'dark';
+  const dark = theme === 'black' || theme === 'blue' || theme === 'dark';
   return dark
     ? { dark: true, background: '#07111f', grid: '#1e293b', axis: '#cbd5e1', text: '#e2e8f0' }
     : { dark: false, background: '#ffffff', grid: '#d7e1ec', axis: '#0f172a', text: '#0f172a' };
@@ -213,6 +226,7 @@ function createGraphExpression(expr: string, color = GRAPH_COLORS[0]): GraphExpr
     expr,
     color,
     enabled: true,
+    showDerivative: false,
   };
 }
 
@@ -239,6 +253,7 @@ export function MathSolverPage() {
   const [graphError, setGraphError] = useState('');
   const [xDomain, setXDomain] = useState<[number, number]>([-10, 10]);
   const [yDomain, setYDomain] = useState<[number, number]>([-10, 10]);
+  const [showValueTable, setShowValueTable] = useState(true);
   const [unitGroupId, setUnitGroupId] = useState<(typeof UNIT_GROUPS)[number]['id']>('length');
   const [unitValue, setUnitValue] = useState('1');
   const [fromUnit, setFromUnit] = useState('m');
@@ -258,6 +273,17 @@ export function MathSolverPage() {
   const unitGroup = UNIT_GROUPS.find((group) => group.id === unitGroupId) ?? UNIT_GROUPS[0];
   const activeGraph = graphExpressions.find((expr) => expr.id === activeGraphId) ?? graphExpressions[0] ?? null;
   const graphTable = activeGraph ? buildValueTable(activeGraph.expr, xDomain) : [];
+  const activeGraphNormalized = activeGraph ? normalizeGraphExpression(activeGraph.expr) : null;
+
+  useEffect(() => {
+    if (!activeGraphId && graphExpressions[0]) {
+      setActiveGraphId(graphExpressions[0].id);
+      return;
+    }
+    if (activeGraphId && !graphExpressions.some((expression) => expression.id === activeGraphId)) {
+      setActiveGraphId(graphExpressions[0]?.id ?? null);
+    }
+  }, [activeGraphId, graphExpressions]);
 
   useEffect(() => {
     setHistory(getStoredHistory());
@@ -298,13 +324,30 @@ export function MathSolverPage() {
 
     try {
       const data = enabled
-        .map((item) => {
+        .flatMap((item) => {
           const normalized = normalizeGraphExpression(item.expr);
-          if (!normalized) return null;
+          if (!normalized) return [];
           if (normalized.type === 'implicit') {
-            return { fn: normalized.value, fnType: 'implicit', color: item.color, sampler: 'builtIn' };
+            return [{ fn: normalized.value, fnType: 'implicit', color: item.color, sampler: 'builtIn' }];
           }
-          return { fn: normalized.value, color: item.color, sampler: 'builtIn', nSamples: 500 };
+          const series: Array<Record<string, unknown>> = [
+            { fn: normalized.value, color: item.color, sampler: 'builtIn', nSamples: 500 },
+          ];
+          if (item.showDerivative) {
+            try {
+              const derivative = math.derivative(normalized.value, 'x').toString();
+              series.push({
+                fn: derivative,
+                color: item.color,
+                sampler: 'builtIn',
+                nSamples: 500,
+                graphType: 'polyline',
+              });
+            } catch {
+              // Keep the base graph even if derivative generation fails.
+            }
+          }
+          return series;
         })
         .filter(Boolean);
 
@@ -348,12 +391,41 @@ export function MathSolverPage() {
     setActiveGraphId(next.id);
   }
 
+  function addBlankGraphExpression() {
+    const next = createGraphExpression('y = ', GRAPH_COLORS[graphExpressions.length % GRAPH_COLORS.length]);
+    setGraphExpressions((current) => [...current, next]);
+    setActiveGraphId(next.id);
+  }
+
+  function cycleGraphColor(expressionId: string) {
+    setGraphExpressions((current) => current.map((item) => {
+      if (item.id !== expressionId) return item;
+      const index = GRAPH_COLORS.indexOf(item.color);
+      return { ...item, color: GRAPH_COLORS[(index + 1 + GRAPH_COLORS.length) % GRAPH_COLORS.length] };
+    }));
+  }
+
+  function replaceGraphExpressions(expressions: string[]) {
+    const nextExpressions = expressions
+      .map((expr, index) => createGraphExpression(expr, GRAPH_COLORS[index % GRAPH_COLORS.length]))
+      .filter((expression) => expression.expr.trim());
+    setGraphExpressions(nextExpressions.length > 0 ? nextExpressions : [createGraphExpression('y = x^2')]);
+    setActiveGraphId(nextExpressions[0]?.id ?? null);
+  }
+
   function applyExample(expr: string) {
     setInput(expr);
     setResult(null);
     setExplanation('');
     setPractice('');
     setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function handleInputKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+      event.preventDefault();
+      void handleSolve();
+    }
   }
 
   function handleInsert(insert: string) {
@@ -393,8 +465,7 @@ export function MathSolverPage() {
       addHistory(input.trim(), data.answer, data.category ?? category);
 
       if (data.graphExpr) {
-        setGraphExpressions([createGraphExpression(data.graphExpr, GRAPH_COLORS[0])]);
-        setActiveGraphId(null);
+        replaceGraphExpressions([data.graphExpr]);
       }
 
       toast(data.verified ? 'Solved successfully' : 'Solved with limited confidence', data.verified ? 'success' : 'warning');
@@ -498,6 +569,16 @@ export function MathSolverPage() {
     const nextY = [yDomain[0] * factor, yDomain[1] * factor] as [number, number];
     setXDomain(nextX);
     setYDomain(nextY);
+  }
+
+  function setGraphWindow(size: 5 | 10 | 20) {
+    setXDomain([-size, size]);
+    setYDomain([-size, size]);
+  }
+
+  function swapUnits() {
+    setFromUnit(toUnit);
+    setToUnit(fromUnit);
   }
 
   const unitResult = useMemo(() => {
@@ -649,9 +730,18 @@ export function MathSolverPage() {
                 ref={inputRef}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
+                onKeyDown={handleInputKeyDown}
                 placeholder={currentCategory.examples[0]?.expr ?? 'Enter a math problem…'}
                 className="math-input"
               />
+
+              <div className="math-input-hints">
+                {SOLVER_HINTS.map((hint) => (
+                  <button key={hint} className="math-hint-pill" onClick={() => applyExample(hint)}>
+                    {hint}
+                  </button>
+                ))}
+              </div>
 
               <div className="math-symbol-row">
                 {activeSymbols.symbols.map((symbol) => (
@@ -673,6 +763,11 @@ export function MathSolverPage() {
                   )}
                 </div>
                 {input.trim() && <div className="math-input-syntax">Input syntax: {input.trim()}</div>}
+                <div className="math-supported-actions">
+                  {currentCategory.supportedActions.map((action) => (
+                    <span key={action} className="math-action-pill">{action}</span>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -712,6 +807,7 @@ export function MathSolverPage() {
                       <span className="math-badge neutral">{result.engine}</span>
                       <span className="math-badge neutral">{MATH_CATEGORIES[result.category]?.label ?? result.category}</span>
                     </div>
+                    {result.error ? <div className="math-inline-warning">{result.error}</div> : null}
                     {result.graphExpr && (
                       <button className="math-button secondary" onClick={() => { addGraphExpression(result.graphExpr ?? ''); setActiveTab('graph'); }}>
                         Send to graph
@@ -768,28 +864,65 @@ export function MathSolverPage() {
             <div className="math-card">
               <div className="math-card-header compact">
                 <h3>Expressions</h3>
-                <button className="math-button secondary" onClick={() => addGraphExpression('y = x')}>Add</button>
+                <div className="math-inline-actions">
+                  <button className="math-button secondary" onClick={() => addGraphExpression('y = x')}>Quick line</button>
+                  <button className="math-button ghost" onClick={addBlankGraphExpression}>Blank row</button>
+                </div>
+              </div>
+              <p className="math-muted small">One expression per row, just like Desmos. Use functions, vertical lines, or implicit relations.</p>
+              <div className="math-preset-grid">
+                {GRAPH_PRESETS.map((preset) => (
+                  <button key={preset.label} className="math-hint-pill" onClick={() => replaceGraphExpressions([preset.expr])}>
+                    {preset.label}
+                  </button>
+                ))}
               </div>
               <div className="math-expression-list">
-                {graphExpressions.map((expression) => (
+                {graphExpressions.map((expression, index) => {
+                  const normalized = normalizeGraphExpression(expression.expr);
+                  const isFunction = normalized?.type === 'function';
+                  const modeLabel = !normalized ? 'Empty' : isFunction ? 'Function' : 'Relation';
+                  return (
                   <div key={expression.id} className={`math-expression-item ${activeGraphId === expression.id ? 'active' : ''}`}>
+                    <span className="math-expression-index">{index + 1}</span>
                     <button
                       className={`math-toggle ${expression.enabled ? 'on' : ''}`}
                       onClick={() => setGraphExpressions((current) => current.map((item) => item.id === expression.id ? { ...item, enabled: !item.enabled } : item))}
                     >
                       {expression.enabled ? 'On' : 'Off'}
                     </button>
-                    <span className="math-color-dot" style={{ background: expression.color }} />
-                    <input
-                      value={expression.expr}
-                      onFocus={() => setActiveGraphId(expression.id)}
-                      onChange={(event) => setGraphExpressions((current) => current.map((item) => item.id === expression.id ? { ...item, expr: event.target.value } : item))}
-                      placeholder="y = x^2"
-                      className="math-expression-input"
+                    <button
+                      className="math-color-button"
+                      style={{ background: expression.color }}
+                      onClick={() => cycleGraphColor(expression.id)}
+                      title="Cycle color"
                     />
+                    <div className="math-expression-body">
+                      <input
+                        value={expression.expr}
+                        onFocus={() => setActiveGraphId(expression.id)}
+                        onChange={(event) => setGraphExpressions((current) => current.map((item) => item.id === expression.id ? { ...item, expr: event.target.value } : item))}
+                        placeholder="y = x^2"
+                        className="math-expression-input"
+                      />
+                      <div className="math-expression-meta">
+                        <span className="math-expression-kind">{modeLabel}</span>
+                        {isFunction ? (
+                          <button
+                            className={`math-mini-toggle ${expression.showDerivative ? 'on' : ''}`}
+                            onClick={() => setGraphExpressions((current) => current.map((item) => item.id === expression.id ? { ...item, showDerivative: !item.showDerivative } : item))}
+                            type="button"
+                          >
+                            {expression.showDerivative ? 'Derivative on' : 'Show derivative'}
+                          </button>
+                        ) : (
+                          <span className="math-expression-help">Implicit/vertical relation</span>
+                        )}
+                      </div>
+                    </div>
                     <button className="math-delete" onClick={() => setGraphExpressions((current) => current.filter((item) => item.id !== expression.id))}>✕</button>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
 
@@ -799,13 +932,26 @@ export function MathSolverPage() {
                 <button className="math-button secondary" onClick={resetGraphView}>Home</button>
                 <button className="math-button secondary" onClick={() => zoomGraph(0.8)}>Zoom in</button>
                 <button className="math-button secondary" onClick={() => zoomGraph(1.25)}>Zoom out</button>
+                <button className="math-button ghost" onClick={() => replaceGraphExpressions([])}>Reset expressions</button>
+              </div>
+              <div className="math-inline-actions wrap" style={{ marginTop: '0.75rem' }}>
+                <button className="math-button ghost" onClick={() => setGraphWindow(5)}>±5</button>
+                <button className="math-button ghost" onClick={() => setGraphWindow(10)}>±10</button>
+                <button className="math-button ghost" onClick={() => setGraphWindow(20)}>±20</button>
+                <button className={`math-button ${showValueTable ? 'secondary' : 'ghost'}`} onClick={() => setShowValueTable((current) => !current)}>
+                  {showValueTable ? 'Hide table' : 'Show table'}
+                </button>
               </div>
               <p className="math-muted small">Use <code>y = x^2</code>, <code>x = 2</code>, or <code>x^2 + y^2 = 25</code>.</p>
+              <div className="math-domain-readout">
+                <span>x: [{xDomain[0]}, {xDomain[1]}]</span>
+                <span>y: [{yDomain[0]}, {yDomain[1]}]</span>
+              </div>
             </div>
 
             <div className="math-card">
               <h3>Value table</h3>
-              {activeGraph && isExplicitExpression(activeGraph.expr) ? (
+              {showValueTable && activeGraph && isExplicitExpression(activeGraph.expr) ? (
                 <div className="math-table">
                   {graphTable.map((row) => (
                     <div key={`${row.x}-${row.y}`} className="math-table-row">
@@ -814,8 +960,10 @@ export function MathSolverPage() {
                     </div>
                   ))}
                 </div>
-              ) : (
+              ) : showValueTable ? (
                 <p className="math-muted">Choose a standard function expression to see sample values.</p>
+              ) : (
+                <p className="math-muted">Value table is hidden for a cleaner graphing view.</p>
               )}
             </div>
           </aside>
@@ -825,9 +973,12 @@ export function MathSolverPage() {
               <div className="math-card-header compact">
                 <div>
                   <h3>Graph surface</h3>
-                  <p>Cleaner plotting with explicit and implicit expressions in one place.</p>
+                  <p>Explicit functions, vertical lines, and implicit relations all render here with a cleaner student-first workflow.</p>
                 </div>
-                <span className="math-badge neutral">{graphExpressions.filter((item) => item.enabled && item.expr.trim()).length} active</span>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {activeGraphNormalized ? <span className="math-badge neutral">{activeGraphNormalized.type === 'function' ? 'Function mode' : 'Relation mode'}</span> : null}
+                  <span className="math-badge neutral">{graphExpressions.filter((item) => item.enabled && item.expr.trim()).length} active</span>
+                </div>
               </div>
               {graphError && <div className="math-graph-error">{graphError}</div>}
               <div ref={graphRef} className="math-graph-canvas" />
@@ -869,6 +1020,9 @@ export function MathSolverPage() {
                     {unitGroup.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.label}</option>)}
                   </select>
                 </label>
+              </div>
+              <div className="math-inline-actions">
+                <button className="math-button secondary" onClick={swapUnits}>Swap</button>
               </div>
               <div className="math-unit-result">
                 <span className="math-label">Result</span>
@@ -984,7 +1138,11 @@ export function MathSolverPage() {
         .math-chip-grid,
         .math-tabbar,
         .math-secondary-grid,
-        .math-unit-grid {
+        .math-unit-grid,
+        .math-input-hints,
+        .math-supported-actions,
+        .math-preset-grid,
+        .math-domain-readout {
           display: flex;
           gap: 0.75rem;
           flex-wrap: wrap;
@@ -1123,6 +1281,30 @@ export function MathSolverPage() {
           color: var(--text-muted, var(--text-3));
           font-size: 0.88rem;
         }
+        .math-input-hints {
+          margin-top: 0.85rem;
+        }
+        .math-hint-pill,
+        .math-action-pill {
+          border-radius: 999px;
+          min-height: 2.1rem;
+          padding: 0 0.85rem;
+          font-size: 0.8rem;
+        }
+        .math-hint-pill {
+          border: 1px solid color-mix(in srgb, var(--border, #cbd5e1) 70%, transparent);
+          background: color-mix(in srgb, var(--bg-inset, #eef2ff) 82%, transparent);
+          color: var(--text-primary, var(--text));
+          cursor: pointer;
+          font: inherit;
+        }
+        .math-action-pill {
+          display: inline-flex;
+          align-items: center;
+          border: 1px solid color-mix(in srgb, var(--border, #cbd5e1) 60%, transparent);
+          background: transparent;
+          color: var(--text-muted, var(--text-3));
+        }
         .math-muted.small {
           font-size: 0.8rem;
           margin-top: 0.7rem;
@@ -1175,10 +1357,22 @@ export function MathSolverPage() {
           display: grid;
           gap: 0.75rem;
         }
+        .math-supported-actions {
+          gap: 0.45rem;
+        }
         .math-preview-expression,
         .math-rendered-answer,
         .math-step-render {
           overflow-x: auto;
+        }
+        .math-inline-warning {
+          margin-top: 0.75rem;
+          padding: 0.8rem 0.9rem;
+          border-radius: 0.9rem;
+          background: rgba(245, 158, 11, 0.12);
+          border: 1px solid rgba(245, 158, 11, 0.25);
+          color: #b45309;
+          font-size: 0.88rem;
         }
         .math-answer-card h2 {
           margin: 0.45rem 0 0.2rem;
@@ -1191,13 +1385,68 @@ export function MathSolverPage() {
         }
         .math-expression-item {
           display: grid;
-          grid-template-columns: auto auto minmax(0, 1fr) auto;
+          grid-template-columns: auto auto auto minmax(0, 1fr) auto;
           align-items: center;
           gap: 0.55rem;
           padding: 0.65rem;
         }
         .math-expression-item.active {
           border-color: color-mix(in srgb, var(--accent, #2563eb) 35%, transparent);
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #2563eb) 22%, transparent);
+        }
+        .math-preset-grid {
+          margin-bottom: 0.8rem;
+          gap: 0.55rem;
+        }
+        .math-expression-index {
+          display: inline-grid;
+          place-items: center;
+          width: 1.7rem;
+          height: 1.7rem;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--surface-2, #e2e8f0) 88%, transparent);
+          color: var(--text-muted, var(--text-3));
+          font-size: 0.74rem;
+          font-weight: 700;
+        }
+        .math-color-button {
+          width: 1.35rem;
+          height: 1.35rem;
+          border-radius: 999px;
+          border: 2px solid color-mix(in srgb, var(--surface, #fff) 92%, transparent);
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--border, #cbd5e1) 75%, transparent);
+          cursor: pointer;
+        }
+        .math-expression-body {
+          display: grid;
+          gap: 0.35rem;
+          min-width: 0;
+        }
+        .math-expression-meta {
+          display: flex;
+          justify-content: space-between;
+          gap: 0.6rem;
+          align-items: center;
+          flex-wrap: wrap;
+        }
+        .math-expression-kind,
+        .math-expression-help {
+          font-size: 0.74rem;
+          color: var(--text-muted, var(--text-3));
+        }
+        .math-mini-toggle {
+          border: 1px solid color-mix(in srgb, var(--border, #cbd5e1) 80%, transparent);
+          background: transparent;
+          color: var(--text-secondary, var(--text-2));
+          border-radius: 999px;
+          padding: 0.22rem 0.6rem;
+          font-size: 0.72rem;
+          cursor: pointer;
+        }
+        .math-mini-toggle.on {
+          color: #1d4ed8;
+          background: rgba(37, 99, 235, 0.1);
+          border-color: rgba(37, 99, 235, 0.24);
         }
         .math-expression-input,
         .math-unit-grid input,
@@ -1221,11 +1470,6 @@ export function MathSolverPage() {
           border-color: rgba(37, 99, 235, 0.3);
           color: #1d4ed8;
         }
-        .math-color-dot {
-          width: 0.9rem;
-          height: 0.9rem;
-          border-radius: 999px;
-        }
         .math-delete {
           width: 2.2rem;
           height: 2.2rem;
@@ -1241,6 +1485,14 @@ export function MathSolverPage() {
         .math-table {
           display: grid;
           gap: 0.55rem;
+        }
+        .math-domain-readout {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1rem;
+          margin-top: 0.7rem;
+          color: var(--text-muted, var(--text-3));
+          font-size: 0.82rem;
         }
         .math-table-row {
           padding: 0.8rem 0.9rem;
@@ -1284,6 +1536,12 @@ export function MathSolverPage() {
           }
           .math-unit-grid {
             grid-template-columns: 1fr;
+          }
+          .math-expression-item {
+            grid-template-columns: auto auto minmax(0, 1fr) auto;
+          }
+          .math-expression-index {
+            display: none;
           }
         }
       `}</style>
