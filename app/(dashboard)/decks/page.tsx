@@ -30,6 +30,36 @@ type ImportPayload = {
   cardCount?: number;
 };
 
+const IMPORT_SOURCE_META = {
+  quizlet: { type: 'quizlet', label: 'Quizlet import' },
+  'kivora-share': { type: 'kivora-share', label: 'Kivora shared deck' },
+  csv: { type: 'csv', label: 'CSV import' },
+  paste: { type: 'paste', label: 'Pasted cards' },
+  anki: { type: 'anki', label: 'Anki import' },
+} satisfies Partial<Record<NonNullable<ImportPayload['source']>, { type: SRSDeck['sourceType']; label: string }>>;
+
+const IMPORT_MODE_OPTIONS: Array<{ id: ImportMode; label: string }> = [
+  { id: 'url', label: 'URL' },
+  { id: 'csv', label: 'CSV' },
+  { id: 'paste', label: 'Paste' },
+  { id: 'anki', label: 'Anki' },
+];
+
+const TAB_COPY: Record<DeckTab, { title: string; description: string }> = {
+  mine: {
+    title: 'My Decks',
+    description: 'Open a deck quickly, jump into study mode, and keep your private deck list tidy.',
+  },
+  import: {
+    title: 'Import',
+    description: 'Bring in decks from reliable sources, then route straight into the editor and study flow.',
+  },
+  public: {
+    title: 'Public Library',
+    description: 'Search shared decks, preview them, and import only what you want into your own workspace.',
+  },
+};
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
@@ -64,6 +94,7 @@ export default function DeckLibraryPage() {
   const [lastImported, setLastImported] = useState<{ deck: SRSDeck; cardCount: number } | null>(null);
 
   const localDeckCount = useMemo(() => myDecks.length, [myDecks]);
+  const activeCopy = TAB_COPY[activeTab];
 
   const refreshMyDecks = useCallback(async () => {
     setLoadingMine(true);
@@ -116,29 +147,9 @@ export default function DeckLibraryPage() {
     payload: ImportPayload,
     fallbackSource: { type: SRSDeck['sourceType']; label: string },
   ) {
-    const sourceType = payload.source === 'quizlet'
-      ? 'quizlet'
-      : payload.source === 'kivora-share'
-        ? 'kivora-share'
-        : payload.source === 'csv'
-          ? 'csv'
-          : payload.source === 'paste'
-            ? 'paste'
-            : payload.source === 'anki'
-              ? 'anki'
-              : fallbackSource.type;
-
-    const sourceLabel = payload.source === 'quizlet'
-      ? 'Quizlet import'
-      : payload.source === 'kivora-share'
-        ? 'Kivora shared deck'
-        : payload.source === 'csv'
-          ? 'CSV import'
-          : payload.source === 'paste'
-            ? 'Pasted cards'
-            : payload.source === 'anki'
-              ? 'Anki import'
-              : fallbackSource.label;
+    const sourceMeta = payload.source ? IMPORT_SOURCE_META[payload.source] : undefined;
+    const sourceType = sourceMeta?.type ?? fallbackSource.type;
+    const sourceLabel = sourceMeta?.label ?? fallbackSource.label;
 
     const deck = buildImportedDeck({
       title: String(payload.title ?? 'Imported deck'),
@@ -323,20 +334,8 @@ export default function DeckLibraryPage() {
       <div className={styles.main}>
         <section className={styles.headerCard}>
           <div>
-            <h2>
-              {activeTab === 'mine'
-                ? 'My Decks'
-                : activeTab === 'import'
-                  ? 'Import'
-                  : 'Public Library'}
-            </h2>
-            <p>
-              {activeTab === 'mine'
-                ? 'Open a deck quickly, jump into study mode, and keep your private deck list tidy.'
-                : activeTab === 'import'
-                  ? 'Bring in decks from reliable sources, then route straight into the editor and study flow.'
-                  : 'Search shared decks, preview them, and import only what you want into your own workspace.'}
-            </p>
+            <h2>{activeCopy.title}</h2>
+            <p>{activeCopy.description}</p>
           </div>
           <div className={styles.actions}>
             <button className={styles.primaryButton} onClick={() => setActiveTab('import')}>
@@ -434,12 +433,7 @@ export default function DeckLibraryPage() {
           </div>
 
           <div className={styles.modeBar}>
-            {([
-              { id: 'url', label: 'URL' },
-              { id: 'csv', label: 'CSV' },
-              { id: 'paste', label: 'Paste' },
-              { id: 'anki', label: 'Anki' },
-            ] satisfies Array<{ id: ImportMode; label: string }>).map((mode) => (
+            {IMPORT_MODE_OPTIONS.map((mode) => (
               <button
                 key={mode.id}
                 className={`${styles.modeButton} ${importMode === mode.id ? styles.modeButtonActive : ''}`}

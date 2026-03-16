@@ -176,6 +176,69 @@ type TopicId = typeof TOPICS[number]['id'];
 type SpecialView = 'formulas' | 'graph' | 'units' | 'scan';
 type ActiveView = TopicId | SpecialView;
 
+const DEFAULT_ACCENT = 'var(--primary)';
+
+const SPECIAL_VIEW_META: Record<SpecialView, { title: string; subtitle: string; icon: string; accent: string; workflowTitle: string; workflow: WorkflowStep[] }> = {
+  formulas: {
+    title: 'Formula Sheets',
+    subtitle: 'Quick-reference formulas organized by topic, ready to review before homework or exams.',
+    icon: '📚',
+    accent: '#6366f1',
+    workflowTitle: 'Formula-sheet workflow',
+    workflow: [
+      { label: 'Choose a topic', detail: 'Jump into the formula group that matches the class or chapter you are studying.' },
+      { label: 'Review the pattern', detail: 'Use these as quick revision cards before homework, quizzes, or an exam.' },
+      { label: 'Send one to the solver', detail: 'Click any formula card when you want a worked explanation or an example problem.' },
+    ],
+  },
+  graph: {
+    title: 'Graph Plotter',
+    subtitle: 'Plot functions, vertical lines, and implicit relations without the old graph-runtime crashes.',
+    icon: '📈',
+    accent: '#22c55e',
+    workflowTitle: 'Graph workflow',
+    workflow: [
+      { label: 'Enter a relation', detail: 'Use forms like y = x^2, x = 2, or x^2 + y^2 = 25.' },
+      { label: 'Plot it', detail: 'Hit Plot to render explicit functions and implicit relations in the same graph area.' },
+      { label: 'Adjust the window', detail: 'Use Home and zoom controls to inspect shape, intercepts, and symmetry.' },
+      { label: 'Compare multiple expressions', detail: 'Add extra rows to see how lines, curves, and relations interact.' },
+    ],
+  },
+  units: {
+    title: 'Unit Converter',
+    subtitle: 'Convert the common units students need most, with a simpler focused tool.',
+    icon: '⚖',
+    accent: '#f59e0b',
+    workflowTitle: 'Unit-converter workflow',
+    workflow: [
+      { label: 'Choose a category', detail: 'Pick the measurement family you need first, like length, mass, or speed.' },
+      { label: 'Set from and to units', detail: 'Choose your source unit and the unit you want to end up with.' },
+      { label: 'Enter a value', detail: 'Type one value and let the converter return a clean answer immediately.' },
+      { label: 'Swap when needed', detail: 'Use the swap control to reverse the conversion without re-entering everything.' },
+    ],
+  },
+  scan: {
+    title: 'Question Scan',
+    subtitle: 'Upload a screenshot or PDF of a math question, extract it, and send it to the solver.',
+    icon: '🧾',
+    accent: '#38bdf8',
+    workflowTitle: 'Question-scan workflow',
+    workflow: [
+      { label: 'Upload a screenshot or PDF', detail: 'This tab only accepts images and PDFs that contain math questions.' },
+      { label: 'Extract the question text', detail: 'Images use OCR and PDFs use text extraction so we can turn the file into solver-ready input.' },
+      { label: 'Review what was captured', detail: 'Check the extracted question before sending it into the solver.' },
+      { label: 'Solve it step by step', detail: 'Use “Solve now” to move the extracted text straight into the Solver tab.' },
+    ],
+  },
+};
+
+const SOLVER_WORKFLOW: WorkflowStep[] = [
+  { label: 'Pick or type a problem', detail: 'Start from an example or enter your own question in plain math text.' },
+  { label: 'Solve it', detail: 'Run the local solver first, then fall back to AI only when the result needs help.' },
+  { label: 'Review the method', detail: 'Read each step and explanation so this feels like guided tutoring, not a black box.' },
+  { label: 'Send graphable work to Graph', detail: 'If the result includes a graph expression, open it in the Graph tab instantly.' },
+];
+
 // ── Formula reference data ────────────────────────────────────────────────────
 
 const FORMULAS: Record<string, Array<{ title: string; latex: string; note?: string }>> = {
@@ -559,7 +622,6 @@ export function MathSolverPage() {
   const [graphExprs, setGraphExprs] = useState<GraphExpression[]>([
     { id: '1', expr: 'x^2', color: GRAPH_COLORS[0], enabled: true },
   ]);
-  const [_graphInput, _setGraphInput] = useState('');
   const graphRef = useRef<HTMLDivElement>(null);
   const [graphError, setGraphError] = useState('');
   const [xDomain, setXDomain] = useState<[number, number]>([-12, 12]);
@@ -726,18 +788,12 @@ export function MathSolverPage() {
   // ── Computed ────────────────────────────────────────────────────────────────
 
   const currentTopic = TOPICS.find(t => t.id === active);
-  const _currentFormulas = FORMULAS[active as string] ?? [];
-  const activeTitle = currentTopic?.label ?? (active === 'formulas' ? 'Formula Sheets' : active === 'graph' ? 'Graph Plotter' : active === 'units' ? 'Unit Converter' : 'Question Scan');
-  const activeSubtitle =
-    active === 'formulas'
-      ? 'Quick-reference formulas organized by topic, ready to review before homework or exams.'
-      : active === 'graph'
-        ? 'Plot functions, vertical lines, and implicit relations without the old graph-runtime crashes.'
-        : active === 'units'
-          ? 'Convert the common units students need most, with a simpler focused tool.'
-          : active === 'scan'
-            ? 'Upload a screenshot or PDF of a math question, extract it, and send it to the solver.'
-          : 'Solve one problem at a time with examples, symbols, and step-by-step output.';
+  const specialMeta = !currentTopic ? SPECIAL_VIEW_META[active as SpecialView] : null;
+  const currentAccent = currentTopic?.color ?? specialMeta?.accent ?? DEFAULT_ACCENT;
+  const activeTitle = currentTopic?.label ?? specialMeta?.title ?? 'Math';
+  const activeSubtitle = currentTopic
+    ? 'Solve one problem at a time with examples, symbols, and step-by-step output.'
+    : specialMeta?.subtitle ?? '';
 
   const unitCat = UNIT_CATS[unitCatIdx];
   const unitResult = (() => {
@@ -824,7 +880,7 @@ export function MathSolverPage() {
 
         {/* Header */}
         <div style={{ padding: '16px 24px 12px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-elevated)', flexShrink: 0 }}>
-          <span style={{ fontSize: 20 }}>{currentTopic?.icon ?? (active === 'formulas' ? '📚' : active === 'graph' ? '📈' : active === 'units' ? '⚖' : '🧾')}</span>
+          <span style={{ fontSize: 20 }}>{currentTopic?.icon ?? specialMeta?.icon ?? '∑'}</span>
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
               {activeTitle}
@@ -868,14 +924,9 @@ export function MathSolverPage() {
         {active !== 'formulas' && active !== 'graph' && active !== 'units' && active !== 'scan' && (
           <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16, flex: 1 }}>
             <WorkflowCard
-              accent={currentTopic?.color ?? 'var(--primary)'}
+              accent={currentAccent}
               title="Solver flow"
-              steps={[
-                { label: 'Pick or type a problem', detail: 'Start from an example or enter your own question in plain math text.' },
-                { label: 'Solve it', detail: 'Run the local solver first, then fall back to AI only when the result needs help.' },
-                { label: 'Review the method', detail: 'Read each step and explanation so this feels like guided tutoring, not a black box.' },
-                { label: 'Send graphable work to Graph', detail: 'If the result includes a graph expression, open it in the Graph tab instantly.' },
-              ]}
+              steps={SOLVER_WORKFLOW}
             />
 
             {/* Quick examples */}
@@ -992,8 +1043,8 @@ export function MathSolverPage() {
                 ) : (
                   <>
                     {/* Answer card */}
-                    <div style={{ padding: '18px 20px', borderRadius: 14, background: `${currentTopic?.color ?? 'var(--primary)'}0d`, border: `1.5px solid ${currentTopic?.color ?? 'var(--primary)'}30` }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: currentTopic?.color ?? 'var(--primary)', marginBottom: 8 }}>Answer</div>
+                      <div style={{ padding: '18px 20px', borderRadius: 14, background: `${currentAccent}0d`, border: `1.5px solid ${currentAccent}30` }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: currentAccent, marginBottom: 8 }}>Answer</div>
                       <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', overflowX: 'auto' }}>
                         {result.answerLatex ? <Latex latex={result.answerLatex} display /> : result.answer}
                       </div>
@@ -1007,7 +1058,7 @@ export function MathSolverPage() {
                         <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Step-by-step solution</div>
                         {result.steps.map((step, i) => (
                           <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 16px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', alignItems: 'flex-start' }}>
-                            <div style={{ width: 24, height: 24, borderRadius: '50%', background: currentTopic?.color ?? 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{step.step ?? i + 1}</div>
+                            <div style={{ width: 24, height: 24, borderRadius: '50%', background: currentAccent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{step.step ?? i + 1}</div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>{step.description}</div>
                               {step.latex && (
@@ -1040,13 +1091,9 @@ export function MathSolverPage() {
         {active === 'formulas' && (
           <div style={{ padding: '20px 24px', flex: 1, overflowY: 'auto' }}>
             <WorkflowCard
-              accent="#6366f1"
-              title="Formula-sheet workflow"
-              steps={[
-                { label: 'Choose a topic', detail: 'Jump into the formula group that matches the class or chapter you are studying.' },
-                { label: 'Review the pattern', detail: 'Use these as quick revision cards before homework, quizzes, or an exam.' },
-                { label: 'Send one to the solver', detail: 'Click any formula card when you want a worked explanation or an example problem.' },
-              ]}
+              accent={SPECIAL_VIEW_META.formulas.accent}
+              title={SPECIAL_VIEW_META.formulas.workflowTitle}
+              steps={SPECIAL_VIEW_META.formulas.workflow}
             />
             <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', marginBottom: 18, fontSize: 12, color: 'var(--text-secondary)' }}>
               This tab is for revision speed: scan formulas, then click one to send it back into the solver for explanation or practice.
@@ -1087,14 +1134,9 @@ export function MathSolverPage() {
         {active === 'graph' && (
           <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
             <WorkflowCard
-              accent="#22c55e"
-              title="Graph workflow"
-              steps={[
-                { label: 'Enter a relation', detail: 'Use forms like y = x^2, x = 2, or x^2 + y^2 = 25.' },
-                { label: 'Plot it', detail: 'Hit Plot to render explicit functions and implicit relations in the same graph area.' },
-                { label: 'Adjust the window', detail: 'Use Home and zoom controls to inspect shape, intercepts, and symmetry.' },
-                { label: 'Compare multiple expressions', detail: 'Add extra rows to see how lines, curves, and relations interact.' },
-              ]}
+              accent={SPECIAL_VIEW_META.graph.accent}
+              title={SPECIAL_VIEW_META.graph.workflowTitle}
+              steps={SPECIAL_VIEW_META.graph.workflow}
             />
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -1173,14 +1215,9 @@ export function MathSolverPage() {
         {active === 'units' && (
           <div style={{ padding: '20px 24px', flex: 1, maxWidth: 540 }}>
             <WorkflowCard
-              accent="#f59e0b"
-              title="Unit-converter workflow"
-              steps={[
-                { label: 'Choose a category', detail: 'Pick the measurement family you need first, like length, mass, or speed.' },
-                { label: 'Set from and to units', detail: 'Choose your source unit and the unit you want to end up with.' },
-                { label: 'Enter a value', detail: 'Type one value and let the converter return a clean answer immediately.' },
-                { label: 'Swap when needed', detail: 'Use the swap control to reverse the conversion without re-entering everything.' },
-              ]}
+              accent={SPECIAL_VIEW_META.units.accent}
+              title={SPECIAL_VIEW_META.units.workflowTitle}
+              steps={SPECIAL_VIEW_META.units.workflow}
             />
             <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', marginBottom: 16, fontSize: 12, color: 'var(--text-secondary)' }}>
               Use this tab for quick conversions only — one value, one category, one clean result.
@@ -1231,14 +1268,9 @@ export function MathSolverPage() {
         {active === 'scan' && (
           <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 900 }}>
             <WorkflowCard
-              accent="#38bdf8"
-              title="Question-scan workflow"
-              steps={[
-                { label: 'Upload a screenshot or PDF', detail: 'This tab only accepts images and PDFs that contain math questions.' },
-                { label: 'Extract the question text', detail: 'Images use OCR and PDFs use text extraction so we can turn the file into solver-ready input.' },
-                { label: 'Review what was captured', detail: 'Check the extracted question before sending it into the solver.' },
-                { label: 'Solve it step by step', detail: 'Use “Solve now” to move the extracted text straight into the Solver tab.' },
-              ]}
+              accent={SPECIAL_VIEW_META.scan.accent}
+              title={SPECIAL_VIEW_META.scan.workflowTitle}
+              steps={SPECIAL_VIEW_META.scan.workflow}
             />
 
             <div style={{ padding: '14px 16px', borderRadius: 12, border: '1px dashed var(--border-subtle)', background: 'var(--bg-2)' }}>
@@ -1329,14 +1361,5 @@ export function MathSolverPage() {
     </div>
   );
 }
-
-// Evaluate graph expression numerically (used for axis labels)
-function _evalAt(expr: string, x: number): string {
-  try {
-    const r = math.evaluate(expr, { x });
-    return typeof r === 'number' ? Number(r.toFixed(4)).toString() : String(r);
-  } catch { return '—'; }
-}
-void _evalAt; // suppress unused warning
 
 export default MathSolverPage;
