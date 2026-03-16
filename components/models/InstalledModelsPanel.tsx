@@ -9,6 +9,7 @@ import {
   saveAiRuntimePreferences,
   type AiRuntimePreferences,
 } from '@/lib/ai/runtime';
+import { invalidateOllamaStatus } from '@/hooks/useOllamaStatus';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -177,6 +178,8 @@ export function InstalledModelsPanel() {
   const checkStatus = useCallback(async () => {
     setRefreshing(true);
     setAiStatus('checking');
+    // Bust the shared singleton cache so AiRuntimeControls re-reads fresh state.
+    invalidateOllamaStatus();
     // Check Ollama
     try {
       const ollamaBase = process.env.NEXT_PUBLIC_OLLAMA_URL ?? 'http://localhost:11434';

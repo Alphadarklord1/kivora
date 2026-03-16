@@ -10,6 +10,7 @@ import {
   type AiMode,
   type AiRuntimePreferences,
 } from '@/lib/ai/runtime';
+import { useOllamaStatus } from '@/hooks/useOllamaStatus';
 
 const MODE_COPY: Record<AiMode, { label: string; hint: string; summary: string }> = {
   auto: {
@@ -31,15 +32,11 @@ const MODE_COPY: Record<AiMode, { label: string; hint: string; summary: string }
 
 export function AiRuntimeControls({ compact = false }: { compact?: boolean }) {
   const [prefs, setPrefs] = useState<AiRuntimePreferences>(() => loadAiRuntimePreferences());
-  const [localStatus, setLocalStatus] = useState<'checking' | 'ready' | 'missing'>('checking');
+  // Shared singleton — no extra network request if InstalledModelsPanel already checked.
+  const localStatus = useOllamaStatus();
   const [cloudConfigured, setCloudConfigured] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const ollamaBase = process.env.NEXT_PUBLIC_OLLAMA_URL ?? 'http://localhost:11434';
-    fetch(`${ollamaBase}/api/version`, { signal: AbortSignal.timeout(2500) })
-      .then((response) => setLocalStatus(response.ok ? 'ready' : 'missing'))
-      .catch(() => setLocalStatus('missing'));
-
     fetch('/api/ai/status')
       .then(async (response) => (response.ok ? response.json() : null))
       .then((payload) => setCloudConfigured(Boolean(payload?.cloudConfigured)))
