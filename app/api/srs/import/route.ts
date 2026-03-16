@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { libraryItems, shares } from '@/lib/db/schema';
+import { cardsToDeckContent, inferDeckTitle, parseAnkiApkg, parseCsvFlashcards, parsePastedFlashcards, type ImportedCard } from '@/lib/srs/importers';
 import { buildQuizletCandidateUrls, extractQuizletCards, extractQuizletTitle, looksLikeQuizletBlocked } from '@/lib/srs/quizlet-import';
 import { eq } from 'drizzle-orm';
 
@@ -28,19 +29,84 @@ async function importKivoraShare(url: URL) {
   };
 }
 
+function importedResponse(
+  source: string,
+  title: string,
+  description: string,
+  cards: ImportedCard[],
+) {
+  return NextResponse.json({
+    source,
+    title,
+    description,
+    cardCount: cards.length,
+    cards,
+    content: cardsToDeckContent(cards),
+  });
+}
+
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => null) as { url?: string } | null;
-  const rawUrl = body?.url?.trim();
-  if (!rawUrl) return NextResponse.json({ error: 'URL is required' }, { status: 400 });
+  const body = await request.json().catch(() => null) as {
+    kind?: 'url' | 'csv' | 'paste' | 'anki';
+    url?: string;
+    text?: string;
+    title?: string;
+    base64?: string;
+    fileName?: string;
+  } | null;
 
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(rawUrl);
-  } catch {
-    return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
-  }
+  const kind = body?.kind ?? (body?.url ? 'url' : null);
+  if (!kind) return NextResponse.json({ error: 'Import request is required' }, { status: 400 });
 
   try {
+    if (kind === 'csv') {
+      const text = body?.text?.trim() ?? '';
+      if (!text) return NextResponse.json({ error: 'CSV text is required' }, { status: 400 });
+
+      const cards = parseCsvFlashcards(text);
+      if (cards.length === 0) {
+        return NextResponse.json({ error: 'Could not parse any cards from this CSV' }, { status: 422 });
+      }
+
+      const title = inferDeckTitle(body?.title, 'Imported CSV deck');
+      return importedResponse('csv', title, `Imported from CSV (${cards.length} cards)`, cards);
+    }
+
+    if (kind === 'paste') {
+      const text = body?.text?.trim() ?? '';
+      if (!text) return NextResponse.json({ error: 'Pasted deck text is required' }, { status: 400 });
+
+      const cards = parsePastedFlashcards(text);
+      if (cards.length === 0) {
+        return NextResponse.json({ error: 'Could not parse flashcards from the pasted text' }, { status: 422 });
+      }
+
+      const title = inferDeckTitle(body?.title, 'Imported deck');
+      return importedResponse('paste', title, `Imported from pasted cards (${cards.length} cards)`, cards);
+    }
+
+    if (kind === 'anki') {
+      const base64 = body?.base64?.trim() ?? '';
+      if (!base64) return NextResponse.json({ error: 'Anki file data is required' }, { status: 400 });
+
+      const { title, cards } = await parseAnkiApkg(base64, body?.fileName);
+      if (cards.length === 0) {
+        return NextResponse.json({ error: 'Could not extract cards from this Anki package' }, { status: 422 });
+      }
+
+      return importedResponse('anki', inferDeckTitle(body?.title, title), `Imported from Anki (${cards.length} cards)`, cards);
+    }
+
+    const rawUrl = body?.url?.trim();
+    if (!rawUrl) return NextResponse.json({ error: 'URL is required' }, { status: 400 });
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(rawUrl);
+    } catch {
+      return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
+    }
+
     const hostname = parsedUrl.hostname.toLowerCase();
     const isKivoraShare = parsedUrl.pathname.includes('/shared/');
     if (isKivoraShare) {
@@ -80,14 +146,13 @@ export async function POST(request: NextRequest) {
       }
 
       const title = extractQuizletTitle(bestHtml);
-      const content = cards.map((card) => `Front: ${card.front} | Back: ${card.back}`).join('\n');
-
       return NextResponse.json({
         source: 'quizlet',
         title,
         cardCount: cards.length,
         description: `Imported from Quizlet (${cards.length} cards)`,
-        content,
+        cards,
+        content: cardsToDeckContent(cards),
       });
     }
 

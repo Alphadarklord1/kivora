@@ -20,6 +20,15 @@ interface PublicDeck {
 }
 
 type DeckTab = 'mine' | 'import' | 'public';
+type ImportMode = 'url' | 'csv' | 'paste' | 'anki';
+type ImportPayload = {
+  title?: string;
+  description?: string;
+  content?: string;
+  cards?: Array<{ front: string; back: string }>;
+  source?: string;
+  cardCount?: number;
+};
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -45,8 +54,13 @@ export default function DeckLibraryPage() {
   const [myDecks, setMyDecks] = useState<SRSDeck[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMine, setLoadingMine] = useState(true);
+  const [importMode, setImportMode] = useState<ImportMode>('url');
   const [importUrl, setImportUrl] = useState('');
-  const [importingUrl, setImportingUrl] = useState(false);
+  const [importTitle, setImportTitle] = useState('');
+  const [csvText, setCsvText] = useState('');
+  const [pasteText, setPasteText] = useState('');
+  const [ankiFile, setAnkiFile] = useState<File | null>(null);
+  const [importingMode, setImportingMode] = useState<ImportMode | null>(null);
   const [lastImported, setLastImported] = useState<{ deck: SRSDeck; cardCount: number } | null>(null);
 
   const localDeckCount = useMemo(() => myDecks.length, [myDecks]);
@@ -90,24 +104,49 @@ export default function DeckLibraryPage() {
     void refreshMyDecks();
   }, [loadDecksFromApi, refreshMyDecks]);
 
+  function resetImportInputs() {
+    setImportUrl('');
+    setImportTitle('');
+    setCsvText('');
+    setPasteText('');
+    setAnkiFile(null);
+  }
+
   async function finalizeImport(
-    payload: { title?: string; description?: string; content?: string; source?: string; cardCount?: number },
+    payload: ImportPayload,
     fallbackSource: { type: SRSDeck['sourceType']; label: string },
   ) {
+    const sourceType = payload.source === 'quizlet'
+      ? 'quizlet'
+      : payload.source === 'kivora-share'
+        ? 'kivora-share'
+        : payload.source === 'csv'
+          ? 'csv'
+          : payload.source === 'paste'
+            ? 'paste'
+            : payload.source === 'anki'
+              ? 'anki'
+              : fallbackSource.type;
+
+    const sourceLabel = payload.source === 'quizlet'
+      ? 'Quizlet import'
+      : payload.source === 'kivora-share'
+        ? 'Kivora shared deck'
+        : payload.source === 'csv'
+          ? 'CSV import'
+          : payload.source === 'paste'
+            ? 'Pasted cards'
+            : payload.source === 'anki'
+              ? 'Anki import'
+              : fallbackSource.label;
+
     const deck = buildImportedDeck({
       title: String(payload.title ?? 'Imported deck'),
       description: String(payload.description ?? ''),
       content: String(payload.content ?? ''),
-      sourceType: payload.source === 'quizlet'
-        ? 'quizlet'
-        : payload.source === 'kivora-share'
-          ? 'kivora-share'
-          : fallbackSource.type,
-      sourceLabel: payload.source === 'quizlet'
-        ? 'Quizlet import'
-        : payload.source === 'kivora-share'
-          ? 'Kivora shared deck'
-          : fallbackSource.label,
+      cards: payload.cards,
+      sourceType,
+      sourceLabel,
       creatorName: 'You',
     });
 
@@ -117,7 +156,7 @@ export default function DeckLibraryPage() {
     const synced = await syncDeckToCloud(deck);
     const cardCount = payload.cardCount ?? deck.cards.length;
     setLastImported({ deck, cardCount });
-    setImportUrl('');
+    resetImportInputs();
     setActiveTab('mine');
     await refreshMyDecks();
     toast(
@@ -127,28 +166,93 @@ export default function DeckLibraryPage() {
     router.push(`/decks/${deck.id}?imported=1`);
   }
 
-  async function importDeckFromUrl() {
-    if (!importUrl.trim()) return;
-    setImportingUrl(true);
+  async function requestImport(body: Record<string, unknown>, fallbackSource: { type: SRSDeck['sourceType']; label: string }) {
     try {
       const res = await fetch('/api/srs/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: importUrl.trim() }),
+        body: JSON.stringify(body),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(payload?.error ?? 'Import failed');
       }
 
-      await finalizeImport(payload as { title?: string; description?: string; content?: string; source?: string; cardCount?: number }, {
-        type: 'manual',
-        label: 'Deck import',
-      });
+      await finalizeImport(payload as ImportPayload, fallbackSource);
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Import failed', 'error');
+    }
+  }
+
+  async function importDeckFromUrl() {
+    if (!importUrl.trim()) return;
+    setImportingMode('url');
+    try {
+      await requestImport(
+        { kind: 'url', url: importUrl.trim() },
+        { type: 'manual', label: 'Deck import' },
+      );
     } finally {
-      setImportingUrl(false);
+      setImportingMode(null);
+    }
+  }
+
+  async function importDeckFromCsv() {
+    if (!csvText.trim()) return;
+    setImportingMode('csv');
+    try {
+      await requestImport(
+        { kind: 'csv', text: csvText.trim(), title: importTitle.trim() || undefined },
+        { type: 'csv', label: 'CSV import' },
+      );
+    } finally {
+      setImportingMode(null);
+    }
+  }
+
+  async function importDeckFromPaste() {
+    if (!pasteText.trim()) return;
+    setImportingMode('paste');
+    try {
+      await requestImport(
+        { kind: 'paste', text: pasteText.trim(), title: importTitle.trim() || undefined },
+        { type: 'paste', label: 'Pasted cards' },
+      );
+    } finally {
+      setImportingMode(null);
+    }
+  }
+
+  async function importDeckFromAnki() {
+    if (!ankiFile) return;
+    setImportingMode('anki');
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = typeof reader.result === 'string' ? reader.result : '';
+          const encoded = result.includes(',') ? result.split(',')[1] ?? '' : result;
+          if (!encoded) {
+            reject(new Error('Could not read the Anki package'));
+            return;
+          }
+          resolve(encoded);
+        };
+        reader.onerror = () => reject(reader.error ?? new Error('Could not read the Anki package'));
+        reader.readAsDataURL(ankiFile);
+      });
+
+      await requestImport(
+        {
+          kind: 'anki',
+          base64,
+          fileName: ankiFile.name,
+          title: importTitle.trim() || undefined,
+        },
+        { type: 'anki', label: 'Anki import' },
+      );
+    } finally {
+      setImportingMode(null);
     }
   }
 
@@ -210,8 +314,8 @@ export default function DeckLibraryPage() {
           </div>
           <div className={styles.metricCard}>
             <span className={styles.metricLabel}>Import source</span>
-            <strong>Quizlet + Kivora</strong>
-            <small>URL import with direct deck handoff</small>
+            <strong>Quizlet + CSV + Anki</strong>
+            <small>Universal import with direct deck handoff</small>
           </div>
         </div>
       </section>
@@ -257,7 +361,7 @@ export default function DeckLibraryPage() {
             <div className={styles.emptyState}>Loading your decks…</div>
           ) : myDecks.length === 0 ? (
             <div className={styles.emptyState}>
-              No private decks yet. Import one from Quizlet or a public Kivora deck to get started.
+              No private decks yet. Import one from Quizlet, CSV, pasted notes, Anki, or a public Kivora deck to get started.
             </div>
           ) : (
             <div className={styles.deckGrid}>
@@ -301,8 +405,8 @@ export default function DeckLibraryPage() {
         <section className={styles.importCard}>
           <div className={styles.sectionHeader}>
             <div>
-              <h2>Import from URL</h2>
-              <p>Supports Quizlet set URLs and Kivora shared deck links, then routes straight into your personal deck viewer.</p>
+              <h2>Import a deck</h2>
+              <p>Bring in flashcards from Quizlet, Kivora links, CSV, pasted notes, or Anki packages, then route straight into your deck viewer.</p>
             </div>
             {lastImported && (
               <button className={styles.inlineAction} onClick={() => router.push(`/decks/${lastImported.deck.id}?imported=1`)}>
@@ -310,17 +414,110 @@ export default function DeckLibraryPage() {
               </button>
             )}
           </div>
-          <div className={styles.importRow}>
-            <input
-              value={importUrl}
-              onChange={(event) => setImportUrl(event.target.value)}
-              placeholder="Paste Quizlet or Kivora deck URL"
-              className={styles.searchInput}
-            />
-            <button className={styles.primaryButton} onClick={importDeckFromUrl} disabled={importingUrl || !importUrl.trim()}>
-              {importingUrl ? 'Importing…' : 'Import URL'}
-            </button>
+
+          <div className={styles.modeBar}>
+            {([
+              { id: 'url', label: 'URL' },
+              { id: 'csv', label: 'CSV' },
+              { id: 'paste', label: 'Paste' },
+              { id: 'anki', label: 'Anki' },
+            ] satisfies Array<{ id: ImportMode; label: string }>).map((mode) => (
+              <button
+                key={mode.id}
+                className={`${styles.modeButton} ${importMode === mode.id ? styles.modeButtonActive : ''}`}
+                onClick={() => setImportMode(mode.id)}
+              >
+                {mode.label}
+              </button>
+            ))}
           </div>
+
+          <div className={styles.formStack}>
+            {importMode === 'url' && (
+              <div className={styles.importRow}>
+                <input
+                  value={importUrl}
+                  onChange={(event) => setImportUrl(event.target.value)}
+                  placeholder="Paste Quizlet or Kivora deck URL"
+                  className={styles.searchInput}
+                />
+                <button className={styles.primaryButton} onClick={importDeckFromUrl} disabled={importingMode === 'url' || !importUrl.trim()}>
+                  {importingMode === 'url' ? 'Importing…' : 'Import URL'}
+                </button>
+              </div>
+            )}
+
+            {importMode === 'csv' && (
+              <>
+                <div className={styles.importRow}>
+                  <input
+                    value={importTitle}
+                    onChange={(event) => setImportTitle(event.target.value)}
+                    placeholder="Optional deck title"
+                    className={styles.searchInput}
+                  />
+                  <button className={styles.primaryButton} onClick={importDeckFromCsv} disabled={importingMode === 'csv' || !csvText.trim()}>
+                    {importingMode === 'csv' ? 'Importing…' : 'Import CSV'}
+                  </button>
+                </div>
+                <textarea
+                  value={csvText}
+                  onChange={(event) => setCsvText(event.target.value)}
+                  className={styles.textArea}
+                  placeholder={'Front,Back\nPhotosynthesis,Converts light into chemical energy\nMitochondria,Powerhouse of the cell'}
+                />
+              </>
+            )}
+
+            {importMode === 'paste' && (
+              <>
+                <div className={styles.importRow}>
+                  <input
+                    value={importTitle}
+                    onChange={(event) => setImportTitle(event.target.value)}
+                    placeholder="Optional deck title"
+                    className={styles.searchInput}
+                  />
+                  <button className={styles.primaryButton} onClick={importDeckFromPaste} disabled={importingMode === 'paste' || !pasteText.trim()}>
+                    {importingMode === 'paste' ? 'Importing…' : 'Import pasted cards'}
+                  </button>
+                </div>
+                <textarea
+                  value={pasteText}
+                  onChange={(event) => setPasteText(event.target.value)}
+                  className={styles.textArea}
+                  placeholder={'Cell :: Basic unit of life\nMitochondria :: Powerhouse of the cell\n\nOr paste alternating lines:\nVector\nQuantity with magnitude and direction'}
+                />
+              </>
+            )}
+
+            {importMode === 'anki' && (
+              <>
+                <div className={styles.importRow}>
+                  <input
+                    value={importTitle}
+                    onChange={(event) => setImportTitle(event.target.value)}
+                    placeholder="Optional deck title override"
+                    className={styles.searchInput}
+                  />
+                  <button className={styles.primaryButton} onClick={importDeckFromAnki} disabled={importingMode === 'anki' || !ankiFile}>
+                    {importingMode === 'anki' ? 'Importing…' : 'Import Anki'}
+                  </button>
+                </div>
+                <label className={styles.uploadCard}>
+                  <span>Select a `.apkg` file</span>
+                  <input
+                    type="file"
+                    accept=".apkg"
+                    className={styles.fileInput}
+                    onChange={(event) => setAnkiFile(event.target.files?.[0] ?? null)}
+                  />
+                  <small>{ankiFile ? ankiFile.name : 'The importer extracts the first front/back fields from the package.'}</small>
+                </label>
+              </>
+            )}
+          </div>
+
           <div className={styles.helperGrid}>
             <article className={styles.helperCard}>
               <strong>Quizlet import</strong>
@@ -329,6 +526,14 @@ export default function DeckLibraryPage() {
             <article className={styles.helperCard}>
               <strong>Kivora shared deck</strong>
               <p>Import a published deck snapshot into your private study space without leaving the deck workflow.</p>
+            </article>
+            <article className={styles.helperCard}>
+              <strong>CSV + paste</strong>
+              <p>Bring in simple term/definition lists without depending on a third-party site staying scrape-friendly.</p>
+            </article>
+            <article className={styles.helperCard}>
+              <strong>Anki packages</strong>
+              <p>Import existing `.apkg` decks so Kivora becomes your universal flashcard workspace, not just a one-source importer.</p>
             </article>
           </div>
         </section>

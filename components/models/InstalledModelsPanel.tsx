@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -227,23 +227,14 @@ export function InstalledModelsPanel() {
 
   return (
     <div className="mdl-shell">
-      {/* Header */}
-      <div className="mdl-header">
-        <div className="mdl-brand">
-          <span className="mdl-brand-icon">🤖</span>
-          <div>
-            <h1>Offline Models</h1>
-            <p>Install, switch, and inspect local AI models without leaving Kivora.</p>
-          </div>
-        </div>
+      {/* Controls bar */}
+      <div className="mdl-controls">
+        <StatusBanner status={aiStatus} ollamaVersion={ollamaVersion} modelsInstalled={ollamaModels.length} inline />
         <button className="mdl-refresh-btn" onClick={checkStatus} disabled={refreshing}
-          style={{ opacity: refreshing ? 0.7 : 1 }}>
+          style={{ opacity: refreshing ? 0.7 : 1, flexShrink: 0 }}>
           {refreshing ? '⟳ Checking…' : '↻ Refresh'}
         </button>
       </div>
-
-      {/* Status banner */}
-      <StatusBanner status={aiStatus} ollamaVersion={ollamaVersion} modelsInstalled={ollamaModels.length} />
 
       {/* Setup guide */}
       {aiStatus === 'none' && <SetupGuide />}
@@ -413,7 +404,6 @@ export function InstalledModelsPanel() {
 
       <style jsx>{`
         .mdl-shell {
-          padding: 0;
           display: flex;
           flex-direction: column;
           gap: 0;
@@ -421,18 +411,10 @@ export function InstalledModelsPanel() {
           margin: 0 auto;
           padding: 0 0 40px;
         }
-        .mdl-header {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 24px 24px 16px; gap: 16px; flex-wrap: wrap;
+        .mdl-controls {
+          display: flex; align-items: center; gap: 10px;
+          padding: 16px 24px; flex-wrap: wrap;
         }
-        .mdl-brand { display: flex; align-items: center; gap: 14px; }
-        .mdl-brand-icon {
-          width: 52px; height: 52px; border-radius: 16px;
-          background: linear-gradient(135deg, #a78bfa, #4f86f7);
-          display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0;
-        }
-        .mdl-brand h1 { margin: 0; font-size: 22px; font-weight: 700; }
-        .mdl-brand p { margin: 2px 0 0; font-size: 12px; color: var(--text-muted); }
         .mdl-refresh-btn {
           padding: 8px 16px; border-radius: 10px; border: 1.5px solid var(--border-subtle);
           background: var(--bg-surface); color: var(--text-secondary); cursor: pointer; font-size: 13px; font-weight: 500;
@@ -508,7 +490,7 @@ export function InstalledModelsPanel() {
         .mc-default-btn:hover { border-color: var(--primary); color: var(--primary); }
         .mc-default-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
         .mc-default-hint { font-size: 12px; color: var(--text-muted); }
-        .mc-default-badge { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: var(--primary, #4f86f7)20; color: var(--primary, #4f86f7); font-weight: 700; }
+        .mc-default-badge { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--primary, #4f86f7) 15%, transparent); color: var(--primary, #4f86f7); font-weight: 700; }
 
         .bundled-section {
           margin: 24px; padding: 20px 24px; border-radius: 20px;
@@ -530,31 +512,31 @@ export function InstalledModelsPanel() {
 
 // ─── Status Banner ────────────────────────────────────────────────────────────
 
-function StatusBanner({ status, ollamaVersion, modelsInstalled }: {
-  status: AIStatus; ollamaVersion: string | null; modelsInstalled: number;
+function StatusBanner({ status, ollamaVersion, modelsInstalled, inline }: {
+  status: AIStatus; ollamaVersion: string | null; modelsInstalled: number; inline?: boolean;
 }) {
+  const baseStyle: React.CSSProperties = inline
+    ? { flex: 1, padding: '9px 14px', borderRadius: 10, fontSize: 13, fontWeight: 500 }
+    : { margin: '0 24px 16px', padding: '12px 16px', borderRadius: 12, fontSize: 13, fontWeight: 500 };
+
   if (status === 'checking') return (
-    <div className="sb sb-checking">
-      <span>⟳ Detecting AI runtime…</span>
-      <style jsx>{`.sb{margin:0 24px 16px;padding:12px 16px;border-radius:12px;font-size:13px;font-weight:500;}.sb-checking{background:var(--bg-surface);border:1px solid var(--border-subtle);color:var(--text-muted);}`}</style>
+    <div style={{ ...baseStyle, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
+      ⟳ Detecting AI runtime…
     </div>
   );
   if (status === 'ollama-ok') return (
-    <div className="sb sb-ok">
-      <span>✓ Ollama detected{ollamaVersion ? ` v${ollamaVersion}` : ''} · {modelsInstalled} model{modelsInstalled !== 1 ? 's' : ''} installed · AI features active</span>
-      <style jsx>{`.sb{margin:0 24px 16px;padding:12px 16px;border-radius:12px;font-size:13px;font-weight:500;}.sb-ok{background:#52b78818;border:1px solid #52b78840;color:#52b788;}`}</style>
+    <div style={{ ...baseStyle, background: '#52b78818', border: '1px solid #52b78840', color: '#52b788' }}>
+      ✓ Ollama{ollamaVersion ? ` v${ollamaVersion}` : ''} · {modelsInstalled} model{modelsInstalled !== 1 ? 's' : ''} installed · AI active
     </div>
   );
   if (status === 'llama-ok') return (
-    <div className="sb sb-ok">
-      <span>✓ llama.cpp runtime detected · AI features active</span>
-      <style jsx>{`.sb{margin:0 24px 16px;padding:12px 16px;border-radius:12px;font-size:13px;font-weight:500;}.sb-ok{background:#52b78818;border:1px solid #52b78840;color:#52b788;}`}</style>
+    <div style={{ ...baseStyle, background: '#52b78818', border: '1px solid #52b78840', color: '#52b788' }}>
+      ✓ llama.cpp detected · AI features active
     </div>
   );
   return (
-    <div className="sb sb-none">
-      <span>⚠ No AI runtime detected. Install Ollama (free, open source) to enable all AI features.</span>
-      <style jsx>{`.sb{margin:0 24px 16px;padding:12px 16px;border-radius:12px;font-size:13px;font-weight:500;}.sb-none{background:#f59e0b18;border:1px solid #f59e0b40;color:#f59e0b;}`}</style>
+    <div style={{ ...baseStyle, background: '#f59e0b18', border: '1px solid #f59e0b40', color: '#f59e0b' }}>
+      ⚠ No AI runtime detected — install Ollama to enable AI features.
     </div>
   );
 }

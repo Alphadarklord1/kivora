@@ -32,7 +32,7 @@ export interface SRSDeck {
   id: string;
   name: string;
   description?: string;
-  sourceType?: 'quizlet' | 'kivora-share' | 'public-library' | 'manual' | 'generated' | 'workspace';
+  sourceType?: 'quizlet' | 'kivora-share' | 'public-library' | 'manual' | 'generated' | 'workspace' | 'csv' | 'paste' | 'anki';
   sourceLabel?: string;
   creatorName?: string;
   cards: SRSCard[];

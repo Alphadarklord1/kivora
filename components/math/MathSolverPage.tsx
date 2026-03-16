@@ -1,1375 +1,839 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import * as math from 'mathjs';
-import { MatlabLab } from '@/components/tools/MatlabLab';
-import { useToast } from '@/providers/ToastProvider';
-import { formatMathExpression } from '@/components/math/MathRenderer';
-import { MATH_CATEGORIES, MATH_CATEGORY_ORDER, MATH_SYMBOL_GROUPS } from '@/lib/math/catalog';
-import { clearMathContext, readMathContext, writeMathContext } from '@/lib/math/context';
-import type { MathCategoryId, MathContext, MathSolveRequest, SolverResult } from '@/lib/math/types';
-import { idbStore } from '@/lib/idb';
-import { extractTextFromBlob } from '@/lib/pdf/extract';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const functionPlot = typeof window !== 'undefined' ? require('function-plot') : null;
 
-// ─── Types ─────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-type MainTab = 'solver' | 'graph' | 'units' | 'lab';
+interface MathStep {
+  step: number;
+  description: string;
+  latex: string;
+  explanation: string;
+}
 
-type SymbolGroupId = (typeof MATH_SYMBOL_GROUPS)[number]['id'];
+interface SolveResult {
+  answer: string;
+  answerLatex: string;
+  steps: MathStep[];
+  graphExpr: string | null;
+  category: string;
+  engine: string;
+  error: string | null;
+}
+
+interface HistoryItem {
+  id: string;
+  problem: string;
+  answer: string;
+  category: string;
+  ts: number;
+}
 
 interface GraphExpression {
   id: string;
   expr: string;
   color: string;
   enabled: boolean;
-  showDerivative: boolean;
 }
 
-interface UnitCategory {
-  label: string;
-  units: { id: string; label: string; toBase: (v: number) => number; fromBase: (v: number) => number }[];
-}
+// ── Topic catalogue ───────────────────────────────────────────────────────────
 
-interface RecentFileCandidate {
-  fileId: string;
-  fileName: string;
-  content?: string;
-  localBlobId?: string | null;
-  mimeType?: string | null;
-}
-
-// ─── Constants ─────────────────────────────────────────────────────────────
-
-const FN_COLORS = ['#6366f1', '#f97316', '#22c55e', '#ef4444', '#a855f7', '#0ea5e9'];
-
-const UNIT_CATEGORIES: UnitCategory[] = [
+const TOPICS = [
   {
-    label: 'Length',
-    units: [
-      { id: 'mm', label: 'Millimeters', toBase: (v) => v / 1000, fromBase: (v) => v * 1000 },
-      { id: 'cm', label: 'Centimeters', toBase: (v) => v / 100, fromBase: (v) => v * 100 },
-      { id: 'm', label: 'Meters', toBase: (v) => v, fromBase: (v) => v },
-      { id: 'km', label: 'Kilometers', toBase: (v) => v * 1000, fromBase: (v) => v / 1000 },
-      { id: 'in', label: 'Inches', toBase: (v) => v * 0.0254, fromBase: (v) => v / 0.0254 },
-      { id: 'ft', label: 'Feet', toBase: (v) => v * 0.3048, fromBase: (v) => v / 0.3048 },
+    id: 'algebra',
+    label: 'Algebra',
+    icon: '𝑥',
+    color: '#6366f1',
+    examples: [
+      'Solve x² + 5x + 6 = 0',
+      'Factor 4x² - 9',
+      'Simplify (2x + 3)² - (x - 1)²',
+      'Solve |3x - 2| = 7',
+      'Solve system: x + y = 5, 2x - y = 4',
     ],
   },
   {
-    label: 'Mass',
-    units: [
-      { id: 'g', label: 'Grams', toBase: (v) => v / 1000, fromBase: (v) => v * 1000 },
-      { id: 'kg', label: 'Kilograms', toBase: (v) => v, fromBase: (v) => v },
-      { id: 'lb', label: 'Pounds', toBase: (v) => v * 0.453592, fromBase: (v) => v / 0.453592 },
-      { id: 'oz', label: 'Ounces', toBase: (v) => v * 0.0283495, fromBase: (v) => v / 0.0283495 },
+    id: 'calculus',
+    label: 'Calculus',
+    icon: '∫',
+    color: '#8b5cf6',
+    examples: [
+      'Differentiate x³ sin(x)',
+      'Integrate x² ln(x) dx',
+      'Limit of (sin x)/x as x → 0',
+      'Find critical points of f(x) = x³ - 3x',
+      'Taylor series of e^x at x = 0',
     ],
   },
   {
-    label: 'Temperature',
-    units: [
-      { id: 'C', label: 'Celsius (°C)', toBase: (v) => v, fromBase: (v) => v },
-      { id: 'F', label: 'Fahrenheit (°F)', toBase: (v) => (v - 32) * 5 / 9, fromBase: (v) => (v * 9 / 5) + 32 },
-      { id: 'K', label: 'Kelvin (K)', toBase: (v) => v - 273.15, fromBase: (v) => v + 273.15 },
+    id: 'statistics',
+    label: 'Statistics',
+    icon: 'σ',
+    color: '#06b6d4',
+    examples: [
+      'Mean and SD of [4, 8, 15, 16, 23, 42]',
+      'P(A∩B) given P(A)=0.4, P(B)=0.5, P(A∪B)=0.7',
+      'Binomial P(X=3) with n=10, p=0.4',
+      'Confidence interval for mean, n=25, x̄=50, s=8',
+      'Chi-square test for independence',
     ],
   },
   {
-    label: 'Speed',
-    units: [
-      { id: 'ms', label: 'm/s', toBase: (v) => v, fromBase: (v) => v },
-      { id: 'kmh', label: 'km/h', toBase: (v) => v / 3.6, fromBase: (v) => v * 3.6 },
-      { id: 'mph', label: 'mph', toBase: (v) => v * 0.44704, fromBase: (v) => v / 0.44704 },
+    id: 'trigonometry',
+    label: 'Trigonometry',
+    icon: '∠',
+    color: '#f59e0b',
+    examples: [
+      'Solve 2 sin(x) = 1 for x in [0, 2π]',
+      'Simplify sin²(x) + cos²(x)',
+      'Find cos(75°) exactly',
+      'Solve triangle: a=5, b=7, C=60°',
+      'Verify sin(2x) = 2 sin(x) cos(x)',
     ],
   },
+  {
+    id: 'geometry',
+    label: 'Geometry',
+    icon: '△',
+    color: '#10b981',
+    examples: [
+      'Area of triangle with sides 3, 4, 5',
+      'Equation of circle: center (2,-3), radius 5',
+      'Distance between (1,2) and (4,6)',
+      'Area of regular hexagon with side 4',
+      'Volume of sphere with radius 7',
+    ],
+  },
+  {
+    id: 'linear-algebra',
+    label: 'Linear Algebra',
+    icon: '[]',
+    color: '#ec4899',
+    examples: [
+      'Eigenvalues of [[2,1],[1,2]]',
+      'Determinant of [[1,2,3],[4,5,6],[7,8,9]]',
+      'Solve Ax=b: A=[[2,1],[1,3]], b=[5,10]',
+      'Dot product of [1,2,3] and [4,5,6]',
+      'Row reduce [[1,2,3],[4,5,6],[7,8,9]]',
+    ],
+  },
+  {
+    id: 'differential-equations',
+    label: 'Diff. Equations',
+    icon: "y'",
+    color: '#f97316',
+    examples: [
+      "Solve dy/dx = 2xy",
+      "Solve y'' - 3y' + 2y = 0",
+      "Solve y' - y = e^x",
+      "Initial value: y' = y, y(0) = 1",
+      "Solve (x² + y²) dx + 2xy dy = 0",
+    ],
+  },
+  {
+    id: 'discrete',
+    label: 'Discrete Math',
+    icon: '#',
+    color: '#14b8a6',
+    examples: [
+      'Find gcd(48, 36)',
+      'Permutations of MISSISSIPPI',
+      'C(10, 4) combinations',
+      '2^100 mod 1000000007',
+      'Fibonacci F(20)',
+    ],
+  },
+  {
+    id: 'physics',
+    label: 'Physics',
+    icon: '⚛',
+    color: '#ef4444',
+    examples: [
+      'Projectile: v₀=20 m/s at 30°, find range',
+      'Ohm\'s law: V=IR, R=10Ω, I=2A',
+      'Kinetic energy at v=15 m/s, m=2 kg',
+      'Wave: λ=0.5m, f=680 Hz, find speed',
+      'Force on charge q=2μC in E=300 N/C',
+    ],
+  },
+] as const;
+
+type TopicId = typeof TOPICS[number]['id'];
+type SpecialView = 'formulas' | 'graph' | 'units';
+type ActiveView = TopicId | SpecialView;
+
+// ── Formula reference data ────────────────────────────────────────────────────
+
+const FORMULAS: Record<string, Array<{ title: string; latex: string; note?: string }>> = {
+  algebra: [
+    { title: 'Quadratic formula', latex: 'x = \\dfrac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}' },
+    { title: 'Sum of arithmetic series', latex: 'S_n = \\dfrac{n}{2}(a_1 + a_n)' },
+    { title: 'Sum of geometric series', latex: 'S_n = \\dfrac{a_1(1 - r^n)}{1 - r},\\ r \\neq 1' },
+    { title: 'Binomial theorem', latex: '(a+b)^n = \\sum_{k=0}^{n} \\binom{n}{k} a^{n-k} b^k' },
+    { title: 'Difference of squares', latex: 'a^2 - b^2 = (a+b)(a-b)' },
+    { title: 'Perfect square', latex: '(a \\pm b)^2 = a^2 \\pm 2ab + b^2' },
+    { title: 'Logarithm rules', latex: '\\log(ab)=\\log a+\\log b,\\ \\log\\dfrac{a}{b}=\\log a-\\log b' },
+    { title: 'Change of base', latex: '\\log_b a = \\dfrac{\\ln a}{\\ln b}' },
+  ],
+  calculus: [
+    { title: 'Power rule', latex: '\\dfrac{d}{dx}\\left[x^n\\right] = nx^{n-1}' },
+    { title: 'Product rule', latex: '\\dfrac{d}{dx}[uv] = u\'v + uv\'' },
+    { title: 'Quotient rule', latex: '\\dfrac{d}{dx}\\left[\\dfrac{u}{v}\\right] = \\dfrac{u\'v - uv\'}{v^2}' },
+    { title: 'Chain rule', latex: '\\dfrac{d}{dx}[f(g(x))] = f\'(g(x))\\cdot g\'(x)' },
+    { title: 'Fundamental theorem', latex: '\\int_a^b f(x)\\,dx = F(b) - F(a)' },
+    { title: 'Power rule (integration)', latex: '\\int x^n\\,dx = \\dfrac{x^{n+1}}{n+1} + C,\\ n \\neq -1' },
+    { title: 'Integration by parts', latex: '\\int u\\,dv = uv - \\int v\\,du' },
+    { title: "L'Hôpital's rule", latex: '\\lim_{x \\to a}\\dfrac{f(x)}{g(x)} = \\lim_{x \\to a}\\dfrac{f\'(x)}{g\'(x)}' },
+  ],
+  statistics: [
+    { title: 'Sample mean', latex: '\\bar{x} = \\dfrac{\\sum x_i}{n}' },
+    { title: 'Population variance', latex: '\\sigma^2 = \\dfrac{\\sum(x_i - \\mu)^2}{N}' },
+    { title: 'Z-score', latex: 'z = \\dfrac{x - \\mu}{\\sigma}' },
+    { title: 'Normal PDF', latex: 'f(x) = \\dfrac{1}{\\sigma\\sqrt{2\\pi}}e^{-\\frac{(x-\\mu)^2}{2\\sigma^2}}' },
+    { title: 'Binomial probability', latex: 'P(X=k) = \\binom{n}{k}p^k(1-p)^{n-k}' },
+    { title: 'Confidence interval', latex: 'CI = \\bar{x} \\pm z_{\\alpha/2}\\cdot\\dfrac{\\sigma}{\\sqrt{n}}' },
+    { title: 'Correlation coefficient', latex: 'r = \\dfrac{\\sum(x_i-\\bar{x})(y_i-\\bar{y})}{\\sqrt{\\sum(x_i-\\bar{x})^2\\sum(y_i-\\bar{y})^2}}' },
+    { title: "Bayes' theorem", latex: 'P(A|B) = \\dfrac{P(B|A)\\cdot P(A)}{P(B)}' },
+  ],
+  trigonometry: [
+    { title: 'Pythagorean identity', latex: '\\sin^2\\theta + \\cos^2\\theta = 1' },
+    { title: 'Sum identities', latex: '\\sin(A \\pm B) = \\sin A\\cos B \\pm \\cos A\\sin B' },
+    { title: 'Double angle (sin)', latex: '\\sin(2x) = 2\\sin x\\cos x' },
+    { title: 'Double angle (cos)', latex: '\\cos(2x) = \\cos^2 x - \\sin^2 x' },
+    { title: 'Law of sines', latex: '\\dfrac{a}{\\sin A} = \\dfrac{b}{\\sin B} = \\dfrac{c}{\\sin C}' },
+    { title: 'Law of cosines', latex: 'c^2 = a^2 + b^2 - 2ab\\cos C' },
+    { title: 'Euler\'s formula', latex: 'e^{i\\theta} = \\cos\\theta + i\\sin\\theta' },
+    { title: 'Half angle (sin)', latex: '\\sin\\dfrac{\\theta}{2} = \\pm\\sqrt{\\dfrac{1-\\cos\\theta}{2}}' },
+  ],
+  geometry: [
+    { title: 'Triangle area', latex: 'A = \\dfrac{1}{2}bh = \\dfrac{1}{2}ab\\sin C' },
+    { title: "Heron's formula", latex: 'A = \\sqrt{s(s-a)(s-b)(s-c)},\\ s=\\dfrac{a+b+c}{2}' },
+    { title: 'Circle area / perimeter', latex: 'A = \\pi r^2,\\quad C = 2\\pi r' },
+    { title: 'Sphere', latex: 'V = \\dfrac{4}{3}\\pi r^3,\\quad A = 4\\pi r^2' },
+    { title: 'Distance formula', latex: 'd = \\sqrt{(x_2-x_1)^2 + (y_2-y_1)^2}' },
+    { title: 'Midpoint', latex: 'M = \\left(\\dfrac{x_1+x_2}{2},\\dfrac{y_1+y_2}{2}\\right)' },
+    { title: 'Equation of line', latex: 'y - y_1 = m(x - x_1)' },
+    { title: 'Equation of circle', latex: '(x-h)^2 + (y-k)^2 = r^2' },
+  ],
+  'linear-algebra': [
+    { title: '2×2 Determinant', latex: '\\det\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix} = ad - bc' },
+    { title: '2×2 Inverse', latex: 'A^{-1} = \\dfrac{1}{ad-bc}\\begin{pmatrix}d&-b\\\\-c&a\\end{pmatrix}' },
+    { title: 'Eigenvalue equation', latex: 'Av = \\lambda v \\Leftrightarrow \\det(A - \\lambda I) = 0' },
+    { title: 'Dot product', latex: '\\mathbf{u} \\cdot \\mathbf{v} = \\sum u_i v_i = |u||v|\\cos\\theta' },
+    { title: 'Cross product magnitude', latex: '|\\mathbf{u} \\times \\mathbf{v}| = |u||v|\\sin\\theta' },
+    { title: 'Gram-Schmidt', latex: 'e_k = v_k - \\sum_{j<k}\\dfrac{\\langle v_k,e_j\\rangle}{\\langle e_j,e_j\\rangle}e_j' },
+  ],
+  'differential-equations': [
+    { title: 'Separable DE', latex: '\\dfrac{dy}{dx} = f(x)g(y) \\Rightarrow \\int\\dfrac{dy}{g(y)} = \\int f(x)\\,dx' },
+    { title: 'Linear 1st-order', latex: 'y\' + P(x)y = Q(x),\\quad \\mu = e^{\\int P\\,dx}' },
+    { title: 'Characteristic equation', latex: 'ay\'\' + by\' + cy = 0 \\Rightarrow ar^2 + br + c = 0' },
+    { title: 'Euler\'s method', latex: 'y_{n+1} = y_n + h\\cdot f(x_n, y_n)' },
+    { title: 'Laplace transform', latex: '\\mathcal{L}\\{f\\}(s) = \\int_0^\\infty e^{-st}f(t)\\,dt' },
+    { title: 'Convolution theorem', latex: '\\mathcal{L}\\{f * g\\} = F(s) \\cdot G(s)' },
+  ],
+  discrete: [
+    { title: 'Permutations', latex: 'P(n,k) = \\dfrac{n!}{(n-k)!}' },
+    { title: 'Combinations', latex: 'C(n,k) = \\binom{n}{k} = \\dfrac{n!}{k!(n-k)!}' },
+    { title: 'Inclusion–exclusion', latex: '|A \\cup B| = |A| + |B| - |A \\cap B|' },
+    { title: 'Euler\'s formula (graphs)', latex: 'V - E + F = 2' },
+    { title: 'Pigeonhole principle', latex: 'n+1 \\text{ items in } n \\text{ bins} \\Rightarrow \\text{one bin} \\geq 2' },
+    { title: 'Sum of integers', latex: '\\sum_{k=1}^n k = \\dfrac{n(n+1)}{2}' },
+  ],
+  physics: [
+    { title: "Newton's 2nd law", latex: 'F = ma' },
+    { title: 'Kinematic equations', latex: 'v = v_0 + at,\\quad s = v_0 t + \\tfrac{1}{2}at^2' },
+    { title: 'Projectile range', latex: 'R = \\dfrac{v_0^2\\sin(2\\theta)}{g}' },
+    { title: 'Work-energy theorem', latex: 'W = \\Delta KE = \\dfrac{1}{2}mv^2 - \\dfrac{1}{2}mv_0^2' },
+    { title: "Coulomb's law", latex: 'F = k_e\\dfrac{q_1 q_2}{r^2},\\quad k_e \\approx 8.99\\times10^9' },
+    { title: 'Wave speed', latex: 'v = f\\lambda' },
+    { title: "Ohm's law", latex: 'V = IR' },
+    { title: 'Ideal gas law', latex: 'PV = nRT' },
+  ],
+};
+
+// ── Symbol pad ────────────────────────────────────────────────────────────────
+
+const SYMBOL_GROUPS = [
+  { label: 'Basic', symbols: ['√', '∛', 'π', 'e', '∞', '±', '×', '÷', '≤', '≥', '≠', '≈'] },
+  { label: 'Algebra', symbols: ['²', '³', '^', '|x|', '(', ')', '[', ']', '{', '}', '∝', 'Σ'] },
+  { label: 'Calculus', symbols: ['∫', '∂', '∑', '∏', 'd/dx', 'lim', '→', '∆', '∇', '∮', '⁻¹', '∞'] },
+  { label: 'Trig', symbols: ['sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh'] },
+  { label: 'Greek', symbols: ['α', 'β', 'γ', 'δ', 'ε', 'θ', 'λ', 'μ', 'σ', 'τ', 'φ', 'ω'] },
+  { label: 'Logic', symbols: ['∧', '∨', '¬', '⇒', '⇔', '∀', '∃', '∈', '∉', '⊆', '⊇', '∅'] },
 ];
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
+const GRAPH_COLORS = ['#6366f1', '#f97316', '#22c55e', '#ef4444', '#a855f7', '#0ea5e9'];
 
-function LatexBlock({ latex, display = false }: { latex: string; display?: boolean }) {
+// ── KaTeX helper ──────────────────────────────────────────────────────────────
+
+function Latex({ latex, display = false }: { latex: string; display?: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
-
   useEffect(() => {
     if (!ref.current) return;
     try {
       katex.render(latex, ref.current, {
-        displayMode: display,
-        throwOnError: false,
-        trust: true,
-        strict: false,
-        output: 'htmlAndMathml',
+        displayMode: display, throwOnError: false, trust: true, strict: false,
       });
-    } catch {
-      ref.current.textContent = latex;
-    }
+    } catch { ref.current.textContent = latex; }
   }, [latex, display]);
-
   return <span ref={ref} />;
 }
 
-function cssVar(name: string, fallback: string) {
-  if (typeof window === 'undefined') return fallback;
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return value || fallback;
+// ── Unit converter data ───────────────────────────────────────────────────────
+
+const UNIT_CATS = [
+  { label: 'Length', units: [
+    { id: 'm', label: 'Meters', toSI: (v: number) => v, fromSI: (v: number) => v },
+    { id: 'km', label: 'Kilometers', toSI: (v: number) => v * 1000, fromSI: (v: number) => v / 1000 },
+    { id: 'cm', label: 'Centimeters', toSI: (v: number) => v / 100, fromSI: (v: number) => v * 100 },
+    { id: 'mm', label: 'Millimeters', toSI: (v: number) => v / 1000, fromSI: (v: number) => v * 1000 },
+    { id: 'in', label: 'Inches', toSI: (v: number) => v * 0.0254, fromSI: (v: number) => v / 0.0254 },
+    { id: 'ft', label: 'Feet', toSI: (v: number) => v * 0.3048, fromSI: (v: number) => v / 0.3048 },
+    { id: 'mi', label: 'Miles', toSI: (v: number) => v * 1609.34, fromSI: (v: number) => v / 1609.34 },
+  ]},
+  { label: 'Mass', units: [
+    { id: 'kg', label: 'Kilograms', toSI: (v: number) => v, fromSI: (v: number) => v },
+    { id: 'g', label: 'Grams', toSI: (v: number) => v / 1000, fromSI: (v: number) => v * 1000 },
+    { id: 'mg', label: 'Milligrams', toSI: (v: number) => v / 1e6, fromSI: (v: number) => v * 1e6 },
+    { id: 'lb', label: 'Pounds', toSI: (v: number) => v * 0.453592, fromSI: (v: number) => v / 0.453592 },
+    { id: 'oz', label: 'Ounces', toSI: (v: number) => v * 0.0283495, fromSI: (v: number) => v / 0.0283495 },
+  ]},
+  { label: 'Temperature', units: [
+    { id: 'C', label: '°Celsius', toSI: (v: number) => v, fromSI: (v: number) => v },
+    { id: 'F', label: '°Fahrenheit', toSI: (v: number) => (v - 32) * 5 / 9, fromSI: (v: number) => v * 9 / 5 + 32 },
+    { id: 'K', label: 'Kelvin', toSI: (v: number) => v - 273.15, fromSI: (v: number) => v + 273.15 },
+  ]},
+  { label: 'Speed', units: [
+    { id: 'ms', label: 'm/s', toSI: (v: number) => v, fromSI: (v: number) => v },
+    { id: 'kmh', label: 'km/h', toSI: (v: number) => v / 3.6, fromSI: (v: number) => v * 3.6 },
+    { id: 'mph', label: 'mph', toSI: (v: number) => v * 0.44704, fromSI: (v: number) => v / 0.44704 },
+    { id: 'kn', label: 'Knots', toSI: (v: number) => v * 0.514444, fromSI: (v: number) => v / 0.514444 },
+  ]},
+  { label: 'Area', units: [
+    { id: 'm2', label: 'm²', toSI: (v: number) => v, fromSI: (v: number) => v },
+    { id: 'km2', label: 'km²', toSI: (v: number) => v * 1e6, fromSI: (v: number) => v / 1e6 },
+    { id: 'ft2', label: 'ft²', toSI: (v: number) => v * 0.092903, fromSI: (v: number) => v / 0.092903 },
+    { id: 'acre', label: 'Acres', toSI: (v: number) => v * 4046.86, fromSI: (v: number) => v / 4046.86 },
+    { id: 'ha', label: 'Hectares', toSI: (v: number) => v * 10000, fromSI: (v: number) => v / 10000 },
+  ]},
+  { label: 'Volume', units: [
+    { id: 'L', label: 'Litres', toSI: (v: number) => v, fromSI: (v: number) => v },
+    { id: 'mL', label: 'Millilitres', toSI: (v: number) => v / 1000, fromSI: (v: number) => v * 1000 },
+    { id: 'm3', label: 'm³', toSI: (v: number) => v * 1000, fromSI: (v: number) => v / 1000 },
+    { id: 'gal', label: 'Gallons (US)', toSI: (v: number) => v * 3.78541, fromSI: (v: number) => v / 3.78541 },
+    { id: 'pt', label: 'Pints (US)', toSI: (v: number) => v * 0.473176, fromSI: (v: number) => v / 0.473176 },
+  ]},
+];
+
+const HISTORY_KEY = 'kivora-math-history';
+function loadHistory(): HistoryItem[] {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]') as HistoryItem[]; } catch { return []; }
+}
+function saveHistory(h: HistoryItem[]) {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(0, 50))); } catch { /* noop */ }
 }
 
-function applyGraphTheme(container: HTMLDivElement) {
-  const svg = container.querySelector('svg');
-  if (!svg) return;
+// ── Main component ────────────────────────────────────────────────────────────
 
-  const bgSurface = cssVar('--bg-surface', '#0b1220');
-  const bgElevated = cssVar('--bg-elevated', '#101827');
-  const border = cssVar('--border-subtle', 'rgba(148, 163, 184, 0.24)');
-  const textMuted = cssVar('--text-muted', '#94a3b8');
-  const textPrimary = cssVar('--text-primary', '#e5e7eb');
-  const primary = cssVar('--primary', '#6366f1');
-  const gridStroke = 'rgba(148, 163, 184, 0.18)';
-
-  (svg as SVGSVGElement).style.display = 'block';
-  (svg as SVGSVGElement).style.width = '100%';
-  (svg as SVGSVGElement).style.height = '100%';
-  (svg as SVGSVGElement).style.background = `linear-gradient(180deg, ${bgElevated}, ${bgSurface})`;
-  (svg as SVGSVGElement).style.borderRadius = '18px';
-
-  container.querySelectorAll('.x.axis text, .y.axis text').forEach((node) => {
-    (node as SVGElement).setAttribute('fill', textMuted);
-  });
-
-  container.querySelectorAll('.x.axis line, .y.axis line, .x.axis path, .y.axis path').forEach((node) => {
-    (node as SVGElement).setAttribute('stroke', border);
-  });
-
-  container.querySelectorAll('.x.grid .tick line, .y.grid .tick line, .grid line').forEach((node) => {
-    (node as SVGElement).setAttribute('stroke', gridStroke);
-  });
-
-  container.querySelectorAll('.tip line, .tip path').forEach((node) => {
-    (node as SVGElement).setAttribute('stroke', primary);
-  });
-
-  container.querySelectorAll('.tip text').forEach((node) => {
-    (node as SVGElement).setAttribute('fill', textPrimary);
-  });
-
-  container.querySelectorAll('path.line').forEach((node) => {
-    (node as SVGElement).setAttribute('stroke-width', '2.8');
-  });
-}
-
-function normalizeInputForPreview(input: string) {
-  return input
-    .replace(/×/g, '*')
-    .replace(/÷/g, '/')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-type PreparedGraphExpression = {
-  fn: string;
-  label: string;
-  kind: 'standard' | 'implicit';
-  evaluationExpr?: string;
-  supportsDerivative: boolean;
-};
-
-function prepareGraphExpression(raw: string): PreparedGraphExpression | null {
-  const expr = raw.trim();
-  if (!expr) return null;
-
-  const relation = expr.match(/^(.+?)=(.+)$/);
-  if (relation) {
-    const lhs = relation[1].trim();
-    const rhs = relation[2].trim();
-
-    if (/^y$/i.test(lhs)) {
-      return { fn: rhs, label: `y = ${rhs}`, kind: 'standard', evaluationExpr: rhs, supportsDerivative: true };
-    }
-    if (/^y$/i.test(rhs)) {
-      return { fn: lhs, label: `${lhs} = y`, kind: 'standard', evaluationExpr: lhs, supportsDerivative: true };
-    }
-
-    return {
-      fn: `(${lhs}) - (${rhs})`,
-      label: `${lhs} = ${rhs}`,
-      kind: 'implicit',
-      supportsDerivative: false,
-    };
-  }
-
-  return {
-    fn: expr,
-    label: expr,
-    kind: 'standard',
-    evaluationExpr: expr,
-    supportsDerivative: true,
-  };
-}
-
-function evaluateGraphExpressionAt(prepared: PreparedGraphExpression, x: number) {
-  if (prepared.kind !== 'standard' || !prepared.evaluationExpr) return '—';
-  try {
-    const evaluated = math.evaluate(prepared.evaluationExpr, { x });
-    return typeof evaluated === 'number' ? Number(evaluated.toFixed(4)).toString() : String(evaluated);
-  } catch {
-    return '—';
-  }
-}
-
-async function loadMostRecentCandidate(): Promise<RecentFileCandidate | null> {
-  try {
-    const res = await fetch('/api/recent?limit=1', { cache: 'no-store' });
-    if (!res.ok) return null;
-    const payload = await res.json() as Array<{ file?: Record<string, unknown> | null }>;
-    const candidate = payload?.[0]?.file;
-    if (!candidate) return null;
-
-    const fileId = typeof candidate.fileId === 'string'
-      ? candidate.fileId
-      : typeof candidate.id === 'string'
-        ? candidate.id
-        : '';
-    const fileName = typeof candidate.fileName === 'string'
-      ? candidate.fileName
-      : typeof candidate.name === 'string'
-        ? candidate.name
-        : 'Recent file';
-
-    if (!fileId) return null;
-
-    return {
-      fileId,
-      fileName,
-      content: typeof candidate.content === 'string' ? candidate.content : undefined,
-      localBlobId: typeof candidate.localBlobId === 'string' ? candidate.localBlobId : null,
-      mimeType: typeof candidate.mimeType === 'string' ? candidate.mimeType : null,
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function recentCandidateToContext(candidate: RecentFileCandidate): Promise<MathContext | null> {
-  if (candidate.content?.trim()) {
-    return {
-      fileId: candidate.fileId,
-      fileName: candidate.fileName,
-      extractedText: candidate.content.trim(),
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
-  if (!candidate.localBlobId) return null;
-  const payload = await idbStore.get(candidate.localBlobId).catch(() => undefined);
-  if (!payload) return null;
-  const extracted = await extractTextFromBlob(payload.blob, candidate.fileName);
-  if (extracted.error) return null;
-  return {
-    fileId: candidate.fileId,
-    fileName: candidate.fileName,
-    extractedText: extracted.text,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-function buildMathLibraryContent(result: SolverResult) {
-  const stepText = result.steps
-    .map((step) => `${step.step}. ${step.description}\n${step.explanation}`)
-    .join('\n\n');
-
-  return [
-    `Problem: ${result.normalizedInput}`,
-    '',
-    `Answer: ${result.answer}`,
-    '',
-    'Steps:',
-    stepText,
-    '',
-    `Explanation: ${result.explanation}`,
-  ].join('\n');
-}
-
-// ─── Graph Panel ──────────────────────────────────────────────────────────
-
-function GraphPanel({ initialExpr }: { initialExpr?: string }) {
-  const [expressions, setExpressions] = useState<GraphExpression[]>([
-    { id: '1', expr: initialExpr || 'x^2', color: FN_COLORS[0], enabled: true, showDerivative: false },
-  ]);
-  const [activeExpressionId, setActiveExpressionId] = useState('1');
-  const [xMin, setXMin] = useState(-10);
-  const [xMax, setXMax] = useState(10);
-  const [yMin, setYMin] = useState(-10);
-  const [yMax, setYMax] = useState(10);
-  const [showGrid, setShowGrid] = useState(true);
-  const [showZeros, setShowZeros] = useState(false);
-  const [showTable, setShowTable] = useState(false);
-  const [graphError, setGraphError] = useState('');
-  const [tableX, setTableX] = useState('-5,-4,-3,-2,-1,0,1,2,3,4,5');
-  const graphRef = useRef<HTMLDivElement>(null);
-
-  const renderGraph = useCallback(() => {
-    if (!graphRef.current) return;
-    const active = expressions.filter((entry) => entry.enabled && entry.expr.trim());
-    if (active.length === 0) {
-      graphRef.current.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:14px">Add an expression to start graphing.</div>';
-      return;
-    }
-
-    import('function-plot').then(({ default: functionPlot }) => {
-      if (!graphRef.current) return;
-      try {
-        setGraphError('');
-        graphRef.current.innerHTML = '';
-        const target = graphRef.current;
-        const width = target.clientWidth || 640;
-        const height = target.clientHeight || 520;
-        const data: object[] = [];
-
-        for (const entry of active) {
-          const prepared = prepareGraphExpression(entry.expr);
-          if (!prepared) continue;
-
-          data.push({
-            fn: prepared.fn,
-            color: entry.color,
-            graphType: prepared.kind === 'standard' ? 'polyline' : undefined,
-            fnType: prepared.kind === 'implicit' ? 'implicit' : undefined,
-          });
-          if (entry.showDerivative && prepared.supportsDerivative) {
-            data.push({
-              fn: prepared.fn,
-              derivative: { fn: prepared.fn, updateOnMouseMove: false },
-              color: `${entry.color}99`,
-            });
-          }
-          if (showZeros && prepared.kind === 'standard') {
-            data.push({ fn: prepared.fn, color: entry.color, fnType: 'x', graphType: 'scatter' });
-          }
-        }
-
-        functionPlot({
-          target,
-          width,
-          height,
-          grid: showGrid,
-          xAxis: { domain: [xMin, xMax] },
-          yAxis: { domain: [yMin, yMax] },
-          data,
-          tip: { xLine: true, yLine: true },
-          disableZoom: false,
-        });
-        applyGraphTheme(target);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Could not render graph';
-        setGraphError(message.includes('builtIn sampler')
-          ? 'This graph includes a relation like x = 2 or x^2 + y^2 = 25. Kivora now switches those to equation mode, but this entry still needs a cleaner relation.'
-          : message);
-      }
-    }).catch(() => setGraphError('function-plot not available'));
-  }, [expressions, showGrid, showZeros, xMin, xMax, yMin, yMax]);
-
-  useEffect(() => {
-    const handle = setTimeout(renderGraph, 120);
-    return () => clearTimeout(handle);
-  }, [renderGraph]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const observer = new MutationObserver(() => {
-      renderGraph();
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
-    return () => observer.disconnect();
-  }, [renderGraph]);
-
-  useEffect(() => {
-    if (!initialExpr?.trim()) return;
-    setExpressions((prev) => {
-      const current = prev[0];
-      if (!current) return [{ id: crypto.randomUUID(), expr: initialExpr, color: FN_COLORS[0], enabled: true, showDerivative: false }];
-      return [{ ...current, expr: initialExpr, enabled: true }, ...prev.slice(1)];
-    });
-    setActiveExpressionId('1');
-  }, [initialExpr]);
-
-  const tableRows = useMemo(() => {
-    if (!showTable) return [];
-    const xs = tableX.split(',').map((part) => Number(part.trim())).filter((value) => Number.isFinite(value));
-    const active = expressions
-      .filter((entry) => entry.enabled && entry.expr.trim())
-      .map((entry) => ({ entry, prepared: prepareGraphExpression(entry.expr) }))
-      .filter((item) => item.prepared);
-    return xs.map((x) => ({
-      x,
-      values: active.map(({ prepared }) => evaluateGraphExpressionAt(prepared!, x)),
-    }));
-  }, [expressions, showTable, tableX]);
-
-  function addExpression(seed = '') {
-    setExpressions((prev) => {
-      const id = `${Date.now()}`;
-      const next = [...prev, { id, expr: seed, color: FN_COLORS[prev.length % FN_COLORS.length], enabled: true, showDerivative: false }];
-      setActiveExpressionId(id);
-      return next;
-    });
-  }
-
-  function updateExpression(id: string, patch: Partial<GraphExpression>) {
-    setExpressions((prev) => prev.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
-  }
-
-  function removeExpression(id: string) {
-    setExpressions((prev) => {
-      const next = prev.filter((entry) => entry.id !== id);
-      if (next.length === 0) {
-        return [{ id: '1', expr: '', color: FN_COLORS[0], enabled: false, showDerivative: false }];
-      }
-      if (!next.find((entry) => entry.id === activeExpressionId)) {
-        setActiveExpressionId(next[0].id);
-      }
-      return next;
-    });
-  }
-
-  const activeCount = expressions.filter((entry) => entry.enabled && entry.expr.trim()).length;
-  const zeroAxisX = useMemo(() => {
-    if (xMin >= 0 || xMax <= 0) return null;
-    return ((0 - xMin) / (xMax - xMin)) * 100;
-  }, [xMax, xMin]);
-  const zeroAxisY = useMemo(() => {
-    if (yMin >= 0 || yMax <= 0) return null;
-    return 100 - (((0 - yMin) / (yMax - yMin)) * 100);
-  }, [yMax, yMin]);
-
-  return (
-    <div className="graph-shell">
-      <div className="graph-sidebar">
-        <div className="graph-sidebar-header">
-          <div>
-            <span className="graph-sidebar-title">Expressions</span>
-            <p className="graph-sidebar-copy">Build up the graph like Desmos: add, hide, differentiate, and compare.</p>
-          </div>
-          <button className="graph-add-btn" onClick={() => addExpression()}>＋ Add</button>
-        </div>
-
-        {expressions.map((entry, index) => {
-          const prepared = prepareGraphExpression(entry.expr);
-          const derivativeDisabled = prepared?.supportsDerivative === false;
-          return (
-            <div key={entry.id} className={`graph-row${activeExpressionId === entry.id ? ' active' : ''}`}>
-              <button
-                className="graph-color-chip"
-                style={{ background: entry.color }}
-                title={entry.enabled ? 'Hide expression' : 'Show expression'}
-                onClick={() => updateExpression(entry.id, { enabled: !entry.enabled })}
-              />
-              <button className="graph-index" onClick={() => setActiveExpressionId(entry.id)}>{index + 1}</button>
-              <div className="graph-input-wrap">
-                <input
-                  className="graph-input"
-                  value={entry.expr}
-                  onChange={(e) => updateExpression(entry.id, { expr: e.target.value, enabled: e.target.value.trim().length > 0 })}
-                  onFocus={() => setActiveExpressionId(entry.id)}
-                  placeholder={index === 0 ? 'y = x^2' : 'f(x) or x^2 + y^2 = 25'}
-                  spellCheck={false}
-                />
-                <div className="graph-row-actions">
-                  <button
-                    className={`graph-derivative${entry.showDerivative ? ' on' : ''}`}
-                    onClick={() => updateExpression(entry.id, { showDerivative: !entry.showDerivative })}
-                    disabled={derivativeDisabled}
-                    title={derivativeDisabled ? 'Derivative is available for y = f(x) entries' : 'Show derivative'}
-                  >
-                    f′
-                  </button>
-                  <button className="graph-remove" onClick={() => removeExpression(entry.id)}>✕</button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        <div className="graph-sidebar-section">
-          <div className="graph-sidebar-subtitle">View</div>
-          <div className="graph-domain-grid">
-            <label>
-              x min
-              <input type="number" value={xMin} onChange={(e) => setXMin(Number(e.target.value))} />
-            </label>
-            <label>
-              x max
-              <input type="number" value={xMax} onChange={(e) => setXMax(Number(e.target.value))} />
-            </label>
-            <label>
-              y min
-              <input type="number" value={yMin} onChange={(e) => setYMin(Number(e.target.value))} />
-            </label>
-            <label>
-              y max
-              <input type="number" value={yMax} onChange={(e) => setYMax(Number(e.target.value))} />
-            </label>
-          </div>
-
-          <div className="graph-toggle-list">
-            <label><input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} /> Grid</label>
-            <label><input type="checkbox" checked={showZeros} onChange={(e) => setShowZeros(e.target.checked)} /> Roots / intercepts</label>
-            <label><input type="checkbox" checked={showTable} onChange={(e) => setShowTable(e.target.checked)} /> Value table</label>
-          </div>
-        </div>
-
-        <div className="graph-sidebar-section">
-          <div className="graph-sidebar-subtitle">Quick presets</div>
-          <div className="graph-preset-grid">
-            {['y = x^2', 'y = sin(x)', 'y = cos(x)', 'y = tan(x)', 'x = 2', 'x^2 + y^2 = 25', 'y = exp(x)', 'y = abs(x)'].map((preset) => (
-              <button key={preset} className="graph-preset" onClick={() => addExpression(preset)}>{preset}</button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="graph-main">
-        <div className="graph-toolbar">
-          <div className="graph-toolbar-left">
-            <button className="graph-toolbar-btn primary" onClick={() => { setXMin(-10); setXMax(10); setYMin(-10); setYMax(10); }}>Home</button>
-            <button className="graph-toolbar-btn" onClick={() => { setXMin((v) => v * 0.78); setXMax((v) => v * 0.78); setYMin((v) => v * 0.78); setYMax((v) => v * 0.78); }}>＋</button>
-            <button className="graph-toolbar-btn" onClick={() => { setXMin((v) => v * 1.28); setXMax((v) => v * 1.28); setYMin((v) => v * 1.28); setYMax((v) => v * 1.28); }}>－</button>
-          </div>
-          <div className="graph-toolbar-meta">
-            <span>{activeCount} active expression{activeCount === 1 ? '' : 's'}</span>
-            <span>Type `y = ...` or full equations like `x^2 + y^2 = 25`</span>
-            <span>Drag to pan · Scroll to zoom</span>
-          </div>
-        </div>
-
-        <div className="graph-canvas-wrap">
-          <div ref={graphRef} className="graph-canvas" />
-          {zeroAxisX !== null ? <div className="graph-zero-axis vertical" style={{ left: `${zeroAxisX}%` }} /> : null}
-          {zeroAxisY !== null ? <div className="graph-zero-axis horizontal" style={{ top: `${zeroAxisY}%` }} /> : null}
-        </div>
-        {graphError && <div className="graph-error">{graphError}</div>}
-
-        {showTable && tableRows.length > 0 && (
-          <div className="graph-table-wrap">
-            <div className="graph-table-header">
-              <span>Value table</span>
-              <input value={tableX} onChange={(e) => setTableX(e.target.value)} placeholder="-5,-4,-3,-2,-1,0,1,2,3" />
-            </div>
-            <table className="graph-table">
-              <thead>
-                <tr>
-                  <th>x</th>
-                  {expressions
-                    .filter((entry) => entry.enabled && entry.expr.trim())
-                    .map((entry) => ({ entry, prepared: prepareGraphExpression(entry.expr) }))
-                    .filter((item) => item.prepared)
-                    .map(({ entry, prepared }) => (
-                      <th key={entry.id} style={{ color: entry.color }}>{prepared!.label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {tableRows.map((row) => (
-                  <tr key={row.x}>
-                    <td>{row.x}</td>
-                    {row.values.map((value, index) => <td key={`${row.x}-${index}`}>{value}</td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <style jsx>{`
-        .graph-shell { display: flex; height: 100%; overflow: hidden; }
-        .graph-sidebar { width: 320px; flex-shrink: 0; border-right: 1px solid var(--border-subtle); background: var(--bg-elevated); overflow-y: auto; }
-        .graph-sidebar-header { padding: 16px; border-bottom: 1px solid var(--border-subtle); display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; }
-        .graph-sidebar-title { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); font-weight: 700; }
-        .graph-sidebar-copy { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
-        .graph-add-btn { border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); border-radius: 10px; padding: 8px 12px; cursor: pointer; }
-        .graph-row { display: grid; grid-template-columns: 18px 28px minmax(0,1fr); gap: 10px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--border-subtle); }
-        .graph-row.active { background: color-mix(in srgb, var(--primary) 9%, var(--bg-elevated)); }
-        .graph-color-chip, .graph-index { border: none; cursor: pointer; }
-        .graph-color-chip { width: 18px; height: 18px; border-radius: 999px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg-surface) 80%, transparent); }
-        .graph-index { width: 28px; height: 28px; border-radius: 8px; background: var(--bg-surface); color: var(--text-muted); }
-        .graph-input-wrap { display: flex; gap: 8px; align-items: center; min-width: 0; }
-        .graph-input { flex: 1; min-width: 0; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); border-radius: 10px; padding: 10px 12px; font-family: 'JetBrains Mono', monospace; }
-        .graph-row-actions { display: flex; gap: 6px; }
-        .graph-derivative, .graph-remove { border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-muted); padding: 6px 8px; cursor: pointer; }
-        .graph-derivative.on { background: var(--primary); color: white; border-color: var(--primary); }
-        .graph-derivative:disabled { opacity: 0.45; cursor: not-allowed; }
-        .graph-sidebar-section { padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); }
-        .graph-sidebar-subtitle { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 700; margin-bottom: 10px; }
-        .graph-domain-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        .graph-domain-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-muted); }
-        .graph-domain-grid input { border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); border-radius: 10px; padding: 8px 10px; }
-        .graph-toggle-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--text-secondary); }
-        .graph-toggle-list input { margin-right: 8px; accent-color: var(--primary); }
-        .graph-preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        .graph-preset { border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); border-radius: 10px; padding: 8px 10px; font-family: 'JetBrains Mono', monospace; cursor: pointer; }
-        .graph-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-        .graph-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-elevated); }
-        .graph-toolbar-left { display: flex; gap: 8px; }
-        .graph-toolbar-btn { border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); border-radius: 10px; padding: 8px 12px; cursor: pointer; }
-        .graph-toolbar-btn.primary { background: var(--primary); color: white; border-color: var(--primary); }
-        .graph-toolbar-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
-        .graph-canvas-wrap { position: relative; flex: 1; min-height: 420px; background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 92%, transparent), var(--bg-surface)); }
-        .graph-canvas { position: absolute; inset: 0; }
-        .graph-zero-axis { position: absolute; pointer-events: none; background: color-mix(in srgb, var(--text-primary) 38%, transparent); }
-        .graph-zero-axis.vertical { top: 0; bottom: 0; width: 1.5px; transform: translateX(-0.75px); }
-        .graph-zero-axis.horizontal { left: 0; right: 0; height: 1.5px; transform: translateY(-0.75px); }
-        .graph-error { margin: 12px 18px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(239,68,68,0.25); background: rgba(239,68,68,0.08); color: #ef4444; font-size: 13px; }
-        .graph-table-wrap { border-top: 1px solid var(--border-subtle); background: var(--bg-elevated); padding: 14px 18px 18px; }
-        .graph-table-header { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-        .graph-table-header input { min-width: 240px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); border-radius: 10px; padding: 8px 10px; }
-        .graph-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .graph-table th, .graph-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); }
-        @media (max-width: 980px) {
-          .graph-shell { flex-direction: column; }
-          .graph-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border-subtle); }
-          .graph-table-header { flex-direction: column; align-items: stretch; }
-          .graph-table-header input { min-width: 0; width: 100%; }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-// ─── Units Panel ──────────────────────────────────────────────────────────
-
-function UnitsPanel() {
-  const [catIdx, setCatIdx] = useState(0);
-  const [fromUnit, setFromUnit] = useState(UNIT_CATEGORIES[0].units[2].id);
-  const [toUnit, setToUnit] = useState(UNIT_CATEGORIES[0].units[3].id);
-  const [value, setValue] = useState('1');
-
-  const cat = UNIT_CATEGORIES[catIdx];
-  const fromU = cat.units.find((unit) => unit.id === fromUnit) ?? cat.units[0];
-  const toU = cat.units.find((unit) => unit.id === toUnit) ?? cat.units[1];
-
-  const result = useMemo(() => {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return '';
-    const base = fromU.toBase(num);
-    const converted = toU.fromBase(base);
-    if (Math.abs(converted) < 0.0001 || Math.abs(converted) > 1e9) return converted.toExponential(6);
-    return converted.toPrecision(10).replace(/\.0+$|(?<=\..*?)0+$/g, '').replace(/\.$/, '');
-  }, [fromU, toU, value]);
-
-  const allConversions = useMemo(() => {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return [];
-    const base = fromU.toBase(num);
-    return cat.units.map((unit) => ({
-      id: unit.id,
-      label: unit.label,
-      value: unit.fromBase(base),
-    }));
-  }, [cat, fromU, value]);
-
-  return (
-    <div className="units-shell">
-      <div className="units-cats">
-        {UNIT_CATEGORIES.map((entry, index) => (
-          <button key={entry.label} className={`units-cat${catIdx === index ? ' active' : ''}`} onClick={() => {
-            setCatIdx(index);
-            setFromUnit(UNIT_CATEGORIES[index].units[0].id);
-            setToUnit(UNIT_CATEGORIES[index].units[1].id);
-          }}>{entry.label}</button>
-        ))}
-      </div>
-
-      <div className="units-body">
-        <div className="units-converter">
-          <div className="units-row">
-            <div className="units-field">
-              <label className="units-label">From</label>
-              <select className="units-select" value={fromUnit} onChange={(e) => setFromUnit(e.target.value)}>
-                {cat.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.label}</option>)}
-              </select>
-              <input className="units-input" type="number" value={value} onChange={(e) => setValue(e.target.value)} />
-            </div>
-
-            <button className="units-swap" onClick={() => { setFromUnit(toUnit); setToUnit(fromUnit); }}>⇄</button>
-
-            <div className="units-field">
-              <label className="units-label">To</label>
-              <select className="units-select" value={toUnit} onChange={(e) => setToUnit(e.target.value)}>
-                {cat.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.label}</option>)}
-              </select>
-              <div className="units-result">{result || '—'}</div>
-            </div>
-          </div>
-
-          {result && <div className="units-formula">{value} {fromU.label} = <strong>{result}</strong> {toU.label}</div>}
-        </div>
-
-        <div>
-          <div className="units-all-title">All {cat.label} conversions from {value} {fromU.label}</div>
-          <div className="units-all-grid">
-            {allConversions.map((entry) => (
-              <button key={entry.id} className={`units-all-card${entry.id === fromUnit ? ' current' : ''}`} onClick={() => setToUnit(entry.id)}>
-                <div className="units-all-val">{Number.isFinite(entry.value) ? Number(entry.value.toPrecision(8)).toString() : '—'}</div>
-                <div className="units-all-lbl">{entry.label}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <style jsx>{`
-        .units-shell { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-        .units-cats { display: flex; flex-wrap: wrap; gap: 4px; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-elevated); }
-        .units-cat { padding: 6px 14px; border-radius: 10px; border: 1.5px solid var(--border-subtle); background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 500; cursor: pointer; }
-        .units-cat.active { background: var(--primary); color: white; border-color: var(--primary); }
-        .units-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
-        .units-converter { background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 20px; }
-        .units-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
-        .units-field { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 200px; }
-        .units-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
-        .units-select, .units-input { padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); }
-        .units-result { padding: 12px 16px; border-radius: 10px; background: color-mix(in srgb, var(--primary) 8%, var(--bg-surface)); border: 2px solid var(--primary); font-size: 18px; font-weight: 700; color: var(--primary); min-height: 50px; display: flex; align-items: center; }
-        .units-swap { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); font-size: 20px; cursor: pointer; }
-        .units-formula { margin-top: 14px; padding: 10px 14px; border-radius: 10px; background: var(--bg-surface); border: 1px solid var(--border-subtle); font-size: 14px; color: var(--text-secondary); text-align: center; }
-        .units-formula strong { color: var(--primary); }
-        .units-all-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 12px; }
-        .units-all-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
-        .units-all-card { padding: 14px; border-radius: 12px; border: 1.5px solid var(--border-subtle); background: var(--bg-elevated); cursor: pointer; text-align: center; }
-        .units-all-card.current { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--bg-elevated)); }
-        .units-all-val { font-size: 16px; font-weight: 700; color: var(--text-primary); font-family: monospace; margin-bottom: 4px; }
-        .units-all-lbl { font-size: 11px; color: var(--text-muted); }
-      `}</style>
-    </div>
-  );
-}
-
-// ─── Solver Panel ─────────────────────────────────────────────────────────
-
-function SolverPanel({ onGraphExpr }: { onGraphExpr: (expr: string) => void }) {
-  const { toast } = useToast();
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const [input, setInput] = useState('2x + 5 = 11');
-  const [activeCategory, setActiveCategory] = useState<MathCategoryId>('algebra');
-  const [symbolGroup, setSymbolGroup] = useState<SymbolGroupId>('basic');
-  const [result, setResult] = useState<SolverResult | null>(null);
+export function MathSolverPage() {
+  const [active, setActive] = useState<ActiveView>('algebra');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [input, setInput] = useState('');
+  const [symbolTab, setSymbolTab] = useState(0);
+  const [showSymbols, setShowSymbols] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [context, setContext] = useState<MathContext | null>(null);
-  const [recentCandidate, setRecentCandidate] = useState<RecentFileCandidate | null>(null);
-  const [recentLoading, setRecentLoading] = useState(false);
-  const [explanation, setExplanation] = useState<string | null>(null);
-  const [explainLoading, setExplainLoading] = useState(false);
-  const [practice, setPractice] = useState<string>('');
-  const [practiceLoading, setPracticeLoading] = useState(false);
-  const [saving, setSaving] = useState<'solution' | 'practice' | null>(null);
+  const [result, setResult] = useState<SolveResult | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    const stored = readMathContext();
-    if (stored) {
-      setContext(stored);
-      return;
-    }
+  // Graph state
+  const [graphExprs, setGraphExprs] = useState<GraphExpression[]>([
+    { id: '1', expr: 'x^2', color: GRAPH_COLORS[0], enabled: true },
+  ]);
+  const [_graphInput, _setGraphInput] = useState('');
+  const graphRef = useRef<HTMLDivElement>(null);
+  const [graphError, setGraphError] = useState('');
 
-    setRecentLoading(true);
-    void loadMostRecentCandidate().then((candidate) => setRecentCandidate(candidate)).finally(() => setRecentLoading(false));
-  }, []);
+  // Unit converter state
+  const [unitCatIdx, setUnitCatIdx] = useState(0);
+  const [fromUnit, setFromUnit] = useState(0);
+  const [toUnit, setToUnit] = useState(1);
+  const [unitValue, setUnitValue] = useState('1');
 
-  const previewLatex = useMemo(() => formatMathExpression(normalizeInputForPreview(input || '')), [input]);
-  const categoryConfig = MATH_CATEGORIES[activeCategory];
+  useEffect(() => { setHistory(loadHistory()); }, []);
 
-  useEffect(() => {
-    const preferredGroup: Partial<Record<MathCategoryId, SymbolGroupId>> = {
-      algebra: 'algebra',
-      geometry: 'basic',
-      calculus: 'calculus',
-      trigonometry: 'trigonometry',
-      'sequences-series': 'algebra',
-      vectors: 'vectors',
-      matrices: 'matrices',
-      'linear-algebra': 'matrices',
-    };
-    const nextGroup = preferredGroup[activeCategory];
-    if (nextGroup) setSymbolGroup(nextGroup);
-  }, [activeCategory]);
+  // ── Solver ─────────────────────────────────────────────────────────────────
 
-  function insertSymbol(symbol: string) {
-    const target = inputRef.current;
-    const placeholderIndex = symbol.indexOf('()');
-    const caretOffset = placeholderIndex >= 0 ? placeholderIndex + 1 : symbol.length;
-    if (!target) {
-      setInput((prev) => `${prev}${symbol}`);
-      return;
-    }
-
-    const start = target.selectionStart ?? input.length;
-    const end = target.selectionEnd ?? input.length;
-    const next = `${input.slice(0, start)}${symbol}${input.slice(end)}`;
-    setInput(next);
-    requestAnimationFrame(() => {
-      target.focus();
-      const caret = start + caretOffset;
-      target.setSelectionRange(caret, caret);
-    });
-  }
-
-  async function loadRecentFileContext() {
-    if (!recentCandidate) return;
-    setRecentLoading(true);
-    const resolved = await recentCandidateToContext(recentCandidate);
-    setRecentLoading(false);
-    if (!resolved) {
-      toast('The recent file is not available locally on this device.', 'warning');
-      return;
-    }
-    writeMathContext({
-      fileId: resolved.fileId,
-      fileName: resolved.fileName,
-      extractedText: resolved.extractedText,
-      sourceFolderId: resolved.sourceFolderId ?? null,
-      sourceTopicId: resolved.sourceTopicId ?? null,
-    });
-    setContext(resolved);
-    setRecentCandidate(null);
-    toast(`Using ${resolved.fileName} for math context`, 'success');
-  }
-
-  const handleSolve = useCallback(async (problemInput?: string) => {
-    const problem = (problemInput ?? input).trim();
-    if (!problem) {
-      setError('Enter a math problem first.');
-      return;
-    }
-
+  const solve = useCallback(async (problem: string = input) => {
+    const p = problem.trim();
+    if (!p) return;
     setLoading(true);
-    setError('');
     setResult(null);
-    setExplanation(null);
-    setPractice('');
-
     try {
-      const body: MathSolveRequest = {
-        problem,
-        category: activeCategory,
-        contextFileId: context?.fileId ?? null,
-        contextText: context?.extractedText ?? null,
-      };
       const res = await fetch('/api/math/solve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ problem: p, category: TOPICS.find(t => t.id === active)?.id ?? null }),
       });
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
-        throw new Error(payload.error || 'Could not solve this problem.');
+      const data = await res.json() as SolveResult;
+      setResult(data);
+      // Add to history
+      if (data.answer && !data.error) {
+        const item: HistoryItem = { id: crypto.randomUUID(), problem: p, answer: data.answer, category: data.category ?? String(active), ts: Date.now() };
+        setHistory(prev => { const next = [item, ...prev.filter(h => h.problem !== p)]; saveHistory(next); return next; });
       }
-      const solved = await res.json() as SolverResult;
-      setResult(solved);
-      setActiveCategory(solved.category);
-      if (solved.graphExpr) onGraphExpr(solved.graphExpr);
-    } catch (solveError) {
-      setError(solveError instanceof Error ? solveError.message : 'Could not solve this problem.');
+      // Auto-populate graph if solver provides expression
+      if (data.graphExpr) {
+        setGraphExprs([{ id: '1', expr: data.graphExpr, color: GRAPH_COLORS[0], enabled: true }]);
+      }
+    } catch {
+      setResult({ answer: '', answerLatex: '', steps: [], graphExpr: null, category: String(active), engine: 'error', error: 'Network error — check that the AI model is running.' });
     } finally {
       setLoading(false);
     }
-  }, [activeCategory, context?.extractedText, context?.fileId, input, onGraphExpr]);
+  }, [input, active]);
 
-  async function saveToLibrary(mode: 'solution' | 'practice') {
-    if (mode === 'solution' && !result) return;
-    if (mode === 'practice' && !practice.trim()) return;
+  // ── Graph rendering ────────────────────────────────────────────────────────
 
-    setSaving(mode);
+  const renderGraph = useCallback(() => {
+    if (!graphRef.current || !functionPlot) return;
+    const enabled = graphExprs.filter(e => e.enabled && e.expr.trim());
+    if (enabled.length === 0) return;
+    setGraphError('');
     try {
-      const content = mode === 'solution'
-        ? buildMathLibraryContent(result!)
-        : practice;
-      const metadata = {
-        title: mode === 'solution' ? `${MATH_CATEGORIES[result!.category].label} solution` : `${categoryConfig.label} practice set`,
-        category: mode === 'solution' ? MATH_CATEGORIES[result!.category].label : categoryConfig.label,
-        problem: mode === 'solution' ? result!.normalizedInput : input.trim(),
-        sourceFileId: context?.fileId ?? null,
-        sourceFileName: context?.fileName ?? null,
-        graphExpr: mode === 'solution' ? result!.graphExpr ?? null : null,
-        savedFrom: '/math',
-      };
-      const res = await fetch('/api/library', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: mode === 'solution' ? 'math-solution' : 'math-practice',
-          content,
-          metadata,
-        }),
+      const fns = enabled.map(e => {
+        const expr = e.expr.trim();
+        const rel = expr.match(/^y\s*=\s*(.+)$/i);
+        const fn = rel ? rel[1] : expr;
+        return { fn, color: e.color, nSamples: 400 };
       });
-      if (!res.ok) throw new Error('Unable to save to Library.');
-      toast(mode === 'solution' ? 'Saved solution to Library' : 'Saved practice set to Library', 'success');
-    } catch (saveError) {
-      toast(saveError instanceof Error ? saveError.message : 'Unable to save to Library.', 'error');
-    } finally {
-      setSaving(null);
+      functionPlot({
+        target: graphRef.current,
+        width: graphRef.current.clientWidth || 600,
+        height: 380,
+        xAxis: { domain: [-10, 10] },
+        yAxis: { domain: [-8, 8] },
+        grid: true,
+        data: fns,
+      });
+    } catch (err) {
+      setGraphError(String(err));
     }
+  }, [graphExprs]);
+
+  useEffect(() => {
+    if (active === 'graph') renderGraph();
+  }, [active, renderGraph]);
+
+  // ── Symbol insertion ────────────────────────────────────────────────────────
+
+  function insertSymbol(sym: string) {
+    const el = inputRef.current;
+    if (!el) { setInput(p => p + sym); return; }
+    const s = el.selectionStart ?? input.length;
+    const e = el.selectionEnd ?? s;
+    const next = input.slice(0, s) + sym + input.slice(e);
+    setInput(next);
+    setTimeout(() => { el.focus(); el.setSelectionRange(s + sym.length, s + sym.length); }, 0);
   }
 
-  async function explainConcept() {
-    if (!input.trim() && !result) return;
-    setExplainLoading(true);
-    setExplanation(null);
-    try {
-      const res = await fetch('/api/explain', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          concept: result?.normalizedInput || input.trim(),
-          context: context?.extractedText?.slice(0, 2400),
-        }),
-      });
-      const payload = await res.json().catch(() => ({ explanation: null }));
-      setExplanation(payload.explanation || 'No explanation was returned.');
-    } catch {
-      setExplanation('Explanation service is unavailable right now.');
-    } finally {
-      setExplainLoading(false);
-    }
+  // ── Computed ────────────────────────────────────────────────────────────────
+
+  const currentTopic = TOPICS.find(t => t.id === active);
+  const _currentFormulas = FORMULAS[active as string] ?? [];
+
+  const unitCat = UNIT_CATS[unitCatIdx];
+  const unitResult = (() => {
+    const v = parseFloat(unitValue);
+    if (isNaN(v) || !unitCat) return '';
+    const si = unitCat.units[fromUnit].toSI(v);
+    const out = unitCat.units[toUnit].fromSI(si);
+    return Number(out.toPrecision(8)).toString();
+  })();
+
+  // ── Styles ──────────────────────────────────────────────────────────────────
+
+  const S = {
+    shell: { display: 'flex', height: '100%', overflow: 'hidden', background: 'var(--bg)', fontFamily: 'inherit' } as React.CSSProperties,
+    sidebar: {
+      width: sidebarOpen ? 220 : 52,
+      minWidth: sidebarOpen ? 220 : 52,
+      transition: 'width 0.2s, min-width 0.2s',
+      background: 'var(--bg-2)',
+      borderRight: '1px solid var(--border-subtle)',
+      display: 'flex',
+      flexDirection: 'column' as const,
+      overflowY: 'auto' as const,
+      overflowX: 'hidden' as const,
+      flexShrink: 0,
+    },
+    main: { flex: 1, overflowY: 'auto' as const, display: 'flex', flexDirection: 'column' as const },
+  };
+
+  // ── Sidebar ─────────────────────────────────────────────────────────────────
+
+  function NavItem({ id, icon, label, color }: { id: ActiveView; icon: string; label: string; color?: string }) {
+    const isActive = active === id;
+    return (
+      <button
+        onClick={() => setActive(id)}
+        title={!sidebarOpen ? label : undefined}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: sidebarOpen ? '8px 14px' : '8px 0',
+          justifyContent: sidebarOpen ? 'flex-start' : 'center',
+          border: 'none', cursor: 'pointer', textAlign: 'left',
+          borderRadius: 8, margin: '1px 6px', width: 'calc(100% - 12px)',
+          background: isActive ? `${color ?? 'var(--primary)'}1a` : 'transparent',
+          color: isActive ? (color ?? 'var(--primary)') : 'var(--text-secondary)',
+          fontWeight: isActive ? 700 : 400, fontSize: 13,
+          transition: 'all 0.12s',
+          borderLeft: isActive ? `3px solid ${color ?? 'var(--primary)'}` : '3px solid transparent',
+        }}
+      >
+        <span style={{ fontSize: 15, flexShrink: 0, fontStyle: 'normal', minWidth: 20, textAlign: 'center' }}>{icon}</span>
+        {sidebarOpen && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>}
+      </button>
+    );
   }
 
-  async function generatePractice() {
-    if (!input.trim() && !result) return;
-    setPracticeLoading(true);
-    setPractice('');
-    try {
-      let sourceContext = '';
-      if (context?.extractedText?.trim()) {
-        sourceContext = context.extractedText.slice(0, 4000);
-      }
-
-      const prompt = [
-        `Math category: ${categoryConfig.label}`,
-        `Task: ${categoryConfig.practicePrompt}`,
-        result ? `Anchor problem already solved: ${result.normalizedInput}` : '',
-        result ? `Anchor answer: ${result.answer}` : '',
-        sourceContext ? `Use the following course material to mirror notation, terminology, and difficulty:\n${sourceContext}` : '',
-        'Output 5 practice questions with concise answer keys.',
-      ].filter(Boolean).join('\n\n');
-
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'assignment',
-          text: prompt,
-          fileId: context?.fileId ?? null,
-          options: { count: 5 },
-        }),
-      });
-      const payload = await res.json();
-      setPractice(payload.content || payload.error || 'No practice set returned.');
-    } catch {
-      setPractice('Could not generate practice questions right now.');
-    } finally {
-      setPracticeLoading(false);
-    }
-  }
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="ms-shell">
-      <div className="ms-body">
-        <div className="ms-left">
-          <div className="ms-input-card">
-            <div className="ms-input-header">
-              <div>
-                <div className="ms-input-label">Problem input</div>
-                <p className="ms-input-copy">Use MATLAB-style text, insert symbols, then solve with one unified engine.</p>
+    <div style={S.shell}>
+
+      {/* ── Sidebar ── */}
+      <aside style={S.sidebar}>
+        {/* Collapse toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: sidebarOpen ? 'space-between' : 'center', padding: sidebarOpen ? '14px 14px 8px' : '14px 0 8px' }}>
+          {sidebarOpen && <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Categories</span>}
+          <button onClick={() => setSidebarOpen(o => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: 4 }} title={sidebarOpen ? 'Collapse' : 'Expand'}>
+            {sidebarOpen ? '◀' : '▶'}
+          </button>
+        </div>
+
+        <div style={{ padding: '0 0 8px' }}>
+          {TOPICS.map(t => <NavItem key={t.id} id={t.id} icon={t.icon} label={t.label} color={t.color} />)}
+          <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
+          <NavItem id="formulas" icon="📚" label="Formula Sheets" />
+          <NavItem id="graph"    icon="📈" label="Graph Plotter"  color="#22c55e" />
+          <NavItem id="units"    icon="⚖" label="Unit Converter" color="#f59e0b" />
+        </div>
+      </aside>
+
+      {/* ── Main content ── */}
+      <div style={S.main}>
+
+        {/* Header */}
+        <div style={{ padding: '16px 24px 12px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-elevated)', flexShrink: 0 }}>
+          <span style={{ fontSize: 20 }}>{currentTopic?.icon ?? (active === 'formulas' ? '📚' : active === 'graph' ? '📈' : '⚖')}</span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
+              {currentTopic?.label ?? (active === 'formulas' ? 'Formula Sheets' : active === 'graph' ? 'Graph Plotter' : 'Unit Converter')}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              {active === 'formulas' ? 'Quick-reference formulas for every topic' :
+               active === 'graph' ? 'Plot any function of x' :
+               active === 'units' ? 'Convert between common units' :
+               'Enter a problem below and press Solve'}
+            </div>
+          </div>
+          <button onClick={() => setShowHistory(h => !h)}
+            style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: showHistory ? 'var(--primary)1a' : 'transparent', color: showHistory ? 'var(--primary)' : 'var(--text-muted)', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
+            🕐 History
+          </button>
+        </div>
+
+        {/* History drawer */}
+        {showHistory && (
+          <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-2)' }}>
+            {history.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No history yet</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
+                {history.map(h => (
+                  <button key={h.id} onClick={() => { setInput(h.problem); setShowHistory(false); setActive((h.category as ActiveView) ?? 'algebra'); setTimeout(() => solve(h.problem), 0); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', cursor: 'pointer', textAlign: 'left' }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.problem}</span>
+                    <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600, flexShrink: 0 }}>{h.answer.slice(0, 30)}{h.answer.length > 30 ? '…' : ''}</span>
+                  </button>
+                ))}
               </div>
-              {context ? (
-                <button className="ms-context-clear" onClick={() => { clearMathContext(); setContext(null); }}>
-                  Clear file context
+            )}
+          </div>
+        )}
+
+        {/* ── SOLVER PHASE ── */}
+        {active !== 'formulas' && active !== 'graph' && active !== 'units' && (
+          <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16, flex: 1 }}>
+
+            {/* Quick examples */}
+            {currentTopic && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {currentTopic.examples.map(ex => (
+                  <button key={ex} onClick={() => { setInput(ex); solve(ex); }}
+                    style={{ padding: '4px 12px', borderRadius: 20, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer', transition: 'all 0.1s' }}
+                    onMouseEnter={e => { (e.currentTarget).style.borderColor = currentTopic.color; (e.currentTarget).style.color = currentTopic.color; }}
+                    onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; (e.currentTarget).style.color = 'var(--text-secondary)'; }}
+                  >
+                    {ex}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Input box */}
+            <div style={{ position: 'relative' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <div style={{ flex: 1, position: 'relative' }}>
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void solve(); } }}
+                    placeholder="Enter a math problem, equation, or expression… (Enter to solve)"
+                    rows={2}
+                    style={{
+                      width: '100%', padding: '12px 16px', borderRadius: 12, resize: 'none',
+                      border: `1.5px solid ${loading ? 'var(--primary)' : 'var(--border-subtle)'}`,
+                      background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 15,
+                      fontFamily: '"JetBrains Mono", monospace', boxSizing: 'border-box', outline: 'none',
+                      transition: 'border-color 0.15s',
+                    }}
+                  />
+                </div>
+                <button onClick={() => void solve()} disabled={loading || !input.trim()}
+                  style={{
+                    padding: '12px 20px', borderRadius: 12, border: 'none', cursor: loading ? 'default' : 'pointer',
+                    background: loading ? 'var(--primary-muted, #6366f133)' : 'var(--primary)',
+                    color: loading ? 'var(--primary)' : '#fff', fontWeight: 700, fontSize: 14,
+                    transition: 'all 0.15s', flexShrink: 0, minWidth: 90, height: 52,
+                  }}>
+                  {loading ? '⏳' : '▶ Solve'}
                 </button>
-              ) : null}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
+                <button onClick={() => setShowSymbols(s => !s)}
+                  style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>
+                  {showSymbols ? '▲ Hide symbols' : '▼ Symbols'}
+                </button>
+                {input && <button onClick={() => { setInput(''); setResult(null); inputRef.current?.focus(); }}
+                  style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>✕ Clear</button>}
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>Shift+Enter for new line</span>
+              </div>
             </div>
 
-            {context ? (
-              <div className="ms-context-card">
-                <div>
-                  <strong>{context.fileName}</strong>
-                  <small>{context.extractedText.split(/\s+/).filter(Boolean).length.toLocaleString()} words available for explanations and practice.</small>
+            {/* Symbol pad */}
+            {showSymbols && (
+              <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '10px 12px' }}>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                  {SYMBOL_GROUPS.map((g, i) => (
+                    <button key={i} onClick={() => setSymbolTab(i)}
+                      style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', background: symbolTab === i ? 'var(--primary)' : 'var(--bg-elevated)', color: symbolTab === i ? '#fff' : 'var(--text-secondary)', fontWeight: symbolTab === i ? 600 : 400 }}>
+                      {g.label}
+                    </button>
+                  ))}
                 </div>
-                <span className="ms-context-badge">Linked file</span>
-              </div>
-            ) : recentCandidate ? (
-              <div className="ms-context-card recent">
-                <div>
-                  <strong>{recentCandidate.fileName}</strong>
-                  <small>Use your most recent workspace file to ground math explanations and practice.</small>
-                </div>
-                <button className="ms-context-cta" onClick={() => void loadRecentFileContext()} disabled={recentLoading}>
-                  {recentLoading ? 'Loading…' : 'Use most recent file'}
-                </button>
-              </div>
-            ) : null}
-
-            <div className="ms-input-row">
-              <textarea
-                ref={inputRef}
-                className="ms-input"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Examples: 2x + 5 <= 11, x^2 - 5x + 6 = 0, hypotenuse 3 4, arithmetic nth 3 2 10"
-                spellCheck={false}
-              />
-              <button className="ms-solve-btn" onClick={() => void handleSolve()} disabled={loading || !input.trim()}>
-                {loading ? '⟳' : '='}
-              </button>
-            </div>
-
-            {error && <div className="ms-error">{error}</div>}
-
-            {input.trim() && (
-              <div className="ms-preview">
-                <div className="ms-preview-head">
-                  <span className="ms-preview-label">Preview</span>
-                  <span className="ms-preview-hint">Rendered notation before solving</span>
-                </div>
-                <div className="ms-preview-latex">
-                  <LatexBlock latex={previewLatex} display />
-                </div>
-                <div className="ms-preview-raw">
-                  <span className="ms-preview-raw-label">Input syntax</span>
-                  <code>{normalizeInputForPreview(input)}</code>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {SYMBOL_GROUPS[symbolTab].symbols.map(s => (
+                    <button key={s} onClick={() => insertSymbol(s)}
+                      style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', minWidth: 38, transition: 'all 0.1s' }}
+                      onMouseEnter={e => { (e.currentTarget).style.borderColor = 'var(--primary)'; (e.currentTarget).style.color = 'var(--primary)'; }}
+                      onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; (e.currentTarget).style.color = 'var(--text-primary)'; }}
+                    >{s}</button>
+                  ))}
                 </div>
               </div>
             )}
 
-            <div className="ms-keyboard-tabs">
-              {MATH_SYMBOL_GROUPS.map((group) => (
-                <button
-                  key={group.id}
-                  className={`ms-keyboard-tab${symbolGroup === group.id ? ' active' : ''}`}
-                  onClick={() => setSymbolGroup(group.id)}
-                >
-                  {group.label}
-                </button>
-              ))}
-            </div>
-            <div className="ms-keyboard-grid">
-              {MATH_SYMBOL_GROUPS.find((group) => group.id === symbolGroup)?.symbols.map((symbol) => (
-                <button key={`${symbolGroup}-${symbol.label}`} className="ms-keyboard-key" onClick={() => insertSymbol(symbol.insert)}>
-                  <span>{symbol.label}</span>
-                  <small>{symbol.insert}</small>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="ms-examples-card">
-            <div className="ms-cat-tabs">
-              {MATH_CATEGORY_ORDER.map((categoryId) => (
-                <button key={categoryId} className={`ms-cat-tab${activeCategory === categoryId ? ' active' : ''}`} onClick={() => setActiveCategory(categoryId)}>
-                  {MATH_CATEGORIES[categoryId].label}
-                </button>
-              ))}
-            </div>
-            <div className="ms-category-actions">
-              {categoryConfig.supportedActions.map((action) => <span key={action} className="ms-action-pill">{action}</span>)}
-            </div>
-            <div className="ms-examples">
-              {categoryConfig.examples.map((example, index) => (
-                <button key={`${categoryConfig.id}-${index}`} className="ms-example" onClick={() => setInput(example.expr)}>
-                  <div className="ms-example-code">{example.expr}</div>
-                  <div className="ms-example-desc">{example.desc}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="ms-right">
-          {!result && !loading && (
-            <div className="ms-empty">
-              <span className="ms-empty-icon">𝑓(x)</span>
-              <p>Enter algebra, geometry, trigonometry, sequences, calculus, matrix, or statistics problems and solve them with steps.</p>
-              <p className="ms-empty-hint">Then explain the concept, send graphable work to the graph tab, or generate practice questions grounded in your course file.</p>
-            </div>
-          )}
-
-          {loading && (
-            <div className="ms-loading">
-              <div className="ms-spinner" />
-              <p>Solving the problem…</p>
-            </div>
-          )}
-
-          {result && !loading && (
-            <div className="ms-solution">
-              <div className={`ms-answer-bar${result.verified ? '' : ' unverified'}`}>
-                <div className="ms-answer-meta">
-                  <span className="ms-answer-type">{MATH_CATEGORIES[result.category].label}</span>
-                  <span className="ms-engine-pill">{result.engine}</span>
-                  {result.verified ? <span className="ms-verified">Verified</span> : <span className="ms-unverified">Needs review</span>}
-                </div>
-
-                <div className="ms-problem-block">
-                  <div className="ms-section-label">Normalized problem</div>
-                  <div className="ms-problem-latex"><LatexBlock latex={result.previewLatex} display /></div>
-                </div>
-
-                <div className="ms-answer-latex">
-                  <LatexBlock latex={result.answerLatex} display />
-                </div>
-                <div className="ms-explanation">{result.explanation}</div>
-
-                <div className="ms-answer-actions">
-                  <button className="ms-act-btn" onClick={() => navigator.clipboard.writeText(result.answer).catch(() => {})}>Copy answer</button>
-                  <button className="ms-act-btn" onClick={() => navigator.clipboard.writeText(result.answerLatex).catch(() => {})}>Copy LaTeX</button>
-                  {result.graphExpr && <button className="ms-act-btn ms-act-graph" onClick={() => onGraphExpr(result.graphExpr!)}>Plot on Graph</button>}
-                  <button className="ms-act-btn" onClick={() => void explainConcept()} disabled={explainLoading}>{explainLoading ? 'Explaining…' : 'Explain this concept'}</button>
-                  <button className="ms-act-btn" onClick={() => void generatePractice()} disabled={practiceLoading}>{practiceLoading ? 'Generating…' : 'Generate practice questions'}</button>
-                  <button className="ms-act-btn" onClick={() => void saveToLibrary('solution')} disabled={saving === 'solution'}>{saving === 'solution' ? 'Saving…' : 'Save to Library'}</button>
-                </div>
+            {/* Loading skeleton */}
+            {loading && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ height: 60, borderRadius: 12, background: 'var(--bg-2)', animation: 'pulse 1.4s ease-in-out infinite' }} />
+                <div style={{ height: 40, borderRadius: 8, background: 'var(--bg-2)', animation: 'pulse 1.4s ease-in-out 0.2s infinite', width: '75%' }} />
+                <div style={{ height: 40, borderRadius: 8, background: 'var(--bg-2)', animation: 'pulse 1.4s ease-in-out 0.4s infinite', width: '55%' }} />
+                <style>{`@keyframes pulse { 0%,100%{opacity:0.5} 50%{opacity:1} }`}</style>
               </div>
+            )}
 
-              <div className="ms-steps">
-                <div className="ms-steps-title">Step-by-step solution</div>
-                {result.steps.map((step) => (
-                  <div key={`${step.step}-${step.description}`} className="ms-step">
-                    <div className="ms-step-num">{step.step}</div>
-                    <div className="ms-step-body">
-                      <div className="ms-step-desc">{step.description}</div>
-                      <div className="ms-step-expr"><LatexBlock latex={step.expression} display /></div>
-                      <div className="ms-step-expl">{step.explanation}</div>
-                    </div>
+            {/* Result */}
+            {result && !loading && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {result.error ? (
+                  <div style={{ padding: '14px 18px', borderRadius: 10, background: '#ef444410', border: '1px solid #ef444440', color: '#ef4444', fontSize: 13 }}>
+                    ⚠ {result.error}
                   </div>
-                ))}
-              </div>
-
-              {(explainLoading || explanation) && (
-                <div className="ms-side-card">
-                  <div className="ms-side-card-header">Explain this concept</div>
-                  <div className="ms-side-card-body">{explainLoading ? 'Generating a clear explanation…' : explanation}</div>
-                </div>
-              )}
-
-              {(practiceLoading || practice) && (
-                <div className="ms-side-card">
-                  <div className="ms-side-card-header">Practice mode</div>
-                  <div className="ms-side-card-body">{practiceLoading ? 'Generating practice questions…' : practice}</div>
-                  {practice && (
-                    <div className="ms-side-actions">
-                      <button className="ms-act-btn" onClick={() => navigator.clipboard.writeText(practice).catch(() => {})}>Copy practice</button>
-                      <button className="ms-act-btn" onClick={() => void saveToLibrary('practice')} disabled={saving === 'practice'}>{saving === 'practice' ? 'Saving…' : 'Save practice'}</button>
+                ) : (
+                  <>
+                    {/* Answer card */}
+                    <div style={{ padding: '18px 20px', borderRadius: 14, background: `${currentTopic?.color ?? 'var(--primary)'}0d`, border: `1.5px solid ${currentTopic?.color ?? 'var(--primary)'}30` }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: currentTopic?.color ?? 'var(--primary)', marginBottom: 8 }}>Answer</div>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', overflowX: 'auto' }}>
+                        {result.answerLatex ? <Latex latex={result.answerLatex} display /> : result.answer}
+                      </div>
+                      {result.engine === 'ai' && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>✨ AI-powered · {result.category}</div>}
+                      {result.engine !== 'ai' && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>🔢 Symbolic solver · {result.engine}</div>}
                     </div>
+
+                    {/* Steps */}
+                    {result.steps.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Step-by-step solution</div>
+                        {result.steps.map((step, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 16px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', alignItems: 'flex-start' }}>
+                            <div style={{ width: 24, height: 24, borderRadius: '50%', background: currentTopic?.color ?? 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{step.step ?? i + 1}</div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>{step.description}</div>
+                              {step.latex && (
+                                <div style={{ overflowX: 'auto', padding: '6px 0', marginBottom: 4 }}>
+                                  <Latex latex={step.latex} display />
+                                </div>
+                              )}
+                              {step.explanation && <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{step.explanation}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Graph CTA */}
+                    {result.graphExpr && (
+                      <button onClick={() => { setGraphExprs([{ id: '1', expr: result.graphExpr!, color: GRAPH_COLORS[0], enabled: true }]); setActive('graph'); }}
+                        style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
+                        📈 View graph of {result.graphExpr}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── FORMULAS VIEW ── */}
+        {active === 'formulas' && (
+          <div style={{ padding: '20px 24px', flex: 1, overflowY: 'auto' }}>
+            {TOPICS.map(topic => {
+              const formulas = FORMULAS[topic.id] ?? [];
+              if (formulas.length === 0) return null;
+              return (
+                <div key={topic.id} style={{ marginBottom: 28 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingBottom: 6, borderBottom: `2px solid ${topic.color}40` }}>
+                    <span style={{ fontSize: 18 }}>{topic.icon}</span>
+                    <span style={{ fontWeight: 700, fontSize: 15, color: topic.color }}>{topic.label}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
+                    {formulas.map((f, i) => (
+                      <div key={i}
+                        style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', cursor: 'pointer', transition: 'border-color 0.12s' }}
+                        onClick={() => { setInput(`Explain: ${f.title}`); setActive(topic.id as TopicId); void solve(`Explain: ${f.title}`); }}
+                        onMouseEnter={e => { (e.currentTarget).style.borderColor = topic.color; }}
+                        onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; }}
+                        title="Click to solve / explain"
+                      >
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>{f.title}</div>
+                        <div style={{ overflowX: 'auto', fontSize: 14 }}>
+                          <Latex latex={f.latex} display />
+                        </div>
+                        {f.note && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>{f.note}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── GRAPH VIEW ── */}
+        {active === 'graph' && (
+          <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div ref={graphRef} style={{ width: '100%', height: 380, borderRadius: 14, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }} />
+            {graphError && <div style={{ fontSize: 12, color: '#ef4444' }}>⚠ {graphError}</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {graphExprs.map((ge, _i) => (
+                <div key={ge.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ width: 16, height: 16, borderRadius: '50%', background: ge.color, flexShrink: 0, cursor: 'pointer' }}
+                    onClick={() => { const c = GRAPH_COLORS[(GRAPH_COLORS.indexOf(ge.color) + 1) % GRAPH_COLORS.length]; setGraphExprs(p => p.map(e => e.id === ge.id ? { ...e, color: c } : e)); }} />
+                  <input value={ge.expr} onChange={e => setGraphExprs(p => p.map(x => x.id === ge.id ? { ...x, expr: e.target.value } : x))}
+                    placeholder="y = x^2"
+                    style={{ flex: 1, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontFamily: '"JetBrains Mono", monospace', outline: 'none' }}
+                    onKeyDown={e => e.key === 'Enter' && renderGraph()}
+                  />
+                  {graphExprs.length > 1 && (
+                    <button onClick={() => setGraphExprs(p => p.filter(x => x.id !== ge.id))}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}>✕</button>
                   )}
                 </div>
-              )}
-
-              {result.error && <div className="ms-error">{result.error}</div>}
+              ))}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setGraphExprs(p => [...p, { id: crypto.randomUUID(), expr: '', color: GRAPH_COLORS[p.length % GRAPH_COLORS.length], enabled: true }])}
+                  style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                  + Add function
+                </button>
+                <button onClick={renderGraph}
+                  style={{ fontSize: 12, padding: '5px 14px', borderRadius: 8, border: 'none', background: '#22c55e', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                  ▶ Plot
+                </button>
+              </div>
             </div>
-          )}
-        </div>
-      </div>
-
-      <style jsx>{`
-        .ms-shell { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-        .ms-body { display: grid; grid-template-columns: 420px minmax(0,1fr); flex: 1; overflow: hidden; }
-        .ms-left { display: flex; flex-direction: column; border-right: 1px solid var(--border-subtle); overflow-y: auto; background: var(--bg-elevated); }
-        .ms-right { overflow-y: auto; padding: 20px; }
-        .ms-input-card, .ms-examples-card { padding: 18px; border-bottom: 1px solid var(--border-subtle); }
-        .ms-input-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-        .ms-input-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
-        .ms-input-copy { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
-        .ms-context-clear { border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); border-radius: 10px; padding: 8px 12px; cursor: pointer; }
-        .ms-context-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--border-subtle)); background: color-mix(in srgb, var(--primary) 8%, var(--bg-surface)); margin-bottom: 12px; }
-        .ms-context-card strong { display: block; font-size: 14px; }
-        .ms-context-card small { display: block; margin-top: 4px; font-size: 12px; line-height: 1.4; color: var(--text-muted); }
-        .ms-context-card.recent { background: color-mix(in srgb, var(--success) 8%, var(--bg-surface)); border-color: color-mix(in srgb, var(--success) 25%, var(--border-subtle)); }
-        .ms-context-badge, .ms-context-cta { border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 600; }
-        .ms-context-badge { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }
-        .ms-context-cta { border: none; background: var(--success, #16a34a); color: white; cursor: pointer; }
-        .ms-input-row { display: grid; grid-template-columns: minmax(0,1fr) 56px; gap: 10px; }
-        .ms-input { width: 100%; min-height: 108px; padding: 14px 16px; border-radius: 14px; border: 2px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); font-size: 14px; line-height: 1.6; font-family: 'JetBrains Mono', monospace; resize: vertical; outline: none; }
-        .ms-input:focus { border-color: var(--primary); }
-        .ms-solve-btn { width: 56px; border-radius: 14px; background: var(--primary); color: white; border: none; font-size: 22px; font-weight: 700; cursor: pointer; }
-        .ms-solve-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .ms-preview { margin-top: 12px; padding: 14px; background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 7%, var(--bg-surface)), var(--bg-surface)); border-radius: 14px; border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border-subtle)); }
-        .ms-preview-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-        .ms-preview-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
-        .ms-preview-hint { font-size: 11px; color: var(--text-muted); }
-        .ms-preview-latex { display: flex; justify-content: center; min-height: 52px; padding: 8px 4px 10px; overflow-x: auto; }
-        .ms-preview-raw { display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--bg-elevated) 82%, transparent); border: 1px solid var(--border-subtle); font-size: 12px; line-height: 1.55; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; }
-        .ms-preview-raw-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-family: var(--font-sans, inherit); }
-        .ms-preview-raw code { font-family: 'JetBrains Mono', monospace; }
-        .ms-keyboard-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
-        .ms-keyboard-tab { border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-muted); border-radius: 999px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
-        .ms-keyboard-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
-        .ms-keyboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-top: 10px; }
-        .ms-keyboard-key { text-align: left; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); border-radius: 12px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
-        .ms-keyboard-key small { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
-        .ms-cat-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-        .ms-cat-tab { padding: 6px 10px; border-radius: 8px; border: none; background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
-        .ms-cat-tab.active { background: var(--primary); color: white; }
-        .ms-category-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-        .ms-action-pill { border-radius: 999px; padding: 4px 10px; background: color-mix(in srgb, var(--primary) 9%, var(--bg-surface)); color: var(--text-secondary); font-size: 11px; }
-        .ms-examples { display: flex; flex-direction: column; gap: 6px; }
-        .ms-example { text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-subtle); background: var(--bg-surface); cursor: pointer; }
-        .ms-example-code { font-size: 13px; font-family: 'JetBrains Mono', monospace; color: var(--text-primary); font-weight: 500; }
-        .ms-example-desc { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
-        .ms-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 320px; color: var(--text-muted); text-align: center; gap: 10px; }
-        .ms-empty-icon { font-size: 60px; opacity: 0.25; }
-        .ms-empty-hint { font-size: 12px !important; }
-        .ms-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 60px; color: var(--text-muted); }
-        .ms-spinner { width: 32px; height: 32px; border: 3px solid var(--border-subtle); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
-        .ms-solution { display: flex; flex-direction: column; gap: 14px; }
-        .ms-answer-bar { padding: 18px; border-radius: 16px; border: 2px solid var(--primary); background: color-mix(in srgb, var(--primary) 6%, var(--bg-elevated)); box-shadow: 0 4px 20px color-mix(in srgb, var(--primary) 15%, transparent); }
-        .ms-answer-bar.unverified { border-color: #f59e0b; background: color-mix(in srgb, #f59e0b 6%, var(--bg-elevated)); }
-        .ms-answer-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-        .ms-answer-type, .ms-engine-pill { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; padding: 4px 8px; border-radius: 999px; }
-        .ms-answer-type { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }
-        .ms-engine-pill { background: var(--bg-surface); color: var(--text-muted); }
-        .ms-verified { color: #52b788; font-size: 12px; }
-        .ms-unverified { color: #f59e0b; font-size: 12px; }
-        .ms-problem-block { margin-bottom: 14px; }
-        .ms-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 6px; }
-        .ms-problem-latex, .ms-answer-latex { display: flex; justify-content: center; padding: 10px 0; overflow-x: auto; }
-        .ms-explanation { font-size: 13px; line-height: 1.7; color: var(--text-secondary); }
-        .ms-answer-actions, .ms-side-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-        .ms-act-btn { padding: 7px 12px; border-radius: 10px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); font-size: 12px; font-weight: 500; cursor: pointer; }
-        .ms-act-graph { background: color-mix(in srgb, var(--primary) 10%, var(--bg-surface)) !important; border-color: var(--primary) !important; color: var(--primary) !important; }
-        .ms-steps, .ms-side-card { background: var(--bg-elevated); border-radius: 16px; border: 1px solid var(--border-subtle); overflow: hidden; }
-        .ms-steps-title, .ms-side-card-header { padding: 12px 18px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface); }
-        .ms-step { display: flex; gap: 14px; padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); }
-        .ms-step:last-child { border-bottom: none; }
-        .ms-step-num { width: 28px; height: 28px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
-        .ms-step-desc { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
-        .ms-step-expr { padding: 7px 10px; background: var(--bg-surface); border-radius: 9px; border: 1px solid var(--border-subtle); overflow-x: auto; display: flex; justify-content: center; margin-bottom: 6px; }
-        .ms-step-expl, .ms-side-card-body { font-size: 12px; color: var(--text-muted); line-height: 1.7; white-space: pre-wrap; }
-        .ms-side-card-body { padding: 14px 18px; }
-        .ms-error { padding: 10px 14px; border-radius: 12px; background: color-mix(in srgb, #e05252 8%, var(--bg-elevated)); border: 1px solid color-mix(in srgb, #e05252 30%, var(--border-subtle)); font-size: 12px; color: var(--text-secondary); }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 980px) {
-          .ms-body { grid-template-columns: 1fr; }
-          .ms-left { border-right: none; border-bottom: 1px solid var(--border-subtle); }
-          .ms-keyboard-grid { grid-template-columns: 1fr; }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-// ─── Root Component ───────────────────────────────────────────────────────
-
-export default function MathSolverPage() {
-  const [activeTab, setActiveTab] = useState<MainTab>('solver');
-  const [graphExprFromSolver, setGraphExprFromSolver] = useState<string | undefined>();
-
-  const handleGraphExpr = useCallback((expr: string) => {
-    setGraphExprFromSolver(expr);
-    setActiveTab('graph');
-  }, []);
-
-  const tabs: Array<{ id: MainTab; label: string; icon: string; hint: string }> = [
-    { id: 'solver', label: 'Solver', icon: '∑', hint: 'Solve algebra, calculus, vectors, statistics, and matrices.' },
-    { id: 'graph', label: 'Graph', icon: '📈', hint: 'Plot graphable expressions with a Desmos-like workspace.' },
-    { id: 'units', label: 'Units', icon: '⚖️', hint: 'Convert engineering and physics units quickly.' },
-    { id: 'lab', label: 'MATLAB Flow', icon: '⌘', hint: 'Use matrix-first workflows and MATLAB-style commands.' },
-  ];
-
-  return (
-    <div className="math-root">
-      <div className="math-header">
-        <div className="math-brand">
-          <span className="math-brand-icon">∑</span>
-          <div>
-            <h1>Math</h1>
-            <p>Unified solver · Graphing · Units · MATLAB Flow</p>
           </div>
-        </div>
-        <div className="math-tabs">
-          {tabs.map((tab) => (
-            <button key={tab.id} className={`math-tab${activeTab === tab.id ? ' active' : ''}`} onClick={() => setActiveTab(tab.id)}>
-              <span className="math-tab-icon">{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+        )}
 
-      <div className="math-body">
-        <aside className="math-sidebar">
-          <div className="math-sidebar-section">
-            <div className="math-sidebar-label">Workflows</div>
-            <div className="math-sidebar-list">
-              {tabs.map((tab) => (
-                <button key={tab.id} className={`math-side-item${activeTab === tab.id ? ' active' : ''}`} onClick={() => setActiveTab(tab.id)}>
-                  <span className="math-side-icon">{tab.icon}</span>
-                  <span className="math-side-copy">
-                    <strong>{tab.label}</strong>
-                    <small>{tab.hint}</small>
-                  </span>
+        {/* ── UNIT CONVERTER ── */}
+        {active === 'units' && (
+          <div style={{ padding: '20px 24px', flex: 1, maxWidth: 540 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
+              {UNIT_CATS.map((c, i) => (
+                <button key={i} onClick={() => { setUnitCatIdx(i); setFromUnit(0); setToUnit(1); }}
+                  style={{ padding: '5px 12px', borderRadius: 20, border: '1px solid var(--border-subtle)', background: unitCatIdx === i ? '#f59e0b' : 'var(--bg-2)', color: unitCatIdx === i ? '#fff' : 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: unitCatIdx === i ? 700 : 400 }}>
+                  {c.label}
                 </button>
               ))}
             </div>
-          </div>
-
-          <div className="math-sidebar-section">
-            <div className="math-sidebar-label">StudyPilot fit</div>
-            <div className="math-ref-card subtle">
-              <span className="math-ref-icon">R</span>
-              <span className="math-side-copy">
-                <strong>Results Hub</strong>
-                <small>Save solved problems and generated practice directly into Library as math-specific results.</small>
-              </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {[{ lbl: 'From', idx: fromUnit, set: setFromUnit }, { lbl: 'To', idx: toUnit, set: setToUnit }].map(({ lbl, idx, set }) => (
+                <div key={lbl} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)', width: 30 }}>{lbl}</label>
+                  <select value={idx} onChange={e => set(Number(e.target.value))}
+                    style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13 }}>
+                    {unitCat.units.map((u, i) => <option key={i} value={i}>{u.label}</option>)}
+                  </select>
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', width: 30 }}>Val</label>
+                <input type="number" value={unitValue} onChange={e => setUnitValue(e.target.value)}
+                  style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14 }} />
+              </div>
+              {unitResult && (
+                <div style={{ padding: '16px 18px', borderRadius: 12, background: '#f59e0b14', border: '1.5px solid #f59e0b40', marginTop: 4 }}>
+                  <div style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700, marginBottom: 4 }}>Result</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>{unitResult} <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-muted)' }}>{unitCat.units[toUnit].label}</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{unitValue} {unitCat.units[fromUnit].label} = {unitResult} {unitCat.units[toUnit].label}</div>
+                </div>
+              )}
             </div>
-            <Link className="math-ref-card" href="/workspace">
-              <span className="math-ref-icon">⌘</span>
-              <span className="math-side-copy">
-                <strong>Workspace + Files</strong>
-                <small>Send one selected course file into Math for grounded explanations and practice generation.</small>
-              </span>
-            </Link>
-            <a className="math-ref-card" href="https://www.wolframalpha.com/" target="_blank" rel="noreferrer">
-              <span className="math-ref-icon">W</span>
-              <span className="math-side-copy">
-                <strong>Wolfram Alpha</strong>
-                <small>Cross-check exact symbolic results and edge cases when you want a second opinion.</small>
-              </span>
-            </a>
           </div>
-        </aside>
-
-        <div className="math-content">
-          {activeTab === 'solver' && <SolverPanel onGraphExpr={handleGraphExpr} />}
-          {activeTab === 'graph' && <GraphPanel initialExpr={graphExprFromSolver} />}
-          {activeTab === 'units' && <UnitsPanel />}
-          {activeTab === 'lab' && <MatlabLab onGraphExpression={handleGraphExpr} />}
-        </div>
+        )}
       </div>
-
-      <style jsx>{`
-        .math-root { display: flex; flex-direction: column; height: calc(100dvh - 40px); overflow: hidden; background: var(--bg-surface); }
-        .math-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-elevated); gap: 16px; }
-        .math-brand { display: flex; align-items: center; gap: 12px; }
-        .math-brand-icon { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 60%, #a78bfa)); display: flex; align-items: center; justify-content: center; font-size: 22px; color: white; font-weight: 700; }
-        .math-brand h1 { margin: 0; font-size: 18px; font-weight: 700; }
-        .math-brand p { margin: 1px 0 0; font-size: 11px; color: var(--text-muted); }
-        .math-tabs { display: flex; gap: 4px; background: var(--bg-surface); border-radius: 12px; padding: 4px; border: 1px solid var(--border-subtle); }
-        .math-tab { display: flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 9px; border: none; background: transparent; color: var(--text-muted); font-size: 14px; font-weight: 500; cursor: pointer; }
-        .math-tab.active { background: var(--primary); color: white; }
-        .math-body { flex: 1; display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 0; }
-        .math-sidebar { padding: 18px; border-right: 1px solid var(--border-subtle); background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 92%, transparent), color-mix(in srgb, var(--bg-surface) 96%, transparent)); overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
-        .math-sidebar-section { display: flex; flex-direction: column; gap: 10px; }
-        .math-sidebar-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
-        .math-sidebar-list { display: flex; flex-direction: column; gap: 8px; }
-        .math-side-item, .math-ref-card { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--border-subtle); background: color-mix(in srgb, var(--bg-elevated) 88%, transparent); color: var(--text-primary); text-align: left; text-decoration: none; }
-        .math-side-item { cursor: pointer; width: 100%; }
-        .math-side-item.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--bg-elevated)); box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 16%, transparent); }
-        .math-ref-card.subtle { background: color-mix(in srgb, var(--primary) 6%, var(--bg-elevated)); }
-        .math-side-icon, .math-ref-icon { width: 32px; height: 32px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--primary) 18%, var(--bg-elevated)); color: var(--text-primary); font-weight: 700; flex-shrink: 0; }
-        .math-side-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-        .math-side-copy strong { font-size: 14px; line-height: 1.2; }
-        .math-side-copy small { font-size: 12px; line-height: 1.45; color: var(--text-muted); }
-        .math-content { flex: 1; overflow: hidden; min-width: 0; }
-        @media (max-width: 980px) {
-          .math-body { grid-template-columns: 1fr; }
-          .math-sidebar { border-right: none; border-bottom: 1px solid var(--border-subtle); max-height: 260px; }
-        }
-      `}</style>
     </div>
   );
 }
+
+// Evaluate graph expression numerically (used for axis labels)
+function _evalAt(expr: string, x: number): string {
+  try {
+    const r = math.evaluate(expr, { x });
+    return typeof r === 'number' ? Number(r.toFixed(4)).toString() : String(r);
+  } catch { return '—'; }
+}
+void _evalAt; // suppress unused warning
+
+export default MathSolverPage;
