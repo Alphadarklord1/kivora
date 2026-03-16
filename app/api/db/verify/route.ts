@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
+import { getDatabaseSummary, resolveDatabaseUrl } from '@/lib/db/config';
 import { users, folders, files, libraryItems, studyPlans } from '@/lib/db/schema';
 
 export async function GET() {
+  const dbSummary = getDatabaseSummary(resolveDatabaseUrl());
+
   if (!isDatabaseConfigured) {
     return NextResponse.json({
       ok: false,
       configured: false,
-      reason: 'DATABASE_URL is not configured',
+      reason: 'Set SUPABASE_DATABASE_URL or DATABASE_URL to connect a database',
+      database: dbSummary,
     }, { status: 503 });
   }
 
@@ -23,6 +27,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       configured: true,
+      database: dbSummary,
       counts: {
         users: userCount,
         folders: folderCount,
@@ -38,6 +43,7 @@ export async function GET() {
       ok: false,
       configured: true,
       reason: 'Database connection failed',
+      database: dbSummary,
     }, { status: 500 });
   }
 }

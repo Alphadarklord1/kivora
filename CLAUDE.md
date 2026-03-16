@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Kivora is a study workspace web application built with Next.js 14 (App Router), Neon PostgreSQL, and NextAuth.js. It helps students organize study materials, generate quizzes/summaries from uploaded files (PDF, Word, PowerPoint), and manage content with cloud-synced metadata.
+Kivora is a study workspace web application built with Next.js 14 (App Router), Supabase/generic PostgreSQL via Drizzle, and NextAuth.js. It helps students organize study materials, generate quizzes/summaries from uploaded files (PDF, Word, PowerPoint), and manage content with cloud-synced metadata.
 
 ## Commands
 
@@ -16,7 +16,7 @@ npm run dev
 npm run build
 
 # Database migrations
-npx drizzle-kit push    # Push schema to Neon
+npx drizzle-kit push    # Push schema to Supabase/Postgres
 npx drizzle-kit studio  # Open Drizzle Studio GUI
 ```
 
@@ -24,7 +24,7 @@ npx drizzle-kit studio  # Open Drizzle Studio GUI
 
 **Stack:**
 - Next.js 14 with App Router
-- Neon PostgreSQL via Drizzle ORM
+- Supabase or PostgreSQL via Drizzle ORM
 - NextAuth.js v5 (beta) for authentication
 - IndexedDB for local file blob storage
 - JSZip for Word/PowerPoint text extraction
@@ -44,7 +44,7 @@ npx drizzle-kit studio  # Open Drizzle Studio GUI
 - `lib/idb/index.ts` - IndexedDB wrapper for file blobs
 
 **Data flow:**
-- Metadata (folders, files info, library items) syncs to Neon PostgreSQL
+- Metadata (folders, files info, library items) syncs to Supabase/PostgreSQL
 - File blobs (PDFs, Word, PowerPoint) stored in browser IndexedDB
 - Text extraction happens client-side from IndexedDB blobs
 - Generated content can be saved to Library (database) or Folder (as file)
@@ -61,13 +61,14 @@ npx drizzle-kit studio  # Open Drizzle Studio GUI
 **File upload workflow:**
 1. User selects file (PDF/Word/PowerPoint)
 2. File blob stored in IndexedDB with unique ID
-3. File metadata saved to Neon with `localBlobId` reference
+3. File metadata saved to the database with `localBlobId` reference
 4. When using tools, text extracted from IndexedDB blob
 5. Generated content can be saved to Library or as a file in folder
 
 **Environment variables (`.env.local`):**
 ```
-DATABASE_URL=postgresql://...
+SUPABASE_DATABASE_URL=postgresql://...
+# or DATABASE_URL=postgresql://...
 NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=your-secret
 GOOGLE_CLIENT_ID=...

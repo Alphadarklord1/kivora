@@ -24,7 +24,8 @@ Main entry points:
 
 Kivora now supports both:
 
-- Neon PostgreSQL in deployed/serverless environments
+- Supabase Postgres as the preferred hosted database
+- generic PostgreSQL / Neon where needed
 - local PostgreSQL for development on your machine
 
 Fast local setup:
@@ -38,6 +39,12 @@ Default local database URL:
 
 ```bash
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/kivora
+```
+
+Preferred hosted setup:
+
+```bash
+SUPABASE_DATABASE_URL=postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres?sslmode=require
 ```
 
 Useful commands:
@@ -54,7 +61,13 @@ Notes:
 
 - `docker-compose.yml` provides a local Postgres 16 instance
 - `drizzle-kit push` applies the current schema directly
-- if you use Neon in production, keep `DATABASE_URL` pointed at Neon there
+- Kivora resolves the database URL in this order:
+  - `SUPABASE_DATABASE_URL`
+  - `DATABASE_URL`
+  - `DIRECT_URL`
+  - `POSTGRES_URL`
+  - `POSTGRES_PRISMA_URL`
+- for Supabase, prefer setting `SUPABASE_DATABASE_URL` so the whole app and Drizzle use the same source of truth
 
 ## Runtime Environment
 

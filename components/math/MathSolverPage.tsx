@@ -1,839 +1,1294 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import katex from 'katex';
-import 'katex/dist/katex.min.css';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import * as math from 'mathjs';
+import { MathRenderer } from '@/components/math/MathRenderer';
+import { MatlabLab } from '@/components/tools/MatlabLab';
+import { MATH_CATEGORIES, MATH_CATEGORY_ORDER, MATH_SYMBOL_GROUPS } from '@/lib/math/catalog';
+import { clearMathContext, readMathContext, writeMathContext } from '@/lib/math/context';
+import type { MathCategoryId, MathContext, MathSolveRequest, SolverResult } from '@/lib/math/types';
+import { useToast } from '@/providers/ToastProvider';
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const functionPlot = typeof window !== 'undefined' ? require('function-plot') : null;
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+type MathTab = 'solver' | 'graph' | 'units' | 'lab';
 
-interface MathStep {
-  step: number;
-  description: string;
-  latex: string;
-  explanation: string;
-}
-
-interface SolveResult {
-  answer: string;
-  answerLatex: string;
-  steps: MathStep[];
-  graphExpr: string | null;
-  category: string;
-  engine: string;
-  error: string | null;
-}
-
-interface HistoryItem {
-  id: string;
-  problem: string;
-  answer: string;
-  category: string;
-  ts: number;
-}
-
-interface GraphExpression {
+type GraphExpression = {
   id: string;
   expr: string;
   color: string;
   enabled: boolean;
-}
+};
 
-// ── Topic catalogue ───────────────────────────────────────────────────────────
+type RecentMathItem = {
+  id: string;
+  problem: string;
+  answer: string;
+  category: MathCategoryId;
+  createdAt: string;
+};
 
-const TOPICS = [
+type RecentWorkspaceFile = {
+  id: string;
+  name: string;
+  content?: string | null;
+  folderId?: string | null;
+  topicId?: string | null;
+};
+
+const GRAPH_COLORS = ['#2563eb', '#f97316', '#16a34a', '#dc2626', '#7c3aed', '#0891b2'];
+const HISTORY_KEY = 'kivora_math_history';
+const TAB_LABELS: Record<MathTab, string> = {
+  solver: 'Solver',
+  graph: 'Graph',
+  units: 'Units',
+  lab: 'MATLAB Flow',
+};
+
+const UNIT_GROUPS = [
   {
-    id: 'algebra',
-    label: 'Algebra',
-    icon: '𝑥',
-    color: '#6366f1',
-    examples: [
-      'Solve x² + 5x + 6 = 0',
-      'Factor 4x² - 9',
-      'Simplify (2x + 3)² - (x - 1)²',
-      'Solve |3x - 2| = 7',
-      'Solve system: x + y = 5, 2x - y = 4',
+    id: 'length',
+    label: 'Length',
+    units: [
+      { id: 'm', label: 'Meters' },
+      { id: 'cm', label: 'Centimeters' },
+      { id: 'km', label: 'Kilometers' },
+      { id: 'in', label: 'Inches' },
+      { id: 'ft', label: 'Feet' },
     ],
   },
   {
-    id: 'calculus',
-    label: 'Calculus',
-    icon: '∫',
-    color: '#8b5cf6',
-    examples: [
-      'Differentiate x³ sin(x)',
-      'Integrate x² ln(x) dx',
-      'Limit of (sin x)/x as x → 0',
-      'Find critical points of f(x) = x³ - 3x',
-      'Taylor series of e^x at x = 0',
+    id: 'mass',
+    label: 'Mass',
+    units: [
+      { id: 'kg', label: 'Kilograms' },
+      { id: 'g', label: 'Grams' },
+      { id: 'mg', label: 'Milligrams' },
+      { id: 'lb', label: 'Pounds' },
     ],
   },
   {
-    id: 'statistics',
-    label: 'Statistics',
-    icon: 'σ',
-    color: '#06b6d4',
-    examples: [
-      'Mean and SD of [4, 8, 15, 16, 23, 42]',
-      'P(A∩B) given P(A)=0.4, P(B)=0.5, P(A∪B)=0.7',
-      'Binomial P(X=3) with n=10, p=0.4',
-      'Confidence interval for mean, n=25, x̄=50, s=8',
-      'Chi-square test for independence',
+    id: 'temperature',
+    label: 'Temperature',
+    units: [
+      { id: 'degC', label: 'Celsius' },
+      { id: 'degF', label: 'Fahrenheit' },
+      { id: 'K', label: 'Kelvin' },
     ],
   },
   {
-    id: 'trigonometry',
-    label: 'Trigonometry',
-    icon: '∠',
-    color: '#f59e0b',
-    examples: [
-      'Solve 2 sin(x) = 1 for x in [0, 2π]',
-      'Simplify sin²(x) + cos²(x)',
-      'Find cos(75°) exactly',
-      'Solve triangle: a=5, b=7, C=60°',
-      'Verify sin(2x) = 2 sin(x) cos(x)',
-    ],
-  },
-  {
-    id: 'geometry',
-    label: 'Geometry',
-    icon: '△',
-    color: '#10b981',
-    examples: [
-      'Area of triangle with sides 3, 4, 5',
-      'Equation of circle: center (2,-3), radius 5',
-      'Distance between (1,2) and (4,6)',
-      'Area of regular hexagon with side 4',
-      'Volume of sphere with radius 7',
-    ],
-  },
-  {
-    id: 'linear-algebra',
-    label: 'Linear Algebra',
-    icon: '[]',
-    color: '#ec4899',
-    examples: [
-      'Eigenvalues of [[2,1],[1,2]]',
-      'Determinant of [[1,2,3],[4,5,6],[7,8,9]]',
-      'Solve Ax=b: A=[[2,1],[1,3]], b=[5,10]',
-      'Dot product of [1,2,3] and [4,5,6]',
-      'Row reduce [[1,2,3],[4,5,6],[7,8,9]]',
-    ],
-  },
-  {
-    id: 'differential-equations',
-    label: 'Diff. Equations',
-    icon: "y'",
-    color: '#f97316',
-    examples: [
-      "Solve dy/dx = 2xy",
-      "Solve y'' - 3y' + 2y = 0",
-      "Solve y' - y = e^x",
-      "Initial value: y' = y, y(0) = 1",
-      "Solve (x² + y²) dx + 2xy dy = 0",
-    ],
-  },
-  {
-    id: 'discrete',
-    label: 'Discrete Math',
-    icon: '#',
-    color: '#14b8a6',
-    examples: [
-      'Find gcd(48, 36)',
-      'Permutations of MISSISSIPPI',
-      'C(10, 4) combinations',
-      '2^100 mod 1000000007',
-      'Fibonacci F(20)',
-    ],
-  },
-  {
-    id: 'physics',
-    label: 'Physics',
-    icon: '⚛',
-    color: '#ef4444',
-    examples: [
-      'Projectile: v₀=20 m/s at 30°, find range',
-      'Ohm\'s law: V=IR, R=10Ω, I=2A',
-      'Kinetic energy at v=15 m/s, m=2 kg',
-      'Wave: λ=0.5m, f=680 Hz, find speed',
-      'Force on charge q=2μC in E=300 N/C',
+    id: 'speed',
+    label: 'Speed',
+    units: [
+      { id: 'm / s', label: 'm/s' },
+      { id: 'km / h', label: 'km/h' },
+      { id: 'mph', label: 'mph' },
     ],
   },
 ] as const;
 
-type TopicId = typeof TOPICS[number]['id'];
-type SpecialView = 'formulas' | 'graph' | 'units';
-type ActiveView = TopicId | SpecialView;
+function getStoredHistory(): RecentMathItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as RecentMathItem[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
-// ── Formula reference data ────────────────────────────────────────────────────
+function saveStoredHistory(items: RecentMathItem[]) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, 8)));
+}
 
-const FORMULAS: Record<string, Array<{ title: string; latex: string; note?: string }>> = {
-  algebra: [
-    { title: 'Quadratic formula', latex: 'x = \\dfrac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}' },
-    { title: 'Sum of arithmetic series', latex: 'S_n = \\dfrac{n}{2}(a_1 + a_n)' },
-    { title: 'Sum of geometric series', latex: 'S_n = \\dfrac{a_1(1 - r^n)}{1 - r},\\ r \\neq 1' },
-    { title: 'Binomial theorem', latex: '(a+b)^n = \\sum_{k=0}^{n} \\binom{n}{k} a^{n-k} b^k' },
-    { title: 'Difference of squares', latex: 'a^2 - b^2 = (a+b)(a-b)' },
-    { title: 'Perfect square', latex: '(a \\pm b)^2 = a^2 \\pm 2ab + b^2' },
-    { title: 'Logarithm rules', latex: '\\log(ab)=\\log a+\\log b,\\ \\log\\dfrac{a}{b}=\\log a-\\log b' },
-    { title: 'Change of base', latex: '\\log_b a = \\dfrac{\\ln a}{\\ln b}' },
-  ],
-  calculus: [
-    { title: 'Power rule', latex: '\\dfrac{d}{dx}\\left[x^n\\right] = nx^{n-1}' },
-    { title: 'Product rule', latex: '\\dfrac{d}{dx}[uv] = u\'v + uv\'' },
-    { title: 'Quotient rule', latex: '\\dfrac{d}{dx}\\left[\\dfrac{u}{v}\\right] = \\dfrac{u\'v - uv\'}{v^2}' },
-    { title: 'Chain rule', latex: '\\dfrac{d}{dx}[f(g(x))] = f\'(g(x))\\cdot g\'(x)' },
-    { title: 'Fundamental theorem', latex: '\\int_a^b f(x)\\,dx = F(b) - F(a)' },
-    { title: 'Power rule (integration)', latex: '\\int x^n\\,dx = \\dfrac{x^{n+1}}{n+1} + C,\\ n \\neq -1' },
-    { title: 'Integration by parts', latex: '\\int u\\,dv = uv - \\int v\\,du' },
-    { title: "L'Hôpital's rule", latex: '\\lim_{x \\to a}\\dfrac{f(x)}{g(x)} = \\lim_{x \\to a}\\dfrac{f\'(x)}{g\'(x)}' },
-  ],
-  statistics: [
-    { title: 'Sample mean', latex: '\\bar{x} = \\dfrac{\\sum x_i}{n}' },
-    { title: 'Population variance', latex: '\\sigma^2 = \\dfrac{\\sum(x_i - \\mu)^2}{N}' },
-    { title: 'Z-score', latex: 'z = \\dfrac{x - \\mu}{\\sigma}' },
-    { title: 'Normal PDF', latex: 'f(x) = \\dfrac{1}{\\sigma\\sqrt{2\\pi}}e^{-\\frac{(x-\\mu)^2}{2\\sigma^2}}' },
-    { title: 'Binomial probability', latex: 'P(X=k) = \\binom{n}{k}p^k(1-p)^{n-k}' },
-    { title: 'Confidence interval', latex: 'CI = \\bar{x} \\pm z_{\\alpha/2}\\cdot\\dfrac{\\sigma}{\\sqrt{n}}' },
-    { title: 'Correlation coefficient', latex: 'r = \\dfrac{\\sum(x_i-\\bar{x})(y_i-\\bar{y})}{\\sqrt{\\sum(x_i-\\bar{x})^2\\sum(y_i-\\bar{y})^2}}' },
-    { title: "Bayes' theorem", latex: 'P(A|B) = \\dfrac{P(B|A)\\cdot P(A)}{P(B)}' },
-  ],
-  trigonometry: [
-    { title: 'Pythagorean identity', latex: '\\sin^2\\theta + \\cos^2\\theta = 1' },
-    { title: 'Sum identities', latex: '\\sin(A \\pm B) = \\sin A\\cos B \\pm \\cos A\\sin B' },
-    { title: 'Double angle (sin)', latex: '\\sin(2x) = 2\\sin x\\cos x' },
-    { title: 'Double angle (cos)', latex: '\\cos(2x) = \\cos^2 x - \\sin^2 x' },
-    { title: 'Law of sines', latex: '\\dfrac{a}{\\sin A} = \\dfrac{b}{\\sin B} = \\dfrac{c}{\\sin C}' },
-    { title: 'Law of cosines', latex: 'c^2 = a^2 + b^2 - 2ab\\cos C' },
-    { title: 'Euler\'s formula', latex: 'e^{i\\theta} = \\cos\\theta + i\\sin\\theta' },
-    { title: 'Half angle (sin)', latex: '\\sin\\dfrac{\\theta}{2} = \\pm\\sqrt{\\dfrac{1-\\cos\\theta}{2}}' },
-  ],
-  geometry: [
-    { title: 'Triangle area', latex: 'A = \\dfrac{1}{2}bh = \\dfrac{1}{2}ab\\sin C' },
-    { title: "Heron's formula", latex: 'A = \\sqrt{s(s-a)(s-b)(s-c)},\\ s=\\dfrac{a+b+c}{2}' },
-    { title: 'Circle area / perimeter', latex: 'A = \\pi r^2,\\quad C = 2\\pi r' },
-    { title: 'Sphere', latex: 'V = \\dfrac{4}{3}\\pi r^3,\\quad A = 4\\pi r^2' },
-    { title: 'Distance formula', latex: 'd = \\sqrt{(x_2-x_1)^2 + (y_2-y_1)^2}' },
-    { title: 'Midpoint', latex: 'M = \\left(\\dfrac{x_1+x_2}{2},\\dfrac{y_1+y_2}{2}\\right)' },
-    { title: 'Equation of line', latex: 'y - y_1 = m(x - x_1)' },
-    { title: 'Equation of circle', latex: '(x-h)^2 + (y-k)^2 = r^2' },
-  ],
-  'linear-algebra': [
-    { title: '2×2 Determinant', latex: '\\det\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix} = ad - bc' },
-    { title: '2×2 Inverse', latex: 'A^{-1} = \\dfrac{1}{ad-bc}\\begin{pmatrix}d&-b\\\\-c&a\\end{pmatrix}' },
-    { title: 'Eigenvalue equation', latex: 'Av = \\lambda v \\Leftrightarrow \\det(A - \\lambda I) = 0' },
-    { title: 'Dot product', latex: '\\mathbf{u} \\cdot \\mathbf{v} = \\sum u_i v_i = |u||v|\\cos\\theta' },
-    { title: 'Cross product magnitude', latex: '|\\mathbf{u} \\times \\mathbf{v}| = |u||v|\\sin\\theta' },
-    { title: 'Gram-Schmidt', latex: 'e_k = v_k - \\sum_{j<k}\\dfrac{\\langle v_k,e_j\\rangle}{\\langle e_j,e_j\\rangle}e_j' },
-  ],
-  'differential-equations': [
-    { title: 'Separable DE', latex: '\\dfrac{dy}{dx} = f(x)g(y) \\Rightarrow \\int\\dfrac{dy}{g(y)} = \\int f(x)\\,dx' },
-    { title: 'Linear 1st-order', latex: 'y\' + P(x)y = Q(x),\\quad \\mu = e^{\\int P\\,dx}' },
-    { title: 'Characteristic equation', latex: 'ay\'\' + by\' + cy = 0 \\Rightarrow ar^2 + br + c = 0' },
-    { title: 'Euler\'s method', latex: 'y_{n+1} = y_n + h\\cdot f(x_n, y_n)' },
-    { title: 'Laplace transform', latex: '\\mathcal{L}\\{f\\}(s) = \\int_0^\\infty e^{-st}f(t)\\,dt' },
-    { title: 'Convolution theorem', latex: '\\mathcal{L}\\{f * g\\} = F(s) \\cdot G(s)' },
-  ],
-  discrete: [
-    { title: 'Permutations', latex: 'P(n,k) = \\dfrac{n!}{(n-k)!}' },
-    { title: 'Combinations', latex: 'C(n,k) = \\binom{n}{k} = \\dfrac{n!}{k!(n-k)!}' },
-    { title: 'Inclusion–exclusion', latex: '|A \\cup B| = |A| + |B| - |A \\cap B|' },
-    { title: 'Euler\'s formula (graphs)', latex: 'V - E + F = 2' },
-    { title: 'Pigeonhole principle', latex: 'n+1 \\text{ items in } n \\text{ bins} \\Rightarrow \\text{one bin} \\geq 2' },
-    { title: 'Sum of integers', latex: '\\sum_{k=1}^n k = \\dfrac{n(n+1)}{2}' },
-  ],
-  physics: [
-    { title: "Newton's 2nd law", latex: 'F = ma' },
-    { title: 'Kinematic equations', latex: 'v = v_0 + at,\\quad s = v_0 t + \\tfrac{1}{2}at^2' },
-    { title: 'Projectile range', latex: 'R = \\dfrac{v_0^2\\sin(2\\theta)}{g}' },
-    { title: 'Work-energy theorem', latex: 'W = \\Delta KE = \\dfrac{1}{2}mv^2 - \\dfrac{1}{2}mv_0^2' },
-    { title: "Coulomb's law", latex: 'F = k_e\\dfrac{q_1 q_2}{r^2},\\quad k_e \\approx 8.99\\times10^9' },
-    { title: 'Wave speed', latex: 'v = f\\lambda' },
-    { title: "Ohm's law", latex: 'V = IR' },
-    { title: 'Ideal gas law', latex: 'PV = nRT' },
-  ],
-};
+function insertAtCaret(textarea: HTMLTextAreaElement | null, current: string, insert: string) {
+  if (!textarea) return { value: `${current}${insert}`, caret: current.length + insert.length };
+  const start = textarea.selectionStart ?? current.length;
+  const end = textarea.selectionEnd ?? start;
+  const next = `${current.slice(0, start)}${insert}${current.slice(end)}`;
+  const anchor = insert.indexOf('()');
+  const caret = anchor >= 0 ? start + anchor + 1 : start + insert.length;
+  return { value: next, caret };
+}
 
-// ── Symbol pad ────────────────────────────────────────────────────────────────
+function normalizeGraphExpression(expr: string) {
+  const trimmed = expr.trim();
+  if (!trimmed) return null;
 
-const SYMBOL_GROUPS = [
-  { label: 'Basic', symbols: ['√', '∛', 'π', 'e', '∞', '±', '×', '÷', '≤', '≥', '≠', '≈'] },
-  { label: 'Algebra', symbols: ['²', '³', '^', '|x|', '(', ')', '[', ']', '{', '}', '∝', 'Σ'] },
-  { label: 'Calculus', symbols: ['∫', '∂', '∑', '∏', 'd/dx', 'lim', '→', '∆', '∇', '∮', '⁻¹', '∞'] },
-  { label: 'Trig', symbols: ['sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh'] },
-  { label: 'Greek', symbols: ['α', 'β', 'γ', 'δ', 'ε', 'θ', 'λ', 'μ', 'σ', 'τ', 'φ', 'ω'] },
-  { label: 'Logic', symbols: ['∧', '∨', '¬', '⇒', '⇔', '∀', '∃', '∈', '∉', '⊆', '⊇', '∅'] },
-];
+  const explicit = trimmed.match(/^y\s*=\s*(.+)$/i);
+  if (explicit) {
+    return { type: 'function' as const, value: explicit[1].trim() };
+  }
 
-const GRAPH_COLORS = ['#6366f1', '#f97316', '#22c55e', '#ef4444', '#a855f7', '#0ea5e9'];
+  const vertical = trimmed.match(/^x\s*=\s*(.+)$/i);
+  if (vertical) {
+    return { type: 'implicit' as const, value: `x - (${vertical[1].trim()})` };
+  }
 
-// ── KaTeX helper ──────────────────────────────────────────────────────────────
+  if (trimmed.includes('=')) {
+    const [lhs, rhs] = trimmed.split('=').map((part) => part.trim());
+    if (!lhs || !rhs) return null;
+    return { type: 'implicit' as const, value: `(${lhs}) - (${rhs})` };
+  }
 
-function Latex({ latex, display = false }: { latex: string; display?: boolean }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (!ref.current) return;
+  return { type: 'function' as const, value: trimmed };
+}
+
+function isExplicitExpression(expr: string) {
+  return normalizeGraphExpression(expr)?.type === 'function';
+}
+
+function buildValueTable(expr: string, xDomain: [number, number]) {
+  const normalized = normalizeGraphExpression(expr);
+  if (!normalized || normalized.type !== 'function') return [] as Array<{ x: string; y: string }>;
+
+  const xs = Array.from({ length: 6 }, (_, index) => xDomain[0] + ((xDomain[1] - xDomain[0]) * index) / 5);
+  return xs.map((x) => {
     try {
-      katex.render(latex, ref.current, {
-        displayMode: display, throwOnError: false, trust: true, strict: false,
-      });
-    } catch { ref.current.textContent = latex; }
-  }, [latex, display]);
-  return <span ref={ref} />;
+      const value = math.evaluate(normalized.value, { x });
+      return {
+        x: Number(x.toFixed(2)).toString(),
+        y: typeof value === 'number' && Number.isFinite(value) ? Number(value.toFixed(4)).toString() : '—',
+      };
+    } catch {
+      return { x: Number(x.toFixed(2)).toString(), y: '—' };
+    }
+  });
 }
 
-// ── Unit converter data ───────────────────────────────────────────────────────
+function getThemePalette() {
+  if (typeof document === 'undefined') {
+    return {
+      dark: false,
+      background: '#ffffff',
+      grid: '#d7e1ec',
+      axis: '#0f172a',
+      text: '#0f172a',
+    };
+  }
 
-const UNIT_CATS = [
-  { label: 'Length', units: [
-    { id: 'm', label: 'Meters', toSI: (v: number) => v, fromSI: (v: number) => v },
-    { id: 'km', label: 'Kilometers', toSI: (v: number) => v * 1000, fromSI: (v: number) => v / 1000 },
-    { id: 'cm', label: 'Centimeters', toSI: (v: number) => v / 100, fromSI: (v: number) => v * 100 },
-    { id: 'mm', label: 'Millimeters', toSI: (v: number) => v / 1000, fromSI: (v: number) => v * 1000 },
-    { id: 'in', label: 'Inches', toSI: (v: number) => v * 0.0254, fromSI: (v: number) => v / 0.0254 },
-    { id: 'ft', label: 'Feet', toSI: (v: number) => v * 0.3048, fromSI: (v: number) => v / 0.3048 },
-    { id: 'mi', label: 'Miles', toSI: (v: number) => v * 1609.34, fromSI: (v: number) => v / 1609.34 },
-  ]},
-  { label: 'Mass', units: [
-    { id: 'kg', label: 'Kilograms', toSI: (v: number) => v, fromSI: (v: number) => v },
-    { id: 'g', label: 'Grams', toSI: (v: number) => v / 1000, fromSI: (v: number) => v * 1000 },
-    { id: 'mg', label: 'Milligrams', toSI: (v: number) => v / 1e6, fromSI: (v: number) => v * 1e6 },
-    { id: 'lb', label: 'Pounds', toSI: (v: number) => v * 0.453592, fromSI: (v: number) => v / 0.453592 },
-    { id: 'oz', label: 'Ounces', toSI: (v: number) => v * 0.0283495, fromSI: (v: number) => v / 0.0283495 },
-  ]},
-  { label: 'Temperature', units: [
-    { id: 'C', label: '°Celsius', toSI: (v: number) => v, fromSI: (v: number) => v },
-    { id: 'F', label: '°Fahrenheit', toSI: (v: number) => (v - 32) * 5 / 9, fromSI: (v: number) => v * 9 / 5 + 32 },
-    { id: 'K', label: 'Kelvin', toSI: (v: number) => v - 273.15, fromSI: (v: number) => v + 273.15 },
-  ]},
-  { label: 'Speed', units: [
-    { id: 'ms', label: 'm/s', toSI: (v: number) => v, fromSI: (v: number) => v },
-    { id: 'kmh', label: 'km/h', toSI: (v: number) => v / 3.6, fromSI: (v: number) => v * 3.6 },
-    { id: 'mph', label: 'mph', toSI: (v: number) => v * 0.44704, fromSI: (v: number) => v / 0.44704 },
-    { id: 'kn', label: 'Knots', toSI: (v: number) => v * 0.514444, fromSI: (v: number) => v / 0.514444 },
-  ]},
-  { label: 'Area', units: [
-    { id: 'm2', label: 'm²', toSI: (v: number) => v, fromSI: (v: number) => v },
-    { id: 'km2', label: 'km²', toSI: (v: number) => v * 1e6, fromSI: (v: number) => v / 1e6 },
-    { id: 'ft2', label: 'ft²', toSI: (v: number) => v * 0.092903, fromSI: (v: number) => v / 0.092903 },
-    { id: 'acre', label: 'Acres', toSI: (v: number) => v * 4046.86, fromSI: (v: number) => v / 4046.86 },
-    { id: 'ha', label: 'Hectares', toSI: (v: number) => v * 10000, fromSI: (v: number) => v / 10000 },
-  ]},
-  { label: 'Volume', units: [
-    { id: 'L', label: 'Litres', toSI: (v: number) => v, fromSI: (v: number) => v },
-    { id: 'mL', label: 'Millilitres', toSI: (v: number) => v / 1000, fromSI: (v: number) => v * 1000 },
-    { id: 'm3', label: 'm³', toSI: (v: number) => v * 1000, fromSI: (v: number) => v / 1000 },
-    { id: 'gal', label: 'Gallons (US)', toSI: (v: number) => v * 3.78541, fromSI: (v: number) => v / 3.78541 },
-    { id: 'pt', label: 'Pints (US)', toSI: (v: number) => v * 0.473176, fromSI: (v: number) => v / 0.473176 },
-  ]},
-];
-
-const HISTORY_KEY = 'kivora-math-history';
-function loadHistory(): HistoryItem[] {
-  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]') as HistoryItem[]; } catch { return []; }
-}
-function saveHistory(h: HistoryItem[]) {
-  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(0, 50))); } catch { /* noop */ }
+  const theme = document.documentElement.getAttribute('data-theme') ?? '';
+  const dark = theme === 'black' || theme === 'dark';
+  return dark
+    ? { dark: true, background: '#07111f', grid: '#1e293b', axis: '#cbd5e1', text: '#e2e8f0' }
+    : { dark: false, background: '#ffffff', grid: '#d7e1ec', axis: '#0f172a', text: '#0f172a' };
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+function styleRenderedGraph(target: HTMLElement | null) {
+  if (!target) return;
+  const palette = getThemePalette();
+  const svg = target.querySelector('svg');
+  if (!svg) return;
+
+  svg.style.background = palette.background;
+  svg.querySelectorAll('.x.axis path, .y.axis path, .x.axis line, .y.axis line').forEach((node) => {
+    (node as SVGElement).setAttribute('stroke', palette.axis);
+  });
+  svg.querySelectorAll('.x.grid path, .y.grid path, .x.grid line, .y.grid line').forEach((node) => {
+    (node as SVGElement).setAttribute('stroke', palette.grid);
+  });
+  svg.querySelectorAll('text').forEach((node) => {
+    (node as SVGElement).setAttribute('fill', palette.text);
+  });
+}
+
+function createHistoryItem(problem: string, answer: string, category: MathCategoryId): RecentMathItem {
+  return {
+    id: crypto.randomUUID(),
+    problem,
+    answer,
+    category,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function createGraphExpression(expr: string, color = GRAPH_COLORS[0]): GraphExpression {
+  return {
+    id: crypto.randomUUID(),
+    expr,
+    color,
+    enabled: true,
+  };
+}
 
 export function MathSolverPage() {
-  const [active, setActive] = useState<ActiveView>('algebra');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { toast } = useToast();
+  const router = useRouter();
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const graphRef = useRef<HTMLDivElement | null>(null);
+
+  const [activeTab, setActiveTab] = useState<MathTab>('solver');
+  const [category, setCategory] = useState<MathCategoryId>('algebra');
   const [input, setInput] = useState('');
-  const [symbolTab, setSymbolTab] = useState(0);
-  const [showSymbols, setShowSymbols] = useState(false);
+  const [result, setResult] = useState<SolverResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<SolveResult | null>(null);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  // Graph state
-  const [graphExprs, setGraphExprs] = useState<GraphExpression[]>([
-    { id: '1', expr: 'x^2', color: GRAPH_COLORS[0], enabled: true },
-  ]);
-  const [_graphInput, _setGraphInput] = useState('');
-  const graphRef = useRef<HTMLDivElement>(null);
+  const [explaining, setExplaining] = useState(false);
+  const [generatingPractice, setGeneratingPractice] = useState(false);
+  const [explanation, setExplanation] = useState('');
+  const [practice, setPractice] = useState('');
+  const [mathContext, setMathContext] = useState<MathContext | null>(null);
+  const [recentWorkspaceFile, setRecentWorkspaceFile] = useState<RecentWorkspaceFile | null>(null);
+  const [history, setHistory] = useState<RecentMathItem[]>([]);
+  const [graphExpressions, setGraphExpressions] = useState<GraphExpression[]>([createGraphExpression('y = x^2')]);
+  const [activeGraphId, setActiveGraphId] = useState<string | null>(null);
   const [graphError, setGraphError] = useState('');
-
-  // Unit converter state
-  const [unitCatIdx, setUnitCatIdx] = useState(0);
-  const [fromUnit, setFromUnit] = useState(0);
-  const [toUnit, setToUnit] = useState(1);
+  const [xDomain, setXDomain] = useState<[number, number]>([-10, 10]);
+  const [yDomain, setYDomain] = useState<[number, number]>([-10, 10]);
+  const [unitGroupId, setUnitGroupId] = useState<(typeof UNIT_GROUPS)[number]['id']>('length');
   const [unitValue, setUnitValue] = useState('1');
+  const [fromUnit, setFromUnit] = useState('m');
+  const [toUnit, setToUnit] = useState('cm');
+  const [themeTick, setThemeTick] = useState(0);
 
-  useEffect(() => { setHistory(loadHistory()); }, []);
+  const currentCategory = MATH_CATEGORIES[category];
+  const symbolGroup = useMemo(() => {
+    if (category === 'calculus') return 'calculus';
+    if (category === 'trigonometry') return 'trigonometry';
+    if (category === 'matrices' || category === 'linear-algebra') return 'matrices';
+    if (category === 'vectors') return 'vectors';
+    if (category === 'algebra') return 'algebra';
+    return 'basic';
+  }, [category]);
+  const activeSymbols = MATH_SYMBOL_GROUPS.find((group) => group.id === symbolGroup) ?? MATH_SYMBOL_GROUPS[0];
+  const unitGroup = UNIT_GROUPS.find((group) => group.id === unitGroupId) ?? UNIT_GROUPS[0];
+  const activeGraph = graphExpressions.find((expr) => expr.id === activeGraphId) ?? graphExpressions[0] ?? null;
+  const graphTable = activeGraph ? buildValueTable(activeGraph.expr, xDomain) : [];
 
-  // ── Solver ─────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    setHistory(getStoredHistory());
+    const context = readMathContext();
+    if (context) setMathContext(context);
 
-  const solve = useCallback(async (problem: string = input) => {
-    const p = problem.trim();
-    if (!p) return;
-    setLoading(true);
-    setResult(null);
-    try {
-      const res = await fetch('/api/math/solve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ problem: p, category: TOPICS.find(t => t.id === active)?.id ?? null }),
-      });
-      const data = await res.json() as SolveResult;
-      setResult(data);
-      // Add to history
-      if (data.answer && !data.error) {
-        const item: HistoryItem = { id: crypto.randomUUID(), problem: p, answer: data.answer, category: data.category ?? String(active), ts: Date.now() };
-        setHistory(prev => { const next = [item, ...prev.filter(h => h.problem !== p)]; saveHistory(next); return next; });
-      }
-      // Auto-populate graph if solver provides expression
-      if (data.graphExpr) {
-        setGraphExprs([{ id: '1', expr: data.graphExpr, color: GRAPH_COLORS[0], enabled: true }]);
-      }
-    } catch {
-      setResult({ answer: '', answerLatex: '', steps: [], graphExpr: null, category: String(active), engine: 'error', error: 'Network error — check that the AI model is running.' });
-    } finally {
-      setLoading(false);
-    }
-  }, [input, active]);
+    fetch('/api/recent?limit=1', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((items) => {
+        const first = Array.isArray(items) ? items[0]?.file : null;
+        if (first && first.id && first.name) {
+          setRecentWorkspaceFile(first as RecentWorkspaceFile);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
-  // ── Graph rendering ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!unitGroup.units.some((unit) => unit.id === fromUnit)) setFromUnit(unitGroup.units[0].id);
+    if (!unitGroup.units.some((unit) => unit.id === toUnit)) setToUnit(unitGroup.units.at(-1)?.id ?? unitGroup.units[0].id);
+  }, [unitGroup, fromUnit, toUnit]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const observer = new MutationObserver(() => setThemeTick((value) => value + 1));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
 
   const renderGraph = useCallback(() => {
     if (!graphRef.current || !functionPlot) return;
-    const enabled = graphExprs.filter(e => e.enabled && e.expr.trim());
-    if (enabled.length === 0) return;
-    setGraphError('');
+    const enabled = graphExpressions.filter((expr) => expr.enabled && expr.expr.trim());
+    if (enabled.length === 0) {
+      graphRef.current.innerHTML = '';
+      setGraphError('');
+      return;
+    }
+
     try {
-      const fns = enabled.map(e => {
-        const expr = e.expr.trim();
-        const rel = expr.match(/^y\s*=\s*(.+)$/i);
-        const fn = rel ? rel[1] : expr;
-        return { fn, color: e.color, nSamples: 400 };
-      });
+      const data = enabled
+        .map((item) => {
+          const normalized = normalizeGraphExpression(item.expr);
+          if (!normalized) return null;
+          if (normalized.type === 'implicit') {
+            return { fn: normalized.value, fnType: 'implicit', color: item.color, sampler: 'builtIn' };
+          }
+          return { fn: normalized.value, color: item.color, sampler: 'builtIn', nSamples: 500 };
+        })
+        .filter(Boolean);
+
+      if (data.length === 0) {
+        graphRef.current.innerHTML = '';
+        setGraphError('');
+        return;
+      }
+
       functionPlot({
         target: graphRef.current,
-        width: graphRef.current.clientWidth || 600,
-        height: 380,
-        xAxis: { domain: [-10, 10] },
-        yAxis: { domain: [-8, 8] },
+        width: Math.max(420, graphRef.current.clientWidth || 760),
+        height: 460,
+        xAxis: { domain: xDomain },
+        yAxis: { domain: yDomain },
         grid: true,
-        data: fns,
+        disableZoom: true,
+        data,
       });
-    } catch (err) {
-      setGraphError(String(err));
+      setGraphError('');
+      styleRenderedGraph(graphRef.current);
+    } catch (error) {
+      setGraphError(error instanceof Error ? error.message : 'Could not render this expression');
     }
-  }, [graphExprs]);
+  }, [graphExpressions, xDomain, yDomain]);
 
   useEffect(() => {
-    if (active === 'graph') renderGraph();
-  }, [active, renderGraph]);
+    if (activeTab !== 'graph') return;
+    renderGraph();
+  }, [activeTab, renderGraph, themeTick]);
 
-  // ── Symbol insertion ────────────────────────────────────────────────────────
-
-  function insertSymbol(sym: string) {
-    const el = inputRef.current;
-    if (!el) { setInput(p => p + sym); return; }
-    const s = el.selectionStart ?? input.length;
-    const e = el.selectionEnd ?? s;
-    const next = input.slice(0, s) + sym + input.slice(e);
-    setInput(next);
-    setTimeout(() => { el.focus(); el.setSelectionRange(s + sym.length, s + sym.length); }, 0);
+  function addHistory(problem: string, answer: string, nextCategory: MathCategoryId) {
+    const next = [createHistoryItem(problem, answer, nextCategory), ...history].slice(0, 8);
+    setHistory(next);
+    saveStoredHistory(next);
   }
 
-  // ── Computed ────────────────────────────────────────────────────────────────
-
-  const currentTopic = TOPICS.find(t => t.id === active);
-  const _currentFormulas = FORMULAS[active as string] ?? [];
-
-  const unitCat = UNIT_CATS[unitCatIdx];
-  const unitResult = (() => {
-    const v = parseFloat(unitValue);
-    if (isNaN(v) || !unitCat) return '';
-    const si = unitCat.units[fromUnit].toSI(v);
-    const out = unitCat.units[toUnit].fromSI(si);
-    return Number(out.toPrecision(8)).toString();
-  })();
-
-  // ── Styles ──────────────────────────────────────────────────────────────────
-
-  const S = {
-    shell: { display: 'flex', height: '100%', overflow: 'hidden', background: 'var(--bg)', fontFamily: 'inherit' } as React.CSSProperties,
-    sidebar: {
-      width: sidebarOpen ? 220 : 52,
-      minWidth: sidebarOpen ? 220 : 52,
-      transition: 'width 0.2s, min-width 0.2s',
-      background: 'var(--bg-2)',
-      borderRight: '1px solid var(--border-subtle)',
-      display: 'flex',
-      flexDirection: 'column' as const,
-      overflowY: 'auto' as const,
-      overflowX: 'hidden' as const,
-      flexShrink: 0,
-    },
-    main: { flex: 1, overflowY: 'auto' as const, display: 'flex', flexDirection: 'column' as const },
-  };
-
-  // ── Sidebar ─────────────────────────────────────────────────────────────────
-
-  function NavItem({ id, icon, label, color }: { id: ActiveView; icon: string; label: string; color?: string }) {
-    const isActive = active === id;
-    return (
-      <button
-        onClick={() => setActive(id)}
-        title={!sidebarOpen ? label : undefined}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: sidebarOpen ? '8px 14px' : '8px 0',
-          justifyContent: sidebarOpen ? 'flex-start' : 'center',
-          border: 'none', cursor: 'pointer', textAlign: 'left',
-          borderRadius: 8, margin: '1px 6px', width: 'calc(100% - 12px)',
-          background: isActive ? `${color ?? 'var(--primary)'}1a` : 'transparent',
-          color: isActive ? (color ?? 'var(--primary)') : 'var(--text-secondary)',
-          fontWeight: isActive ? 700 : 400, fontSize: 13,
-          transition: 'all 0.12s',
-          borderLeft: isActive ? `3px solid ${color ?? 'var(--primary)'}` : '3px solid transparent',
-        }}
-      >
-        <span style={{ fontSize: 15, flexShrink: 0, fontStyle: 'normal', minWidth: 20, textAlign: 'center' }}>{icon}</span>
-        {sidebarOpen && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>}
-      </button>
-    );
+  function addGraphExpression(expr: string) {
+    const next = createGraphExpression(expr, GRAPH_COLORS[graphExpressions.length % GRAPH_COLORS.length]);
+    setGraphExpressions((current) => [...current, next]);
+    setActiveGraphId(next.id);
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  function applyExample(expr: string) {
+    setInput(expr);
+    setResult(null);
+    setExplanation('');
+    setPractice('');
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function handleInsert(insert: string) {
+    const next = insertAtCaret(inputRef.current, input, insert);
+    setInput(next.value);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(next.caret, next.caret);
+    });
+  }
+
+  async function handleSolve() {
+    if (!input.trim() || loading) return;
+    setLoading(true);
+    setExplanation('');
+    setPractice('');
+
+    try {
+      const body: MathSolveRequest = {
+        problem: input.trim(),
+        category,
+        contextFileId: mathContext?.fileId ?? null,
+        contextText: mathContext?.extractedText ?? null,
+      };
+      const res = await fetch('/api/math/solve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null) as SolverResult & { error?: string } | null;
+      if (!res.ok || !data) {
+        throw new Error(data?.error ?? 'Could not solve this problem');
+      }
+
+      setResult(data);
+      setCategory(data.category ?? category);
+      addHistory(input.trim(), data.answer, data.category ?? category);
+
+      if (data.graphExpr) {
+        setGraphExpressions([createGraphExpression(data.graphExpr, GRAPH_COLORS[0])]);
+        setActiveGraphId(null);
+      }
+
+      toast(data.verified ? 'Solved successfully' : 'Solved with limited confidence', data.verified ? 'success' : 'warning');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Math solve failed', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleExplain() {
+    if (!input.trim() || explaining) return;
+    setExplaining(true);
+    try {
+      const contextParts = [
+        result?.answer ? `Solved answer: ${result.answer}` : '',
+        mathContext?.extractedText ? mathContext.extractedText.slice(0, 2000) : '',
+      ].filter(Boolean);
+
+      const res = await fetch('/api/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          concept: input.trim(),
+          context: contextParts.join('\n\n'),
+        }),
+      });
+      const payload = await res.json().catch(() => null) as { explanation?: string; error?: string } | null;
+      if (!res.ok || !payload?.explanation) throw new Error(payload?.error ?? 'Could not explain this concept');
+      setExplanation(payload.explanation.trim());
+      toast('Explanation ready', 'success');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not explain this concept', 'error');
+    } finally {
+      setExplaining(false);
+    }
+  }
+
+  async function handlePractice() {
+    if (!input.trim() || generatingPractice) return;
+    setGeneratingPractice(true);
+    try {
+      const promptText = [
+        `Category: ${currentCategory.label}`,
+        `Problem focus: ${input.trim()}`,
+        result?.answer ? `Solved answer: ${result.answer}` : '',
+        currentCategory.practicePrompt,
+        mathContext?.extractedText ? `Use this study file context where helpful:\n${mathContext.extractedText.slice(0, 2500)}` : '',
+      ].filter(Boolean).join('\n\n');
+
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'practice', text: promptText, options: { count: 5 } }),
+      });
+      const payload = await res.json().catch(() => null) as { content?: string; error?: string } | null;
+      if (!res.ok || !payload?.content) throw new Error(payload?.error ?? 'Could not generate practice');
+      setPractice(payload.content);
+      toast('Practice questions generated', 'success');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not generate practice', 'error');
+    } finally {
+      setGeneratingPractice(false);
+    }
+  }
+
+  async function saveLibraryItem(mode: 'math-solution' | 'math-practice', content: string) {
+    if (!content.trim()) return;
+    try {
+      const res = await fetch('/api/library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode,
+          content,
+          metadata: {
+            title: mode === 'math-solution' ? `Math Solution — ${input.trim()}` : `Math Practice — ${currentCategory.label}`,
+            category,
+            problem: input.trim(),
+            sourceFileId: mathContext?.fileId ?? null,
+            sourceFileName: mathContext?.fileName ?? null,
+            graphExpr: result?.graphExpr ?? null,
+            savedFrom: '/math',
+          },
+        }),
+      });
+      if (!res.ok) throw new Error('Library save failed');
+      toast(mode === 'math-solution' ? 'Saved solution to Library' : 'Saved practice to Library', 'success');
+    } catch {
+      toast('Could not save to Library', 'warning');
+    }
+  }
+
+  function resetGraphView() {
+    setXDomain([-10, 10]);
+    setYDomain([-10, 10]);
+  }
+
+  function zoomGraph(factor: number) {
+    const nextX = [xDomain[0] * factor, xDomain[1] * factor] as [number, number];
+    const nextY = [yDomain[0] * factor, yDomain[1] * factor] as [number, number];
+    setXDomain(nextX);
+    setYDomain(nextY);
+  }
+
+  const unitResult = useMemo(() => {
+    try {
+      const numeric = Number(unitValue);
+      if (!Number.isFinite(numeric)) return '—';
+      const converted = math.unit(numeric, fromUnit).to(toUnit);
+      const convertedValue = Number(converted.toNumeric());
+      if (!Number.isFinite(convertedValue)) return '—';
+      return `${convertedValue.toFixed(6).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')} ${toUnit}`;
+    } catch {
+      return '—';
+    }
+  }, [unitValue, fromUnit, toUnit]);
+
+  const previewExpression = result?.previewLatex || input.trim();
 
   return (
-    <div style={S.shell}>
-
-      {/* ── Sidebar ── */}
-      <aside style={S.sidebar}>
-        {/* Collapse toggle */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: sidebarOpen ? 'space-between' : 'center', padding: sidebarOpen ? '14px 14px 8px' : '14px 0 8px' }}>
-          {sidebarOpen && <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Categories</span>}
-          <button onClick={() => setSidebarOpen(o => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: 4 }} title={sidebarOpen ? 'Collapse' : 'Expand'}>
-            {sidebarOpen ? '◀' : '▶'}
-          </button>
+    <div className="math-shell">
+      <div className="math-header">
+        <div>
+          <span className="math-eyebrow">Math Studio</span>
+          <h1>Clean math workflow for high-school and undergraduate study.</h1>
+          <p>One place to solve, graph, convert, explain, and practice without the old duplicated math paths getting in the way.</p>
         </div>
-
-        <div style={{ padding: '0 0 8px' }}>
-          {TOPICS.map(t => <NavItem key={t.id} id={t.id} icon={t.icon} label={t.label} color={t.color} />)}
-          <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
-          <NavItem id="formulas" icon="📚" label="Formula Sheets" />
-          <NavItem id="graph"    icon="📈" label="Graph Plotter"  color="#22c55e" />
-          <NavItem id="units"    icon="⚖" label="Unit Converter" color="#f59e0b" />
+        <div className="math-header-actions">
+          <button className="math-button secondary" onClick={() => router.push('/workspace')}>Back to Workspace</button>
+          <button className="math-button secondary" onClick={() => setActiveTab('lab')}>Open MATLAB Flow</button>
         </div>
-      </aside>
+      </div>
 
-      {/* ── Main content ── */}
-      <div style={S.main}>
-
-        {/* Header */}
-        <div style={{ padding: '16px 24px 12px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-elevated)', flexShrink: 0 }}>
-          <span style={{ fontSize: 20 }}>{currentTopic?.icon ?? (active === 'formulas' ? '📚' : active === 'graph' ? '📈' : '⚖')}</span>
+      {mathContext ? (
+        <div className="math-context-card">
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
-              {currentTopic?.label ?? (active === 'formulas' ? 'Formula Sheets' : active === 'graph' ? 'Graph Plotter' : 'Unit Converter')}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              {active === 'formulas' ? 'Quick-reference formulas for every topic' :
-               active === 'graph' ? 'Plot any function of x' :
-               active === 'units' ? 'Convert between common units' :
-               'Enter a problem below and press Solve'}
-            </div>
+            <strong>{mathContext.fileName}</strong>
+            <p>Linked from Workspace{mathContext.sourceTopicId ? ' topic' : mathContext.sourceFolderId ? ' folder' : ''}. This file will be used for explain/practice context.</p>
           </div>
-          <button onClick={() => setShowHistory(h => !h)}
-            style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: showHistory ? 'var(--primary)1a' : 'transparent', color: showHistory ? 'var(--primary)' : 'var(--text-muted)', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
-            🕐 History
-          </button>
+          <div className="math-inline-actions">
+            <button className="math-button secondary" onClick={() => router.push('/workspace')}>Open Workspace</button>
+            <button className="math-button ghost" onClick={() => { clearMathContext(); setMathContext(null); }}>Clear file</button>
+          </div>
         </div>
-
-        {/* History drawer */}
-        {showHistory && (
-          <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-2)' }}>
-            {history.length === 0 ? (
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No history yet</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
-                {history.map(h => (
-                  <button key={h.id} onClick={() => { setInput(h.problem); setShowHistory(false); setActive((h.category as ActiveView) ?? 'algebra'); setTimeout(() => solve(h.problem), 0); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', cursor: 'pointer', textAlign: 'left' }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.problem}</span>
-                    <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600, flexShrink: 0 }}>{h.answer.slice(0, 30)}{h.answer.length > 30 ? '…' : ''}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+      ) : recentWorkspaceFile ? (
+        <div className="math-context-card subtle">
+          <div>
+            <strong>Recent workspace file</strong>
+            <p>{recentWorkspaceFile.name}</p>
           </div>
-        )}
+          <div className="math-inline-actions">
+            {recentWorkspaceFile.content ? (
+              <button
+                className="math-button secondary"
+                onClick={() => {
+                  const nextContext = {
+                    fileId: recentWorkspaceFile.id,
+                    fileName: recentWorkspaceFile.name,
+                    extractedText: recentWorkspaceFile.content ?? '',
+                    sourceFolderId: recentWorkspaceFile.folderId ?? null,
+                    sourceTopicId: recentWorkspaceFile.topicId ?? null,
+                  };
+                  writeMathContext(nextContext);
+                  setMathContext({ ...nextContext, updatedAt: new Date().toISOString() });
+                  toast('Recent file linked to Math', 'success');
+                }}
+              >
+                Use recent file
+              </button>
+            ) : null}
+            <button className="math-button ghost" onClick={() => router.push('/workspace')}>Choose from Workspace</button>
+          </div>
+        </div>
+      ) : null}
 
-        {/* ── SOLVER PHASE ── */}
-        {active !== 'formulas' && active !== 'graph' && active !== 'units' && (
-          <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16, flex: 1 }}>
+      <div className="math-tabbar">
+        {(['solver', 'graph', 'units', 'lab'] as MathTab[]).map((tab) => (
+          <button
+            key={tab}
+            className={`math-tab ${activeTab === tab ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {TAB_LABELS[tab]}
+          </button>
+        ))}
+      </div>
 
-            {/* Quick examples */}
-            {currentTopic && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {currentTopic.examples.map(ex => (
-                  <button key={ex} onClick={() => { setInput(ex); solve(ex); }}
-                    style={{ padding: '4px 12px', borderRadius: 20, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer', transition: 'all 0.1s' }}
-                    onMouseEnter={e => { (e.currentTarget).style.borderColor = currentTopic.color; (e.currentTarget).style.color = currentTopic.color; }}
-                    onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; (e.currentTarget).style.color = 'var(--text-secondary)'; }}
+      {activeTab === 'solver' && (
+        <div className="math-layout">
+          <aside className="math-sidebar">
+            <div className="math-card">
+              <h3>Categories</h3>
+              <div className="math-chip-grid">
+                {MATH_CATEGORY_ORDER.map((id) => (
+                  <button
+                    key={id}
+                    className={`math-chip ${category === id ? 'active' : ''}`}
+                    onClick={() => setCategory(id)}
                   >
-                    {ex}
+                    {MATH_CATEGORIES[id].label}
                   </button>
                 ))}
-              </div>
-            )}
-
-            {/* Input box */}
-            <div style={{ position: 'relative' }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <div style={{ flex: 1, position: 'relative' }}>
-                  <textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void solve(); } }}
-                    placeholder="Enter a math problem, equation, or expression… (Enter to solve)"
-                    rows={2}
-                    style={{
-                      width: '100%', padding: '12px 16px', borderRadius: 12, resize: 'none',
-                      border: `1.5px solid ${loading ? 'var(--primary)' : 'var(--border-subtle)'}`,
-                      background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 15,
-                      fontFamily: '"JetBrains Mono", monospace', boxSizing: 'border-box', outline: 'none',
-                      transition: 'border-color 0.15s',
-                    }}
-                  />
-                </div>
-                <button onClick={() => void solve()} disabled={loading || !input.trim()}
-                  style={{
-                    padding: '12px 20px', borderRadius: 12, border: 'none', cursor: loading ? 'default' : 'pointer',
-                    background: loading ? 'var(--primary-muted, #6366f133)' : 'var(--primary)',
-                    color: loading ? 'var(--primary)' : '#fff', fontWeight: 700, fontSize: 14,
-                    transition: 'all 0.15s', flexShrink: 0, minWidth: 90, height: 52,
-                  }}>
-                  {loading ? '⏳' : '▶ Solve'}
-                </button>
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
-                <button onClick={() => setShowSymbols(s => !s)}
-                  style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>
-                  {showSymbols ? '▲ Hide symbols' : '▼ Symbols'}
-                </button>
-                {input && <button onClick={() => { setInput(''); setResult(null); inputRef.current?.focus(); }}
-                  style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>✕ Clear</button>}
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>Shift+Enter for new line</span>
               </div>
             </div>
 
-            {/* Symbol pad */}
-            {showSymbols && (
-              <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '10px 12px' }}>
-                <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-                  {SYMBOL_GROUPS.map((g, i) => (
-                    <button key={i} onClick={() => setSymbolTab(i)}
-                      style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', background: symbolTab === i ? 'var(--primary)' : 'var(--bg-elevated)', color: symbolTab === i ? '#fff' : 'var(--text-secondary)', fontWeight: symbolTab === i ? 600 : 400 }}>
-                      {g.label}
+            <div className="math-card">
+              <h3>{currentCategory.label} examples</h3>
+              <div className="math-example-list">
+                {currentCategory.examples.map((example) => (
+                  <button key={example.expr} className="math-example" onClick={() => applyExample(example.expr)}>
+                    <strong>{example.expr}</strong>
+                    <span>{example.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="math-card">
+              <h3>Recent solves</h3>
+              {history.length === 0 ? (
+                <p className="math-muted">Your recent math work will appear here.</p>
+              ) : (
+                <div className="math-history-list">
+                  {history.map((item) => (
+                    <button key={item.id} className="math-history-item" onClick={() => { setCategory(item.category); setInput(item.problem); setExplanation(''); setPractice(''); }}>
+                      <strong>{item.problem}</strong>
+                      <span>{item.answer}</span>
                     </button>
                   ))}
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                  {SYMBOL_GROUPS[symbolTab].symbols.map(s => (
-                    <button key={s} onClick={() => insertSymbol(s)}
-                      style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', minWidth: 38, transition: 'all 0.1s' }}
-                      onMouseEnter={e => { (e.currentTarget).style.borderColor = 'var(--primary)'; (e.currentTarget).style.color = 'var(--primary)'; }}
-                      onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; (e.currentTarget).style.color = 'var(--text-primary)'; }}
-                    >{s}</button>
-                  ))}
+              )}
+            </div>
+          </aside>
+
+          <section className="math-main">
+            <div className="math-card">
+              <div className="math-card-header">
+                <div>
+                  <h3>Problem input</h3>
+                  <p>Type naturally, like <code>integral from 0 to pi of sin(x) dx</code> or <code>system x + y = 3; x - y = 1</code>.</p>
+                </div>
+                <div className="math-inline-actions">
+                  <button className="math-button ghost" onClick={() => { setInput(''); setResult(null); setExplanation(''); setPractice(''); }}>Clear</button>
+                  <button className="math-button primary" onClick={handleSolve} disabled={!input.trim() || loading}>
+                    {loading ? 'Solving…' : 'Solve'}
+                  </button>
                 </div>
               </div>
-            )}
 
-            {/* Loading skeleton */}
-            {loading && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ height: 60, borderRadius: 12, background: 'var(--bg-2)', animation: 'pulse 1.4s ease-in-out infinite' }} />
-                <div style={{ height: 40, borderRadius: 8, background: 'var(--bg-2)', animation: 'pulse 1.4s ease-in-out 0.2s infinite', width: '75%' }} />
-                <div style={{ height: 40, borderRadius: 8, background: 'var(--bg-2)', animation: 'pulse 1.4s ease-in-out 0.4s infinite', width: '55%' }} />
-                <style>{`@keyframes pulse { 0%,100%{opacity:0.5} 50%{opacity:1} }`}</style>
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder={currentCategory.examples[0]?.expr ?? 'Enter a math problem…'}
+                className="math-input"
+              />
+
+              <div className="math-symbol-row">
+                {activeSymbols.symbols.map((symbol) => (
+                  <button key={`${activeSymbols.id}-${symbol.label}`} className="math-symbol" onClick={() => handleInsert(symbol.insert)}>
+                    {symbol.label}
+                  </button>
+                ))}
               </div>
-            )}
 
-            {/* Result */}
-            {result && !loading && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {result.error ? (
-                  <div style={{ padding: '14px 18px', borderRadius: 10, background: '#ef444410', border: '1px solid #ef444440', color: '#ef4444', fontSize: 13 }}>
-                    ⚠ {result.error}
-                  </div>
-                ) : (
-                  <>
-                    {/* Answer card */}
-                    <div style={{ padding: '18px 20px', borderRadius: 14, background: `${currentTopic?.color ?? 'var(--primary)'}0d`, border: `1.5px solid ${currentTopic?.color ?? 'var(--primary)'}30` }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: currentTopic?.color ?? 'var(--primary)', marginBottom: 8 }}>Answer</div>
-                      <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', overflowX: 'auto' }}>
-                        {result.answerLatex ? <Latex latex={result.answerLatex} display /> : result.answer}
-                      </div>
-                      {result.engine === 'ai' && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>✨ AI-powered · {result.category}</div>}
-                      {result.engine !== 'ai' && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>🔢 Symbolic solver · {result.engine}</div>}
+              <div className="math-preview-card">
+                <div>
+                  <span className="math-label">Preview</span>
+                  {previewExpression ? (
+                    <div className="math-preview-expression">
+                      <MathRenderer math={previewExpression} display={true} />
                     </div>
+                  ) : (
+                    <p className="math-muted">Type a problem to see a clean math preview.</p>
+                  )}
+                </div>
+                {input.trim() && <div className="math-input-syntax">Input syntax: {input.trim()}</div>}
+              </div>
+            </div>
 
-                    {/* Steps */}
-                    {result.steps.length > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Step-by-step solution</div>
-                        {result.steps.map((step, i) => (
-                          <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 16px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', alignItems: 'flex-start' }}>
-                            <div style={{ width: 24, height: 24, borderRadius: '50%', background: currentTopic?.color ?? 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{step.step ?? i + 1}</div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>{step.description}</div>
-                              {step.latex && (
-                                <div style={{ overflowX: 'auto', padding: '6px 0', marginBottom: 4 }}>
-                                  <Latex latex={step.latex} display />
-                                </div>
-                              )}
-                              {step.explanation && <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{step.explanation}</div>}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+            <div className="math-card">
+              <div className="math-card-header">
+                <div>
+                  <h3>Solution</h3>
+                  <p>Step-by-step output stays grounded in one solver path instead of multiple competing math UIs.</p>
+                </div>
+                <div className="math-inline-actions">
+                  <button className="math-button secondary" onClick={handleExplain} disabled={!input.trim() || explaining}>
+                    {explaining ? 'Explaining…' : 'Explain'}
+                  </button>
+                  <button className="math-button secondary" onClick={handlePractice} disabled={!input.trim() || generatingPractice}>
+                    {generatingPractice ? 'Generating…' : 'Practice'}
+                  </button>
+                  <button className="math-button ghost" onClick={() => saveLibraryItem('math-solution', result ? `${result.answer}\n\n${result.steps.map((step) => `${step.description}: ${step.expression}`).join('\n')}` : '')} disabled={!result}>
+                    Save
+                  </button>
+                </div>
+              </div>
 
-                    {/* Graph CTA */}
+              {!result ? (
+                <div className="math-empty-state">
+                  <strong>Ready when you are</strong>
+                  <p>Pick an example or type your own problem, then solve it here.</p>
+                </div>
+              ) : (
+                <div className="math-result-stack">
+                  <div className="math-answer-card">
+                    <span className="math-label">Answer</span>
+                    <h2>{result.answer}</h2>
+                    <div className="math-rendered-answer"><MathRenderer math={result.answerLatex} display={true} /></div>
+                    <p>{result.explanation}</p>
+                    <div className="math-badges">
+                      <span className={`math-badge ${result.verified ? 'good' : 'warn'}`}>{result.verified ? 'Verified' : 'Needs review'}</span>
+                      <span className="math-badge neutral">{result.engine}</span>
+                      <span className="math-badge neutral">{MATH_CATEGORIES[result.category]?.label ?? result.category}</span>
+                    </div>
                     {result.graphExpr && (
-                      <button onClick={() => { setGraphExprs([{ id: '1', expr: result.graphExpr!, color: GRAPH_COLORS[0], enabled: true }]); setActive('graph'); }}
-                        style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
-                        📈 View graph of {result.graphExpr}
+                      <button className="math-button secondary" onClick={() => { addGraphExpression(result.graphExpr ?? ''); setActiveTab('graph'); }}>
+                        Send to graph
                       </button>
                     )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── FORMULAS VIEW ── */}
-        {active === 'formulas' && (
-          <div style={{ padding: '20px 24px', flex: 1, overflowY: 'auto' }}>
-            {TOPICS.map(topic => {
-              const formulas = FORMULAS[topic.id] ?? [];
-              if (formulas.length === 0) return null;
-              return (
-                <div key={topic.id} style={{ marginBottom: 28 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingBottom: 6, borderBottom: `2px solid ${topic.color}40` }}>
-                    <span style={{ fontSize: 18 }}>{topic.icon}</span>
-                    <span style={{ fontWeight: 700, fontSize: 15, color: topic.color }}>{topic.label}</span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
-                    {formulas.map((f, i) => (
-                      <div key={i}
-                        style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', cursor: 'pointer', transition: 'border-color 0.12s' }}
-                        onClick={() => { setInput(`Explain: ${f.title}`); setActive(topic.id as TopicId); void solve(`Explain: ${f.title}`); }}
-                        onMouseEnter={e => { (e.currentTarget).style.borderColor = topic.color; }}
-                        onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; }}
-                        title="Click to solve / explain"
-                      >
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>{f.title}</div>
-                        <div style={{ overflowX: 'auto', fontSize: 14 }}>
-                          <Latex latex={f.latex} display />
-                        </div>
-                        {f.note && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>{f.note}</div>}
+
+                  <div className="math-steps">
+                    {result.steps.map((step) => (
+                      <div key={`${step.step}-${step.description}`} className="math-step-card">
+                        <div className="math-step-title">Step {step.step}: {step.description}</div>
+                        <div className="math-step-render"><MathRenderer math={step.expression} display={true} /></div>
+                        <p>{step.explanation}</p>
                       </div>
                     ))}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── GRAPH VIEW ── */}
-        {active === 'graph' && (
-          <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div ref={graphRef} style={{ width: '100%', height: 380, borderRadius: 14, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }} />
-            {graphError && <div style={{ fontSize: 12, color: '#ef4444' }}>⚠ {graphError}</div>}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {graphExprs.map((ge, _i) => (
-                <div key={ge.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <div style={{ width: 16, height: 16, borderRadius: '50%', background: ge.color, flexShrink: 0, cursor: 'pointer' }}
-                    onClick={() => { const c = GRAPH_COLORS[(GRAPH_COLORS.indexOf(ge.color) + 1) % GRAPH_COLORS.length]; setGraphExprs(p => p.map(e => e.id === ge.id ? { ...e, color: c } : e)); }} />
-                  <input value={ge.expr} onChange={e => setGraphExprs(p => p.map(x => x.id === ge.id ? { ...x, expr: e.target.value } : x))}
-                    placeholder="y = x^2"
-                    style={{ flex: 1, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontFamily: '"JetBrains Mono", monospace', outline: 'none' }}
-                    onKeyDown={e => e.key === 'Enter' && renderGraph()}
-                  />
-                  {graphExprs.length > 1 && (
-                    <button onClick={() => setGraphExprs(p => p.filter(x => x.id !== ge.id))}
-                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}>✕</button>
-                  )}
-                </div>
-              ))}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setGraphExprs(p => [...p, { id: crypto.randomUUID(), expr: '', color: GRAPH_COLORS[p.length % GRAPH_COLORS.length], enabled: true }])}
-                  style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                  + Add function
-                </button>
-                <button onClick={renderGraph}
-                  style={{ fontSize: 12, padding: '5px 14px', borderRadius: 8, border: 'none', background: '#22c55e', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
-                  ▶ Plot
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── UNIT CONVERTER ── */}
-        {active === 'units' && (
-          <div style={{ padding: '20px 24px', flex: 1, maxWidth: 540 }}>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
-              {UNIT_CATS.map((c, i) => (
-                <button key={i} onClick={() => { setUnitCatIdx(i); setFromUnit(0); setToUnit(1); }}
-                  style={{ padding: '5px 12px', borderRadius: 20, border: '1px solid var(--border-subtle)', background: unitCatIdx === i ? '#f59e0b' : 'var(--bg-2)', color: unitCatIdx === i ? '#fff' : 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: unitCatIdx === i ? 700 : 400 }}>
-                  {c.label}
-                </button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {[{ lbl: 'From', idx: fromUnit, set: setFromUnit }, { lbl: 'To', idx: toUnit, set: setToUnit }].map(({ lbl, idx, set }) => (
-                <div key={lbl} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <label style={{ fontSize: 12, color: 'var(--text-muted)', width: 30 }}>{lbl}</label>
-                  <select value={idx} onChange={e => set(Number(e.target.value))}
-                    style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13 }}>
-                    {unitCat.units.map((u, i) => <option key={i} value={i}>{u.label}</option>)}
-                  </select>
-                </div>
-              ))}
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <label style={{ fontSize: 12, color: 'var(--text-muted)', width: 30 }}>Val</label>
-                <input type="number" value={unitValue} onChange={e => setUnitValue(e.target.value)}
-                  style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14 }} />
-              </div>
-              {unitResult && (
-                <div style={{ padding: '16px 18px', borderRadius: 12, background: '#f59e0b14', border: '1.5px solid #f59e0b40', marginTop: 4 }}>
-                  <div style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700, marginBottom: 4 }}>Result</div>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>{unitResult} <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-muted)' }}>{unitCat.units[toUnit].label}</span></div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{unitValue} {unitCat.units[fromUnit].label} = {unitResult} {unitCat.units[toUnit].label}</div>
-                </div>
               )}
             </div>
-          </div>
-        )}
-      </div>
+
+            {(explanation || practice) && (
+              <div className="math-secondary-grid">
+                {explanation && (
+                  <div className="math-card">
+                    <div className="math-card-header compact">
+                      <h3>Concept explanation</h3>
+                      <button className="math-button ghost" onClick={() => setExplanation('')}>Clear</button>
+                    </div>
+                    <div className="math-prose">{explanation}</div>
+                  </div>
+                )}
+
+                {practice && (
+                  <div className="math-card">
+                    <div className="math-card-header compact">
+                      <h3>Practice questions</h3>
+                      <div className="math-inline-actions">
+                        <button className="math-button ghost" onClick={() => saveLibraryItem('math-practice', practice)}>Save</button>
+                        <button className="math-button ghost" onClick={() => setPractice('')}>Clear</button>
+                      </div>
+                    </div>
+                    <div className="math-prose">{practice}</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'graph' && (
+        <div className="math-layout graph-layout">
+          <aside className="math-sidebar">
+            <div className="math-card">
+              <div className="math-card-header compact">
+                <h3>Expressions</h3>
+                <button className="math-button secondary" onClick={() => addGraphExpression('y = x')}>Add</button>
+              </div>
+              <div className="math-expression-list">
+                {graphExpressions.map((expression) => (
+                  <div key={expression.id} className={`math-expression-item ${activeGraphId === expression.id ? 'active' : ''}`}>
+                    <button
+                      className={`math-toggle ${expression.enabled ? 'on' : ''}`}
+                      onClick={() => setGraphExpressions((current) => current.map((item) => item.id === expression.id ? { ...item, enabled: !item.enabled } : item))}
+                    >
+                      {expression.enabled ? 'On' : 'Off'}
+                    </button>
+                    <span className="math-color-dot" style={{ background: expression.color }} />
+                    <input
+                      value={expression.expr}
+                      onFocus={() => setActiveGraphId(expression.id)}
+                      onChange={(event) => setGraphExpressions((current) => current.map((item) => item.id === expression.id ? { ...item, expr: event.target.value } : item))}
+                      placeholder="y = x^2"
+                      className="math-expression-input"
+                    />
+                    <button className="math-delete" onClick={() => setGraphExpressions((current) => current.filter((item) => item.id !== expression.id))}>✕</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="math-card">
+              <h3>Graph controls</h3>
+              <div className="math-inline-actions wrap">
+                <button className="math-button secondary" onClick={resetGraphView}>Home</button>
+                <button className="math-button secondary" onClick={() => zoomGraph(0.8)}>Zoom in</button>
+                <button className="math-button secondary" onClick={() => zoomGraph(1.25)}>Zoom out</button>
+              </div>
+              <p className="math-muted small">Use <code>y = x^2</code>, <code>x = 2</code>, or <code>x^2 + y^2 = 25</code>.</p>
+            </div>
+
+            <div className="math-card">
+              <h3>Value table</h3>
+              {activeGraph && isExplicitExpression(activeGraph.expr) ? (
+                <div className="math-table">
+                  {graphTable.map((row) => (
+                    <div key={`${row.x}-${row.y}`} className="math-table-row">
+                      <span>x = {row.x}</span>
+                      <strong>y = {row.y}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="math-muted">Choose a standard function expression to see sample values.</p>
+              )}
+            </div>
+          </aside>
+
+          <section className="math-main">
+            <div className="math-card graph-surface-card">
+              <div className="math-card-header compact">
+                <div>
+                  <h3>Graph surface</h3>
+                  <p>Cleaner plotting with explicit and implicit expressions in one place.</p>
+                </div>
+                <span className="math-badge neutral">{graphExpressions.filter((item) => item.enabled && item.expr.trim()).length} active</span>
+              </div>
+              {graphError && <div className="math-graph-error">{graphError}</div>}
+              <div ref={graphRef} className="math-graph-canvas" />
+            </div>
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'units' && (
+        <div className="math-layout compact-layout">
+          <section className="math-main single-column">
+            <div className="math-card">
+              <div className="math-card-header">
+                <div>
+                  <h3>Unit converter</h3>
+                  <p>Simple, reliable conversion for the units students actually use most.</p>
+                </div>
+              </div>
+              <div className="math-unit-grid">
+                <label>
+                  <span>Category</span>
+                  <select value={unitGroupId} onChange={(event) => setUnitGroupId(event.target.value as (typeof UNIT_GROUPS)[number]['id'])}>
+                    {UNIT_GROUPS.map((group) => <option key={group.id} value={group.id}>{group.label}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>Value</span>
+                  <input value={unitValue} onChange={(event) => setUnitValue(event.target.value)} />
+                </label>
+                <label>
+                  <span>From</span>
+                  <select value={fromUnit} onChange={(event) => setFromUnit(event.target.value)}>
+                    {unitGroup.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.label}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>To</span>
+                  <select value={toUnit} onChange={(event) => setToUnit(event.target.value)}>
+                    {unitGroup.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.label}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className="math-unit-result">
+                <span className="math-label">Result</span>
+                <strong>{unitResult}</strong>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'lab' && (
+        <div className="math-layout compact-layout">
+          <section className="math-main single-column">
+            <div className="math-card">
+              <div className="math-card-header">
+                <div>
+                  <h3>MATLAB Flow</h3>
+                  <p>A cleaner student lab for matrices, systems, and quick plots — without pretending to be full desktop MATLAB.</p>
+                </div>
+                <button className="math-button secondary" onClick={() => setActiveTab('graph')}>Open graph tab</button>
+              </div>
+              <MatlabLab
+                onGraphExpression={(expression) => {
+                  addGraphExpression(expression.startsWith('y =') ? expression : `y = ${expression}`);
+                  setActiveTab('graph');
+                  toast('Expression sent to Graph', 'success');
+                }}
+              />
+            </div>
+          </section>
+        </div>
+      )}
+
+      <style jsx>{`
+        .math-shell {
+          display: grid;
+          gap: 1rem;
+          padding: 1rem;
+          min-height: 100%;
+          background: radial-gradient(circle at top left, color-mix(in srgb, var(--accent, #2563eb) 8%, transparent), transparent 38%), var(--bg);
+        }
+        .math-header,
+        .math-context-card,
+        .math-tabbar,
+        .math-card {
+          border: 1px solid var(--border-subtle, var(--border));
+          border-radius: 1.4rem;
+          background: color-mix(in srgb, var(--surface, #fff) 86%, transparent);
+          box-shadow: var(--shadow-md, 0 10px 30px rgba(15, 23, 42, 0.08));
+        }
+        .math-header {
+          padding: 1.3rem 1.4rem;
+          display: flex;
+          justify-content: space-between;
+          gap: 1rem;
+          align-items: flex-start;
+          flex-wrap: wrap;
+        }
+        .math-header h1 {
+          margin: 0.45rem 0 0.55rem;
+          font-size: clamp(2rem, 4vw, 3rem);
+          line-height: 1;
+          letter-spacing: -0.04em;
+          font-family: "Fraunces", serif;
+          color: var(--text-primary, var(--text));
+          max-width: 16ch;
+        }
+        .math-header p,
+        .math-context-card p,
+        .math-card p,
+        .math-prose {
+          margin: 0;
+          color: var(--text-muted, var(--text-3));
+          line-height: 1.7;
+        }
+        .math-eyebrow,
+        .math-label,
+        .math-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.35rem;
+          font-size: 0.74rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          font-weight: 700;
+        }
+        .math-eyebrow,
+        .math-badge.neutral,
+        .math-label {
+          color: var(--text-muted, var(--text-3));
+        }
+        .math-badge {
+          min-height: 1.8rem;
+          padding: 0 0.7rem;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--bg-inset, #eef2ff) 82%, transparent);
+          border: 1px solid color-mix(in srgb, var(--border, #cbd5e1) 65%, transparent);
+        }
+        .math-badge.good {
+          color: #166534;
+          background: rgba(22, 163, 74, 0.12);
+          border-color: rgba(22, 163, 74, 0.3);
+        }
+        .math-badge.warn {
+          color: #b45309;
+          background: rgba(245, 158, 11, 0.12);
+          border-color: rgba(245, 158, 11, 0.25);
+        }
+        .math-header-actions,
+        .math-inline-actions,
+        .math-symbol-row,
+        .math-badges,
+        .math-chip-grid,
+        .math-tabbar,
+        .math-secondary-grid,
+        .math-unit-grid {
+          display: flex;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+        .math-inline-actions.wrap {
+          margin-top: 0.7rem;
+        }
+        .math-button,
+        .math-tab,
+        .math-chip,
+        .math-symbol,
+        .math-example,
+        .math-history-item,
+        .math-toggle,
+        .math-delete {
+          border: 1px solid var(--border, #cbd5e1);
+          background: color-mix(in srgb, var(--surface, #fff) 86%, transparent);
+          color: var(--text-primary, var(--text));
+          border-radius: 0.95rem;
+          cursor: pointer;
+          transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
+          font: inherit;
+        }
+        .math-button:hover,
+        .math-tab:hover,
+        .math-chip:hover,
+        .math-symbol:hover,
+        .math-example:hover,
+        .math-history-item:hover,
+        .math-toggle:hover,
+        .math-delete:hover {
+          transform: translateY(-1px);
+        }
+        .math-button {
+          min-height: 2.7rem;
+          padding: 0 1rem;
+          font-weight: 600;
+        }
+        .math-button.primary,
+        .math-tab.active,
+        .math-chip.active {
+          background: linear-gradient(135deg, var(--accent, #2563eb), color-mix(in srgb, var(--accent, #2563eb) 68%, white 32%));
+          border-color: transparent;
+          color: #fff;
+        }
+        .math-button.secondary {
+          background: color-mix(in srgb, var(--accent, #2563eb) 12%, var(--surface, #fff));
+          border-color: color-mix(in srgb, var(--accent, #2563eb) 28%, transparent);
+        }
+        .math-button.ghost,
+        .math-delete {
+          background: transparent;
+        }
+        .math-context-card {
+          padding: 1rem 1.2rem;
+          display: flex;
+          justify-content: space-between;
+          gap: 1rem;
+          align-items: center;
+          flex-wrap: wrap;
+        }
+        .math-context-card.subtle {
+          background: color-mix(in srgb, var(--bg-inset, #eef2ff) 68%, transparent);
+        }
+        .math-tabbar {
+          padding: 0.6rem;
+        }
+        .math-tab {
+          min-height: 2.6rem;
+          padding: 0 1rem;
+          font-weight: 600;
+        }
+        .math-layout {
+          display: grid;
+          grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+          gap: 1rem;
+        }
+        .math-layout.compact-layout,
+        .math-main.single-column {
+          grid-template-columns: 1fr;
+        }
+        .math-sidebar,
+        .math-main,
+        .math-result-stack,
+        .math-steps,
+        .math-history-list,
+        .math-example-list,
+        .math-expression-list {
+          display: grid;
+          gap: 1rem;
+        }
+        .math-card {
+          padding: 1.15rem;
+        }
+        .math-card h3 {
+          margin: 0;
+          font-size: 1.05rem;
+          color: var(--text-primary, var(--text));
+        }
+        .math-card-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 1rem;
+          align-items: flex-start;
+          margin-bottom: 0.95rem;
+          flex-wrap: wrap;
+        }
+        .math-card-header.compact {
+          margin-bottom: 0.8rem;
+        }
+        .math-chip-grid {
+          margin-top: 0.8rem;
+        }
+        .math-chip,
+        .math-symbol {
+          min-height: 2.35rem;
+          padding: 0 0.85rem;
+          font-size: 0.92rem;
+        }
+        .math-example,
+        .math-history-item {
+          padding: 0.9rem 1rem;
+          text-align: left;
+          display: grid;
+          gap: 0.25rem;
+        }
+        .math-example strong,
+        .math-history-item strong {
+          color: var(--text-primary, var(--text));
+          font-size: 0.94rem;
+        }
+        .math-example span,
+        .math-history-item span,
+        .math-muted,
+        .math-input-syntax {
+          color: var(--text-muted, var(--text-3));
+          font-size: 0.88rem;
+        }
+        .math-muted.small {
+          font-size: 0.8rem;
+          margin-top: 0.7rem;
+        }
+        .math-input {
+          width: 100%;
+          min-height: 132px;
+          padding: 1rem 1.05rem;
+          border-radius: 1rem;
+          border: 1px solid var(--border, #cbd5e1);
+          background: color-mix(in srgb, var(--surface, #fff) 92%, transparent);
+          color: var(--text-primary, var(--text));
+          font: inherit;
+          line-height: 1.7;
+          resize: vertical;
+          outline: none;
+        }
+        .math-input:focus,
+        .math-expression-input:focus,
+        .math-unit-grid input:focus,
+        .math-unit-grid select:focus {
+          border-color: color-mix(in srgb, var(--accent, #2563eb) 32%, transparent);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #2563eb) 16%, transparent);
+        }
+        .math-symbol-row {
+          margin-top: 0.85rem;
+        }
+        .math-preview-card,
+        .math-answer-card,
+        .math-step-card,
+        .math-empty-state,
+        .math-unit-result,
+        .math-graph-error,
+        .math-expression-item,
+        .math-table-row {
+          border: 1px solid color-mix(in srgb, var(--border, #cbd5e1) 70%, transparent);
+          background: color-mix(in srgb, var(--bg-inset, #f8fafc) 82%, transparent);
+          border-radius: 1rem;
+        }
+        .math-preview-card,
+        .math-answer-card,
+        .math-step-card,
+        .math-empty-state,
+        .math-unit-result,
+        .math-graph-error {
+          padding: 1rem;
+        }
+        .math-preview-card {
+          margin-top: 1rem;
+          display: grid;
+          gap: 0.75rem;
+        }
+        .math-preview-expression,
+        .math-rendered-answer,
+        .math-step-render {
+          overflow-x: auto;
+        }
+        .math-answer-card h2 {
+          margin: 0.45rem 0 0.2rem;
+          font-size: clamp(1.5rem, 3vw, 2.2rem);
+          color: var(--text-primary, var(--text));
+        }
+        .math-prose {
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .math-expression-item {
+          display: grid;
+          grid-template-columns: auto auto minmax(0, 1fr) auto;
+          align-items: center;
+          gap: 0.55rem;
+          padding: 0.65rem;
+        }
+        .math-expression-item.active {
+          border-color: color-mix(in srgb, var(--accent, #2563eb) 35%, transparent);
+        }
+        .math-expression-input,
+        .math-unit-grid input,
+        .math-unit-grid select {
+          min-height: 2.55rem;
+          border-radius: 0.85rem;
+          border: 1px solid var(--border, #cbd5e1);
+          padding: 0 0.75rem;
+          background: color-mix(in srgb, var(--surface, #fff) 92%, transparent);
+          color: var(--text-primary, var(--text));
+          font: inherit;
+          width: 100%;
+        }
+        .math-toggle {
+          min-height: 2.1rem;
+          padding: 0 0.7rem;
+          font-size: 0.78rem;
+        }
+        .math-toggle.on {
+          background: rgba(37, 99, 235, 0.12);
+          border-color: rgba(37, 99, 235, 0.3);
+          color: #1d4ed8;
+        }
+        .math-color-dot {
+          width: 0.9rem;
+          height: 0.9rem;
+          border-radius: 999px;
+        }
+        .math-delete {
+          width: 2.2rem;
+          height: 2.2rem;
+        }
+        .math-graph-canvas {
+          min-height: 460px;
+          width: 100%;
+          overflow: hidden;
+          border-radius: 1rem;
+          border: 1px solid color-mix(in srgb, var(--border, #cbd5e1) 60%, transparent);
+          background: color-mix(in srgb, var(--surface, #fff) 94%, transparent);
+        }
+        .math-table {
+          display: grid;
+          gap: 0.55rem;
+        }
+        .math-table-row {
+          padding: 0.8rem 0.9rem;
+          display: flex;
+          justify-content: space-between;
+          gap: 1rem;
+        }
+        .math-unit-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 1rem;
+        }
+        .math-unit-grid label {
+          display: grid;
+          gap: 0.45rem;
+          font-size: 0.9rem;
+          color: var(--text-primary, var(--text));
+        }
+        .math-unit-result {
+          margin-top: 1rem;
+          display: grid;
+          gap: 0.45rem;
+        }
+        .math-unit-result strong {
+          font-size: 1.6rem;
+          color: var(--text-primary, var(--text));
+        }
+        code {
+          padding: 0.1rem 0.35rem;
+          border-radius: 0.35rem;
+          background: color-mix(in srgb, var(--bg-inset, #eef2ff) 80%, transparent);
+        }
+        @media (max-width: 980px) {
+          .math-layout {
+            grid-template-columns: 1fr;
+          }
+          .math-header,
+          .math-context-card,
+          .math-card-header {
+            align-items: stretch;
+          }
+          .math-unit-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </div>
   );
 }
-
-// Evaluate graph expression numerically (used for axis labels)
-function _evalAt(expr: string, x: number): string {
-  try {
-    const r = math.evaluate(expr, { x });
-    return typeof r === 'number' ? Number(r.toFixed(4)).toString() : String(r);
-  } catch { return '—'; }
-}
-void _evalAt; // suppress unused warning
 
 export default MathSolverPage;

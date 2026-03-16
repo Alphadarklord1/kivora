@@ -34,7 +34,7 @@ function hashSessionToken(token: string) {
 
 export async function issueTwoFactorSession(userId: string) {
   if (!isDatabaseConfigured) {
-    throw new Error('Two-factor sessions require DATABASE_URL to be configured.');
+    throw new Error('Two-factor sessions require a configured Supabase or PostgreSQL database.');
   }
 
   const identifier = buildSessionIdentifier(userId);

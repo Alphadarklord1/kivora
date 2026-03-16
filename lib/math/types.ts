@@ -26,7 +26,7 @@ export interface SolverResult {
   explanation: string;
   graphExpr?: string;
   verified: boolean;
-  engine: 'mathjs' | 'nerdamer' | 'hybrid';
+  engine: 'mathjs' | 'nerdamer' | 'hybrid' | 'ai';
   error?: string;
 }
 
