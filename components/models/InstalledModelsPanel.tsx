@@ -1,6 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { AiRuntimeControls } from '@/components/models/AiRuntimeControls';
+import {
+  AI_PREFS_UPDATED_EVENT,
+  DEFAULT_LOCAL_MODEL,
+  loadAiRuntimePreferences,
+  saveAiRuntimePreferences,
+  type AiRuntimePreferences,
+} from '@/lib/ai/runtime';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -153,16 +161,14 @@ const TIER_LABELS: Record<string, string> = {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-const OLLAMA_MODEL_KEY = 'kivora_ollama_model';
-
 export function InstalledModelsPanel() {
   const [aiStatus, setAiStatus] = useState<AIStatus>('checking');
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [activeModel, setActiveModel] = useState<string | null>(null);
   const [defaultModel, setDefaultModel] = useState<string>(() => {
-    if (typeof window === 'undefined') return 'mistral';
-    return localStorage.getItem(OLLAMA_MODEL_KEY) || 'mistral';
+    if (typeof window === 'undefined') return DEFAULT_LOCAL_MODEL;
+    return loadAiRuntimePreferences().localModel || DEFAULT_LOCAL_MODEL;
   });
   const [filterTier, setFilterTier] = useState<string>('all');
   const [ollamaVersion, setOllamaVersion] = useState<string | null>(null);
@@ -202,7 +208,8 @@ export function InstalledModelsPanel() {
 
   function setAsDefault(modelId: string) {
     setDefaultModel(modelId);
-    localStorage.setItem(OLLAMA_MODEL_KEY, modelId);
+    const nextPrefs = { ...loadAiRuntimePreferences(), localModel: modelId };
+    saveAiRuntimePreferences(nextPrefs);
   }
 
   useEffect(() => {
@@ -211,6 +218,17 @@ export function InstalledModelsPanel() {
     });
     return () => cancelAnimationFrame(frame);
   }, [checkStatus]);
+
+  useEffect(() => {
+    function handlePrefsUpdate(event: Event) {
+      const detail = (event as CustomEvent<AiRuntimePreferences>).detail;
+      if (!detail) return;
+      setDefaultModel(detail.localModel || DEFAULT_LOCAL_MODEL);
+    }
+
+    window.addEventListener(AI_PREFS_UPDATED_EVENT, handlePrefsUpdate as EventListener);
+    return () => window.removeEventListener(AI_PREFS_UPDATED_EVENT, handlePrefsUpdate as EventListener);
+  }, []);
 
   const copyCommand = useCallback((cmd: string, id: string) => {
     navigator.clipboard.writeText(cmd).catch(() => {});
@@ -234,6 +252,10 @@ export function InstalledModelsPanel() {
           style={{ opacity: refreshing ? 0.7 : 1, flexShrink: 0 }}>
           {refreshing ? '⟳ Checking…' : '↻ Refresh'}
         </button>
+      </div>
+
+      <div className="mdl-section">
+        <AiRuntimeControls />
       </div>
 
       {/* Setup guide */}

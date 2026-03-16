@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { offlineGenerate, type ToolMode } from '@/lib/offline/generate';
+import { callOpenAIChat } from '@/lib/ai/openai';
+import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/ai/server-routing';
 import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
 
@@ -27,11 +29,10 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: 'Invalid JSON.' }, { status: 400 }); }
 
-  const { mode, text, options, model: clientModel, retrievalContext, fileId, deckTitle, deckContent } = body as {
+  const { mode, text, options, retrievalContext, fileId, deckTitle, deckContent } = body as {
     mode?: string;
     text?: string;
     options?: Record<string, unknown>;
-    model?: string;
     retrievalContext?: string;
     fileId?: string | null;
     deckTitle?: string;
@@ -63,66 +64,64 @@ export async function POST(req: NextRequest) {
   const preparedText = typeof retrievalContext === 'string' && retrievalContext.trim()
     ? retrievalContext.trim()
     : buildGenerationContext(currentMode, baseSourceText, options, persistedIndex);
+  const { mode: aiMode, localModel, cloudModel } = resolveAiRuntimeRequest(body);
 
-  // ── 1. Ollama (open-source local LLM) ────────────────────────────────────
   const ollamaBase = process.env.OLLAMA_URL ?? 'http://localhost:11434';
-  try {
-    const ollamaModel = (typeof clientModel === 'string' && clientModel.trim())
-      ? clientModel.trim()
-      : (process.env.OLLAMA_MODEL ?? 'mistral');
-    const prompt = buildPrompt(currentMode, preparedText, options);
+  if (shouldTryLocal(aiMode)) {
+    try {
+      const userPrompt = buildUserPrompt(currentMode, preparedText, options);
+      const prompt = buildPrompt(currentMode, preparedText, options);
 
-    // Try Ollama OpenAI-compatible endpoint first (works with most versions)
-    const res = await fetch(`${ollamaBase}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: ollamaModel,
-        messages: [
-          { role: 'system', content: 'You are a study assistant. Be concise, accurate, and helpful.' },
-          { role: 'user', content: buildUserPrompt(currentMode, preparedText, options) },
-        ],
-        max_tokens: 1600,
-        temperature: 0.7,
-        stream: false,
-      }),
-      signal: AbortSignal.timeout(45_000),
-    });
+      const res = await fetch(`${ollamaBase}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: localModel,
+          messages: [
+            { role: 'system', content: 'You are a study assistant. Be concise, accurate, and helpful.' },
+            { role: 'user', content: userPrompt },
+          ],
+          max_tokens: 1600,
+          temperature: 0.7,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(45_000),
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      const content = data?.choices?.[0]?.message?.content ?? '';
-      if (content.trim()) {
-        return NextResponse.json({ mode, content: content.trim(), source: 'ollama' });
+      if (res.ok) {
+        const data = await res.json();
+        const content = data?.choices?.[0]?.message?.content ?? '';
+        if (content.trim()) {
+          return NextResponse.json({ mode, content: content.trim(), source: 'local' });
+        }
       }
-    }
 
-    // Fallback: try Ollama native /api/generate endpoint
-    const res2 = await fetch(`${ollamaBase}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: ollamaModel,
-        prompt,
-        stream: false,
-        options: { num_predict: 1600, temperature: 0.7 },
-      }),
-      signal: AbortSignal.timeout(45_000),
-    });
+      const res2 = await fetch(`${ollamaBase}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: localModel,
+          prompt,
+          stream: false,
+          options: { num_predict: 1600, temperature: 0.7 },
+        }),
+        signal: AbortSignal.timeout(45_000),
+      });
 
-    if (res2.ok) {
-      const data2 = await res2.json();
-      const content2 = data2?.response ?? '';
-      if (content2.trim()) {
-        return NextResponse.json({ mode, content: content2.trim(), source: 'ollama' });
+      if (res2.ok) {
+        const data2 = await res2.json();
+        const content2 = data2?.response ?? '';
+        if (content2.trim()) {
+          return NextResponse.json({ mode, content: content2.trim(), source: 'local' });
+        }
       }
+    } catch {
+      // Local runtime unavailable — fall through.
     }
-  } catch {
-    // Ollama unavailable — fall through
   }
 
   // ── 2. llama.cpp proxy (alternative local runner) ─────────────────────────
-  const llamaUrl = process.env.LLAMA_PROXY_URL;
+  const llamaUrl = shouldTryLocal(aiMode) ? process.env.LLAMA_PROXY_URL : null;
   if (llamaUrl) {
     try {
       const prompt = buildPrompt(currentMode, preparedText, options);
@@ -147,6 +146,22 @@ export async function POST(req: NextRequest) {
       }
     } catch {
       // llama.cpp unavailable — fall through
+    }
+  }
+
+  if (shouldTryCloud(aiMode)) {
+    const cloudResult = await callOpenAIChat({
+      model: cloudModel,
+      messages: [
+        { role: 'system', content: 'You are a study assistant. Be concise, accurate, and helpful.' },
+        { role: 'user', content: buildUserPrompt(currentMode, preparedText, options) },
+      ],
+      maxTokens: 1600,
+      temperature: 0.7,
+    });
+
+    if (cloudResult.ok) {
+      return NextResponse.json({ mode, content: cloudResult.content, source: 'openai' });
     }
   }
 

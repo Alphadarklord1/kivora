@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
 
 interface Exam {
   id: string;
@@ -111,15 +112,13 @@ Requirements:
 - Add a final "Exam Day Tips" section
 - Format in clean markdown with headings per phase`;
 
-    const ollamaModel = typeof window !== 'undefined'
-      ? (localStorage.getItem('kivora_ollama_model') ?? 'mistral')
-      : 'mistral';
+    const ai = loadAiRuntimePreferences();
 
     try {
       const res = await fetch('/api/generate/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'outline', text: prompt, model: ollamaModel }),
+        body: JSON.stringify({ mode: 'outline', text: prompt, ai }),
         signal: ctrl.signal,
       });
 

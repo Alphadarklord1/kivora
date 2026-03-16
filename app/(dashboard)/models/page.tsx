@@ -14,14 +14,20 @@ export default async function ModelsPage({ searchParams }: { searchParams?: Prom
       <section className={styles.hero}>
         <div>
           <span className={styles.eyebrow}>Models & Downloads</span>
-          <h1>Manage local models and desktop releases from one place.</h1>
+          <h1>Choose privacy-first local AI, cloud convenience, or both.</h1>
           <p>
-            Install and switch offline study models, then move to downloads and release assets without a second sidebar destination.
+            Kivora now treats offline local models and cloud APIs as one routing system. Pick the mode that fits the student:
+            local for privacy and no internet, cloud for convenience, or auto to prefer local first and fall back when needed.
           </p>
+          <div className={styles.highlights}>
+            <span>Local keeps files on-device</span>
+            <span>Cloud is faster to start</span>
+            <span>Auto balances both</span>
+          </div>
         </div>
         <div className={styles.actions}>
           <Link href="/models" className={`${styles.tabLink} ${activeTab === 'models' ? styles.active : ''}`}>
-            Installed &amp; Setup
+            Routing &amp; Setup
           </Link>
           <Link href="/models?tab=downloads" className={`${styles.tabLink} ${activeTab === 'downloads' ? styles.active : ''}`}>
             Downloads &amp; Releases

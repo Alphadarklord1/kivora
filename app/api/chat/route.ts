@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
+import { callOpenAIChat } from '@/lib/ai/openai';
+import type { OpenAIMessage } from '@/lib/ai/openai';
 import { buildRagContext, retrieveFromIndex, retrieveRelevantChunks } from '@/lib/rag/retrieve';
 import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
+import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/ai/server-routing';
 
 /**
  * POST /api/chat
@@ -19,23 +22,19 @@ export async function POST(req: NextRequest) {
     fileId,
     context,
     sources: providedSources,
-    model: clientModel,
   } = body as {
     messages?: Array<{ role: string; content: string }>;
     fileId?: string;
     context?: string;
     sources?: Array<{ label: string; preview: string; text: string }>;
-    model?: string;
   };
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return new Response('messages array required', { status: 400 });
   }
 
-  const ollamaBase  = process.env.OLLAMA_URL   ?? 'http://localhost:11434';
-  const ollamaModel = (typeof clientModel === 'string' && clientModel.trim())
-    ? clientModel.trim()
-    : (process.env.OLLAMA_MODEL ?? 'mistral');
+  const { mode, localModel, cloudModel } = resolveAiRuntimeRequest(body);
+  const ollamaBase = process.env.OLLAMA_URL ?? 'http://localhost:11434';
 
   const encoder = new TextEncoder();
   function sseChunk(token: string, done: boolean, source?: string, sources?: Array<{ label: string; preview: string }>): Uint8Array {
@@ -73,9 +72,13 @@ RETRIEVED DOCUMENT SOURCES:
 ${ragContext}`
     : 'You are a helpful study assistant. Be accurate, concise, and educational.';
 
-  const ollamaMessages = [
+  const ollamaMessages: OpenAIMessage[] = [
     { role: 'system', content: sysContent },
-    ...messages.map(m => ({ role: m.role, content: m.content })),
+    ...messages
+      .filter((message): message is { role: 'system' | 'user' | 'assistant'; content: string } =>
+        message.role === 'system' || message.role === 'user' || message.role === 'assistant'
+      )
+      .map(message => ({ role: message.role, content: message.content })),
   ];
 
   const SSE_HEADERS = {
@@ -84,13 +87,13 @@ ${ragContext}`
     'X-Accel-Buffering': 'no',
   };
 
-  // ── 1. Try Ollama OpenAI-compat streaming ────────────────────────────────
-  try {
+  if (shouldTryLocal(mode)) {
+    try {
     const ollamaRes = await fetch(`${ollamaBase}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: ollamaModel,
+        model: localModel,
         messages: ollamaMessages,
         max_tokens: 2000,
         temperature: 0.7,
@@ -124,19 +127,48 @@ ${ragContext}`
               }
             }
           } finally {
-            controller.enqueue(sseChunk('', true, 'ollama', sources.map(({ label, preview }) => ({ label, preview }))));
+            controller.enqueue(sseChunk('', true, 'local', sources.map(({ label, preview }) => ({ label, preview }))));
             controller.close();
           }
         },
       });
       return new Response(stream, { headers: SSE_HEADERS });
     }
-  } catch { /* fall through */ }
+    } catch {
+      // Fall through to cloud/offline.
+    }
+  }
+
+  if (shouldTryCloud(mode)) {
+    const cloudResult = await callOpenAIChat({
+      model: cloudModel,
+      messages: ollamaMessages,
+      maxTokens: 2000,
+      temperature: 0.7,
+    });
+
+    if (cloudResult.ok) {
+      const stream = new ReadableStream({
+        async start(controller) {
+          const words = cloudResult.content.split(/(\s+)/);
+          for (let i = 0; i < words.length; i += 4) {
+            const chunk = words.slice(i, i + 4).join('');
+            if (chunk) controller.enqueue(sseChunk(chunk, false));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+          controller.enqueue(sseChunk('', true, 'openai', sources.map(({ label, preview }) => ({ label, preview }))));
+          controller.close();
+        },
+      });
+
+      return new Response(stream, { headers: SSE_HEADERS });
+    }
+  }
 
   // ── 2. Offline fallback ───────────────────────────────────────────────────
   const fallback = context?.trim()
-    ? `I found the most relevant document sections for your question, but the AI model is not available right now.\n\nRelevant sources:\n${sources.map(({ label, preview }) => `${label}: ${preview}`).join('\n')}\n\nTo enable AI chat, install Ollama from https://ollama.com and run:\n\`ollama pull mistral\``
-    : `No AI model is available. Install Ollama from https://ollama.com and run: \`ollama pull mistral\``;
+    ? `I found the most relevant document sections for your question, but no live AI runtime is available right now.\n\nRelevant sources:\n${sources.map(({ label, preview }) => `${label}: ${preview}`).join('\n')}\n\nYou can install a local model from Models & Downloads or configure a cloud API key.`
+    : `No live AI runtime is available right now. Install a local model from Models & Downloads or configure a cloud API key.`;
 
   const stream = new ReadableStream({
     async start(controller) {

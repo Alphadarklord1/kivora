@@ -6,20 +6,7 @@ import { signOut, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
 import { useSettings, type Density, type Theme } from '@/providers/SettingsProvider';
-
-const OLLAMA_MODEL_KEY = 'kivora_ollama_model';
-const DEFAULT_MODEL = 'mistral';
-
-const AVAILABLE_MODELS = [
-  { id: 'mistral', label: 'Mistral 7B', hint: 'Best overall · 4.1 GB' },
-  { id: 'qwen2.5', label: 'Qwen2.5 1.5B', hint: 'Ultra-fast · 1.1 GB' },
-  { id: 'qwen2.5-math', label: 'Qwen2.5-Math 1.5B', hint: 'Math specialist · 1.1 GB' },
-  { id: 'phi4-mini', label: 'Phi-4 Mini 3.8B', hint: 'STEM reasoning · 2.3 GB' },
-  { id: 'llama3.2:3b', label: 'Llama 3.2 3B', hint: 'Balanced · 2.0 GB' },
-  { id: 'gemma3:4b', label: 'Gemma 3 4B', hint: 'Writing & analysis · 3.3 GB' },
-  { id: 'deepseek-r1:7b', label: 'DeepSeek R1 7B', hint: 'Chain-of-thought · 4.7 GB' },
-  { id: 'mistral:latest', label: 'Mistral Large 24B', hint: 'Maximum quality · 14 GB' },
-];
+import { AiRuntimeControls } from '@/components/models/AiRuntimeControls';
 
 const THEME_OPTIONS: { id: Theme; label: string; hint: string }[] = [
   { id: 'system', label: 'System', hint: 'Follow your device preference' },
@@ -241,19 +228,6 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [activeModel, setActiveModel] = useState(() => {
-    if (typeof window === 'undefined') return DEFAULT_MODEL;
-    return localStorage.getItem(OLLAMA_MODEL_KEY) || DEFAULT_MODEL;
-  });
-  const [ollamaStatus, setOllamaStatus] = useState<'checking' | 'ok' | 'none'>('checking');
-
-  useEffect(() => {
-    const base = process.env.NEXT_PUBLIC_OLLAMA_URL ?? 'http://localhost:11434';
-    fetch(`${base}/api/version`, { signal: AbortSignal.timeout(2500) })
-      .then(response => setOllamaStatus(response.ok ? 'ok' : 'none'))
-      .catch(() => setOllamaStatus('none'));
-  }, []);
-
   useEffect(() => {
     if (!session?.user) {
       setAccountLoading(false);
@@ -300,12 +274,6 @@ export default function SettingsPage() {
   function set<K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) {
     updateSetting(key, value);
     markSaved();
-  }
-
-  function setModel(id: string) {
-    setActiveModel(id);
-    localStorage.setItem(OLLAMA_MODEL_KEY, id);
-    markSaved('AI model preference updated');
   }
 
   async function handleSignOut() {
@@ -767,33 +735,8 @@ export default function SettingsPage() {
         />
       </Section>
 
-      <Section title="AI model" subtitle="Choose the local model Kivora should prefer when Ollama is available.">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>Ollama status</span>
-          <span className={`badge${ollamaStatus === 'ok' ? ' badge-success' : ''}`} style={{ marginLeft: 'auto' }}>
-            {ollamaStatus === 'checking' ? 'Checking…' : ollamaStatus === 'ok' ? 'Connected' : 'Not detected'}
-          </span>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {AVAILABLE_MODELS.map(model => (
-            <button
-              key={model.id}
-              type="button"
-              className={`btn ${activeModel === model.id ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setModel(model.id)}
-              style={{ justifyContent: 'space-between', textAlign: 'left', padding: '12px 14px', minHeight: 0 }}
-            >
-              <span>
-                <span style={{ display: 'block', fontWeight: 600 }}>{model.label}</span>
-                <span style={{ display: 'block', fontSize: 'var(--text-xs)', color: activeModel === model.id ? 'rgba(255,255,255,0.85)' : 'var(--text-3)' }}>{model.hint}</span>
-              </span>
-              <span className="badge">{activeModel === model.id ? 'Active' : 'Select'}</span>
-            </button>
-          ))}
-        </div>
-        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-          Install new models from <a href="/models" style={{ color: 'var(--accent)' }}>Models & Downloads</a>, or run <code>ollama pull {activeModel}</code> locally.
-        </p>
+      <Section title="AI routing" subtitle="Choose whether Kivora should prefer local privacy, cloud convenience, or automatic fallback.">
+        <AiRuntimeControls compact />
       </Section>
 
       <Section title="Support" subtitle="Quick access to reporting and system status when something feels off.">
@@ -806,20 +749,14 @@ export default function SettingsPage() {
         </div>
       </Section>
 
-      <Section title="AI runtime" subtitle="Understand which local runtime Kivora can use right now.">
+      <Section title="AI runtime" subtitle="The app keeps a deterministic offline fallback too, so study tools still work even when neither local nor cloud AI is available.">
         <div style={{ display: 'grid', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>Offline fallback</span>
+            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>Deterministic fallback</span>
             <span className="badge badge-success" style={{ marginLeft: 'auto' }}>Always available</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>Ollama (local AI)</span>
-            <span className={`badge${ollamaStatus === 'ok' ? ' badge-success' : ''}`} style={{ marginLeft: 'auto' }}>
-              {ollamaStatus === 'checking' ? 'Detecting…' : ollamaStatus === 'ok' ? 'Active' : 'Not running'}
-            </span>
-          </div>
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-            Ollama runs models entirely on your machine. If you host it on a different port, set <code>NEXT_PUBLIC_OLLAMA_URL</code>.
+            If local and cloud AI are both unavailable, Kivora still generates basic study output offline so students are not blocked.
           </p>
         </div>
       </Section>
