@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
 import { offlineGenerate, type ToolMode } from '@/lib/offline/generate';
+import { callOpenAIChat } from '@/lib/ai/openai';
+import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/ai/server-routing';
 import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
 
@@ -27,11 +29,10 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); }
   catch { return new Response('Invalid JSON', { status: 400 }); }
 
-  const { mode, text, options, model: clientModel, fileId, deckTitle, deckContent } = body as {
+  const { mode, text, options, fileId, deckTitle, deckContent } = body as {
     mode?: string;
     text?: string;
     options?: Record<string, unknown>;
-    model?: string;
     retrievalContext?: string;
     fileId?: string | null;
     deckTitle?: string;
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
   const preparedContext = typeof body.retrievalContext === 'string' && body.retrievalContext.trim()
     ? body.retrievalContext.trim()
     : buildGenerationContext(currentMode, baseSourceText, options, persistedIndex);
+  const { mode: aiMode, localModel, cloudModel } = resolveAiRuntimeRequest(body);
 
   const encoder = new TextEncoder();
 
@@ -65,21 +67,17 @@ export async function POST(req: NextRequest) {
     return encoder.encode(`data: ${payload}\n\n`);
   }
 
-  // ── 1. Try Ollama streaming ──────────────────────────────────────────────
   const ollamaBase = process.env.OLLAMA_URL ?? 'http://localhost:11434';
-  const ollamaModel = (typeof clientModel === 'string' && clientModel.trim())
-    ? clientModel.trim()
-    : (process.env.OLLAMA_MODEL ?? 'mistral');
-
   const userPrompt = buildUserPrompt(currentMode, preparedContext, options);
 
-  try {
+  if (shouldTryLocal(aiMode)) {
+    try {
     // Try OpenAI-compatible streaming endpoint first
     const ollamaRes = await fetch(`${ollamaBase}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: ollamaModel,
+        model: localModel,
         messages: [
           { role: 'system', content: 'You are a study assistant. Be concise, accurate, and helpful.' },
           { role: 'user', content: userPrompt },
@@ -116,7 +114,7 @@ export async function POST(req: NextRequest) {
               }
             }
           } finally {
-            controller.enqueue(sseChunk('', true, 'ollama'));
+            controller.enqueue(sseChunk('', true, 'local'));
             controller.close();
           }
         },
@@ -135,7 +133,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: ollamaModel,
+        model: localModel,
         prompt: buildPrompt(currentMode, preparedContext, options),
         stream: true,
         options: { num_predict: 1600, temperature: 0.7 },
@@ -163,7 +161,7 @@ export async function POST(req: NextRequest) {
                   const token = parsed?.response ?? '';
                   if (token) controller.enqueue(sseChunk(token, false));
                   if (parsed?.done) {
-                    controller.enqueue(sseChunk('', true, 'ollama'));
+                    controller.enqueue(sseChunk('', true, 'local'));
                     controller.close();
                     return;
                   }
@@ -171,7 +169,7 @@ export async function POST(req: NextRequest) {
               }
             }
           } finally {
-            controller.enqueue(sseChunk('', true, 'ollama'));
+            controller.enqueue(sseChunk('', true, 'local'));
             controller.close();
           }
         },
@@ -184,8 +182,45 @@ export async function POST(req: NextRequest) {
         },
       });
     }
-  } catch {
-    // Ollama unavailable — fall through to offline
+    } catch {
+      // Local runtime unavailable — fall through.
+    }
+  }
+
+  if (shouldTryCloud(aiMode)) {
+    const cloudResult = await callOpenAIChat({
+      model: cloudModel,
+      messages: [
+        { role: 'system', content: 'You are a study assistant. Be concise, accurate, and helpful.' },
+        { role: 'user', content: userPrompt },
+      ],
+      maxTokens: 1600,
+      temperature: 0.7,
+    });
+
+    if (cloudResult.ok) {
+      const stream = new ReadableStream({
+        async start(controller) {
+          const words = cloudResult.content.split(/(\s+)/);
+          const CHUNK = 4;
+          for (let i = 0; i < words.length; i += CHUNK) {
+            const chunk = words.slice(i, i + CHUNK).join('');
+            if (chunk) controller.enqueue(sseChunk(chunk, false));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+          controller.enqueue(sseChunk('', true, 'openai'));
+          controller.close();
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          'X-Accel-Buffering': 'no',
+        },
+      });
+    }
   }
 
   // ── 2. Offline fallback: chunk the text into ~word-sized pieces ──────────

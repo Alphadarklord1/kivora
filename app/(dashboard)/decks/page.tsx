@@ -147,7 +147,9 @@ export default function DeckLibraryPage() {
     payload: ImportPayload,
     fallbackSource: { type: SRSDeck['sourceType']; label: string },
   ) {
-    const sourceMeta = payload.source ? IMPORT_SOURCE_META[payload.source] : undefined;
+    const sourceMeta = typeof payload.source === 'string' && payload.source in IMPORT_SOURCE_META
+      ? IMPORT_SOURCE_META[payload.source as keyof typeof IMPORT_SOURCE_META]
+      : undefined;
     const sourceType = sourceMeta?.type ?? fallbackSource.type;
     const sourceLabel = sourceMeta?.label ?? fallbackSource.label;
 

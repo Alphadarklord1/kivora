@@ -11,6 +11,7 @@ import {
   persistDeckLocally,
   syncDeckToCloud,
 } from '@/lib/srs/deck-utils';
+import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
 import type { GeneratedContent } from '@/lib/offline/generate';
 import { FlashcardView } from '@/components/workspace/views/FlashcardView';
 import { InteractiveQuiz } from '@/components/workspace/InteractiveQuiz';
@@ -203,6 +204,7 @@ export default function DeckDetailPage() {
     if (!deck || generating) return;
     setGenerating(mode);
     try {
+      const ai = loadAiRuntimePreferences();
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -213,6 +215,7 @@ export default function DeckDetailPage() {
           deckTitle: deck.name,
           deckContent,
           options: mode === 'exam' ? { count: 8 } : undefined,
+          ai,
         }),
       });
       const payload = await res.json().catch(() => null);

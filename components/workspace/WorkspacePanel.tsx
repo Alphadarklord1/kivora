@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
+import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
 import { idbStore } from '@/lib/idb';
 import { extractTextFromBlob } from '@/lib/pdf/extract';
 import type { ToolMode } from '@/lib/offline/generate';
@@ -437,14 +438,12 @@ export function WorkspacePanel({
     setEditMode(false);
 
     try {
-      const ollamaModel = typeof window !== 'undefined'
-        ? (localStorage.getItem('kivora_ollama_model') ?? 'mistral')
-        : 'mistral';
+      const ai = loadAiRuntimePreferences();
 
       const res = await fetch('/api/generate/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, text: src, fileId: selFile?.id ?? null, retrievalContext, options: { count }, model: ollamaModel }),
+        body: JSON.stringify({ mode, text: src, fileId: selFile?.id ?? null, retrievalContext, options: { count }, ai }),
         signal: ctrl.signal,
       });
 
@@ -452,7 +451,7 @@ export function WorkspacePanel({
         // Fallback to non-streaming route
         const fallback = await fetch('/api/generate', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode, text: retrievalContext, fileId: selFile?.id ?? null, options: { count }, model: ollamaModel }),
+          body: JSON.stringify({ mode, text: retrievalContext, fileId: selFile?.id ?? null, options: { count }, ai }),
         });
         const data = await fallback.json();
         setOutput(data.content ?? data.error ?? 'No output received.');
@@ -969,7 +968,8 @@ export function WorkspacePanel({
                     )}
                     {generating && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginLeft: 4 }}>● streaming…</span>}
                     {!generating && streamSource === 'offline' && <span className="badge" style={{ fontSize: 10, opacity: 0.6 }}>offline</span>}
-                    {!generating && streamSource === 'ollama' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(74,222,128,0.15)', color: '#4ade80', borderColor: 'rgba(74,222,128,0.3)' }}>● AI</span>}
+                    {!generating && streamSource === 'local' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(74,222,128,0.15)', color: '#4ade80', borderColor: 'rgba(74,222,128,0.3)' }}>● Local AI</span>}
+                    {!generating && streamSource === 'openai' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(79,134,247,0.15)', color: '#4f86f7', borderColor: 'rgba(79,134,247,0.3)' }}>● Cloud AI</span>}
                     {/* Edit toggle — only for text modes, not while streaming */}
                     {!generating && (genMode === 'summarize' || genMode === 'notes' || genMode === 'rephrase' || genMode === 'outline' || genMode === 'assignment' || genMode === 'quiz') && (
                       <button

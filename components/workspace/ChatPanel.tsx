@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
 import { buildRagContext } from '@/lib/rag/retrieve';
 import { queryIndexedDocument } from '@/lib/rag/index-store';
 
@@ -116,9 +117,7 @@ export function ChatPanel({
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
     try {
-      const ollamaModel = typeof window !== 'undefined'
-        ? (localStorage.getItem('kivora_ollama_model') ?? 'mistral')
-        : 'mistral';
+      const ai = loadAiRuntimePreferences();
 
       const retrievedSources = extractedText && fileId
         ? await queryIndexedDocument(fileId, extractedText, q, 5).catch(() => [])
@@ -132,7 +131,7 @@ export function ChatPanel({
           fileId: fileId ?? null,
           context: retrievedSources.length > 0 ? buildRagContext(retrievedSources) : extractedText,
           sources: retrievedSources.map((source) => ({ label: source.label, preview: source.preview, text: source.text })),
-          model: ollamaModel,
+          ai,
         }),
         signal: ctrl.signal,
       });

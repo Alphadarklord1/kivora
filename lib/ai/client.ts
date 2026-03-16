@@ -10,10 +10,15 @@ import {
   type AiScopeErrorCode,
   type StudyAiMode,
 } from '@/lib/ai/policy';
+import {
+  getDefaultAiRuntimePreferences,
+  normalizeAiMode,
+  type AiMode,
+} from '@/lib/ai/runtime';
 import { isElectronRenderer } from '@/lib/runtime/mode';
 import { readCompatStorage, removeCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
-export type AiProvider = 'desktop-local' | 'openai' | 'offline';
+export type AiProvider = AiMode | 'offline';
 
 export interface AiPreferences {
   provider: AiProvider;
@@ -50,26 +55,20 @@ export type AiGenerationResult =
   | AiGenerationRuntimeError;
 
 function getDefaultProvider(): AiProvider {
-  return isElectronRenderer() ? 'desktop-local' : 'openai';
+  return getDefaultAiRuntimePreferences().mode;
 }
 
 const DEFAULT_PREFS: AiPreferences = {
   provider: getDefaultProvider(),
-  openaiModel: 'gpt-4o-mini',
-  enableCloudFallback: false,
+  openaiModel: getDefaultAiRuntimePreferences().cloudModel,
+  enableCloudFallback: true,
 };
 
 function normalizeProvider(value: string | null): AiProvider {
-  if (value === 'desktop-local' || value === 'openai' || value === 'offline') {
+  if (value === 'offline') {
     return value;
   }
-
-  // Legacy migration from old preferences.
-  if (value === 'auto' || value === 'ollama') {
-    return isElectronRenderer() ? 'desktop-local' : 'openai';
-  }
-
-  return getDefaultProvider();
+  return normalizeAiMode(value);
 }
 
 function normalizeBoolean(value: string | null, fallback = false): boolean {
@@ -91,7 +90,7 @@ export function saveAiPreferences(prefs: AiPreferences) {
   if (typeof window === 'undefined') return;
   writeCompatStorage(localStorage, storageKeys.aiProvider, prefs.provider);
   writeCompatStorage(localStorage, storageKeys.aiOpenAiModel, prefs.openaiModel);
-  writeCompatStorage(localStorage, storageKeys.aiCloudFallback, String(prefs.enableCloudFallback));
+  writeCompatStorage(localStorage, storageKeys.aiCloudFallback, String(prefs.enableCloudFallback || prefs.provider === 'auto'));
 
   // Cleanup legacy keys to keep stored state consistent.
   removeCompatStorage(localStorage, storageKeys.aiLegacyOllamaModel);
@@ -128,7 +127,7 @@ async function requestOpenAI(
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({
-        provider: 'openai',
+        provider: 'cloud',
         model,
         text,
         mode,
@@ -151,7 +150,7 @@ async function requestOpenAI(
 
       return {
         status: 'runtime_error',
-        provider: 'openai',
+        provider: 'cloud',
         message: String(payload.error || payload.reason || 'OpenAI generation failed'),
         details: `HTTP ${res.status}`,
       };
@@ -161,14 +160,14 @@ async function requestOpenAI(
     if (!content || typeof content.displayText !== 'string') {
       return {
         status: 'runtime_error',
-        provider: 'openai',
+        provider: 'cloud',
         message: 'OpenAI returned invalid content',
       };
     }
 
     return {
       status: 'success',
-      provider: 'openai',
+      provider: 'cloud',
       content,
       fallbackUsed: Boolean(payload.fallback),
       reason: typeof payload.reason === 'string' ? payload.reason : undefined,
@@ -176,7 +175,7 @@ async function requestOpenAI(
   } catch (error) {
     return {
       status: 'runtime_error',
-      provider: 'openai',
+      provider: 'cloud',
       message: 'OpenAI request failed',
       details: error instanceof Error ? error.message : String(error),
     };
@@ -191,7 +190,7 @@ async function requestDesktopLocal(
   if (typeof window === 'undefined' || !window.electronAPI?.desktopAI) {
     return {
       status: 'runtime_error',
-      provider: 'desktop-local',
+      provider: 'local',
       message: 'Desktop AI runtime is not available',
       details: 'Electron desktop bridge is missing',
     };
@@ -202,7 +201,7 @@ async function requestDesktopLocal(
     if (result.ok) {
       return {
         status: 'success',
-        provider: 'desktop-local',
+        provider: 'local',
         content: result.content,
         fallbackUsed: false,
       };
@@ -219,14 +218,14 @@ async function requestDesktopLocal(
 
     return {
       status: 'runtime_error',
-      provider: 'desktop-local',
+      provider: 'local',
       message: result.message,
       details: result.errorCode,
     };
   } catch (error) {
     return {
       status: 'runtime_error',
-      provider: 'desktop-local',
+      provider: 'local',
       message: 'Desktop AI request failed',
       details: error instanceof Error ? error.message : String(error),
     };
@@ -244,7 +243,7 @@ export async function generateAiContent(
     return toPolicyBlock(scopeDecision);
   }
 
-  const preferDesktopOpenSource = isElectronRenderer() && prefs.provider !== 'offline';
+  const preferDesktopOpenSource = isElectronRenderer() && (prefs.provider === 'auto' || prefs.provider === 'local');
 
   if (preferDesktopOpenSource) {
     const localResult = await requestDesktopLocal(text, mode, rewriteOptions);
@@ -252,7 +251,7 @@ export async function generateAiContent(
       return localResult;
     }
 
-    if (prefs.enableCloudFallback || prefs.provider === 'openai') {
+    if (prefs.enableCloudFallback || prefs.provider === 'cloud' || prefs.provider === 'auto') {
       const cloudResult = await requestOpenAI(prefs.openaiModel, text, mode, rewriteOptions);
       if (cloudResult.status === 'success' || cloudResult.status === 'policy_block') {
         return cloudResult.status === 'success'
@@ -260,7 +259,7 @@ export async function generateAiContent(
               ...cloudResult,
               fallbackUsed: true,
               reason: localResult.message,
-              primaryProvider: 'desktop-local',
+              primaryProvider: 'local',
             }
           : cloudResult;
       }
@@ -272,7 +271,7 @@ export async function generateAiContent(
       content: getGeneratedContent(mode, text, rewriteOptions),
       fallbackUsed: true,
       reason: localResult.message || 'Desktop open-source model unavailable',
-      primaryProvider: 'desktop-local',
+      primaryProvider: 'local',
     };
   }
 
@@ -283,11 +282,11 @@ export async function generateAiContent(
       content: getGeneratedContent(mode, text, rewriteOptions),
       fallbackUsed: true,
       reason: 'AI provider is set to offline deterministic mode',
-      primaryProvider: 'openai',
+      primaryProvider: 'cloud',
     };
   }
 
-  if (prefs.provider === 'openai') {
+  if (prefs.provider === 'cloud') {
     const cloudResult = await requestOpenAI(prefs.openaiModel, text, mode, rewriteOptions);
     if (cloudResult.status === 'success' || cloudResult.status === 'policy_block') {
       return cloudResult;
@@ -299,7 +298,7 @@ export async function generateAiContent(
       content: getGeneratedContent(mode, text, rewriteOptions),
       fallbackUsed: true,
       reason: cloudResult.message,
-      primaryProvider: 'openai',
+      primaryProvider: 'cloud',
     };
   }
 
@@ -320,7 +319,7 @@ export async function generateAiContent(
       content: getGeneratedContent(mode, text, rewriteOptions),
       fallbackUsed: true,
       reason: cloudResult.message || localResult.message,
-      primaryProvider: 'desktop-local',
+      primaryProvider: 'local',
     };
   }
 
@@ -330,6 +329,6 @@ export async function generateAiContent(
     content: getGeneratedContent(mode, text, rewriteOptions),
     fallbackUsed: true,
     reason: localResult.message,
-    primaryProvider: 'desktop-local',
+    primaryProvider: 'local',
   };
 }
