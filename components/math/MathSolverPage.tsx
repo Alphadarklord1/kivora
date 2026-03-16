@@ -12,7 +12,7 @@ import { readMathContext } from '@/lib/math/context';
 interface MathStep {
   step: number;
   description: string;
-  latex: string;
+  expression: string;  // matches /lib/math/types.ts and both solver paths
   explanation: string;
 }
 
@@ -606,9 +606,13 @@ function saveHistory(h: HistoryItem[]) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+const MATH_SIDEBAR_KEY = 'kivora-math-sidebar';
+
 export function MathSolverPage() {
   const [active, setActive] = useState<ActiveView>('algebra');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
+    try { return localStorage.getItem(MATH_SIDEBAR_KEY) !== 'closed'; } catch { return true; }
+  });
   const [input, setInput] = useState('');
   const [symbolTab, setSymbolTab] = useState(0);
   const [showSymbols, setShowSymbols] = useState(false);
@@ -860,7 +864,11 @@ export function MathSolverPage() {
         {/* Collapse toggle */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: sidebarOpen ? 'space-between' : 'center', padding: sidebarOpen ? '14px 14px 8px' : '14px 0 8px' }}>
           {sidebarOpen && <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Categories</span>}
-          <button onClick={() => setSidebarOpen(o => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: 4 }} title={sidebarOpen ? 'Collapse' : 'Expand'}>
+          <button onClick={() => setSidebarOpen(o => {
+            const next = !o;
+            try { localStorage.setItem(MATH_SIDEBAR_KEY, next ? 'open' : 'closed'); } catch { /* noop */ }
+            return next;
+          })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: 4 }} title={sidebarOpen ? 'Collapse' : 'Expand'}>
             {sidebarOpen ? '◀' : '▶'}
           </button>
         </div>
@@ -889,10 +897,13 @@ export function MathSolverPage() {
               {activeSubtitle}
             </div>
           </div>
-          <button onClick={() => setShowHistory(h => !h)}
-            style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: showHistory ? 'var(--primary)1a' : 'transparent', color: showHistory ? 'var(--primary)' : 'var(--text-muted)', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
-            🕐 History
-          </button>
+          {history.length > 0 && (
+            <button onClick={() => setShowHistory(h => !h)}
+              style={{ marginLeft: 'auto', padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${showHistory ? 'var(--primary)' : 'var(--border-subtle)'}`, background: showHistory ? 'color-mix(in srgb, var(--primary) 10%, var(--bg-elevated))' : 'var(--bg-elevated)', color: showHistory ? 'var(--primary)' : 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+              🕐 History
+              <span style={{ background: showHistory ? 'var(--primary)' : 'var(--border-mid, var(--border-subtle))', color: showHistory ? '#fff' : 'var(--text-muted)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999 }}>{history.length}</span>
+            </button>
+          )}
         </div>
 
         {/* History drawer */}
@@ -1023,6 +1034,29 @@ export function MathSolverPage() {
               </div>
             )}
 
+            {/* Recent history chips */}
+            {history.length > 0 && !loading && !result && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>Recent:</span>
+                {history.slice(0, 3).map(h => (
+                  <button key={h.id}
+                    onClick={() => {
+                      const nextCategory = (TOPICS.find(t => t.id === h.category)?.id ?? 'algebra') as TopicId;
+                      setInput(h.problem);
+                      setActive(nextCategory);
+                      setTimeout(() => { void solve(h.problem, nextCategory); }, 0);
+                    }}
+                    style={{ padding: '4px 12px', borderRadius: 20, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', transition: 'all 0.1s', fontFamily: '"JetBrains Mono", monospace' }}
+                    title={`${h.problem} = ${h.answer}`}
+                    onMouseEnter={e => { (e.currentTarget).style.borderColor = 'var(--primary)'; (e.currentTarget).style.color = 'var(--primary)'; }}
+                    onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; (e.currentTarget).style.color = 'var(--text-secondary)'; }}
+                  >
+                    {h.problem.length > 28 ? h.problem.slice(0, 28) + '…' : h.problem}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Loading skeleton */}
             {loading && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1061,9 +1095,9 @@ export function MathSolverPage() {
                             <div style={{ width: 24, height: 24, borderRadius: '50%', background: currentAccent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{step.step ?? i + 1}</div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>{step.description}</div>
-                              {step.latex && (
+                              {step.expression && (
                                 <div style={{ overflowX: 'auto', padding: '6px 0', marginBottom: 4 }}>
-                                  <Latex latex={step.latex} display />
+                                  <Latex latex={step.expression} display />
                                 </div>
                               )}
                               {step.explanation && <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{step.explanation}</div>}
@@ -1342,14 +1376,10 @@ export function MathSolverPage() {
                     </div>
                   </div>
 
-                  <div style={{ overflowX: 'auto', marginBottom: 12, padding: '8px 0' }}>
-                    <Latex latex={scanExtracted} display />
-                  </div>
-
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
-                    Input syntax
+                    Extracted text
                   </div>
-                  <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 12, color: 'var(--text-secondary)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 13, color: 'var(--text-secondary)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>
                     {scanExtracted}
                   </div>
                 </div>

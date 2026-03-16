@@ -56,6 +56,12 @@ const GENERATE_TABS = [
   { id: 'exam',       label: 'Exam Prep',  icon: '🏆', hint: 'Timed exam with scoring and weak-area analysis' },
 ] as const;
 
+const GENERATE_TAB_GROUPS = [
+  { label: 'Written',  ids: ['summarize', 'notes', 'rephrase', 'outline'] },
+  { label: 'Practice', ids: ['practice', 'mcq', 'quiz', 'flashcards', 'assignment'] },
+  { label: 'Exam',     ids: ['exam'] },
+] as const;
+
 type GenMode    = (typeof GENERATE_TABS)[number]['id'];
 type MainTab    = 'files' | 'generate' | 'chat' | 'notes' | 'focus' | 'library' | 'planner';
 
@@ -829,21 +835,29 @@ export function WorkspacePanel({
         {mainTab === 'generate' && (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
 
-            {/* Tool mode pills */}
-            <div style={{ display: 'flex', gap: 5, padding: '10px 14px 8px', flexWrap: 'wrap', flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
-              {GENERATE_TABS.map(t => (
-                <button key={t.id} title={t.hint}
-                  onClick={() => { setGenMode(t.id); setOutput(''); }}
-                  style={{
-                    padding: '5px 12px', borderRadius: 20, fontSize: 'var(--text-xs)',
-                    fontWeight: 500, border: `1.5px solid ${genMode === t.id ? 'var(--accent)' : 'var(--border-2)'}`,
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                    background: genMode === t.id ? 'var(--accent)' : 'var(--surface-2)',
-                    color: genMode === t.id ? '#fff' : 'var(--text-2)',
-                    transition: 'all 0.14s',
-                  }}>
-                  {t.icon} {t.label}
-                </button>
+            {/* Tool mode pills — grouped */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
+              {GENERATE_TAB_GROUPS.map((group, gi) => (
+                <div key={group.label} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: gi === 0 ? '9px 14px 5px' : '4px 14px 5px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-3)', marginRight: 3, flexShrink: 0, minWidth: 42 }}>
+                    {group.label}
+                  </span>
+                  <span style={{ width: 1, height: 14, background: 'var(--border-2)', flexShrink: 0, marginRight: 3 }} />
+                  {GENERATE_TABS.filter(t => (group.ids as readonly string[]).includes(t.id)).map(t => (
+                    <button key={t.id} title={t.hint}
+                      onClick={() => { setGenMode(t.id); setOutput(''); }}
+                      style={{
+                        padding: '4px 11px', borderRadius: 20, fontSize: 'var(--text-xs)',
+                        fontWeight: 500, border: `1.5px solid ${genMode === t.id ? 'var(--accent)' : 'var(--border-2)'}`,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                        background: genMode === t.id ? 'var(--accent)' : 'var(--surface-2)',
+                        color: genMode === t.id ? '#fff' : 'var(--text-2)',
+                        transition: 'all 0.14s',
+                      }}>
+                      {t.icon} {t.label}
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
 
