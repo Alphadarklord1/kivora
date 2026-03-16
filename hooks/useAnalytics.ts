@@ -77,7 +77,16 @@ export interface DeckStats {
   totalCards: number;
   dailyGoal: number;
   reviewedToday: number;
+  cardsMastered: number;
+  dueCardsTotal: number;
+  overallRetention: number;
   topDecks: DeckPerformance[];
+}
+
+export interface WeekOverWeek {
+  thisWeekAvg: number;
+  lastWeekAvg: number;
+  weekDelta: number | null;
 }
 
 export interface AnalyticsData {
@@ -90,6 +99,7 @@ export interface AnalyticsData {
   insights: string[];
   usage: UsageStats;
   deckStats: DeckStats;
+  weekOverWeek?: WeekOverWeek;
   fallback?: boolean;
   warning?: string;
   requestId?: string;

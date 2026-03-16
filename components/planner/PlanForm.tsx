@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { StudyTopic } from '@/lib/planner/generate';
+import { StudyTopic, generateStudySchedule, type GeneratedSchedule } from '@/lib/planner/generate';
 import { useFoldersStore } from '@/lib/store/folders';
 import { useI18n } from '@/lib/i18n/useI18n';
 
@@ -47,6 +47,7 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
     { name: '', difficulty: 3, estimatedHours: 2 },
   ]);
   const [error, setError] = useState('');
+  const [preview, setPreview] = useState<GeneratedSchedule | null>(null);
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -65,16 +66,20 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
     setTopics(prev => prev.map((t, i) => i === idx ? { ...t, [field]: value } : t));
   };
 
-  const handleSubmit = () => {
+  const handlePreview = () => {
     setError('');
-
     if (!title.trim()) { setError(t('Enter a plan title')); return; }
     if (!examDate) { setError(t('Pick an exam date')); return; }
     if (new Date(examDate) <= new Date()) { setError(t('Exam date must be in the future')); return; }
-
     const validTopics = topics.filter(t => t.name.trim());
     if (validTopics.length === 0) { setError(t('Add at least one topic')); return; }
+    const schedule = generateStudySchedule(new Date(examDate), validTopics, dailyMinutes);
+    setPreview(schedule);
+  };
 
+  const handleConfirm = () => {
+    if (!preview) return;
+    const validTopics = topics.filter(t => t.name.trim());
     onGenerate({
       title: title.trim(),
       examDate,
@@ -198,10 +203,70 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
         </button>
       </div>
 
-      <button className="generate-btn" onClick={handleSubmit}>
+      <button className="generate-btn" onClick={handlePreview}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         {t('Generate Schedule')}
       </button>
+
+      {/* Schedule preview */}
+      {preview && (
+        <div className="preview-panel">
+          <div className="preview-header">
+            <h3>📅 Schedule Preview</h3>
+            <button className="preview-close" onClick={() => setPreview(null)}>✕</button>
+          </div>
+          <div className="preview-summary">
+            <div className="ps-stat">
+              <span className="ps-val">{preview.totalDays}</span>
+              <span className="ps-lbl">Total days</span>
+            </div>
+            <div className="ps-stat">
+              <span className="ps-val">{preview.summary.totalStudyHours}h</span>
+              <span className="ps-lbl">Study hours</span>
+            </div>
+            <div className="ps-stat">
+              <span className="ps-val">{preview.summary.revisionDays}</span>
+              <span className="ps-lbl">Revision days</span>
+            </div>
+            <div className="ps-stat">
+              <span className="ps-val">{preview.summary.topicsCount}</span>
+              <span className="ps-lbl">Topics</span>
+            </div>
+          </div>
+
+          {/* First 7 days preview */}
+          <div className="preview-days">
+            {preview.days.slice(0, 7).map(day => (
+              <div key={day.dayNumber} className={`preview-day${day.isRevision ? ' revision' : ''}`}>
+                <div className="pd-header">
+                  <span className="pd-num">Day {day.dayNumber}</span>
+                  <span className="pd-date">{new Date(day.date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                  {day.isRevision && <span className="pd-rev-badge">Revision</span>}
+                  <span className="pd-mins">{day.totalMinutes}m</span>
+                </div>
+                <div className="pd-topics">
+                  {day.topics.map((t, i) => (
+                    <span key={i} className={`pd-topic-chip ${t.tasks[0] ?? 'learn'}`}>
+                      {t.name} · {t.duration}m
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {preview.totalDays > 7 && (
+              <div className="preview-more">+ {preview.totalDays - 7} more days until {new Date(preview.endDate + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+            )}
+          </div>
+
+          <div className="preview-actions">
+            <button className="back-btn" onClick={() => setPreview(null)}>← Edit</button>
+            <button className="confirm-btn" onClick={handleConfirm}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Save Plan
+            </button>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         .plan-form {
@@ -403,6 +468,106 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
           transition: var(--transition-fast);
         }
         .generate-btn:hover { background: var(--primary-hover); }
+
+        /* Schedule preview */
+        .preview-panel {
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+          background: color-mix(in srgb, var(--primary) 4%, var(--bg-base));
+          padding: var(--space-4);
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3);
+          animation: previewSlide 0.2s ease;
+        }
+        @keyframes previewSlide { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+        .preview-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .preview-header h3 { margin: 0; font-size: var(--font-body); font-weight: 600; }
+        .preview-close {
+          width: 26px; height: 26px; border-radius: 50%;
+          border: 1px solid var(--border-subtle); background: transparent;
+          cursor: pointer; color: var(--text-muted); font-size: 12px;
+        }
+        .preview-summary {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: var(--space-2);
+        }
+        .ps-stat {
+          display: flex; flex-direction: column; align-items: center; gap: 2px;
+          padding: var(--space-2); border-radius: var(--radius-sm);
+          background: var(--bg-elevated, var(--bg-surface));
+          border: 1px solid var(--border-subtle);
+        }
+        .ps-val { font-size: 20px; font-weight: 700; color: var(--primary); }
+        .ps-lbl { font-size: 10px; color: var(--text-muted); text-align: center; }
+        .preview-days {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-2);
+          max-height: 280px;
+          overflow-y: auto;
+        }
+        .preview-day {
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-sm);
+          padding: var(--space-2) var(--space-3);
+          background: var(--bg-elevated, var(--bg-surface));
+        }
+        .preview-day.revision {
+          border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+          background: color-mix(in srgb, var(--primary) 5%, var(--bg-elevated, var(--bg-surface)));
+        }
+        .pd-header {
+          display: flex; align-items: center; gap: 8px;
+          margin-bottom: 6px; flex-wrap: wrap;
+        }
+        .pd-num { font-size: 11px; font-weight: 700; color: var(--primary); }
+        .pd-date { font-size: 11px; color: var(--text-muted); flex: 1; }
+        .pd-rev-badge {
+          font-size: 9px; font-weight: 700; padding: 2px 6px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--primary) 15%, transparent);
+          color: var(--primary);
+        }
+        .pd-mins { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
+        .pd-topics { display: flex; flex-wrap: wrap; gap: 4px; }
+        .pd-topic-chip {
+          font-size: 10px; padding: 2px 8px; border-radius: 999px;
+          font-weight: 500;
+        }
+        .pd-topic-chip.learn { background: color-mix(in srgb, #4f86f7 12%, transparent); color: #2563eb; border: 1px solid color-mix(in srgb, #4f86f7 25%, transparent); }
+        .pd-topic-chip.practice { background: color-mix(in srgb, #f59e0b 12%, transparent); color: #b45309; border: 1px solid color-mix(in srgb, #f59e0b 25%, transparent); }
+        .pd-topic-chip.review { background: color-mix(in srgb, #52b788 12%, transparent); color: #166534; border: 1px solid color-mix(in srgb, #52b788 25%, transparent); }
+        .preview-more {
+          font-size: 11px; color: var(--text-muted); text-align: center;
+          padding: var(--space-2);
+          border-radius: var(--radius-sm);
+          border: 1px dashed var(--border-subtle);
+        }
+        .preview-actions {
+          display: flex; gap: var(--space-2); padding-top: var(--space-2);
+          border-top: 1px solid var(--border-subtle);
+        }
+        .back-btn {
+          padding: var(--space-2) var(--space-3); border-radius: var(--radius-md);
+          border: 1px solid var(--border-subtle); background: transparent;
+          color: var(--text-secondary); font-size: var(--font-meta); cursor: pointer;
+          transition: var(--transition-fast);
+        }
+        .back-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .confirm-btn {
+          display: flex; align-items: center; gap: var(--space-2);
+          padding: var(--space-2) var(--space-4); border-radius: var(--radius-md);
+          border: none; background: var(--primary); color: white;
+          font-size: var(--font-meta); font-weight: 600; cursor: pointer;
+          flex: 1; justify-content: center; transition: var(--transition-fast);
+        }
+        .confirm-btn:hover { background: var(--primary-hover); }
       `}</style>
     </div>
   );
