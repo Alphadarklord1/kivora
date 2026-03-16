@@ -281,13 +281,63 @@ export default function DeckLibraryPage() {
 
   return (
     <div className={styles.page}>
-      <section className={styles.hero}>
-        <div className={styles.heroCopy}>
+      <aside className={styles.sidebar}>
+        <div className={styles.sidebarIntro}>
           <span className={styles.eyebrow}>Deck Workflow</span>
-          <h1>Import, open, edit, and publish decks from one streamlined workspace.</h1>
-          <p>
-            Private decks stay at the center of study mode, quiz generation, explanations, and public sharing.
-          </p>
+          <h1>Decks</h1>
+          <p>Keep imports, study mode, and public sharing in one calmer workspace.</p>
+        </div>
+
+        <nav className={styles.sidebarNav}>
+          {tabMeta.map((tab) => (
+            <button
+              key={tab.id}
+              className={`${styles.navButton} ${activeTab === tab.id ? styles.navButtonActive : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <span>{tab.label}</span>
+              {typeof tab.count === 'number' ? <small>{tab.count}</small> : null}
+            </button>
+          ))}
+        </nav>
+
+        <div className={styles.sidebarPanel}>
+          <div className={styles.metricCard}>
+            <span className={styles.metricLabel}>Private decks</span>
+            <strong>{localDeckCount}</strong>
+            <small>Study, quiz, and revise from your saved decks.</small>
+          </div>
+          <div className={styles.metricCard}>
+            <span className={styles.metricLabel}>Public decks</span>
+            <strong>{decks.length}</strong>
+            <small>Importable snapshots from the shared library.</small>
+          </div>
+          <div className={styles.metricCard}>
+            <span className={styles.metricLabel}>Import sources</span>
+            <strong>Quizlet, CSV, Paste, Anki</strong>
+            <small>Use the Import tab to bring everything into one deck system.</small>
+          </div>
+        </div>
+      </aside>
+
+      <div className={styles.main}>
+        <section className={styles.headerCard}>
+          <div>
+            <h2>
+              {activeTab === 'mine'
+                ? 'My Decks'
+                : activeTab === 'import'
+                  ? 'Import'
+                  : 'Public Library'}
+            </h2>
+            <p>
+              {activeTab === 'mine'
+                ? 'Open a deck quickly, jump into study mode, and keep your private deck list tidy.'
+                : activeTab === 'import'
+                  ? 'Bring in decks from reliable sources, then route straight into the editor and study flow.'
+                  : 'Search shared decks, preview them, and import only what you want into your own workspace.'}
+            </p>
+          </div>
           <div className={styles.actions}>
             <button className={styles.primaryButton} onClick={() => setActiveTab('import')}>
               Import a deck
@@ -299,41 +349,9 @@ export default function DeckLibraryPage() {
               View stats
             </button>
           </div>
-        </div>
+        </section>
 
-        <div className={styles.heroPanel}>
-          <div className={styles.metricCard}>
-            <span className={styles.metricLabel}>Private decks</span>
-            <strong>{localDeckCount}</strong>
-            <small>Personal study decks</small>
-          </div>
-          <div className={styles.metricCard}>
-            <span className={styles.metricLabel}>Public decks</span>
-            <strong>{decks.length}</strong>
-            <small>Searchable shared decks</small>
-          </div>
-          <div className={styles.metricCard}>
-            <span className={styles.metricLabel}>Import source</span>
-            <strong>Quizlet + CSV + Anki</strong>
-            <small>Universal import with direct deck handoff</small>
-          </div>
-        </div>
-      </section>
-
-      <section className={styles.tabBar}>
-        {tabMeta.map((tab) => (
-          <button
-            key={tab.id}
-            className={`${styles.tabButton} ${activeTab === tab.id ? styles.tabButtonActive : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            <span>{tab.label}</span>
-            {typeof tab.count === 'number' ? <small>{tab.count}</small> : null}
-          </button>
-        ))}
-      </section>
-
-      {activeTab === 'mine' && (
+        {activeTab === 'mine' && (
         <section className={styles.libraryCard}>
           <div className={styles.sectionHeader}>
             <div>
@@ -381,7 +399,7 @@ export default function DeckLibraryPage() {
                   </div>
 
                   <div className={styles.preview}>
-                    {deck.cards.slice(0, 3).map((card) => (
+                    {deck.cards.slice(0, 2).map((card) => (
                       <div key={card.id}><strong>{card.front}</strong> — {card.back}</div>
                     ))}
                   </div>
@@ -583,7 +601,7 @@ export default function DeckLibraryPage() {
                   </div>
 
                   <div className={styles.preview}>
-                    {deck.content.split('\n').slice(0, 4).map((line, index) => (
+                    {deck.content.split('\n').slice(0, 3).map((line, index) => (
                       <div key={`${deck.shareId}-${index}`}>{line}</div>
                     ))}
                   </div>
@@ -605,6 +623,7 @@ export default function DeckLibraryPage() {
           )}
         </section>
       )}
+      </div>
     </div>
   );
 }
