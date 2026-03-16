@@ -4,8 +4,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import * as math from 'mathjs';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const functionPlot = typeof window !== 'undefined' ? require('function-plot') : null;
+import { extractTextFromBlob } from '@/lib/pdf/extract';
+import { readMathContext } from '@/lib/math/context';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -39,6 +39,11 @@ interface GraphExpression {
   expr: string;
   color: string;
   enabled: boolean;
+}
+
+interface WorkflowStep {
+  label: string;
+  detail: string;
 }
 
 type NormalizedGraphExpression =
@@ -168,7 +173,7 @@ const TOPICS = [
 ] as const;
 
 type TopicId = typeof TOPICS[number]['id'];
-type SpecialView = 'formulas' | 'graph' | 'units';
+type SpecialView = 'formulas' | 'graph' | 'units' | 'scan';
 type ActiveView = TopicId | SpecialView;
 
 // ── Formula reference data ────────────────────────────────────────────────────
@@ -272,6 +277,12 @@ const SYMBOL_GROUPS = [
 ];
 
 const GRAPH_COLORS = ['#6366f1', '#f97316', '#22c55e', '#ef4444', '#a855f7', '#0ea5e9'];
+const GRAPH_PRESETS = [
+  { label: 'Parabola', expr: 'y = x^2' },
+  { label: 'Sine', expr: 'y = sin(x)' },
+  { label: 'Circle', expr: 'x^2 + y^2 = 25' },
+  { label: 'Vertical line', expr: 'x = 2' },
+];
 
 function normalizeGraphExpression(expr: string): NormalizedGraphExpression | null {
   const trimmed = expr.trim();
@@ -296,32 +307,129 @@ function normalizeGraphExpression(expr: string): NormalizedGraphExpression | nul
   return { type: 'function', value: trimmed };
 }
 
-function restyleGraphCanvas(target: HTMLDivElement | null) {
-  if (!target) return;
-  const svg = target.querySelector('svg');
-  if (!svg) return;
+function getGraphTheme() {
   const theme = document.documentElement.getAttribute('data-theme');
   const dark = theme === 'blue' || theme === 'black' || theme === 'dark';
-  const background = dark ? '#10192d' : '#ffffff';
-  const axis = dark ? '#dbe4f5' : '#111827';
-  const grid = dark ? '#31415e' : '#dbe4f0';
-  const labels = dark ? '#dbe4f5' : '#1f2937';
+  return {
+    background: dark ? '#10192d' : '#ffffff',
+    axis: dark ? '#dbe4f5' : '#111827',
+    grid: dark ? '#31415e' : '#dbe4f0',
+    labels: dark ? '#dbe4f5' : '#1f2937',
+  };
+}
 
-  svg.style.background = background;
-  svg.querySelectorAll('.x.axis path, .y.axis path').forEach(node => {
-    (node as SVGElement).setAttribute('stroke', axis);
-    (node as SVGElement).setAttribute('stroke-width', '1.6');
-  });
-  svg.querySelectorAll('.x.axis line, .y.axis line').forEach(node => {
-    (node as SVGElement).setAttribute('stroke', axis);
-    (node as SVGElement).setAttribute('stroke-width', '1.25');
-  });
-  svg.querySelectorAll('.x.grid line, .y.grid line').forEach(node => {
-    (node as SVGElement).setAttribute('stroke', grid);
-  });
-  svg.querySelectorAll('text').forEach(node => {
-    (node as SVGElement).setAttribute('fill', labels);
-  });
+function buildGraphSvg(expressions: GraphExpression[], xDomain: [number, number], yDomain: [number, number]) {
+  const width = 920;
+  const height = 420;
+  const padding = 28;
+  const innerWidth = width - padding * 2;
+  const innerHeight = height - padding * 2;
+  const xRange = Math.max(xDomain[1] - xDomain[0], 0.0001);
+  const yRange = Math.max(yDomain[1] - yDomain[0], 0.0001);
+  const theme = getGraphTheme();
+
+  const toSvgX = (x: number) => padding + ((x - xDomain[0]) / xRange) * innerWidth;
+  const toSvgY = (y: number) => height - padding - ((y - yDomain[0]) / yRange) * innerHeight;
+  const evaluate = (expr: string, scope: Record<string, number>) => {
+    const result = math.evaluate(expr, scope);
+    return typeof result === 'number' ? result : Number(result);
+  };
+
+  const gridLines = Array.from({ length: 11 }, (_, index) => {
+    const x = padding + (innerWidth * index) / 10;
+    const y = padding + (innerHeight * index) / 10;
+    return `
+      <line x1="${x}" y1="${padding}" x2="${x}" y2="${height - padding}" stroke="${theme.grid}" stroke-width="1" />
+      <line x1="${padding}" y1="${y}" x2="${width - padding}" y2="${y}" stroke="${theme.grid}" stroke-width="1" />
+    `;
+  }).join('');
+
+  const axisLines = `
+    ${xDomain[0] <= 0 && xDomain[1] >= 0 ? `<line x1="${toSvgX(0)}" y1="${padding}" x2="${toSvgX(0)}" y2="${height - padding}" stroke="${theme.axis}" stroke-width="1.5" />` : ''}
+    ${yDomain[0] <= 0 && yDomain[1] >= 0 ? `<line x1="${padding}" y1="${toSvgY(0)}" x2="${width - padding}" y2="${toSvgY(0)}" stroke="${theme.axis}" stroke-width="1.5" />` : ''}
+  `;
+
+  const layers = expressions
+    .filter(expr => expr.enabled && expr.expr.trim())
+    .map(expr => {
+      const normalized = normalizeGraphExpression(expr.expr);
+      if (!normalized) return '';
+
+      if (normalized.type === 'function') {
+        const samples = 260;
+        const segments: string[] = [];
+        let current = '';
+        let previous: { x: number; y: number } | null = null;
+
+        for (let i = 0; i <= samples; i += 1) {
+          const x = xDomain[0] + (xRange * i) / samples;
+          let y: number;
+          try {
+            y = evaluate(normalized.value, { x });
+          } catch {
+            if (current) segments.push(current);
+            current = '';
+            previous = null;
+            continue;
+          }
+
+          if (!Number.isFinite(y)) {
+            if (current) segments.push(current);
+            current = '';
+            previous = null;
+            continue;
+          }
+
+          const svgX = toSvgX(x);
+          const svgY = toSvgY(y);
+          const jumpTooLarge = previous && Math.abs(svgY - previous.y) > innerHeight * 0.75;
+          if (jumpTooLarge && current) {
+            segments.push(current);
+            current = '';
+          }
+
+          current = current ? `${current} L ${svgX.toFixed(2)} ${svgY.toFixed(2)}` : `M ${svgX.toFixed(2)} ${svgY.toFixed(2)}`;
+          previous = { x: svgX, y: svgY };
+        }
+
+        if (current) segments.push(current);
+        return segments.map(segment => `<path d="${segment}" fill="none" stroke="${expr.color}" stroke-width="2.4" stroke-linecap="round" />`).join('');
+      }
+
+      const threshold = Math.max((xRange + yRange) / 220, 0.08);
+      const cols = 110;
+      const rows = 80;
+      const dots: string[] = [];
+
+      for (let row = 0; row <= rows; row += 1) {
+        for (let col = 0; col <= cols; col += 1) {
+          const x = xDomain[0] + (xRange * col) / cols;
+          const y = yDomain[0] + (yRange * row) / rows;
+          try {
+            const value = evaluate(normalized.value, { x, y });
+            if (Number.isFinite(value) && Math.abs(value) <= threshold) {
+              dots.push(`<circle cx="${toSvgX(x).toFixed(2)}" cy="${toSvgY(y).toFixed(2)}" r="1.3" fill="${expr.color}" opacity="0.82" />`);
+            }
+          } catch {
+            // Ignore sample points that fail evaluation.
+          }
+        }
+      }
+
+      return dots.join('');
+    })
+    .join('');
+
+  return `
+    <svg viewBox="0 0 ${width} ${height}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Math graph">
+      <rect width="${width}" height="${height}" fill="${theme.background}" rx="14" ry="14" />
+      ${gridLines}
+      ${axisLines}
+      ${layers}
+      <text x="${padding}" y="${height - 8}" fill="${theme.labels}" font-size="11">x: [${xDomain[0]}, ${xDomain[1]}]</text>
+      <text x="${width - padding}" y="${height - 8}" text-anchor="end" fill="${theme.labels}" font-size="11">y: [${yDomain[0]}, ${yDomain[1]}]</text>
+    </svg>
+  `;
 }
 
 // ── KaTeX helper ──────────────────────────────────────────────────────────────
@@ -337,6 +445,46 @@ function Latex({ latex, display = false }: { latex: string; display?: boolean })
     } catch { ref.current.textContent = latex; }
   }, [latex, display]);
   return <span ref={ref} />;
+}
+
+function WorkflowCard({ accent, title, steps }: { accent: string; title: string; steps: WorkflowStep[] }) {
+  return (
+    <div
+      style={{
+        padding: '12px 14px',
+        borderRadius: 12,
+        border: `1px solid ${accent}30`,
+        background: `${accent}10`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+      }}
+    >
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: accent }}>
+        {title}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
+        {steps.map((step, index) => (
+          <div
+            key={`${step.label}-${index}`}
+            style={{
+              padding: '10px 12px',
+              borderRadius: 10,
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            <div style={{ fontSize: 11, color: accent, fontWeight: 700, marginBottom: 4 }}>
+              {index + 1}. {step.label}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+              {step.detail}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ── Unit converter data ───────────────────────────────────────────────────────
@@ -417,6 +565,12 @@ export function MathSolverPage() {
   const [xDomain, setXDomain] = useState<[number, number]>([-12, 12]);
   const [yDomain, setYDomain] = useState<[number, number]>([-10, 10]);
   const [themeTick, setThemeTick] = useState(0);
+  const [contextName, setContextName] = useState('');
+  const [scanBusy, setScanBusy] = useState(false);
+  const [scanFileName, setScanFileName] = useState('');
+  const [scanError, setScanError] = useState('');
+  const [scanExtracted, setScanExtracted] = useState('');
+  const [scanSource, setScanSource] = useState<'image' | 'pdf' | null>(null);
 
   // Unit converter state
   const [unitCatIdx, setUnitCatIdx] = useState(0);
@@ -425,6 +579,12 @@ export function MathSolverPage() {
   const [unitValue, setUnitValue] = useState('1');
 
   useEffect(() => { setHistory(loadHistory()); }, []);
+
+  useEffect(() => {
+    const context = readMathContext();
+    if (!context) return;
+    setContextName(context.fileName);
+  }, []);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -437,18 +597,68 @@ export function MathSolverPage() {
     setGraphExprs([{ id: crypto.randomUUID(), expr, color: GRAPH_COLORS[0], enabled: true }]);
   }, []);
 
+  const loadQuestionFromFile = useCallback(async (file: File) => {
+    const isImage = file.type.startsWith('image/');
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+    if (!isImage && !isPdf) {
+      setScanError('Upload a screenshot image or a PDF that contains a math question.');
+      return;
+    }
+
+    setScanBusy(true);
+    setScanError('');
+    setScanExtracted('');
+    setScanFileName(file.name);
+    setScanSource(isImage ? 'image' : 'pdf');
+
+    try {
+      if (isImage) {
+        const imageBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result ?? ''));
+          reader.onerror = () => reject(new Error('Could not read the image.'));
+          reader.readAsDataURL(file);
+        });
+
+        const response = await fetch('/api/math-ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64 }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.expression) {
+          throw new Error(data.error ?? 'Could not extract a math expression from the screenshot.');
+        }
+        setScanExtracted(String(data.expression).trim());
+        return;
+      }
+
+      const extracted = await extractTextFromBlob(file, file.name);
+      if (extracted.error || !extracted.text.trim()) {
+        throw new Error(extracted.error ?? 'The PDF did not contain readable text.');
+      }
+      setScanExtracted(extracted.text.replace(/\s+/g, ' ').trim().slice(0, 4000));
+    } catch (error) {
+      setScanError(error instanceof Error ? error.message : 'Could not process this file.');
+    } finally {
+      setScanBusy(false);
+    }
+  }, []);
+
   // ── Solver ─────────────────────────────────────────────────────────────────
 
-  const solve = useCallback(async (problem: string = input) => {
+  const solve = useCallback(async (problem: string = input, categoryOverride?: TopicId) => {
     const p = problem.trim();
     if (!p) return;
     setLoading(true);
     setResult(null);
+    const requestCategory = categoryOverride ?? TOPICS.find(t => t.id === active)?.id ?? null;
     try {
       const res = await fetch('/api/math/solve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ problem: p, category: TOPICS.find(t => t.id === active)?.id ?? null }),
+        body: JSON.stringify({ problem: p, category: requestCategory }),
       });
       const data = await res.json() as SolveResult;
       setResult(data);
@@ -462,7 +672,7 @@ export function MathSolverPage() {
         replaceGraphWith(data.graphExpr);
       }
     } catch {
-      setResult({ answer: '', answerLatex: '', steps: [], graphExpr: null, category: String(active), engine: 'error', error: 'Network error — check that the AI model is running.' });
+      setResult({ answer: '', answerLatex: '', steps: [], graphExpr: null, category: String(requestCategory ?? active), engine: 'error', error: 'Network error — check that the AI model is running.' });
     } finally {
       setLoading(false);
     }
@@ -471,41 +681,19 @@ export function MathSolverPage() {
   // ── Graph rendering ────────────────────────────────────────────────────────
 
   const renderGraph = useCallback(() => {
-    if (!graphRef.current || !functionPlot) return;
+    if (!graphRef.current) return;
     const enabled = graphExprs.filter(e => e.enabled && e.expr.trim());
     if (enabled.length === 0) {
       graphRef.current.innerHTML = '';
       setGraphError('');
       return;
     }
-    setGraphError('');
     try {
-      const fns = enabled
-        .map(e => {
-          const normalized = normalizeGraphExpression(e.expr);
-          if (!normalized) return null;
-          if (normalized.type === 'implicit') {
-            return { fn: normalized.value, fnType: 'implicit', color: e.color, sampler: 'builtIn' };
-          }
-          return { fn: normalized.value, color: e.color, sampler: 'builtIn', nSamples: 500 };
-        })
-        .filter(Boolean);
-      if (fns.length === 0) {
-        graphRef.current.innerHTML = '';
-        return;
-      }
-      functionPlot({
-        target: graphRef.current,
-        width: graphRef.current.clientWidth || 600,
-        height: 380,
-        xAxis: { domain: xDomain },
-        yAxis: { domain: yDomain },
-        grid: true,
-        data: fns,
-      });
-      restyleGraphCanvas(graphRef.current);
+      graphRef.current.innerHTML = buildGraphSvg(enabled, xDomain, yDomain);
+      setGraphError('');
     } catch (err) {
-      setGraphError(String(err));
+      graphRef.current.innerHTML = '';
+      setGraphError(err instanceof Error ? err.message : String(err));
     }
   }, [graphExprs, xDomain, yDomain]);
 
@@ -539,14 +727,16 @@ export function MathSolverPage() {
 
   const currentTopic = TOPICS.find(t => t.id === active);
   const _currentFormulas = FORMULAS[active as string] ?? [];
-  const activeTitle = currentTopic?.label ?? (active === 'formulas' ? 'Formula Sheets' : active === 'graph' ? 'Graph Plotter' : 'Unit Converter');
+  const activeTitle = currentTopic?.label ?? (active === 'formulas' ? 'Formula Sheets' : active === 'graph' ? 'Graph Plotter' : active === 'units' ? 'Unit Converter' : 'Question Scan');
   const activeSubtitle =
     active === 'formulas'
       ? 'Quick-reference formulas organized by topic, ready to review before homework or exams.'
       : active === 'graph'
-        ? 'Plot functions, vertical lines, and implicit relations with a cleaner graphing workflow.'
+        ? 'Plot functions, vertical lines, and implicit relations without the old graph-runtime crashes.'
         : active === 'units'
           ? 'Convert the common units students need most, with a simpler focused tool.'
+          : active === 'scan'
+            ? 'Upload a screenshot or PDF of a math question, extract it, and send it to the solver.'
           : 'Solve one problem at a time with examples, symbols, and step-by-step output.';
 
   const unitCat = UNIT_CATS[unitCatIdx];
@@ -625,6 +815,7 @@ export function MathSolverPage() {
           <NavItem id="formulas" icon="📚" label="Formula Sheets" />
           <NavItem id="graph"    icon="📈" label="Graph Plotter"  color="#22c55e" />
           <NavItem id="units"    icon="⚖" label="Unit Converter" color="#f59e0b" />
+          <NavItem id="scan"     icon="🧾" label="Question Scan"  color="#38bdf8" />
         </div>
       </aside>
 
@@ -633,7 +824,7 @@ export function MathSolverPage() {
 
         {/* Header */}
         <div style={{ padding: '16px 24px 12px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-elevated)', flexShrink: 0 }}>
-          <span style={{ fontSize: 20 }}>{currentTopic?.icon ?? (active === 'formulas' ? '📚' : active === 'graph' ? '📈' : '⚖')}</span>
+          <span style={{ fontSize: 20 }}>{currentTopic?.icon ?? (active === 'formulas' ? '📚' : active === 'graph' ? '📈' : active === 'units' ? '⚖' : '🧾')}</span>
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
               {activeTitle}
@@ -656,7 +847,13 @@ export function MathSolverPage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
                 {history.map(h => (
-                  <button key={h.id} onClick={() => { setInput(h.problem); setShowHistory(false); setActive((h.category as ActiveView) ?? 'algebra'); setTimeout(() => solve(h.problem), 0); }}
+                  <button key={h.id} onClick={() => {
+                    const nextCategory = (TOPICS.find(topic => topic.id === h.category)?.id ?? 'algebra') as TopicId;
+                    setInput(h.problem);
+                    setShowHistory(false);
+                    setActive(nextCategory);
+                    setTimeout(() => { void solve(h.problem, nextCategory); }, 0);
+                  }}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', cursor: 'pointer', textAlign: 'left' }}>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.problem}</span>
                     <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600, flexShrink: 0 }}>{h.answer.slice(0, 30)}{h.answer.length > 30 ? '…' : ''}</span>
@@ -668,14 +865,24 @@ export function MathSolverPage() {
         )}
 
         {/* ── SOLVER PHASE ── */}
-        {active !== 'formulas' && active !== 'graph' && active !== 'units' && (
+        {active !== 'formulas' && active !== 'graph' && active !== 'units' && active !== 'scan' && (
           <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16, flex: 1 }}>
+            <WorkflowCard
+              accent={currentTopic?.color ?? 'var(--primary)'}
+              title="Solver flow"
+              steps={[
+                { label: 'Pick or type a problem', detail: 'Start from an example or enter your own question in plain math text.' },
+                { label: 'Solve it', detail: 'Run the local solver first, then fall back to AI only when the result needs help.' },
+                { label: 'Review the method', detail: 'Read each step and explanation so this feels like guided tutoring, not a black box.' },
+                { label: 'Send graphable work to Graph', detail: 'If the result includes a graph expression, open it in the Graph tab instantly.' },
+              ]}
+            />
 
             {/* Quick examples */}
             {currentTopic && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {currentTopic.examples.map(ex => (
-                  <button key={ex} onClick={() => { setInput(ex); solve(ex); }}
+                  <button key={ex} onClick={() => { setInput(ex); void solve(ex, currentTopic.id); }}
                     style={{ padding: '4px 12px', borderRadius: 20, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer', transition: 'all 0.1s' }}
                     onMouseEnter={e => { (e.currentTarget).style.borderColor = currentTopic.color; (e.currentTarget).style.color = currentTopic.color; }}
                     onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; (e.currentTarget).style.color = 'var(--text-secondary)'; }}
@@ -694,6 +901,12 @@ export function MathSolverPage() {
                 Press <strong style={{ color: 'var(--text-primary)' }}>Enter</strong> to solve, <strong style={{ color: 'var(--text-primary)' }}>Shift + Enter</strong> for a new line.
               </span>
             </div>
+
+            {contextName && (
+              <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 12, color: 'var(--text-secondary)' }}>
+                Linked workspace file: <strong style={{ color: 'var(--text-primary)' }}>{contextName}</strong>
+              </div>
+            )}
 
             {/* Input box */}
             <div style={{ position: 'relative' }}>
@@ -826,6 +1039,15 @@ export function MathSolverPage() {
         {/* ── FORMULAS VIEW ── */}
         {active === 'formulas' && (
           <div style={{ padding: '20px 24px', flex: 1, overflowY: 'auto' }}>
+            <WorkflowCard
+              accent="#6366f1"
+              title="Formula-sheet workflow"
+              steps={[
+                { label: 'Choose a topic', detail: 'Jump into the formula group that matches the class or chapter you are studying.' },
+                { label: 'Review the pattern', detail: 'Use these as quick revision cards before homework, quizzes, or an exam.' },
+                { label: 'Send one to the solver', detail: 'Click any formula card when you want a worked explanation or an example problem.' },
+              ]}
+            />
             <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', marginBottom: 18, fontSize: 12, color: 'var(--text-secondary)' }}>
               This tab is for revision speed: scan formulas, then click one to send it back into the solver for explanation or practice.
             </div>
@@ -842,7 +1064,7 @@ export function MathSolverPage() {
                     {formulas.map((f, i) => (
                       <div key={i}
                         style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', cursor: 'pointer', transition: 'border-color 0.12s' }}
-                        onClick={() => { setInput(`Explain: ${f.title}`); setActive(topic.id as TopicId); void solve(`Explain: ${f.title}`); }}
+                        onClick={() => { setInput(`Explain: ${f.title}`); setActive(topic.id as TopicId); void solve(`Explain: ${f.title}`, topic.id as TopicId); }}
                         onMouseEnter={e => { (e.currentTarget).style.borderColor = topic.color; }}
                         onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; }}
                         title="Click to solve / explain"
@@ -864,14 +1086,19 @@ export function MathSolverPage() {
         {/* ── GRAPH VIEW ── */}
         {active === 'graph' && (
           <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <WorkflowCard
+              accent="#22c55e"
+              title="Graph workflow"
+              steps={[
+                { label: 'Enter a relation', detail: 'Use forms like y = x^2, x = 2, or x^2 + y^2 = 25.' },
+                { label: 'Plot it', detail: 'Hit Plot to render explicit functions and implicit relations in the same graph area.' },
+                { label: 'Adjust the window', detail: 'Use Home and zoom controls to inspect shape, intercepts, and symmetry.' },
+                { label: 'Compare multiple expressions', detail: 'Add extra rows to see how lines, curves, and relations interact.' },
+              ]}
+            />
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {[
-                  { label: 'Parabola', expr: 'y = x^2' },
-                  { label: 'Sine', expr: 'y = sin(x)' },
-                  { label: 'Circle', expr: 'x^2 + y^2 = 25' },
-                  { label: 'Vertical line', expr: 'x = 2' },
-                ].map(preset => (
+                {GRAPH_PRESETS.map(preset => (
                   <button
                     key={preset.label}
                     onClick={() => replaceGraphWith(preset.expr)}
@@ -945,6 +1172,16 @@ export function MathSolverPage() {
         {/* ── UNIT CONVERTER ── */}
         {active === 'units' && (
           <div style={{ padding: '20px 24px', flex: 1, maxWidth: 540 }}>
+            <WorkflowCard
+              accent="#f59e0b"
+              title="Unit-converter workflow"
+              steps={[
+                { label: 'Choose a category', detail: 'Pick the measurement family you need first, like length, mass, or speed.' },
+                { label: 'Set from and to units', detail: 'Choose your source unit and the unit you want to end up with.' },
+                { label: 'Enter a value', detail: 'Type one value and let the converter return a clean answer immediately.' },
+                { label: 'Swap when needed', detail: 'Use the swap control to reverse the conversion without re-entering everything.' },
+              ]}
+            />
             <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', marginBottom: 16, fontSize: 12, color: 'var(--text-secondary)' }}>
               Use this tab for quick conversions only — one value, one category, one clean result.
             </div>
@@ -987,6 +1224,105 @@ export function MathSolverPage() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ── QUESTION SCAN ── */}
+        {active === 'scan' && (
+          <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 900 }}>
+            <WorkflowCard
+              accent="#38bdf8"
+              title="Question-scan workflow"
+              steps={[
+                { label: 'Upload a screenshot or PDF', detail: 'This tab only accepts images and PDFs that contain math questions.' },
+                { label: 'Extract the question text', detail: 'Images use OCR and PDFs use text extraction so we can turn the file into solver-ready input.' },
+                { label: 'Review what was captured', detail: 'Check the extracted question before sending it into the solver.' },
+                { label: 'Solve it step by step', detail: 'Use “Solve now” to move the extracted text straight into the Solver tab.' },
+              ]}
+            />
+
+            <div style={{ padding: '14px 16px', borderRadius: 12, border: '1px dashed var(--border-subtle)', background: 'var(--bg-2)' }}>
+              <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, marginBottom: 6 }}>
+                Upload math-question files only
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                Best for phone screenshots, worksheet captures, or PDFs that contain a single question or a short worked problem.
+              </div>
+              <input
+                type="file"
+                accept="image/*,.pdf,application/pdf"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    void loadQuestionFromFile(file);
+                  }
+                  event.currentTarget.value = '';
+                }}
+                style={{ fontSize: 12, color: 'var(--text-secondary)' }}
+              />
+            </div>
+
+            {scanBusy && (
+              <div style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 12, color: 'var(--text-secondary)' }}>
+                Extracting the question from <strong style={{ color: 'var(--text-primary)' }}>{scanFileName || 'your file'}</strong>…
+              </div>
+            )}
+
+            {scanError && (
+              <div style={{ padding: '12px 14px', borderRadius: 10, background: '#ef444410', border: '1px solid #ef444440', fontSize: 12, color: '#ef4444' }}>
+                ⚠ {scanError}
+              </div>
+            )}
+
+            {scanExtracted && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ padding: '14px 16px', borderRadius: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                        Extracted question
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                        {scanFileName || 'Uploaded file'} · {scanSource === 'image' ? 'Screenshot OCR' : 'PDF text extraction'}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => {
+                          setInput(scanExtracted);
+                          setActive('algebra');
+                          inputRef.current?.focus();
+                        }}
+                        style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}
+                      >
+                        Use in solver
+                      </button>
+                      <button
+                        onClick={() => {
+                          setInput(scanExtracted);
+                          setActive('algebra');
+                          setTimeout(() => { void solve(scanExtracted, 'algebra'); }, 0);
+                        }}
+                        style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Solve now
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ overflowX: 'auto', marginBottom: 12, padding: '8px 0' }}>
+                    <Latex latex={scanExtracted} display />
+                  </div>
+
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                    Input syntax
+                  </div>
+                  <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 12, color: 'var(--text-secondary)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    {scanExtracted}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
