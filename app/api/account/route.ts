@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
         email: users.email,
         name: users.name,
         image: users.image,
+        bio: users.bio,
         createdAt: users.createdAt,
         hasPassword: users.passwordHash,
         twoFactorEnabled: users.twoFactorEnabled,
@@ -102,7 +103,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, email } = body;
+    const { name, email, image, bio } = body;
     const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : email;
     const currentUser = await db.query.users.findFirst({
       where: eq(users.id, userId),
@@ -142,10 +143,71 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        return apiError(400, {
+          errorCode: 'INVALID_NAME',
+          reason: 'Name cannot be empty',
+          requestId,
+        });
+      }
+      if (name.trim().length > 80) {
+        return apiError(400, {
+          errorCode: 'INVALID_NAME',
+          reason: 'Name must be 80 characters or fewer',
+          requestId,
+        });
+      }
+    }
+
+    if (image !== undefined && image !== null && image !== '') {
+      if (typeof image !== 'string') {
+        return apiError(400, {
+          errorCode: 'INVALID_IMAGE',
+          reason: 'Image must be a URL string',
+          requestId,
+        });
+      }
+      try {
+        new URL(image);
+      } catch {
+        return apiError(400, {
+          errorCode: 'INVALID_IMAGE',
+          reason: 'Profile picture must be a valid URL',
+          requestId,
+        });
+      }
+      if (image.length > 500) {
+        return apiError(400, {
+          errorCode: 'INVALID_IMAGE',
+          reason: 'Profile picture URL is too long',
+          requestId,
+        });
+      }
+    }
+
+    if (bio !== undefined && bio !== null && typeof bio !== 'string') {
+      return apiError(400, {
+        errorCode: 'INVALID_BIO',
+        reason: 'Bio must be text',
+        requestId,
+      });
+    }
+
+    if (typeof bio === 'string' && bio.trim().length > 240) {
+      return apiError(400, {
+        errorCode: 'INVALID_BIO',
+        reason: 'Bio must be 240 characters or fewer',
+        requestId,
+      });
+    }
+
     // Update user
-    const updateData: Record<string, string | Date> = { updatedAt: new Date() };
-    if (name !== undefined) updateData.name = name;
+    const updateData: Record<string, string | Date | null> = { updatedAt: new Date() };
+    if (name !== undefined) updateData.name = name.trim();
     if (normalizedEmail) updateData.email = normalizedEmail;
+    if (image !== undefined) updateData.image = typeof image === 'string' && image.trim() ? image.trim() : null;
+    if (bio !== undefined) updateData.bio = typeof bio === 'string' && bio.trim() ? bio.trim() : null;
 
     const updated = await db
       .update(users)
@@ -156,6 +218,7 @@ export async function PUT(request: NextRequest) {
         email: users.email,
         name: users.name,
         image: users.image,
+        bio: users.bio,
       });
 
     return NextResponse.json(updated[0]);

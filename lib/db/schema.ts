@@ -10,6 +10,7 @@ export const users = pgTable('users', {
   name: text('name'),
   emailVerified: timestamp('email_verified'),
   image: text('image'),
+  bio: text('bio'),
   passwordHash: text('password_hash'),
   isGuest: boolean('is_guest').notNull().default(false),
   guestSessionId: text('guest_session_id'),

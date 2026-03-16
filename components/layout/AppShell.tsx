@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   function toggleTheme() {
-    updateSetting('theme', settings.theme === 'dark' ? 'light' : 'dark');
+    updateSetting('theme', settings.theme === 'light' ? 'blue' : 'light');
   }
 
   async function handleSignOut() {
@@ -158,7 +158,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={toggleTheme}
             title="Toggle theme"
           >
-            <span className="nav-icon">{settings.theme === 'dark' ? '☀️' : '🌙'}</span>
+            <span className="nav-icon">{settings.theme === 'light' ? '🌙' : '☀️'}</span>
             {!collapsed && <span className="nav-label">Theme</span>}
           </button>
 
