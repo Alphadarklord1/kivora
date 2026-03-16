@@ -19,6 +19,12 @@ interface Props {
   extractedText: string;
   fileName?: string;
   fileId?: string;
+  files?: Array<{ id: string; name: string }>;
+  selectedFileId?: string | null;
+  onSelectFile?: (fileId: string) => void;
+  onLoadSelectedFile?: () => void;
+  onClearContext?: () => void;
+  extracting?: boolean;
 }
 
 /* Minimal markdown → HTML for chat bubbles */
@@ -40,7 +46,17 @@ const STARTER_QUESTIONS = [
   "What is the author's conclusion?",
 ];
 
-export function ChatPanel({ extractedText, fileName, fileId }: Props) {
+export function ChatPanel({
+  extractedText,
+  fileName,
+  fileId,
+  files = [],
+  selectedFileId = null,
+  onSelectFile,
+  onLoadSelectedFile,
+  onClearContext,
+  extracting = false,
+}: Props) {
   const [messages,  setMessages]  = useState<Message[]>([]);
   const [input,     setInput]     = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -48,6 +64,7 @@ export function ChatPanel({ extractedText, fileName, fileId }: Props) {
   const abortRef  = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastContextRef = useRef<string | null>(null);
 
   function copyMessage(text: string, idx: number) {
     navigator.clipboard.writeText(text).then(() => {
@@ -59,6 +76,14 @@ export function ChatPanel({ extractedText, fileName, fileId }: Props) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    const nextContext = fileId ?? null;
+    if (lastContextRef.current && nextContext !== lastContextRef.current) {
+      setMessages([]);
+    }
+    lastContextRef.current = nextContext;
+  }, [fileId]);
 
   async function sendMessage(question?: string) {
     const q = (question ?? input).trim();
@@ -180,10 +205,47 @@ export function ChatPanel({ extractedText, fileName, fileId }: Props) {
         ) : (
           <>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warning)', flexShrink: 0 }} />
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-              No document loaded — open a file in <strong style={{ color: 'var(--text-2)' }}>Files</strong> and click <strong style={{ color: 'var(--accent)' }}>⚡ Use</strong>
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+              {files.length > 0 && onSelectFile && onLoadSelectedFile ? (
+                <>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                    No document loaded —
+                  </span>
+                  <select
+                    value={selectedFileId ?? ''}
+                    onChange={(event) => onSelectFile(event.target.value)}
+                    style={{
+                      minWidth: 180,
+                      maxWidth: 280,
+                      padding: '4px 8px',
+                      fontSize: 'var(--text-xs)',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'var(--surface)',
+                      color: 'var(--text)',
+                    }}
+                  >
+                    <option value="" disabled>Choose a file from this folder…</option>
+                    {files.map((file) => (
+                      <option key={file.id} value={file.id}>{file.name}</option>
+                    ))}
+                  </select>
+                  <button className="btn btn-secondary btn-sm" disabled={!selectedFileId || extracting} onClick={onLoadSelectedFile}>
+                    {extracting ? 'Loading…' : 'Load into chat'}
+                  </button>
+                </>
+              ) : (
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                  No document loaded — open a file in <strong style={{ color: 'var(--text-2)' }}>Files</strong> and click <strong style={{ color: 'var(--accent)' }}>💬 Chat</strong>
+                </span>
+              )}
+            </div>
           </>
+        )}
+        {extractedText && onClearContext && (
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, flexShrink: 0 }} onClick={onClearContext}>
+            Remove file
+          </button>
         )}
         {messages.length > 0 && (
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, marginLeft: 'auto', flexShrink: 0 }} onClick={() => setMessages([])}>

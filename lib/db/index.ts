@@ -3,34 +3,16 @@ import { drizzle as drizzleNeon } from 'drizzle-orm/neon-http';
 import { drizzle as drizzlePostgres } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
+import { isLocalPostgresUrl, isNeonUrl, resolveDatabaseUrl } from './config';
 
 type DatabaseInstance = ReturnType<typeof drizzleNeon<typeof schema>>;
 
-const databaseUrl = process.env.DATABASE_URL;
-
-function parseDatabaseUrl(url: string) {
-  try {
-    return new URL(url);
-  } catch {
-    return null;
-  }
-}
-
-function isNeonUrl(url: string) {
-  const parsed = parseDatabaseUrl(url);
-  if (!parsed) return false;
-  return parsed.hostname.includes('neon.tech');
-}
-
-function isLocalPostgresUrl(url: string) {
-  const parsed = parseDatabaseUrl(url);
-  if (!parsed) return false;
-  return ['localhost', '127.0.0.1', '::1', 'db'].includes(parsed.hostname);
-}
+const databaseUrl = resolveDatabaseUrl();
 
 type GlobalDb = typeof globalThis & {
   __kivoraDb?: DatabaseInstance;
   __kivoraSql?: ReturnType<typeof postgres>;
+  __kivoraDbUrl?: string;
 };
 
 const globalForDb = globalThis as GlobalDb;
@@ -51,11 +33,14 @@ function createDatabase(url: string): DatabaseInstance {
 }
 
 const configuredDb = databaseUrl
-  ? (globalForDb.__kivoraDb ?? createDatabase(databaseUrl))
+  ? (globalForDb.__kivoraDbUrl === databaseUrl && globalForDb.__kivoraDb
+      ? globalForDb.__kivoraDb
+      : createDatabase(databaseUrl))
   : null;
 
-if (configuredDb) {
+if (configuredDb && databaseUrl) {
   globalForDb.__kivoraDb = configuredDb;
+  globalForDb.__kivoraDbUrl = databaseUrl;
 }
 
 export const isDatabaseConfigured = Boolean(databaseUrl);
@@ -64,7 +49,7 @@ type ConfiguredDb = NonNullable<typeof configuredDb>;
 
 const missingDb = new Proxy({} as ConfiguredDb, {
   get() {
-    throw new Error('DATABASE_URL is not configured. Add it to your environment variables.');
+    throw new Error('No database URL is configured. Set SUPABASE_DATABASE_URL or DATABASE_URL in your environment.');
   },
 });
 

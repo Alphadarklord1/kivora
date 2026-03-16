@@ -96,8 +96,14 @@ function wordCount(text: string) {
 // ── Inline file viewer ─────────────────────────────────────────────────────
 
 function FileViewer({
-  file, onClose, onUseForTools, onUseInMath,
-}: { file: FileRecord; onClose: () => void; onUseForTools: (text: string) => void; onUseInMath: (file: FileRecord, text: string) => void }) {
+  file, onClose, onUseForTools, onUseForChat, onUseInMath,
+}: {
+  file: FileRecord;
+  onClose: () => void;
+  onUseForTools: (file: FileRecord, text: string) => void;
+  onUseForChat: (file: FileRecord, text: string) => void;
+  onUseInMath: (file: FileRecord, text: string) => void;
+}) {
   const { toast } = useToast();
   const [blobUrl,     setBlobUrl]     = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
@@ -132,14 +138,25 @@ function FileViewer({
   }, [file.id]);
 
   async function useForTools() {
-    if (textContent) { onUseForTools(textContent); return; }
+    if (textContent) { onUseForTools(file, textContent); return; }
     if (!file.localBlobId) return;
     const payload = await idbStore.get(file.localBlobId);
     if (!payload) { toast('File not found locally.', 'error'); return; }
     const res = await extractTextFromBlob(payload.blob, file.name);
     if (res.error) { toast(res.error, 'error'); return; }
     toast(`${res.wordCount.toLocaleString()} words loaded into Generate`, 'success');
-    onUseForTools(res.text);
+    onUseForTools(file, res.text);
+  }
+
+  async function useForChat() {
+    if (textContent) { onUseForChat(file, textContent); return; }
+    if (!file.localBlobId) return;
+    const payload = await idbStore.get(file.localBlobId);
+    if (!payload) { toast('File not found locally.', 'error'); return; }
+    const res = await extractTextFromBlob(payload.blob, file.name);
+    if (res.error) { toast(res.error, 'error'); return; }
+    toast(`${res.wordCount.toLocaleString()} words loaded into Chat`, 'success');
+    onUseForChat(file, res.text);
   }
 
   async function useInMath() {
@@ -170,6 +187,9 @@ function FileViewer({
         {fmt(file.fileSize) && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', flexShrink: 0 }}>{fmt(file.fileSize)}</span>}
         <button className="btn btn-primary btn-sm" onClick={useForTools} title="Load into Generate tab" style={{ flexShrink: 0 }}>
           ⚡ Use for Generate
+        </button>
+        <button className="btn btn-secondary btn-sm" onClick={useForChat} title="Load into Chat tab" style={{ flexShrink: 0 }}>
+          💬 Use for Chat
         </button>
         <button className="btn btn-secondary btn-sm" onClick={useInMath} title="Send this file into Math" style={{ flexShrink: 0 }}>
           ∑ Use in Math
@@ -300,6 +320,14 @@ export function WorkspacePanel({
 
   useEffect(() => { loadFiles(); }, [loadFiles, filesRefreshKey]);
   useEffect(() => { setViewFile(null); setMissingBlobs(new Set()); }, [selectedFolder, selectedTopic]);
+  useEffect(() => {
+    if (!selFile) return;
+    const stillExists = files.some((file) => file.id === selFile.id);
+    if (!stillExists) {
+      setSelFile(null);
+      setExtractedText('');
+    }
+  }, [files, selFile]);
 
   const loadLib = useCallback(() => {
     setLibLoad(true);
@@ -511,13 +539,40 @@ export function WorkspacePanel({
     else toast('Could not save — DB may not be configured', 'warning');
   }
 
-  function handleUseForTools(text: string) {
+  function handleUseForTools(file: FileRecord, text: string) {
     setExtractedText(text);
-    setSelFile(viewFile);
+    setSelFile(file);
     setPasteMode(false);
     setOutput('');
     setMainTab('generate');
     toast('Content loaded — pick a tool and generate', 'success');
+  }
+
+  function handleUseForChat(file: FileRecord, text: string) {
+    setExtractedText(text);
+    setSelFile(file);
+    setPasteMode(false);
+    setOutput('');
+    setMainTab('chat');
+    toast('File loaded — ask a question in Chat', 'success');
+  }
+
+  async function loadSelectedFileIntoChat() {
+    if (!selFile) {
+      toast('Choose a file first.', 'warning');
+      return;
+    }
+    const text = await extractFromFile(selFile);
+    if (text) {
+      setMainTab('chat');
+      toast(`"${selFile.name}" is ready in Chat`, 'success');
+    }
+  }
+
+  function clearChatContext() {
+    setSelFile(null);
+    setExtractedText('');
+    toast('Chat file cleared', 'info');
   }
 
   function clearGen() { abortRef.current?.abort(); setSelFile(null); setExtractedText(''); setOutput(''); setPasteMode(false); setGenerating(false); }
@@ -688,6 +743,19 @@ export function WorkspacePanel({
                                     <button
                                       className="btn btn-secondary btn-sm"
                                       style={{ fontSize: 11, padding: '2px 8px' }}
+                                      title="Extract text and open in Chat"
+                                      onClick={async () => {
+                                        const text = await extractFromFile(file);
+                                        if (text) {
+                                          setSelFile(file);
+                                          setMainTab('chat');
+                                        }
+                                      }}>
+                                      💬 Chat
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary btn-sm"
+                                      style={{ fontSize: 11, padding: '2px 8px' }}
                                       title="Send this file into Math"
                                       onClick={async () => {
                                         const text = await extractFromFile(file);
@@ -759,6 +827,7 @@ export function WorkspacePanel({
                   file={viewFile}
                   onClose={() => setViewFile(null)}
                   onUseForTools={handleUseForTools}
+                  onUseForChat={handleUseForChat}
                   onUseInMath={sendFileToMath}
                 />
               </div>
@@ -997,7 +1066,22 @@ export function WorkspacePanel({
 
         {/* ─────────────────── CHAT ──────────────────── */}
         {mainTab === 'chat' && (
-          <ChatPanel extractedText={extractedText} fileName={selFile?.name} fileId={selFile?.id} />
+          <ChatPanel
+            extractedText={extractedText}
+            fileName={selFile?.name}
+            fileId={selFile?.id}
+            files={files.map((file) => ({ id: file.id, name: file.name }))}
+            selectedFileId={selFile?.id ?? null}
+            onSelectFile={(fileId) => {
+              const nextFile = files.find((file) => file.id === fileId);
+              if (!nextFile) return;
+              setSelFile(nextFile);
+              setExtractedText('');
+            }}
+            onLoadSelectedFile={loadSelectedFileIntoChat}
+            onClearContext={clearChatContext}
+            extracting={extracting}
+          />
         )}
 
         {/* ─────────────────── NOTES ─────────────────── */}

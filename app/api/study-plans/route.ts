@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
     if (!isDatabaseConfigured) {
-      return databaseUnavailable(request, 'Study plan creation requires DATABASE_URL to be configured', undefined, requestId);
+      return databaseUnavailable(request, 'Study plan creation requires a configured Supabase or PostgreSQL database', undefined, requestId);
     }
 
     const userId = await getUserId(request);

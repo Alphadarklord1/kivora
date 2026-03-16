@@ -13,7 +13,7 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = createRequestId(request);
   if (!isDatabaseConfigured) {
-    return databaseUnavailable(request, 'Study plan lookup requires DATABASE_URL to be configured', undefined, requestId);
+    return databaseUnavailable(request, 'Study plan lookup requires a configured Supabase or PostgreSQL database', undefined, requestId);
   }
 
   const userId = await getUserId(request);
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = createRequestId(request);
   if (!isDatabaseConfigured) {
-    return databaseUnavailable(request, 'Study plan updates require DATABASE_URL to be configured', undefined, requestId);
+    return databaseUnavailable(request, 'Study plan updates require a configured Supabase or PostgreSQL database', undefined, requestId);
   }
 
   const userId = await getUserId(request);
@@ -93,7 +93,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = createRequestId(request);
   if (!isDatabaseConfigured) {
-    return databaseUnavailable(request, 'Study plan deletion requires DATABASE_URL to be configured', undefined, requestId);
+    return databaseUnavailable(request, 'Study plan deletion requires a configured Supabase or PostgreSQL database', undefined, requestId);
   }
 
   const userId = await getUserId(request);
