@@ -66,6 +66,19 @@ export function ChatPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastContextRef = useRef<string | null>(null);
 
+  function updateLastAssistant(content: string, sources?: MessageSource[]) {
+    setMessages(prev => {
+      const next = [...prev];
+      next[next.length - 1] = {
+        ...(next[next.length - 1] ?? { role: 'assistant' as const, content }),
+        role: 'assistant',
+        content,
+        ...(sources ? { sources } : {}),
+      };
+      return next;
+    });
+  }
+
   function copyMessage(text: string, idx: number) {
     navigator.clipboard.writeText(text).then(() => {
       setCopiedIdx(idx);
@@ -125,11 +138,7 @@ export function ChatPanel({
       });
 
       if (!res.ok || !res.body) {
-        setMessages(prev => {
-          const next = [...prev];
-          next[next.length - 1] = { role: 'assistant', content: 'Could not connect. Is Ollama running?' };
-          return next;
-        });
+        updateLastAssistant('Could not connect. Is Ollama running?');
         return;
       }
 
@@ -150,33 +159,17 @@ export function ChatPanel({
           try {
             const { token, done: isDone, sources } = JSON.parse(t.slice(6));
             if (Array.isArray(sources) && sources.length > 0) {
-              setMessages(prev => {
-                const next = [...prev];
-                next[next.length - 1] = {
-                  ...(next[next.length - 1] ?? { role: 'assistant', content }),
-                  content,
-                  sources,
-                };
-                return next;
-              });
+              updateLastAssistant(content, sources);
             }
             if (isDone) break;
             content += token;
-            setMessages(prev => {
-              const next = [...prev];
-              next[next.length - 1] = { role: 'assistant', content };
-              return next;
-            });
+            updateLastAssistant(content);
           } catch { /* skip */ }
         }
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name !== 'AbortError') {
-        setMessages(prev => {
-          const next = [...prev];
-          next[next.length - 1] = { role: 'assistant', content: 'Connection error. Is Ollama running?' };
-          return next;
-        });
+        updateLastAssistant('Connection error. Is Ollama running?');
       }
     } finally {
       setStreaming(false);

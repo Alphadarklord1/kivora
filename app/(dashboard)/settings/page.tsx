@@ -160,6 +160,31 @@ function Section({
   );
 }
 
+function GuestUpgradeNotice({ compact = false }: { compact?: boolean }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: compact ? 'center' : 'flex-start',
+        justifyContent: 'space-between',
+        gap: 12,
+        flexWrap: 'wrap',
+        padding: compact ? 0 : 14,
+        borderRadius: compact ? 0 : 16,
+        border: compact ? 'none' : '1px solid var(--border-2)',
+        background: compact ? 'transparent' : 'var(--surface-2)',
+      }}
+    >
+      <span style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', flex: 1, minWidth: 240 }}>
+        You are in guest mode. Sign in with a real account to save a profile picture, short description, password, and 2-step verification.
+      </span>
+      <a href="/login" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>
+        Sign in / Register
+      </a>
+    </div>
+  );
+}
+
 function ChoiceButtons<T extends string>({
   options,
   value,
@@ -435,11 +460,44 @@ export default function SettingsPage() {
 
       <Section title="Account" subtitle="Profile, connected sign-in methods, and basic account details.">
         {showGuestState ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', flex: 1 }}>
-              You are in guest mode. Appearance settings still work locally, but account features like profile, password, and two-step verification need a real sign-in.
-            </span>
-            <a href="/login" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Sign in / Register</a>
+          <div style={{ display: 'grid', gap: 16 }}>
+            <GuestUpgradeNotice />
+
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <AvatarPreview image={imageUrl || null} name={name || 'Guest user'} email={session?.user?.email ?? 'guest@kivora.local'} />
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)' }}>{name || 'Guest user'}</div>
+                <div style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', marginTop: 4 }}>Profile fields will save after sign-in.</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                  <span className="badge">Profile picture</span>
+                  <span className="badge">Short description</span>
+                  <span className="badge">Connected accounts</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+              <div>
+                <label style={labelStyle}>Display name</label>
+                <input style={fieldStyle} value={name} onChange={e => setName(e.target.value)} placeholder="Your name" disabled />
+              </div>
+              <div>
+                <label style={labelStyle}>Profile picture URL</label>
+                <input style={fieldStyle} value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." disabled />
+              </div>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Short description</label>
+              <textarea
+                style={{ ...fieldStyle, minHeight: 96, resize: 'vertical' }}
+                value={bio}
+                onChange={e => setBio(e.target.value)}
+                placeholder="A short line about what you study, teach, or focus on."
+                maxLength={240}
+                disabled
+              />
+            </div>
           </div>
         ) : accountLoading ? (
           <div className="skeleton" style={{ height: 180, borderRadius: 18 }} />
@@ -507,9 +565,46 @@ export default function SettingsPage() {
 
       <Section title="Security" subtitle="Password changes and two-step verification for your account.">
         {showGuestState ? (
-          <p style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>
-            Security settings become available after you sign in with an account.
-          </p>
+          <div style={{ display: 'grid', gap: 16 }}>
+            <GuestUpgradeNotice compact />
+            <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)', opacity: 0.76 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Two-step verification</div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginTop: 4 }}>
+                    Protect your account with an authenticator app after sign-in.
+                  </div>
+                </div>
+                <span className="badge">Locked in guest mode</span>
+              </div>
+              <div style={{ marginTop: 14 }}>
+                <button className="btn btn-primary btn-sm" disabled>Set up 2-step verification</button>
+              </div>
+            </div>
+
+            <form style={{ display: 'grid', gap: 12, opacity: 0.76 }}>
+              <div style={{ fontWeight: 700 }}>Password</div>
+              <div>
+                <label style={labelStyle}>Current password</label>
+                <input style={fieldStyle} type="password" placeholder="Current password" disabled />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>New password</label>
+                  <input style={fieldStyle} type="password" placeholder="At least 6 characters" disabled />
+                </div>
+                <div>
+                  <label style={labelStyle}>Confirm new password</label>
+                  <input style={fieldStyle} type="password" placeholder="Repeat new password" disabled />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="btn btn-primary" type="button" disabled>
+                  Change password
+                </button>
+              </div>
+            </form>
+          </div>
         ) : accountLoading ? (
           <div className="skeleton" style={{ height: 210, borderRadius: 18 }} />
         ) : account ? (
