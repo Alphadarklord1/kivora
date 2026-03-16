@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   if (!isDatabaseConfigured) return err(503, 'Database not configured');
 
   const row = await db
-    .select({ id: users.id, name: users.name, email: users.email, image: users.image, createdAt: users.createdAt, hasPassword: users.passwordHash })
+    .select({ id: users.id, name: users.name, email: users.email, image: users.image, bio: users.bio, createdAt: users.createdAt, hasPassword: users.passwordHash })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
 // ── PATCH /api/users/me ────────────────────────────────────────────────────
 // Body (all optional):
-//   { name?, image?, currentPassword?, newPassword? }
+//   { name?, image?, bio?, currentPassword?, newPassword? }
 export async function PATCH(req: NextRequest) {
   const userId = await getUserId(req);
   if (!userId) return err(401, 'Not authenticated');
@@ -39,9 +39,10 @@ export async function PATCH(req: NextRequest) {
   try { body = await req.json(); }
   catch { return err(400, 'Invalid JSON'); }
 
-  const { name, image, currentPassword, newPassword } = body as {
+  const { name, image, bio, currentPassword, newPassword } = body as {
     name?: string;
     image?: string;
+    bio?: string;
     currentPassword?: string;
     newPassword?: string;
   };
@@ -55,7 +56,7 @@ export async function PATCH(req: NextRequest) {
 
   if (!user) return err(404, 'User not found');
 
-  const updates: Partial<{ name: string; image: string | null; passwordHash: string; updatedAt: Date }> = {
+  const updates: Partial<{ name: string; image: string | null; bio: string | null; passwordHash: string; updatedAt: Date }> = {
     updatedAt: new Date(),
   };
 
@@ -78,6 +79,13 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  if (bio !== undefined) {
+    if (bio !== null && typeof bio !== 'string') return err(400, 'Invalid bio');
+    const trimmedBio = bio.trim();
+    if (trimmedBio.length > 240) return err(400, 'Bio too long (max 240 chars)');
+    updates.bio = trimmedBio || null;
+  }
+
   // Password change
   if (newPassword !== undefined) {
     if (newPassword.length < 8) return err(400, 'New password must be at least 8 characters');
@@ -97,7 +105,7 @@ export async function PATCH(req: NextRequest) {
     .update(users)
     .set(updates)
     .where(eq(users.id, userId))
-    .returning({ id: users.id, name: users.name, email: users.email, image: users.image });
+    .returning({ id: users.id, name: users.name, email: users.email, image: users.image, bio: users.bio });
 
   return NextResponse.json(updated);
 }

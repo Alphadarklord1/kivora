@@ -48,10 +48,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
           <div style={{ marginBottom: '12px' }}>
             <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px' }}>{t('Theme')}</label>
-            <select value={settings.theme} onChange={(e) => updateSettings({ theme: e.target.value as 'light' | 'dark' | 'black' })}>
+            <select value={settings.theme} onChange={(e) => updateSettings({ theme: e.target.value as 'light' | 'blue' | 'black' | 'system' })}>
               <option value="light">{t('Light')}</option>
-              <option value="dark">{t('Blue Mode')}</option>
+              <option value="blue">{t('Blue Mode')}</option>
               <option value="black">{t('Black Mode')}</option>
+              <option value="system">{t('System')}</option>
             </select>
           </div>
 
