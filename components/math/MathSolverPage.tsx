@@ -41,6 +41,10 @@ interface GraphExpression {
   enabled: boolean;
 }
 
+type NormalizedGraphExpression =
+  | { type: 'function'; value: string }
+  | { type: 'implicit'; value: string };
+
 // ── Topic catalogue ───────────────────────────────────────────────────────────
 
 const TOPICS = [
@@ -269,6 +273,57 @@ const SYMBOL_GROUPS = [
 
 const GRAPH_COLORS = ['#6366f1', '#f97316', '#22c55e', '#ef4444', '#a855f7', '#0ea5e9'];
 
+function normalizeGraphExpression(expr: string): NormalizedGraphExpression | null {
+  const trimmed = expr.trim();
+  if (!trimmed) return null;
+
+  const explicit = trimmed.match(/^y\s*=\s*(.+)$/i);
+  if (explicit) {
+    return { type: 'function', value: explicit[1].trim() };
+  }
+
+  const vertical = trimmed.match(/^x\s*=\s*(.+)$/i);
+  if (vertical) {
+    return { type: 'implicit', value: `x - (${vertical[1].trim()})` };
+  }
+
+  if (trimmed.includes('=')) {
+    const [lhs, rhs] = trimmed.split('=').map(part => part.trim());
+    if (!lhs || !rhs) return null;
+    return { type: 'implicit', value: `(${lhs}) - (${rhs})` };
+  }
+
+  return { type: 'function', value: trimmed };
+}
+
+function restyleGraphCanvas(target: HTMLDivElement | null) {
+  if (!target) return;
+  const svg = target.querySelector('svg');
+  if (!svg) return;
+  const theme = document.documentElement.getAttribute('data-theme');
+  const dark = theme === 'blue' || theme === 'black' || theme === 'dark';
+  const background = dark ? '#10192d' : '#ffffff';
+  const axis = dark ? '#dbe4f5' : '#111827';
+  const grid = dark ? '#31415e' : '#dbe4f0';
+  const labels = dark ? '#dbe4f5' : '#1f2937';
+
+  svg.style.background = background;
+  svg.querySelectorAll('.x.axis path, .y.axis path').forEach(node => {
+    (node as SVGElement).setAttribute('stroke', axis);
+    (node as SVGElement).setAttribute('stroke-width', '1.6');
+  });
+  svg.querySelectorAll('.x.axis line, .y.axis line').forEach(node => {
+    (node as SVGElement).setAttribute('stroke', axis);
+    (node as SVGElement).setAttribute('stroke-width', '1.25');
+  });
+  svg.querySelectorAll('.x.grid line, .y.grid line').forEach(node => {
+    (node as SVGElement).setAttribute('stroke', grid);
+  });
+  svg.querySelectorAll('text').forEach(node => {
+    (node as SVGElement).setAttribute('fill', labels);
+  });
+}
+
 // ── KaTeX helper ──────────────────────────────────────────────────────────────
 
 function Latex({ latex, display = false }: { latex: string; display?: boolean }) {
@@ -359,6 +414,9 @@ export function MathSolverPage() {
   const [_graphInput, _setGraphInput] = useState('');
   const graphRef = useRef<HTMLDivElement>(null);
   const [graphError, setGraphError] = useState('');
+  const [xDomain, setXDomain] = useState<[number, number]>([-12, 12]);
+  const [yDomain, setYDomain] = useState<[number, number]>([-10, 10]);
+  const [themeTick, setThemeTick] = useState(0);
 
   // Unit converter state
   const [unitCatIdx, setUnitCatIdx] = useState(0);
@@ -367,6 +425,17 @@ export function MathSolverPage() {
   const [unitValue, setUnitValue] = useState('1');
 
   useEffect(() => { setHistory(loadHistory()); }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const observer = new MutationObserver(() => setThemeTick(v => v + 1));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  const replaceGraphWith = useCallback((expr: string) => {
+    setGraphExprs([{ id: crypto.randomUUID(), expr, color: GRAPH_COLORS[0], enabled: true }]);
+  }, []);
 
   // ── Solver ─────────────────────────────────────────────────────────────────
 
@@ -390,46 +459,69 @@ export function MathSolverPage() {
       }
       // Auto-populate graph if solver provides expression
       if (data.graphExpr) {
-        setGraphExprs([{ id: '1', expr: data.graphExpr, color: GRAPH_COLORS[0], enabled: true }]);
+        replaceGraphWith(data.graphExpr);
       }
     } catch {
       setResult({ answer: '', answerLatex: '', steps: [], graphExpr: null, category: String(active), engine: 'error', error: 'Network error — check that the AI model is running.' });
     } finally {
       setLoading(false);
     }
-  }, [input, active]);
+  }, [input, active, replaceGraphWith]);
 
   // ── Graph rendering ────────────────────────────────────────────────────────
 
   const renderGraph = useCallback(() => {
     if (!graphRef.current || !functionPlot) return;
     const enabled = graphExprs.filter(e => e.enabled && e.expr.trim());
-    if (enabled.length === 0) return;
+    if (enabled.length === 0) {
+      graphRef.current.innerHTML = '';
+      setGraphError('');
+      return;
+    }
     setGraphError('');
     try {
-      const fns = enabled.map(e => {
-        const expr = e.expr.trim();
-        const rel = expr.match(/^y\s*=\s*(.+)$/i);
-        const fn = rel ? rel[1] : expr;
-        return { fn, color: e.color, nSamples: 400 };
-      });
+      const fns = enabled
+        .map(e => {
+          const normalized = normalizeGraphExpression(e.expr);
+          if (!normalized) return null;
+          if (normalized.type === 'implicit') {
+            return { fn: normalized.value, fnType: 'implicit', color: e.color, sampler: 'builtIn' };
+          }
+          return { fn: normalized.value, color: e.color, sampler: 'builtIn', nSamples: 500 };
+        })
+        .filter(Boolean);
+      if (fns.length === 0) {
+        graphRef.current.innerHTML = '';
+        return;
+      }
       functionPlot({
         target: graphRef.current,
         width: graphRef.current.clientWidth || 600,
         height: 380,
-        xAxis: { domain: [-10, 10] },
-        yAxis: { domain: [-8, 8] },
+        xAxis: { domain: xDomain },
+        yAxis: { domain: yDomain },
         grid: true,
         data: fns,
       });
+      restyleGraphCanvas(graphRef.current);
     } catch (err) {
       setGraphError(String(err));
     }
-  }, [graphExprs]);
+  }, [graphExprs, xDomain, yDomain]);
 
   useEffect(() => {
     if (active === 'graph') renderGraph();
-  }, [active, renderGraph]);
+  }, [active, renderGraph, themeTick]);
+
+  function resetGraphView() {
+    setXDomain([-12, 12]);
+    setYDomain([-10, 10]);
+  }
+
+  function zoomGraph(factor: number) {
+    setXDomain(([min, max]) => [Number((min * factor).toFixed(2)), Number((max * factor).toFixed(2))]);
+    setYDomain(([min, max]) => [Number((min * factor).toFixed(2)), Number((max * factor).toFixed(2))]);
+  }
 
   // ── Symbol insertion ────────────────────────────────────────────────────────
 
@@ -447,6 +539,15 @@ export function MathSolverPage() {
 
   const currentTopic = TOPICS.find(t => t.id === active);
   const _currentFormulas = FORMULAS[active as string] ?? [];
+  const activeTitle = currentTopic?.label ?? (active === 'formulas' ? 'Formula Sheets' : active === 'graph' ? 'Graph Plotter' : 'Unit Converter');
+  const activeSubtitle =
+    active === 'formulas'
+      ? 'Quick-reference formulas organized by topic, ready to review before homework or exams.'
+      : active === 'graph'
+        ? 'Plot functions, vertical lines, and implicit relations with a cleaner graphing workflow.'
+        : active === 'units'
+          ? 'Convert the common units students need most, with a simpler focused tool.'
+          : 'Solve one problem at a time with examples, symbols, and step-by-step output.';
 
   const unitCat = UNIT_CATS[unitCatIdx];
   const unitResult = (() => {
@@ -535,13 +636,10 @@ export function MathSolverPage() {
           <span style={{ fontSize: 20 }}>{currentTopic?.icon ?? (active === 'formulas' ? '📚' : active === 'graph' ? '📈' : '⚖')}</span>
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
-              {currentTopic?.label ?? (active === 'formulas' ? 'Formula Sheets' : active === 'graph' ? 'Graph Plotter' : 'Unit Converter')}
+              {activeTitle}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              {active === 'formulas' ? 'Quick-reference formulas for every topic' :
-               active === 'graph' ? 'Plot any function of x' :
-               active === 'units' ? 'Convert between common units' :
-               'Enter a problem below and press Solve'}
+              {activeSubtitle}
             </div>
           </div>
           <button onClick={() => setShowHistory(h => !h)}
@@ -587,6 +685,15 @@ export function MathSolverPage() {
                 ))}
               </div>
             )}
+
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                Best for: one problem, one result, and clear working steps.
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                Press <strong style={{ color: 'var(--text-primary)' }}>Enter</strong> to solve, <strong style={{ color: 'var(--text-primary)' }}>Shift + Enter</strong> for a new line.
+              </span>
+            </div>
 
             {/* Input box */}
             <div style={{ position: 'relative' }}>
@@ -719,6 +826,9 @@ export function MathSolverPage() {
         {/* ── FORMULAS VIEW ── */}
         {active === 'formulas' && (
           <div style={{ padding: '20px 24px', flex: 1, overflowY: 'auto' }}>
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', marginBottom: 18, fontSize: 12, color: 'var(--text-secondary)' }}>
+              This tab is for revision speed: scan formulas, then click one to send it back into the solver for explanation or practice.
+            </div>
             {TOPICS.map(topic => {
               const formulas = FORMULAS[topic.id] ?? [];
               if (formulas.length === 0) return null;
@@ -754,11 +864,51 @@ export function MathSolverPage() {
         {/* ── GRAPH VIEW ── */}
         {active === 'graph' && (
           <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div ref={graphRef} style={{ width: '100%', height: 380, borderRadius: 14, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }} />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {[
+                  { label: 'Parabola', expr: 'y = x^2' },
+                  { label: 'Sine', expr: 'y = sin(x)' },
+                  { label: 'Circle', expr: 'x^2 + y^2 = 25' },
+                  { label: 'Vertical line', expr: 'x = 2' },
+                ].map(preset => (
+                  <button
+                    key={preset.label}
+                    onClick={() => replaceGraphWith(preset.expr)}
+                    style={{ padding: '5px 12px', borderRadius: 20, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer' }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={resetGraphView} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Home</button>
+                <button onClick={() => zoomGraph(0.8)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Zoom in</button>
+                <button onClick={() => zoomGraph(1.25)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Zoom out</button>
+              </div>
+            </div>
+
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                Supported: <code>y = x^2</code>, <code>x = 2</code>, <code>x^2 + y^2 = 25</code>.
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                Window x:[{xDomain[0]}, {xDomain[1]}] · y:[{yDomain[0]}, {yDomain[1]}]
+              </span>
+            </div>
+
+            <div ref={graphRef} style={{ width: '100%', height: 420, borderRadius: 14, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }} />
             {graphError && <div style={{ fontSize: 12, color: '#ef4444' }}>⚠ {graphError}</div>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {graphExprs.map((ge, _i) => (
                 <div key={ge.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button
+                    onClick={() => setGraphExprs(p => p.map(x => x.id === ge.id ? { ...x, enabled: !x.enabled } : x))}
+                    style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, border: '1px solid var(--border-subtle)', background: ge.enabled ? `${ge.color}1f` : 'transparent', color: ge.enabled ? ge.color : 'var(--text-muted)', cursor: 'pointer', minWidth: 42 }}
+                    title={ge.enabled ? 'Hide expression' : 'Show expression'}
+                  >
+                    {ge.enabled ? 'On' : 'Off'}
+                  </button>
                   <div style={{ width: 16, height: 16, borderRadius: '50%', background: ge.color, flexShrink: 0, cursor: 'pointer' }}
                     onClick={() => { const c = GRAPH_COLORS[(GRAPH_COLORS.indexOf(ge.color) + 1) % GRAPH_COLORS.length]; setGraphExprs(p => p.map(e => e.id === ge.id ? { ...e, color: c } : e)); }} />
                   <input value={ge.expr} onChange={e => setGraphExprs(p => p.map(x => x.id === ge.id ? { ...x, expr: e.target.value } : x))}
@@ -766,6 +916,12 @@ export function MathSolverPage() {
                     style={{ flex: 1, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontFamily: '"JetBrains Mono", monospace', outline: 'none' }}
                     onKeyDown={e => e.key === 'Enter' && renderGraph()}
                   />
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 58, textAlign: 'right' }}>
+                    {(() => {
+                      const normalized = normalizeGraphExpression(ge.expr);
+                      return normalized ? (normalized.type === 'function' ? 'Function' : 'Relation') : 'Empty';
+                    })()}
+                  </span>
                   {graphExprs.length > 1 && (
                     <button onClick={() => setGraphExprs(p => p.filter(x => x.id !== ge.id))}
                       style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}>✕</button>
@@ -775,7 +931,7 @@ export function MathSolverPage() {
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setGraphExprs(p => [...p, { id: crypto.randomUUID(), expr: '', color: GRAPH_COLORS[p.length % GRAPH_COLORS.length], enabled: true }])}
                   style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                  + Add function
+                  + Add expression
                 </button>
                 <button onClick={renderGraph}
                   style={{ fontSize: 12, padding: '5px 14px', borderRadius: 8, border: 'none', background: '#22c55e', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
@@ -789,6 +945,9 @@ export function MathSolverPage() {
         {/* ── UNIT CONVERTER ── */}
         {active === 'units' && (
           <div style={{ padding: '20px 24px', flex: 1, maxWidth: 540 }}>
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', marginBottom: 16, fontSize: 12, color: 'var(--text-secondary)' }}>
+              Use this tab for quick conversions only — one value, one category, one clean result.
+            </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
               {UNIT_CATS.map((c, i) => (
                 <button key={i} onClick={() => { setUnitCatIdx(i); setFromUnit(0); setToUnit(1); }}
@@ -807,6 +966,14 @@ export function MathSolverPage() {
                   </select>
                 </div>
               ))}
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => { setFromUnit(toUnit); setToUnit(fromUnit); }}
+                  style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                >
+                  ⇄ Swap units
+                </button>
+              </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <label style={{ fontSize: 12, color: 'var(--text-muted)', width: 30 }}>Val</label>
                 <input type="number" value={unitValue} onChange={e => setUnitValue(e.target.value)}
