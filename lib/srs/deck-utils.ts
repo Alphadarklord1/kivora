@@ -6,6 +6,7 @@ type ImportedDeckSource = {
   title: string;
   description?: string;
   content: string;
+  cards?: Array<{ front: string; back: string }>;
   sourceType?: SRSDeck['sourceType'];
   sourceLabel?: string;
   creatorName?: string;
@@ -38,12 +39,16 @@ export function buildImportedDeck({
   title,
   description = '',
   content,
+  cards,
   sourceType = 'manual',
   sourceLabel = 'Manual deck',
   creatorName = 'You',
 }: ImportedDeckSource): SRSDeck | null {
-  const cards = parseFlashcards(content);
-  if (cards.length === 0) return null;
+  const parsedCards = (cards?.length ? cards : parseFlashcards(content))
+    .map((card) => ({ front: card.front.trim(), back: card.back.trim() }))
+    .filter((card) => card.front && card.back);
+
+  if (parsedCards.length === 0) return null;
 
   return {
     id: `deck-${crypto.randomUUID().slice(0, 12)}`,
@@ -52,7 +57,7 @@ export function buildImportedDeck({
     sourceType,
     sourceLabel,
     creatorName,
-    cards: cards.map((card, index) =>
+    cards: parsedCards.map((card, index) =>
       createCard(`deck-card-${index}-${crypto.randomUUID().slice(0, 8)}`, card.front, card.back),
     ),
     createdAt: new Date().toISOString(),

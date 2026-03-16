@@ -7,13 +7,14 @@ declare module 'sql.js' {
   }
 
   interface Database {
+    exec(sql: string): Array<{ columns: string[]; values: SqlValue[][] }>;
     run(sql: string, params?: SqlValue[] | Record<string, SqlValue>): void;
     prepare(sql: string): Statement;
     export(): Uint8Array;
   }
 
   interface SqlJsStatic {
-    Database: new () => Database;
+    Database: new (data?: Uint8Array | ArrayLike<number>) => Database;
   }
 
   export interface InitSqlJsConfig {
