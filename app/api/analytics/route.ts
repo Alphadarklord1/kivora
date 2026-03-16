@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
-import { quizAttempts, files, libraryItems, srsDecks, srsPreferences, srsReviewHistory } from '@/lib/db/schema';
-import { eq, count, avg, desc } from 'drizzle-orm';
+import { quizAttempts, files, libraryItems, srsDecks, srsPreferences, srsReviewHistory, studyPlans } from '@/lib/db/schema';
+import { eq, count, avg, desc, gte, and } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/session';
 import type { SRSDeck } from '@/lib/srs/sm2';
 
@@ -124,10 +124,20 @@ export async function GET(req: NextRequest) {
       mode: a.mode ?? 'unknown',
     }));
 
+    // Fetch review history early so activity streak can include deck review dates.
+    const reviewRowsEarly = await db.select({ reviewedAt: srsReviewHistory.reviewedAt })
+      .from(srsReviewHistory).where(eq(srsReviewHistory.userId, userId));
+
     // ── Activity / streak ─────────────────────────────────────────────────
-    const dateSet = new Set(periodAttempts.map(a =>
+    // Include both quiz attempt dates AND deck review dates for a true activity signal.
+    const reviewDateSet = new Set(reviewRowsEarly
+      .map(r => r.reviewedAt?.toISOString?.().slice(0, 10) ?? '')
+      .filter(Boolean),
+    );
+    const quizDateSet = new Set(periodAttempts.map(a =>
       a.createdAt ? new Date(a.createdAt).toISOString().slice(0, 10) : '',
     ).filter(Boolean));
+    const dateSet = new Set([...quizDateSet, ...reviewDateSet]);
     const totalActiveDays = dateSet.size;
 
     // Current streak (consecutive days ending today)
@@ -203,6 +213,37 @@ export async function GET(req: NextRequest) {
       if (item.mode) toolUsage[item.mode] = (toolUsage[item.mode] ?? 0) + 1;
     }
 
+    // ── Study plan stats ──────────────────────────────────────────────────
+    const planRows = await db.select().from(studyPlans).where(eq(studyPlans.userId, userId));
+    const activePlanRows = planRows.filter(p => p.status === 'active');
+    const completedPlanRows = planRows.filter(p => p.status === 'completed');
+    const avgProgress = planRows.length > 0
+      ? Math.round(planRows.reduce((s, p) => s + (p.progress ?? 0), 0) / planRows.length)
+      : 0;
+    // Count total scheduled days and completed days across all plans
+    interface ScheduleDayLike { completed?: boolean }
+    const totalStudyDays = planRows.reduce((s, p) => {
+      const sched = Array.isArray((p.schedule as { days?: ScheduleDayLike[] })?.days)
+        ? (p.schedule as { days: ScheduleDayLike[] }).days
+        : [];
+      return s + sched.length;
+    }, 0);
+    const completedDays = planRows.reduce((s, p) => {
+      const sched = Array.isArray((p.schedule as { days?: ScheduleDayLike[] })?.days)
+        ? (p.schedule as { days: ScheduleDayLike[] }).days
+        : [];
+      return s + sched.filter((d) => d.completed).length;
+    }, 0);
+
+    const planStats = {
+      totalPlans: planRows.length,
+      activePlans: activePlanRows.length,
+      completedPlans: completedPlanRows.length,
+      averageProgress: avgProgress,
+      totalStudyDays,
+      completedDays,
+    };
+
     // ── Deck analytics ─────────────────────────────────────────────────────
     const [deckRows, prefRows, reviewRows] = await Promise.all([
       db.select().from(srsDecks).where(eq(srsDecks.userId, userId)),
@@ -214,11 +255,22 @@ export async function GET(req: NextRequest) {
     const todayStr = new Date().toISOString().slice(0, 10);
     const periodReviewRows = reviewRows.filter((row) => row.reviewedAt && new Date(row.reviewedAt) >= since);
 
+    // SRS aggregate metrics
+    const allCards = deckRows.flatMap(row => (row.deckData as SRSDeck)?.cards ?? []);
+    const cardsMastered = allCards.filter(c => (c.interval ?? 0) >= 21).length;
+    const dueCardsTotal = allCards.filter(c => c.nextReview && c.nextReview <= todayStr).length;
+    const totalReviewsAll = allCards.reduce((s, c) => s + c.totalReviews, 0);
+    const totalCorrectAll = allCards.reduce((s, c) => s + c.correctReviews, 0);
+    const overallRetention = totalReviewsAll > 0 ? Math.round((totalCorrectAll / totalReviewsAll) * 100) : 0;
+
     const deckStats = {
       totalDecks: deckRows.length,
-      totalCards: deckRows.reduce((sum, row) => sum + (((row.deckData as SRSDeck)?.cards?.length) ?? 0), 0),
+      totalCards: allCards.length,
       dailyGoal,
       reviewedToday: periodReviewRows.filter((row) => row.reviewedAt?.toISOString?.().slice(0, 10) === todayStr).length,
+      cardsMastered,
+      dueCardsTotal,
+      overallRetention,
       topDecks: deckRows
         .map((row) => {
           const deck = row.deckData as SRSDeck;
@@ -283,6 +335,21 @@ export async function GET(req: NextRequest) {
         .slice(0, 6),
     };
 
+    // ── Week-over-week comparison ──────────────────────────────────────────
+    const thisWeekStart = new Date(); thisWeekStart.setDate(thisWeekStart.getDate() - 7);
+    const lastWeekStart = new Date(); lastWeekStart.setDate(lastWeekStart.getDate() - 14);
+    const thisWeekAttempts = attempts.filter(a => a.createdAt && new Date(a.createdAt) >= thisWeekStart);
+    const lastWeekAttempts = attempts.filter(a => {
+      if (!a.createdAt) return false;
+      const d = new Date(a.createdAt);
+      return d >= lastWeekStart && d < thisWeekStart;
+    });
+    const thisWeekAvg = thisWeekAttempts.length > 0
+      ? Math.round(thisWeekAttempts.reduce((s, a) => s + (a.score ?? 0), 0) / thisWeekAttempts.length) : 0;
+    const lastWeekAvg = lastWeekAttempts.length > 0
+      ? Math.round(lastWeekAttempts.reduce((s, a) => s + (a.score ?? 0), 0) / lastWeekAttempts.length) : 0;
+    const weekDelta = thisWeekAttempts.length > 0 && lastWeekAttempts.length > 0 ? thisWeekAvg - lastWeekAvg : null;
+
     // ── Insights ──────────────────────────────────────────────────────────
     const insights: string[] = [];
     if (periodAttempts.length === 0) {
@@ -291,6 +358,12 @@ export async function GET(req: NextRequest) {
       if (avgScore >= 80) insights.push(`Outstanding! Your average score of ${avgScore}% shows strong mastery.`);
       else if (avgScore >= 60) insights.push(`Good progress! Your average score is ${avgScore}%. Keep practicing to reach 80%.`);
       else insights.push(`Your average score is ${avgScore}%. Focus on your weak areas to improve.`);
+
+      if (weekDelta !== null) {
+        if (weekDelta > 5) insights.push(`📈 Up ${weekDelta}% from last week (${lastWeekAvg}% → ${thisWeekAvg}%). Great improvement!`);
+        else if (weekDelta < -5) insights.push(`📉 Down ${Math.abs(weekDelta)}% from last week (${lastWeekAvg}% → ${thisWeekAvg}%). Try reviewing weaker topics.`);
+        else insights.push(`↔ Consistent performance: ${thisWeekAvg}% this week vs ${lastWeekAvg}% last week.`);
+      }
 
       if (currentStreak >= 7) insights.push(`🔥 ${currentStreak}-day study streak! Consistency is key to long-term retention.`);
       else if (currentStreak > 0) insights.push(`${currentStreak}-day streak. Try to study daily to build a habit.`);
@@ -301,12 +374,17 @@ export async function GET(req: NextRequest) {
     }
 
     if (deckStats.totalDecks > 0) {
+      if (dueCardsTotal > 0) {
+        insights.push(`📋 ${dueCardsTotal} card${dueCardsTotal !== 1 ? 's' : ''} due for review today. Keep your retention rate strong!`);
+      }
       const topDeck = deckStats.topDecks[0];
-      insights.push(
-        topDeck
-          ? `Deck focus: "${topDeck.name}" has ${topDeck.dueCards} due cards and ${topDeck.accuracy}% accuracy.`
-          : 'Your decks are ready for review — open one and keep the streak alive.',
-      );
+      if (topDeck) {
+        insights.push(`Deck focus: "${topDeck.name}" — ${topDeck.dueCards} due, ${topDeck.accuracy}% accuracy.`);
+      }
+    }
+
+    if (planStats.activePlans > 0) {
+      insights.push(`📅 ${planStats.activePlans} active study plan${planStats.activePlans !== 1 ? 's' : ''}. ${planStats.averageProgress}% average progress — keep it up!`);
     }
 
     return NextResponse.json({
@@ -321,15 +399,13 @@ export async function GET(req: NextRequest) {
         recentScores,
         scoreDistribution: dist,
       },
-      planStats: {
-        totalPlans: 0, activePlans: 0, completedPlans: 0,
-        averageProgress: 0, totalStudyDays: 0, completedDays: 0,
-      },
+      planStats,
       weakAreas,
       coachActions: [],
       activity: {
         currentStreak, totalActiveDays, weeklyActivity, dailyActivity,
       },
+      weekOverWeek: { thisWeekAvg, lastWeekAvg, weekDelta },
       insights,
       usage: {
         totalFiles: fileCount?.value ?? 0,

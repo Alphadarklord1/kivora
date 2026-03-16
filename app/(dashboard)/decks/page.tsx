@@ -92,6 +92,38 @@ export default function DeckLibraryPage() {
   const [ankiFile, setAnkiFile] = useState<File | null>(null);
   const [importingMode, setImportingMode] = useState<ImportMode | null>(null);
   const [lastImported, setLastImported] = useState<{ deck: SRSDeck; cardCount: number } | null>(null);
+  const [deckSort, setDeckSort] = useState<'recent' | 'name' | 'due' | 'accuracy'>('recent');
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  function getDeckAccuracy(deck: SRSDeck) {
+    const totalReviews = deck.cards.reduce((s, c) => s + c.totalReviews, 0);
+    const totalCorrect = deck.cards.reduce((s, c) => s + c.correctReviews, 0);
+    return totalReviews > 0 ? Math.round((totalCorrect / totalReviews) * 100) : -1;
+  }
+  function getDeckDue(deck: SRSDeck) {
+    return deck.cards.filter(c => c.nextReview && c.nextReview <= todayStr).length;
+  }
+  function getDeckMastered(deck: SRSDeck) {
+    return deck.cards.filter(c => (c.interval ?? 0) >= 21).length;
+  }
+
+  const sortedMyDecks = useMemo(() => {
+    return [...myDecks].sort((a, b) => {
+      if (deckSort === 'name') return a.name.localeCompare(b.name);
+      if (deckSort === 'due') return getDeckDue(b) - getDeckDue(a);
+      if (deckSort === 'accuracy') {
+        const accA = getDeckAccuracy(a); const accB = getDeckAccuracy(b);
+        if (accA === -1 && accB === -1) return 0;
+        if (accA === -1) return 1;
+        if (accB === -1) return -1;
+        return accA - accB; // lowest accuracy first (needs attention)
+      }
+      // default: recent
+      return new Date(b.lastStudied ?? b.createdAt).getTime() - new Date(a.lastStudied ?? a.createdAt).getTime();
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myDecks, deckSort]);
 
   const localDeckCount = useMemo(() => myDecks.length, [myDecks]);
   const activeCopy = TAB_COPY[activeTab];
@@ -376,6 +408,22 @@ export default function DeckLibraryPage() {
             </div>
           )}
 
+          {/* Sort controls */}
+          {myDecks.length > 1 && (
+            <div className={styles.sortRow}>
+              <span className={styles.sortLabel}>Sort:</span>
+              {(['recent', 'due', 'accuracy', 'name'] as const).map(opt => (
+                <button
+                  key={opt}
+                  className={`${styles.sortChip} ${deckSort === opt ? styles.sortChipActive : ''}`}
+                  onClick={() => setDeckSort(opt)}
+                >
+                  {opt === 'recent' ? 'Recent' : opt === 'due' ? '⏰ Due' : opt === 'accuracy' ? '🎯 Needs work' : 'A–Z'}
+                </button>
+              ))}
+            </div>
+          )}
+
           {loadingMine ? (
             <div className={styles.emptyState}>Loading your decks…</div>
           ) : myDecks.length === 0 ? (
@@ -384,37 +432,64 @@ export default function DeckLibraryPage() {
             </div>
           ) : (
             <div className={styles.deckGrid}>
-              {myDecks.map((deck) => (
-                <article key={deck.id} className={styles.deckCard}>
-                  <div className={styles.deckTop}>
-                    <div>
-                      <h3>{deck.name}</h3>
-                      {deck.description && <p>{deck.description}</p>}
+              {sortedMyDecks.map((deck) => {
+                const accuracy = getDeckAccuracy(deck);
+                const due = getDeckDue(deck);
+                const mastered = getDeckMastered(deck);
+                const accColor = accuracy < 0 ? 'var(--text-muted)' : accuracy >= 80 ? '#52b788' : accuracy >= 60 ? '#4f86f7' : '#e05252';
+                return (
+                  <article key={deck.id} className={styles.deckCard}>
+                    <div className={styles.deckTop}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <h3>{deck.name}</h3>
+                        {deck.description && <p>{deck.description}</p>}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                        <span className={styles.countPill}>{deck.cards.length} cards</span>
+                        {due > 0 && (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'color-mix(in srgb, #f59e0b 15%, transparent)', color: '#b45309', border: '1px solid color-mix(in srgb, #f59e0b 30%, transparent)' }}>
+                            {due} due
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <span className={styles.countPill}>{deck.cards.length} cards</span>
-                  </div>
 
-                  <div className={styles.metaRow}>
-                    <span>{deck.sourceLabel ?? 'Private deck'}</span>
-                    <span>{formatDate(deck.lastStudied ?? deck.createdAt)}</span>
-                  </div>
+                    {/* Accuracy bar */}
+                    {accuracy >= 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)', minWidth: 54 }}>Accuracy</span>
+                        <div style={{ flex: 1, height: 5, background: 'var(--border-subtle)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${accuracy}%`, background: accColor, borderRadius: 3, transition: 'width 0.5s' }} />
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: accColor, minWidth: 32, textAlign: 'right' }}>{accuracy}%</span>
+                      </div>
+                    )}
 
-                  <div className={styles.preview}>
-                    {deck.cards.slice(0, 2).map((card) => (
-                      <div key={card.id}><strong>{card.front}</strong> — {card.back}</div>
-                    ))}
-                  </div>
+                    <div className={styles.metaRow}>
+                      <span>{deck.sourceLabel ?? 'Private deck'}</span>
+                      <span style={{ display: 'flex', gap: 8 }}>
+                        {mastered > 0 && <span style={{ color: '#52b788', fontWeight: 600 }}>🏆 {mastered} mastered</span>}
+                        <span>{formatDate(deck.lastStudied ?? deck.createdAt)}</span>
+                      </span>
+                    </div>
 
-                  <div className={styles.cardActions}>
-                    <button className={styles.primaryButton} onClick={() => router.push(`/decks/${deck.id}`)}>
-                      Open deck
-                    </button>
-                    <button className={styles.secondaryButton} onClick={() => router.push(`/decks/${deck.id}?imported=1`)}>
-                      Study
-                    </button>
-                  </div>
-                </article>
-              ))}
+                    <div className={styles.preview}>
+                      {deck.cards.slice(0, 2).map((card) => (
+                        <div key={card.id}><strong>{card.front}</strong> — {card.back}</div>
+                      ))}
+                    </div>
+
+                    <div className={styles.cardActions}>
+                      <button className={styles.primaryButton} onClick={() => router.push(`/decks/${deck.id}`)}>
+                        Open deck
+                      </button>
+                      <button className={styles.secondaryButton} onClick={() => router.push(`/decks/${deck.id}?mode=review`)}>
+                        {due > 0 ? `Review (${due})` : 'Study'}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
@@ -564,12 +639,18 @@ export default function DeckLibraryPage() {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search public decks"
+                onKeyDown={(e) => { if (e.key === 'Enter') void loadDecksFromApi(query); }}
+                placeholder="Search by title or topic…"
                 className={styles.searchInput}
               />
-              <button className={styles.secondaryButton} onClick={() => void loadDecksFromApi(query)}>
+              <button className={styles.primaryButton} onClick={() => void loadDecksFromApi(query)}>
                 Search
               </button>
+              {query && (
+                <button className={styles.secondaryButton} onClick={() => { setQuery(''); void loadDecksFromApi(''); }}>
+                  Clear
+                </button>
+              )}
             </div>
           </div>
 
@@ -577,45 +658,51 @@ export default function DeckLibraryPage() {
             <div className={styles.emptyState}>Loading public decks…</div>
           ) : decks.length === 0 ? (
             <div className={styles.emptyState}>
-              No public decks found yet. Publish one from a personal deck to seed the library.
+              {query ? `No public decks found for "${query}". Try a different search term.` : 'No public decks found yet. Publish one from a personal deck to seed the library.'}
             </div>
           ) : (
-            <div className={styles.deckGrid}>
-              {decks.map((deck) => (
-                <article key={deck.shareId} className={styles.deckCard}>
-                  <div className={styles.deckTop}>
-                    <div>
-                      <h3>{deck.title}</h3>
-                      {deck.description && <p>{deck.description}</p>}
+            <>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                {decks.length} deck{decks.length !== 1 ? 's' : ''} found{query ? ` for "${query}"` : ''}
+              </p>
+              <div className={styles.deckGrid}>
+                {decks.map((deck) => (
+                  <article key={deck.shareId} className={styles.deckCard}>
+                    <div className={styles.deckTop}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <h3>{deck.title}</h3>
+                        {deck.description && <p>{deck.description}</p>}
+                      </div>
+                      <span className={styles.countPill}>{deck.cardCount} cards</span>
                     </div>
-                    <span className={styles.countPill}>{deck.cardCount} cards</span>
-                  </div>
 
-                  <div className={styles.metaRow}>
-                    <span>{formatDate(deck.createdAt)}</span>
-                    <span>{deck.shareToken.slice(0, 8)}</span>
-                  </div>
+                    <div className={styles.metaRow}>
+                      <span>Published {formatDate(deck.createdAt)}</span>
+                    </div>
 
-                  <div className={styles.preview}>
-                    {deck.content.split('\n').slice(0, 3).map((line, index) => (
-                      <div key={`${deck.shareId}-${index}`}>{line}</div>
-                    ))}
-                  </div>
+                    {/* Card preview */}
+                    <div className={styles.preview}>
+                      {deck.content.split('\n').filter(l => l.trim()).slice(0, 2).map((line, index) => (
+                        <div key={`${deck.shareId}-${index}`} style={{ fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{line}</div>
+                      ))}
+                    </div>
 
-                  <div className={styles.cardActions}>
-                    <button className={styles.primaryButton} onClick={() => void importPublicDeck(deck)}>
-                      Import deck
-                    </button>
-                    <button
-                      className={styles.secondaryButton}
-                      onClick={() => navigator.clipboard.writeText(deck.shareUrl).then(() => toast('Link copied', 'success'))}
-                    >
-                      Copy link
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
+                    <div className={styles.cardActions}>
+                      <button className={styles.primaryButton} onClick={() => void importPublicDeck(deck)}>
+                        Import deck
+                      </button>
+                      <button
+                        className={styles.secondaryButton}
+                        onClick={() => navigator.clipboard.writeText(deck.shareUrl).then(() => toast('Link copied', 'success'))}
+                        title={deck.shareUrl}
+                      >
+                        Copy link
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
           )}
         </section>
       )}

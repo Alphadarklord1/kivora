@@ -9,6 +9,7 @@ import {
   type WeakArea,
   type Activity,
   type UsageStats,
+  type WeekOverWeek,
 } from '@/hooks/useAnalytics';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ export function StudyAnalytics() {
   );
   if (!data) return null;
 
-  const { quizStats, planStats, weakAreas, activity, insights, usage, deckStats } = data;
+  const { quizStats, planStats, weakAreas, activity, insights, usage, deckStats, weekOverWeek } = data;
 
   return (
     <div className="an-shell">
@@ -89,7 +90,9 @@ export function StudyAnalytics() {
             (quizStats?.averageScore ?? 0) >= 80 ? '#52b788' :
             (quizStats?.averageScore ?? 0) >= 60 ? '#4f86f7' : '#e05252'
           }
-          detail={`${quizStats?.totalAttempts ?? 0} quizzes taken`}
+          detail={weekOverWeek?.weekDelta != null
+            ? `${weekOverWeek.weekDelta >= 0 ? '▲' : '▼'} ${Math.abs(weekOverWeek.weekDelta)}% vs last week`
+            : `${quizStats?.totalAttempts ?? 0} quizzes taken`}
         />
         <StatCard
           icon="📝"
@@ -100,24 +103,31 @@ export function StudyAnalytics() {
         />
         <StatCard
           icon="📅"
-          label="Plan Progress"
-          value={`${Math.round(planStats?.averageProgress ?? 0)}%`}
+          label="Plans"
+          value={planStats?.activePlans ?? 0}
           accent="#a78bfa"
-          detail={`${planStats?.completedDays ?? 0}/${planStats?.totalStudyDays ?? 0} study days done`}
+          detail={`${planStats?.averageProgress ?? 0}% avg progress · ${planStats?.completedPlans ?? 0} completed`}
         />
         <StatCard
-          icon="📚"
-          label="Files"
-          value={usage?.totalFiles ?? 0}
+          icon="🎯"
+          label="Due Today"
+          value={deckStats?.dueCardsTotal ?? 0}
+          accent={(deckStats?.dueCardsTotal ?? 0) > 20 ? '#e05252' : (deckStats?.dueCardsTotal ?? 0) > 0 ? '#f59e0b' : '#52b788'}
+          detail={`${deckStats?.reviewedToday ?? 0}/${deckStats?.dailyGoal ?? 20} reviewed today`}
+        />
+        <StatCard
+          icon="🏆"
+          label="Cards Mastered"
+          value={deckStats?.cardsMastered ?? 0}
           accent="#52b788"
-          detail={`${usage?.libraryItems ?? 0} saved to library`}
+          detail={`${deckStats?.overallRetention ?? 0}% overall retention`}
         />
         <StatCard
           icon="🃏"
           label="Decks"
           value={deckStats?.totalDecks ?? 0}
           accent="#7c3aed"
-          detail={`${deckStats?.reviewedToday ?? 0}/${deckStats?.dailyGoal ?? 20} cards reviewed today`}
+          detail={`${deckStats?.totalCards ?? 0} total cards · ${usage?.libraryItems ?? 0} library items`}
         />
         <StatCard
           icon="⏱️"
@@ -150,6 +160,7 @@ export function StudyAnalytics() {
           insights={insights}
           usage={usage}
           deckStats={deckStats}
+          weekOverWeek={weekOverWeek}
         />
       )}
       {activeTab === 'scores' && (
@@ -284,13 +295,14 @@ function StatCard({ icon, label, value, unit, accent, detail }: {
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ quizStats, planStats: _planStats, weakAreas, insights, usage, deckStats }: {
+function OverviewTab({ quizStats, planStats: _planStats, weakAreas, insights, usage, deckStats, weekOverWeek: _weekOverWeek }: {
   quizStats: QuizStats | null;
   planStats: PlanStats | null;
   weakAreas: WeakArea[];
   insights: string[];
   usage: UsageStats | null;
   deckStats: DeckStats;
+  weekOverWeek?: WeekOverWeek;
 }) {
   const dist = quizStats?.scoreDistribution;
 
@@ -389,26 +401,54 @@ function OverviewTab({ quizStats, planStats: _planStats, weakAreas, insights, us
         {deckStats.topDecks.length === 0 ? (
           <p className="card-empty">No deck activity yet. Import a deck or generate flashcards to start tracking progress.</p>
         ) : (
-          <div className="deck-list">
-            {deckStats.topDecks.map((deck) => (
-              <div key={deck.deckId} className="deck-item">
-                <div className="deck-head">
-                  <strong>{deck.name}</strong>
-                  <span>{deck.accuracy}%</span>
+          <div className="deck-grid-perf">
+            {deckStats.topDecks.map((deck) => {
+              const accColor = deck.accuracy >= 80 ? '#52b788' : deck.accuracy >= 60 ? '#4f86f7' : '#e05252';
+              return (
+                <div key={deck.deckId} className="deck-perf-card">
+                  <div className="dp-head">
+                    <strong className="dp-name">{deck.name}</strong>
+                    <div className="dp-badges">
+                      {deck.dueCards > 0 && (
+                        <span className="dp-badge due">{deck.dueCards} due</span>
+                      )}
+                      {deck.sourceLabel && (
+                        <span className="dp-badge src">{deck.sourceLabel}</span>
+                      )}
+                    </div>
+                  </div>
+                  {/* Accuracy bar */}
+                  <div className="dp-acc-row">
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 70 }}>Accuracy</span>
+                    <div className="dp-bar-bg">
+                      <div className="dp-bar-fill" style={{ width: `${deck.accuracy}%`, background: accColor }} />
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: accColor, minWidth: 36, textAlign: 'right' }}>{deck.accuracy}%</span>
+                  </div>
+                  {/* Goal progress */}
+                  <div className="dp-acc-row">
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 70 }}>Today</span>
+                    <div className="dp-bar-bg">
+                      <div className="dp-bar-fill" style={{ width: `${deck.goalProgress}%`, background: '#7c3aed' }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 36, textAlign: 'right' }}>{deck.reviewedToday}/{deckStats.dailyGoal}</span>
+                  </div>
+                  <div className="dp-stats">
+                    <span>{deck.totalCards} cards</span>
+                    <span>{deck.quizAttempts} quizzes</span>
+                    <span>{deck.studyDays} study days</span>
+                  </div>
+                  {deck.weakConcepts.length > 0 && (
+                    <div className="dp-weak">
+                      <span className="dp-weak-label">Weak:</span>
+                      {deck.weakConcepts.slice(0, 2).map((c, i) => (
+                        <span key={i} className="dp-weak-chip">{c.length > 22 ? c.slice(0, 22) + '…' : c}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="deck-meta">
-                  <span>{deck.totalCards} cards</span>
-                  <span>{deck.dueCards} due</span>
-                  <span>{deck.reviewedToday}/{deckStats.dailyGoal} today</span>
-                  <span>{deck.quizAttempts} quizzes</span>
-                </div>
-                <div className="weak-suggestion">
-                  {deck.weakConcepts.length > 0
-                    ? `Weak concepts: ${deck.weakConcepts.join(', ')}`
-                    : 'No weak concepts detected yet.'}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -454,30 +494,25 @@ function OverviewTab({ quizStats, planStats: _planStats, weakAreas, insights, us
         .tool-bar-bg { flex:1; height:8px; background:var(--bg-surface); border-radius:4px; overflow:hidden; }
         .tool-bar-fill { height:100%; border-radius:4px; background:var(--primary); transition:width 0.5s; }
         .tool-count { font-size:12px; font-weight:600; color:var(--text-muted); min-width:24px; text-align:right; }
-        .deck-list { display:grid; gap:12px; }
-        .deck-item {
-          padding: 14px 16px;
-          border-radius: 14px;
-          border: 1px solid var(--border-subtle);
+        .deck-grid-perf { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+        .deck-perf-card {
+          padding: 14px 16px; border-radius: 14px; border: 1px solid var(--border-subtle);
           background: color-mix(in srgb, var(--bg-surface) 74%, transparent);
+          display: flex; flex-direction: column; gap: 8px;
         }
-        .deck-head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 6px;
-        }
-        .deck-head strong { font-size: 14px; color: var(--text-primary); }
-        .deck-head span { font-size: 14px; font-weight: 700; color: #7c3aed; }
-        .deck-meta {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          margin-bottom: 6px;
-          font-size: 11px;
-          color: var(--text-muted);
-        }
+        .dp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+        .dp-name { font-size: 14px; font-weight: 600; color: var(--text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dp-badges { display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+        .dp-badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 999px; }
+        .dp-badge.due { background: color-mix(in srgb, #f59e0b 15%, transparent); color: #b45309; border: 1px solid color-mix(in srgb, #f59e0b 30%, transparent); }
+        .dp-badge.src { background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary); border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent); }
+        .dp-acc-row { display: flex; align-items: center; gap: 8px; }
+        .dp-bar-bg { flex: 1; height: 6px; background: var(--bg-surface); border-radius: 3px; overflow: hidden; }
+        .dp-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+        .dp-stats { display: flex; gap: 10px; font-size: 11px; color: var(--text-muted); flex-wrap: wrap; }
+        .dp-weak { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+        .dp-weak-label { font-size: 10px; font-weight: 600; color: #e05252; }
+        .dp-weak-chip { font-size: 10px; padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, #e05252 10%, var(--bg-surface)); color: var(--text-secondary); border: 1px solid color-mix(in srgb, #e05252 20%, transparent); }
         .insights-card { background:color-mix(in srgb, var(--primary) 5%, var(--bg-elevated)); }
         .insights-list { margin:0; padding:0 0 0 16px; display:flex; flex-direction:column; gap:6px; }
         .insight-item { font-size:14px; color:var(--text-secondary); line-height:1.6; }
