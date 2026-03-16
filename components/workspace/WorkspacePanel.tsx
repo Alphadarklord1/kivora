@@ -137,46 +137,38 @@ function FileViewer({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file.id]);
 
-  async function useForTools() {
-    if (textContent) { onUseForTools(file, textContent); return; }
+  async function resolveFileText(successLabel: string) {
+    if (textContent) return textContent;
     if (!file.localBlobId) return;
     const payload = await idbStore.get(file.localBlobId);
     if (!payload) { toast('File not found locally.', 'error'); return; }
     const res = await extractTextFromBlob(payload.blob, file.name);
     if (res.error) { toast(res.error, 'error'); return; }
-    toast(`${res.wordCount.toLocaleString()} words loaded into Generate`, 'success');
-    onUseForTools(file, res.text);
+    toast(`${res.wordCount.toLocaleString()} words loaded into ${successLabel}`, 'success');
+    return res.text;
+  }
+
+  async function useForTools() {
+    const text = await resolveFileText('Generate');
+    if (text) onUseForTools(file, text);
   }
 
   async function useForChat() {
-    if (textContent) { onUseForChat(file, textContent); return; }
-    if (!file.localBlobId) return;
-    const payload = await idbStore.get(file.localBlobId);
-    if (!payload) { toast('File not found locally.', 'error'); return; }
-    const res = await extractTextFromBlob(payload.blob, file.name);
-    if (res.error) { toast(res.error, 'error'); return; }
-    toast(`${res.wordCount.toLocaleString()} words loaded into Chat`, 'success');
-    onUseForChat(file, res.text);
+    const text = await resolveFileText('Chat');
+    if (text) onUseForChat(file, text);
   }
 
   async function useInMath() {
-    if (textContent) { onUseInMath(file, textContent); return; }
+    if (textContent) {
+      onUseInMath(file, textContent);
+      return;
+    }
     if (!file.localBlobId) {
       toast('This file is not available locally for math context.', 'warning');
       return;
     }
-    const payload = await idbStore.get(file.localBlobId);
-    if (!payload) {
-      toast('File not found locally.', 'error');
-      return;
-    }
-    const res = await extractTextFromBlob(payload.blob, file.name);
-    if (res.error) {
-      toast(res.error, 'error');
-      return;
-    }
-    toast(`${res.wordCount.toLocaleString()} words sent to Math`, 'success');
-    onUseInMath(file, res.text);
+    const text = await resolveFileText('Math');
+    if (text) onUseInMath(file, text);
   }
 
   return (
@@ -539,22 +531,21 @@ export function WorkspacePanel({
     else toast('Could not save — DB may not be configured', 'warning');
   }
 
-  function handleUseForTools(file: FileRecord, text: string) {
+  function applyFileContext(file: FileRecord, text: string, nextTab: MainTab, successMessage: string) {
     setExtractedText(text);
     setSelFile(file);
     setPasteMode(false);
     setOutput('');
-    setMainTab('generate');
-    toast('Content loaded — pick a tool and generate', 'success');
+    setMainTab(nextTab);
+    toast(successMessage, 'success');
+  }
+
+  function handleUseForTools(file: FileRecord, text: string) {
+    applyFileContext(file, text, 'generate', 'Content loaded — pick a tool and generate');
   }
 
   function handleUseForChat(file: FileRecord, text: string) {
-    setExtractedText(text);
-    setSelFile(file);
-    setPasteMode(false);
-    setOutput('');
-    setMainTab('chat');
-    toast('File loaded — ask a question in Chat', 'success');
+    applyFileContext(file, text, 'chat', 'File loaded — ask a question in Chat');
   }
 
   async function loadSelectedFileIntoChat() {
