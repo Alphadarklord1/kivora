@@ -41,12 +41,95 @@ function uniqueCards(cards: ParsedFlashcard[]) {
   return Array.from(unique.values()).slice(0, 500);
 }
 
+// ── Strategy 1: Parse __NEXT_DATA__ JSON blob (most reliable for current Quizlet) ──
+
+type JsonNode = Record<string, unknown> | unknown[] | string | number | boolean | null;
+
+function findStudiableItems(obj: JsonNode, depth = 0): unknown[] | null {
+  if (depth > 15) return null;
+  if (obj === null || obj === undefined) return null;
+
+  // If it's a string that looks like JSON, try parsing it
+  if (typeof obj === 'string') {
+    if (obj.includes('studiableItems') && (obj.startsWith('{') || obj.startsWith('['))) {
+      try {
+        const parsed = JSON.parse(obj) as JsonNode;
+        return findStudiableItems(parsed, depth + 1);
+      } catch { /* not valid JSON */ }
+    }
+    return null;
+  }
+
+  if (typeof obj !== 'object') return null;
+
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      const found = findStudiableItems(item as JsonNode, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const record = obj as Record<string, unknown>;
+  if (Array.isArray(record['studiableItems'])) return record['studiableItems'] as unknown[];
+
+  for (const val of Object.values(record)) {
+    const found = findStudiableItems(val as JsonNode, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+function parseNextData(html: string): ParsedFlashcard[] {
+  const scriptMatch = html.match(/<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
+  if (!scriptMatch) return [];
+
+  try {
+    const data = JSON.parse(scriptMatch[1] ?? '') as JsonNode;
+    const items = findStudiableItems(data);
+    if (!items || !items.length) return [];
+
+    const cards: ParsedFlashcard[] = [];
+    for (const item of items) {
+      const typedItem = item as Record<string, unknown>;
+      const sides = Array.isArray(typedItem['cardSides']) ? typedItem['cardSides'] as Record<string, unknown>[] : [];
+      if (!sides.length) continue;
+
+      // Find word/term side and definition side
+      const wordSide = sides.find(s => s['side'] === 'word' || s['side'] === 'term') ?? sides[0];
+      const defSide  = sides.find(s => s['side'] === 'definition' || s['side'] === 'back') ?? sides[1];
+      if (!wordSide || !defSide) continue;
+
+      // Extract text — new format uses media[].plainText, old format uses media[].text
+      function extractText(side: Record<string, unknown>): string {
+        const media = Array.isArray(side['media']) ? side['media'] as Record<string, unknown>[] : [];
+        for (const m of media) {
+          if (typeof m['plainText'] === 'string' && m['plainText'].trim()) return m['plainText'].trim();
+          if (typeof m['text'] === 'string' && m['text'].trim()) return m['text'].trim();
+        }
+        // Fallback: direct text property
+        if (typeof side['text'] === 'string') return side['text'].trim();
+        return '';
+      }
+
+      const front = normalizeText(extractText(wordSide));
+      const back  = normalizeText(extractText(defSide));
+      if (front && back) cards.push({ front, back });
+    }
+    return uniqueCards(cards);
+  } catch {
+    return [];
+  }
+}
+
+// ── Strategy 2: word/definition JSON key patterns ──
+
 function parseWordDefinitionPairs(html: string) {
   const patterns = [
-    /"word":"([^\"]+)".{0,500}?"definition":"([^\"]+)"/g,
-    /"term":"([^\"]+)".{0,500}?"definition":"([^\"]+)"/g,
-    /"front":"([^\"]+)".{0,500}?"back":"([^\"]+)"/g,
-    /"side":"word".{0,500}?"text":"([^\"]+)".{0,500}?"side":"definition".{0,500}?"text":"([^\"]+)"/g,
+    /"word":"([^"]+)".{0,500}?"definition":"([^"]+)"/g,
+    /"term":"([^"]+)".{0,500}?"definition":"([^"]+)"/g,
+    /"front":"([^"]+)".{0,500}?"back":"([^"]+)"/g,
+    /"side":"word".{0,500}?"text":"([^"]+)".{0,500}?"side":"definition".{0,500}?"text":"([^"]+)"/g,
   ];
 
   const cards: ParsedFlashcard[] = [];
@@ -59,16 +142,25 @@ function parseWordDefinitionPairs(html: string) {
   return uniqueCards(cards);
 }
 
+// ── Strategy 3: JSON-LD schema.org ──
+
 function parseJsonLd(html: string) {
   const cards: ParsedFlashcard[] = [];
   const scriptMatches = html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
   for (const match of scriptMatches) {
     try {
       const data = JSON.parse(decodeEscapes(match[1] ?? '')) as Record<string, unknown>;
-      const parts = Array.isArray(data.hasPart) ? data.hasPart : Array.isArray(data.mainEntity) ? data.mainEntity : [];
+      const parts = Array.isArray(data['hasPart'])
+        ? data['hasPart']
+        : Array.isArray(data['mainEntity'])
+          ? data['mainEntity']
+          : [];
       for (const part of parts as Array<Record<string, unknown>>) {
-        const front = typeof part.name === 'string' ? part.name : typeof part.term === 'string' ? part.term : '';
-        const back = typeof part.text === 'string' ? part.text : typeof part.description === 'string' ? part.description : typeof part.definition === 'string' ? part.definition : '';
+        const front = typeof part['name'] === 'string' ? part['name']
+          : typeof part['term'] === 'string' ? part['term'] : '';
+        const back = typeof part['text'] === 'string' ? part['text']
+          : typeof part['description'] === 'string' ? part['description']
+          : typeof part['definition'] === 'string' ? part['definition'] : '';
         if (front && back) cards.push({ front, back });
       }
     } catch {
@@ -78,23 +170,34 @@ function parseJsonLd(html: string) {
   return uniqueCards(cards);
 }
 
+// ── Strategy 4: Embedded script patterns ──
+
 function parseEmbeddedJson(html: string) {
   const cards: ParsedFlashcard[] = [];
   const scriptMatches = html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi);
   for (const match of scriptMatches) {
     const script = match[1] ?? '';
-    if (!/term|definition|word/i.test(script)) continue;
+    if (!/term|definition|word|plainText/i.test(script)) continue;
 
-    for (const pair of script.matchAll(/(?:"word"|"term")\s*:\s*"([^\"]+)"[\s\S]{0,500}?(?:"definition"|"text")\s*:\s*"([^\"]+)"/g)) {
+    // word/term → definition/text (original)
+    for (const pair of script.matchAll(/(?:"word"|"term")\s*:\s*"([^"]+)"[\s\S]{0,500}?(?:"definition"|"text")\s*:\s*"([^"]+)"/g)) {
       cards.push({ front: pair[1] ?? '', back: pair[2] ?? '' });
     }
 
-    for (const pair of script.matchAll(/"cardSides"\s*:\s*\[(?:.|\n){0,500}?"text"\s*:\s*"([^\"]+)"(?:.|\n){0,500}?"text"\s*:\s*"([^\"]+)"/g)) {
+    // cardSides with plainText (modern Quizlet format)
+    for (const pair of script.matchAll(/"cardSides"\s*:\s*\[[\s\S]{0,600}?"plainText"\s*:\s*"([^"]+)"[\s\S]{0,600}?"plainText"\s*:\s*"([^"]+)"/g)) {
+      cards.push({ front: pair[1] ?? '', back: pair[2] ?? '' });
+    }
+
+    // cardSides with text key (legacy)
+    for (const pair of script.matchAll(/"cardSides"\s*:\s*\[[\s\S]{0,500}?"text"\s*:\s*"([^"]+)"[\s\S]{0,500}?"text"\s*:\s*"([^"]+)"/g)) {
       cards.push({ front: pair[1] ?? '', back: pair[2] ?? '' });
     }
   }
   return uniqueCards(cards);
 }
+
+// ── Strategy 5: Visible DOM spans (last resort) ──
 
 function parseVisibleTerms(html: string) {
   const cards: ParsedFlashcard[] = [];
@@ -107,12 +210,15 @@ function parseVisibleTerms(html: string) {
   return uniqueCards(cards);
 }
 
+// ── Public API ───────────────────────────────────────────────────────────────
+
 export function extractQuizletCards(html: string) {
   const strategies = [
-    parseWordDefinitionPairs,
-    parseJsonLd,
-    parseEmbeddedJson,
-    parseVisibleTerms,
+    parseNextData,           // Most reliable — direct JSON parse of __NEXT_DATA__
+    parseWordDefinitionPairs, // word/definition key patterns in JSON
+    parseJsonLd,             // schema.org JSON-LD
+    parseEmbeddedJson,       // Script tag patterns (plainText + text keys)
+    parseVisibleTerms,       // DOM span fallback
   ];
 
   for (const strategy of strategies) {

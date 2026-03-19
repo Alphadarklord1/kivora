@@ -39,6 +39,8 @@ export interface WorkspacePanelProps {
   selectedTopicName:  string;
   onRefresh: () => void;
   filesRefreshKey?: number;
+  onToggleReports?: () => void;
+  reportsOpen?: boolean;
 }
 
 // ── Tab config ─────────────────────────────────────────────────────────────
@@ -230,6 +232,7 @@ function FileViewer({
 
 export function WorkspacePanel({
   selectedFolder, selectedTopic, selectedFolderName, selectedTopicName, onRefresh, filesRefreshKey,
+  onToggleReports, reportsOpen,
 }: WorkspacePanelProps) {
   const { toast } = useToast();
   const router = useRouter();
@@ -429,9 +432,34 @@ export function WorkspacePanel({
     let src = extractedText.trim();
     if (!src && selFile) src = (await extractFromFile(selFile))?.trim() ?? '';
     if (!src) { toast('Select a file or paste content first.', 'warning'); return; }
+
+    // Read privacy preference — what can we send to AI?
+    const aiDataMode = (typeof window !== 'undefined'
+      ? localStorage.getItem('kivora_ai_mode')
+      : null) as 'full' | 'metadata-only' | 'offline' | null ?? 'full';
+
+    // If user chose offline-only mode, skip AI API entirely
+    if (aiDataMode === 'offline') {
+      setGenerating(true); setOutput(''); setStreamSource('offline'); setEditMode(false);
+      try {
+        const { offlineGenerate } = await import('@/lib/offline/generate');
+        const result = offlineGenerate(mode as ToolMode, src, { count });
+        setOutput(result);
+        setStreamSource('offline');
+        toast('Generated offline (Offline-only mode is active)', 'info');
+      } catch { toast('Offline generation failed.', 'error'); }
+      finally { setGenerating(false); }
+      return;
+    }
+
+    // If metadata-only: replace content with a placeholder summary
+    const textForAI = aiDataMode === 'metadata-only'
+      ? `[Content withheld for privacy. File: "${selFile?.name ?? 'pasted text'}", ${wordCount(src).toLocaleString()} words. Generate ${mode} based on this description only.]`
+      : src;
+
     const retrievalContext = selFile
-      ? buildGenerationContext(mode as Parameters<typeof buildGenerationContext>[0], src, { count }, await ensureRagIndex(selFile.id, src).catch(() => undefined))
-      : buildGenerationContext(mode as Parameters<typeof buildGenerationContext>[0], src, { count });
+      ? buildGenerationContext(mode as Parameters<typeof buildGenerationContext>[0], textForAI, { count }, await ensureRagIndex(selFile.id, src).catch(() => undefined))
+      : buildGenerationContext(mode as Parameters<typeof buildGenerationContext>[0], textForAI, { count });
 
     // Cancel any in-flight stream
     abortRef.current?.abort();
@@ -614,6 +642,15 @@ export function WorkspacePanel({
             </span>
           )}
           {files.length > 0 && <span className="badge badge-accent">{files.length} file{files.length !== 1 ? 's' : ''}</span>}
+          {onToggleReports && (
+            <button
+              className={`btn btn-sm ${reportsOpen ? 'btn-accent' : 'btn-ghost'}`}
+              onClick={onToggleReports}
+              title={reportsOpen ? 'Close reports panel' : 'Open study reports'}
+              style={{ fontSize: 12, padding: '3px 8px' }}>
+              📊
+            </button>
+          )}
         </div>
       </div>
 
@@ -1099,7 +1136,10 @@ export function WorkspacePanel({
         )}
 
         {/* ─────────────────── FOCUS ─────────────────── */}
-        {mainTab === 'focus' && <FocusPanel />}
+        {/* Always mounted so the Pomodoro timer keeps running when you switch tabs */}
+        <div style={{ display: mainTab === 'focus' ? 'flex' : 'none', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
+          <FocusPanel />
+        </div>
 
         {/* ─────────────────── PLANNER ─────────────────── */}
         {mainTab === 'planner' && <ExamPlannerPanel />}
