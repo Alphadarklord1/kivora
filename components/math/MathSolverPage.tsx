@@ -69,7 +69,7 @@ const TOPICS = [
   {
     id: 'calculus',
     label: 'Calculus',
-    icon: '∫',
+    icon: '∂',
     color: '#8b5cf6',
     examples: [
       'Differentiate x³ sin(x)',
@@ -121,7 +121,7 @@ const TOPICS = [
   {
     id: 'linear-algebra',
     label: 'Linear Algebra',
-    icon: '[]',
+    icon: '⊞',
     color: '#ec4899',
     examples: [
       'Eigenvalues of [[2,1],[1,2]]',
@@ -137,24 +137,25 @@ const TOPICS = [
     icon: "y'",
     color: '#f97316',
     examples: [
-      "Solve dy/dx = 2xy",
-      "Solve y'' - 3y' + 2y = 0",
-      "Solve y' - y = e^x",
-      "Initial value: y' = y, y(0) = 1",
-      "Solve (x² + y²) dx + 2xy dy = 0",
+      "y'' + 3y' + 2y = 0",
+      "y'' - y = 0",
+      "y' = -2y",
+      "dy/dx = 3x^2",
+      "y' + 2y = 4",
     ],
   },
   {
     id: 'discrete',
     label: 'Discrete Math',
-    icon: '#',
+    icon: '∈',
     color: '#14b8a6',
     examples: [
-      'Find gcd(48, 36)',
-      'Permutations of MISSISSIPPI',
-      'C(10, 4) combinations',
-      '2^100 mod 1000000007',
-      'Fibonacci F(20)',
+      'gcd(48, 36)',
+      'lcm(12, 18)',
+      'C(10, 3)',
+      'P(5, 2)',
+      'fibonacci(10)',
+      '2^10 mod 7',
     ],
   },
   {
@@ -163,11 +164,12 @@ const TOPICS = [
     icon: '⚛',
     color: '#ef4444',
     examples: [
-      'Projectile: v₀=20 m/s at 30°, find range',
-      'Ohm\'s law: V=IR, R=10Ω, I=2A',
-      'Kinetic energy at v=15 m/s, m=2 kg',
-      'Wave: λ=0.5m, f=680 Hz, find speed',
-      'Force on charge q=2μC in E=300 N/C',
+      'ohm V=12 I=3',
+      'KE m=10 v=5',
+      'projectile v=50 theta=45',
+      'wave f=440 lambda=0.78',
+      'force m=5 a=3',
+      'PE m=10 h=5',
     ],
   },
 ] as const;
@@ -182,8 +184,8 @@ const SPECIAL_VIEW_META: Record<SpecialView, { title: string; subtitle: string; 
   integrate: {
     title: 'Integration',
     subtitle: 'Compute indefinite and definite integrals with full step-by-step working and rendered LaTeX.',
-    icon: '∫',
-    accent: '#8b5cf6',
+    icon: '∫₀',
+    accent: '#7c3aed',
     workflowTitle: 'Integration workflow',
     workflow: [
       { label: 'Enter f(x)', detail: 'Type the integrand — e.g. x^2, sin(x), or x*e^x.' },
@@ -354,10 +356,16 @@ const SYMBOL_GROUPS = [
 
 const GRAPH_COLORS = ['#6366f1', '#f97316', '#22c55e', '#ef4444', '#a855f7', '#0ea5e9'];
 const GRAPH_PRESETS = [
-  { label: 'Parabola', expr: 'y = x^2' },
-  { label: 'Sine', expr: 'y = sin(x)' },
-  { label: 'Circle', expr: 'x^2 + y^2 = 25' },
-  { label: 'Vertical line', expr: 'x = 2' },
+  { label: 'y = x²',       expr: 'y = x^2' },
+  { label: 'y = sin(x)',   expr: 'y = sin(x)' },
+  { label: 'y = cos(x)',   expr: 'y = cos(x)' },
+  { label: 'y = e^x',     expr: 'y = e^x' },
+  { label: 'y = ln(x)',   expr: 'y = log(x)' },
+  { label: 'y = 1/x',    expr: 'y = 1/x' },
+  { label: 'y = |x|',    expr: 'y = abs(x)' },
+  { label: 'Circle',     expr: 'x^2 + y^2 = 25' },
+  { label: 'y = tan(x)', expr: 'y = tan(x)' },
+  { label: 'x = 2',      expr: 'x = 2' },
 ];
 
 function normalizeGraphExpression(expr: string): NormalizedGraphExpression | null {
@@ -717,6 +725,7 @@ export function MathSolverPage() {
   const [intgAnswerLatex, setIntgAnswerLatex] = useState('');
   const [intgError, setIntgError] = useState('');
   const [intgNumerical, setIntgNumerical] = useState<string | null>(null);
+  const [formulaSearch, setFormulaSearch] = useState('');
 
   const [contextName, setContextName] = useState('');
   const [scanBusy, setScanBusy] = useState(false);
@@ -1061,11 +1070,21 @@ export function MathSolverPage() {
         </div>
 
         <div style={{ padding: '0 0 8px' }}>
+          {sidebarOpen && (
+            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '6px 20px 4px', opacity: 0.6 }}>
+              Solver Topics
+            </div>
+          )}
           {TOPICS.map(t => <NavItem key={t.id} id={t.id} icon={t.icon} label={t.label} color={t.color} />)}
           <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
+          {sidebarOpen && (
+            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '2px 20px 4px', opacity: 0.6 }}>
+              Tools
+            </div>
+          )}
           <NavItem id="formulas"  icon="📚" label="Formula Sheets" />
           <NavItem id="graph"     icon="📈" label="Graph Plotter"  color="#22c55e" />
-          <NavItem id="integrate" icon="∫"  label="Integration"    color="#8b5cf6" />
+          <NavItem id="integrate" icon="∫₀" label="Integration"    color="#7c3aed" />
           <NavItem id="units"     icon="⚖" label="Unit Converter" color="#f59e0b" />
           <NavItem id="scan"      icon="🧾" label="Question Scan"  color="#38bdf8" />
         </div>
@@ -1332,47 +1351,87 @@ export function MathSolverPage() {
         )}
 
         {/* ── FORMULAS VIEW ── */}
-        {active === 'formulas' && (
-          <div style={{ padding: '20px 24px', flex: 1, overflowY: 'auto' }}>
-            <WorkflowCard
-              accent={SPECIAL_VIEW_META.formulas.accent}
-              title={SPECIAL_VIEW_META.formulas.workflowTitle}
-              steps={SPECIAL_VIEW_META.formulas.workflow}
-            />
-            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', marginBottom: 18, fontSize: 12, color: 'var(--text-secondary)' }}>
-              This tab is for revision speed: scan formulas, then click one to send it back into the solver for explanation or practice.
-            </div>
-            {TOPICS.map(topic => {
-              const formulas = FORMULAS[topic.id] ?? [];
-              if (formulas.length === 0) return null;
-              return (
-                <div key={topic.id} style={{ marginBottom: 28 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingBottom: 6, borderBottom: `2px solid ${topic.color}40` }}>
-                    <span style={{ fontSize: 18 }}>{topic.icon}</span>
-                    <span style={{ fontWeight: 700, fontSize: 15, color: topic.color }}>{topic.label}</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
-                    {formulas.map((f, i) => (
-                      <div key={i}
-                        style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', cursor: 'pointer', transition: 'border-color 0.12s' }}
-                        onClick={() => { setInput(`Explain: ${f.title}`); setActive(topic.id as TopicId); void solve(`Explain: ${f.title}`, topic.id as TopicId); }}
-                        onMouseEnter={e => { (e.currentTarget).style.borderColor = topic.color; }}
-                        onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; }}
-                        title="Click to solve / explain"
-                      >
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>{f.title}</div>
-                        <div style={{ overflowX: 'auto', fontSize: 14 }}>
-                          <Latex latex={f.latex} display />
-                        </div>
-                        {f.note && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>{f.note}</div>}
-                      </div>
-                    ))}
-                  </div>
+        {active === 'formulas' && (() => {
+          const q = formulaSearch.trim().toLowerCase();
+          const topicsWithFormulas = TOPICS.filter(topic => (FORMULAS[topic.id] ?? []).length > 0);
+          const totalCount = topicsWithFormulas.reduce((acc, t) => acc + (FORMULAS[t.id]?.length ?? 0), 0);
+          return (
+            <div style={{ padding: '20px 24px', flex: 1, overflowY: 'auto' }}>
+              <WorkflowCard
+                accent={SPECIAL_VIEW_META.formulas.accent}
+                title={SPECIAL_VIEW_META.formulas.workflowTitle}
+                steps={SPECIAL_VIEW_META.formulas.workflow}
+              />
+
+              {/* Search + stats bar */}
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+                <input
+                  value={formulaSearch}
+                  onChange={e => setFormulaSearch(e.target.value)}
+                  placeholder="Search formulas…"
+                  style={{ flex: 1, minWidth: 180, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, outline: 'none' }}
+                />
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{totalCount} formulas across {topicsWithFormulas.length} topics</span>
+              </div>
+
+              {/* Topic jump chips */}
+              {!q && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 18 }}>
+                  {topicsWithFormulas.map(topic => (
+                    <a key={topic.id} href={`#formula-${topic.id}`}
+                      style={{ padding: '3px 12px', borderRadius: 20, border: `1px solid ${topic.color}40`, background: `${topic.color}10`, color: topic.color, fontSize: 11, fontWeight: 600, textDecoration: 'none', cursor: 'pointer' }}>
+                      {topic.icon} {topic.label} <span style={{ opacity: 0.7 }}>({FORMULAS[topic.id]?.length ?? 0})</span>
+                    </a>
+                  ))}
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
+
+              {topicsWithFormulas.map(topic => {
+                const allFormulas = FORMULAS[topic.id] ?? [];
+                const formulas = q
+                  ? allFormulas.filter(f => f.title.toLowerCase().includes(q) || f.latex.toLowerCase().includes(q))
+                  : allFormulas;
+                if (formulas.length === 0) return null;
+                return (
+                  <div key={topic.id} id={`formula-${topic.id}`} style={{ marginBottom: 28, scrollMarginTop: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingBottom: 8, borderBottom: `2px solid ${topic.color}40` }}>
+                      <span style={{ fontSize: 18 }}>{topic.icon}</span>
+                      <span style={{ fontWeight: 700, fontSize: 15, color: topic.color }}>{topic.label}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>{formulas.length} formula{formulas.length !== 1 ? 's' : ''}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic' }}>Click any card to explain in solver →</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
+                      {formulas.map((f, i) => (
+                        <div key={i}
+                          style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', cursor: 'pointer', transition: 'all 0.12s', position: 'relative' }}
+                          onClick={() => { setInput(`Explain: ${f.title}`); setActive(topic.id as TopicId); void solve(`Explain: ${f.title}`, topic.id as TopicId); }}
+                          onMouseEnter={e => { const el = e.currentTarget; el.style.borderColor = topic.color; el.style.boxShadow = `0 0 0 2px ${topic.color}20`; }}
+                          onMouseLeave={e => { const el = e.currentTarget; el.style.borderColor = 'var(--border-subtle)'; el.style.boxShadow = 'none'; }}
+                          title={`Click to explain "${f.title}" in the solver`}
+                        >
+                          <div style={{ fontSize: 11, color: topic.color, fontWeight: 600, marginBottom: 8 }}>{f.title}</div>
+                          <div style={{ overflowX: 'auto', fontSize: 14 }}>
+                            <Latex latex={f.latex} display />
+                          </div>
+                          {f.note && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6, fontStyle: 'italic' }}>{f.note}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {q && topicsWithFormulas.every(topic => {
+                const allFormulas = FORMULAS[topic.id] ?? [];
+                return allFormulas.filter(f => f.title.toLowerCase().includes(q) || f.latex.toLowerCase().includes(q)).length === 0;
+              }) && (
+                <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                  No formulas match &ldquo;{formulaSearch}&rdquo;
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── GRAPH VIEW ── */}
         {active === 'graph' && (

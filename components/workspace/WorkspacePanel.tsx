@@ -1070,31 +1070,53 @@ export function WorkspacePanel({
               )}
 
               {!generating && !output && extractedText && (
-                <div className="empty-state" style={{ padding: '50px 20px' }}>
+                <div className="empty-state" style={{ padding: '36px 20px' }}>
                   <div className="empty-icon">{currentGen.icon}</div>
                   <h3>{currentGen.label}</h3>
-                  <p>{currentGen.hint}</p>
-                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 6 }}>
-                    {wordCount(extractedText).toLocaleString()} words ready
-                  </p>
-                  <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                    <button className="btn btn-primary btn-sm" onClick={() => runGenerate(genMode as ToolMode)}>
+                  <p style={{ maxWidth: 340 }}>{currentGen.hint}</p>
+                  <div style={{ marginTop: 4, marginBottom: 16, display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <span className="badge badge-accent" style={{ fontSize: 11 }}>
+                      {wordCount(extractedText).toLocaleString()} words ready
+                    </span>
+                    {selFile && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>from &ldquo;{selFile.name}&rdquo;</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button className="btn btn-primary" onClick={() => runGenerate(genMode as ToolMode)}>
                       {currentGen.icon} Generate {currentGen.label}
                     </button>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>or press Ctrl+G</span>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>or <kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 3, padding: '0 4px', fontFamily: 'monospace' }}>Ctrl+G</kbd></span>
+                  </div>
+                  {/* Also show all other tools so user can pick without going back */}
+                  <div style={{ marginTop: 20, display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+                    {GENERATE_TABS.filter(t => t.id !== genMode).map(t => (
+                      <button key={t.id} className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
+                        onClick={() => { setGenMode(t.id); void runGenerate(t.id as ToolMode); }}>
+                        {t.icon} {t.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
 
               {!generating && !output && !extractedText && !pasteMode && (
-                <div className="empty-state" style={{ padding: '50px 20px' }}>
+                <div className="empty-state" style={{ padding: '40px 20px' }}>
                   <div className="empty-icon">⚡</div>
-                  <h3>AI Generate</h3>
-                  <p>
-                    Open a file in <strong>Files</strong> and click <strong>⚡ Use for Generate</strong>,
-                    or switch to <strong>Paste text</strong> above to enter content directly.
+                  <h3>AI Tools</h3>
+                  <p style={{ marginBottom: 18 }}>
+                    Open a file in <strong>Files</strong> and click <strong>⚡ Use</strong>, or switch to <strong>Paste text</strong> above.
                   </p>
-                  <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', fontSize: 'var(--text-xs)', color: 'var(--text-3)', textAlign: 'left', maxWidth: 280, margin: '18px auto 0' }}>
+                  {/* Quick-start tool buttons */}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 20 }}>
+                    {GENERATE_TABS.slice(0, 6).map(t => (
+                      <button key={t.id}
+                        className={`btn btn-sm btn-ghost`}
+                        style={{ fontSize: 12 }}
+                        onClick={() => { setGenMode(t.id); setPasteMode(true); }}>
+                        {t.icon} {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', fontSize: 'var(--text-xs)', color: 'var(--text-3)', textAlign: 'left', maxWidth: 280, margin: '0 auto' }}>
                     <span><kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Ctrl+G</kbd> Generate</span>
                     <span><kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Ctrl+S</kbd> Save to library</span>
                     <span><kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Ctrl+E</kbd> Export .md</span>
@@ -1256,14 +1278,27 @@ export function WorkspacePanel({
                     <div style={{ marginTop: 8 }}>
                       {expanded
                         ? <FlashcardView content={item.content} />
-                        : <div className="lib-item-preview" style={{ maxHeight: 80, overflow: 'hidden', WebkitMaskImage: 'linear-gradient(to bottom, #000 60%, transparent)', maskImage: 'linear-gradient(to bottom, #000 60%, transparent)' }}>
+                        : <div className="lib-item-preview" style={{ maxHeight: 80, overflow: 'hidden', WebkitMaskImage: 'linear-gradient(to bottom, #000 60%, transparent)', maskImage: 'linear-gradient(to bottom, #000 60%, transparent)', fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
                             {item.content.slice(0, 300)}…
                           </div>
                       }
                     </div>
+                  ) : item.mode === 'mcq' ? (
+                    <div style={{ marginTop: 8 }}>
+                      {expanded
+                        ? <MCQView content={item.content} />
+                        : <div className="lib-item-preview" style={{ maxHeight: 80, overflow: 'hidden', WebkitMaskImage: 'linear-gradient(to bottom, #000 60%, transparent)', maskImage: 'linear-gradient(to bottom, #000 60%, transparent)' }}>
+                            <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(item.content.slice(0, 400)) }} />
+                          </div>
+                      }
+                    </div>
                   ) : (
-                    <div className="lib-item-preview" style={{ maxHeight: expanded ? 'none' : 80, overflow: expanded ? 'visible' : 'hidden', WebkitMaskImage: expanded ? 'none' : 'linear-gradient(to bottom, #000 60%, transparent)', maskImage: expanded ? 'none' : 'linear-gradient(to bottom, #000 60%, transparent)' }}>
-                      {item.content.slice(0, expanded ? undefined : 600)}{!expanded && item.content.length > 600 ? '…' : ''}
+                    <div style={{ marginTop: 8 }}>
+                      {expanded
+                        ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(item.content) }} />
+                        : <div className="tool-output" style={{ maxHeight: 90, overflow: 'hidden', WebkitMaskImage: 'linear-gradient(to bottom, #000 50%, transparent)', maskImage: 'linear-gradient(to bottom, #000 50%, transparent)', pointerEvents: 'none' }}
+                            dangerouslySetInnerHTML={{ __html: mdToHtml(item.content.slice(0, 600)) }} />
+                      }
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
