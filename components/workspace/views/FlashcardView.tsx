@@ -221,7 +221,7 @@ export function FlashcardView({
     'Stats': 'الإحصاءات',
     'Import': 'استيراد',
     'Browse': 'استعراض',
-    'Study Hub': 'مركز الدراسة',
+    'Revision Coach': 'مدرب المراجعة',
     'Share': 'مشاركة',
     'Shared': 'تمت المشاركة',
     'Error': 'خطأ',
@@ -526,7 +526,7 @@ export function FlashcardView({
             cardCount: deck.cards.length,
             sourceDeckId: deck.id,
             sourceDeckName: deck.name,
-            savedFrom: initialDeck ? `/study/${deck.id}` : '/workspace',
+            savedFrom: initialDeck ? `/coach?set=${deck.id}&panel=manage` : '/workspace',
           },
         }),
       });
@@ -873,7 +873,7 @@ export function FlashcardView({
           <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('stats')}>📊 {t('Stats')}</button>
           <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('import')}>📥 {t('Import')}</button>
           {showBrowseButton ? (
-            <button className="btn btn-ghost btn-sm" onClick={() => router.push('/study')}>🃏 {t('Study Hub')}</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => router.push('/coach')}>🧭 {t('Revision Coach')}</button>
           ) : (
             <span />
           )}

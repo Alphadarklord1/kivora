@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { href: '/planner',   key: 'Planner',             icon: '📅' },
   { href: '/math',      key: 'Math',                icon: '∑'  },
   { href: '/library',   key: 'Library',             icon: '🗂️' },
-  { href: '/study',     key: 'Study Hub',           icon: '🃏' },
+  { href: '/coach',     key: 'Revision Coach',     icon: '🧭' },
   { href: '/analytics', key: 'Analytics',           icon: '📊' },
   { href: '/models',    key: 'Models & Downloads',  icon: '🤖' },
   { href: '/sharing',   key: 'Sharing',             icon: '🔗' },

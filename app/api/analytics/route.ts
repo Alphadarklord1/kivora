@@ -417,7 +417,7 @@ export async function GET(req: NextRequest) {
       }
       const topDeck = deckStats.topDecks[0];
       if (topDeck) {
-        insights.push(`Deck focus: "${topDeck.name}" — ${topDeck.dueCards} due, ${topDeck.accuracy}% accuracy.`);
+        insights.push(`Review set focus: "${topDeck.name}" — ${topDeck.dueCards} due, ${topDeck.accuracy}% accuracy.`);
       }
     }
 
@@ -442,10 +442,10 @@ export async function GET(req: NextRequest) {
           : `Review ${dueCardsTotal} due card${dueCardsTotal === 1 ? '' : 's'} today`,
         type: 'review',
         payload: {
-          href: '/study',
-          cta: 'Open Study Hub',
+          href: '/coach',
+          cta: 'Open Revision Coach',
           detail: reviewDeck
-            ? `${reviewDeck.accuracy}% retention in your most active deck`
+            ? `${reviewDeck.accuracy}% retention in your most active review set`
             : 'Keep today’s review queue under control to protect retention.',
         },
       });
@@ -492,12 +492,12 @@ export async function GET(req: NextRequest) {
     if (deckStats.totalDecks === 0) {
       coachActions.push({
         id: 'create-first-deck',
-        label: 'Create or import your first deck',
+        label: 'Create or import your first review set',
         type: 'review',
         payload: {
-          href: '/study',
-          cta: 'Open Study Hub',
-          detail: 'Study Hub unlocks review history, daily goals, and stronger spaced repetition analytics.',
+          href: '/coach',
+          cta: 'Open Revision Coach',
+          detail: 'Revision Coach unlocks daily missions, review history, and stronger spaced repetition analytics.',
         },
       });
     }

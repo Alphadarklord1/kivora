@@ -128,7 +128,7 @@ export function StudyAnalytics() {
         />
         <StatCard
           icon="🃏"
-          label="Decks"
+          label="Review Sets"
           value={deckStats?.totalDecks ?? 0}
           accent="#7c3aed"
           detail={`${deckStats?.totalCards ?? 0} total cards · ${usage?.libraryItems ?? 0} library items`}
@@ -439,9 +439,9 @@ function OverviewTab({ quizStats, planStats: _planStats, weakAreas, coachActions
       </div>
 
       <div className="an-card wide">
-        <h3 className="card-title">Deck Performance</h3>
+        <h3 className="card-title">Review Set Performance</h3>
         {deckStats.topDecks.length === 0 ? (
-          <p className="card-empty">No deck activity yet. Import a deck or generate flashcards to start tracking progress.</p>
+          <p className="card-empty">No review-set activity yet. Import a set or generate flashcards to start tracking progress.</p>
         ) : (
           <div className="deck-grid-perf">
             {deckStats.topDecks.map((deck) => {
@@ -1410,9 +1410,9 @@ function GoalsTab({ planStats, weakAreas, deckStats }: {
       </div>
 
       <div className="an-card">
-        <h3 className="card-title">Deck Goal Progress</h3>
+        <h3 className="card-title">Review Set Goal Progress</h3>
         {deckStats.topDecks.length === 0 ? (
-          <p className="card-empty">No deck goal data yet. Review a deck to start building daily progress.</p>
+          <p className="card-empty">No review-set goal data yet. Review a set to start building daily progress.</p>
         ) : (
           <div className="goal-list">
             {deckStats.topDecks.slice(0, 5).map((deck) => (
