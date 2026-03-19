@@ -11,6 +11,7 @@ export const users = pgTable('users', {
   emailVerified: timestamp('email_verified'),
   image: text('image'),
   bio: text('bio'),
+  supabaseAuthId: text('supabase_auth_id'),
   passwordHash: text('password_hash'),
   isGuest: boolean('is_guest').notNull().default(false),
   guestSessionId: text('guest_session_id'),
@@ -21,6 +22,7 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
   guestSessionUnique: uniqueIndex('users_guest_session_id_uq').on(table.guestSessionId),
+  supabaseAuthUnique: uniqueIndex('users_supabase_auth_id_uq').on(table.supabaseAuthId),
 }));
 
 export const accounts = pgTable('accounts', {
@@ -106,6 +108,10 @@ export const files = pgTable('files', {
   localBlobId: text('local_blob_id'), // Reference to IndexedDB blob
   mimeType: text('mime_type'),
   fileSize: integer('file_size'),
+  storageProvider: text('storage_provider'),
+  storageBucket: text('storage_bucket'),
+  storagePath: text('storage_path'),
+  storageUploadedAt: timestamp('storage_uploaded_at'),
   liked: boolean('liked').default(false),
   pinned: boolean('pinned').default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),

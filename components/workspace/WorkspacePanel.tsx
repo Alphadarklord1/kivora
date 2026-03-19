@@ -11,6 +11,7 @@ import { deleteRagIndex, ensureRagIndex } from '@/lib/rag/index-store';
 import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteLocalFile, listLocalFiles, upsertLocalFile } from '@/lib/files/local-files';
+import { createFileReplaceRequest, createFileUploadRequest, resolveStoredFileBlob } from '@/lib/files/client-storage';
 import { getDeckStats, loadDecks, deleteDeck, type SRSDeck } from '@/lib/srs/sm2';
 import { ChatPanel } from '@/components/workspace/ChatPanel';
 import { NotesPanel } from '@/components/workspace/NotesPanel';
@@ -28,6 +29,9 @@ import { writeMathContext } from '@/lib/math/context';
 interface FileRecord {
   id: string; name: string; type: string;
   mimeType?: string; fileSize?: number;
+  storageProvider?: string | null;
+  storageBucket?: string | null;
+  storagePath?: string | null;
   localBlobId?: string; localFilePath?: string | null;
   content?: string; createdAt: string;
 }
@@ -125,17 +129,19 @@ function FileViewer({
     (async () => {
       try {
         if (file.content && !file.localBlobId) { setTextContent(file.content); return; }
-        if (!file.localBlobId) { setErr('No local file data — this file may have been uploaded on another device.'); return; }
-        const payload = await idbStore.get(file.localBlobId);
-        if (!payload) { setErr('File not found in local storage.'); return; }
+        const blob = await resolveStoredFileBlob(file);
+        if (!blob) {
+          setErr('This file is not available locally or in remote storage yet.');
+          return;
+        }
         if (isPDF(file) || isImage(file)) {
-          url = URL.createObjectURL(payload.blob);
+          url = URL.createObjectURL(blob);
           setBlobUrl(url);
         } else {
           const isPlain = !!file.name.toLowerCase().match(/\.(txt|md|csv|json|xml|html)$/);
-          if (isPlain) setTextContent(await payload.blob.text());
+          if (isPlain) setTextContent(await blob.text());
           else {
-            const res = await extractTextFromBlob(payload.blob, file.name);
+            const res = await extractTextFromBlob(blob, file.name);
             if (res.error) setErr(res.error); else setTextContent(res.text);
           }
         }
@@ -148,10 +154,9 @@ function FileViewer({
 
   async function resolveFileText(successLabel: string) {
     if (textContent) return textContent;
-    if (!file.localBlobId) return;
-    const payload = await idbStore.get(file.localBlobId);
-    if (!payload) { toast('File not found locally.', 'error'); return; }
-    const res = await extractTextFromBlob(payload.blob, file.name);
+    const blob = await resolveStoredFileBlob(file);
+    if (!blob) { toast('File not found locally or in remote storage.', 'error'); return; }
+    const res = await extractTextFromBlob(blob, file.name);
     if (res.error) { toast(res.error, 'error'); return; }
     toast(`${res.wordCount.toLocaleString()} words loaded into ${successLabel}`, 'success');
     return res.text;
@@ -309,7 +314,7 @@ export function WorkspacePanel({
       await Promise.all(loaded.map(async f => {
         if (f.localBlobId) {
           const payload = await idbStore.get(f.localBlobId).catch(() => undefined);
-          if (!payload) missing.add(f.id);
+          if (!payload && !f.content && !f.storagePath) missing.add(f.id);
         }
       }));
       setMissingBlobs(missing);
@@ -364,12 +369,11 @@ export function WorkspacePanel({
       void markRecentFile(file.id);
       return file.content;
     }
-    if (!file.localBlobId) { toast('No local file data.', 'error'); return null; }
     setExtracting(true);
     try {
-      const payload = await idbStore.get(file.localBlobId);
-      if (!payload) { toast('File not found in local storage.', 'error'); return null; }
-      const res = await extractTextFromBlob(payload.blob, file.name);
+      const blob = await resolveStoredFileBlob(file);
+      if (!blob) { toast('File not found in local or remote storage.', 'error'); return null; }
+      const res = await extractTextFromBlob(blob, file.name);
       if (res.error) { toast(res.error, 'error'); return null; }
       setExtractedText(res.text);
       void ensureRagIndex(file.id, res.text);
@@ -385,7 +389,10 @@ export function WorkspacePanel({
     await idbStore.put(blobId, { blob: file, name: file.name, type: file.type, size: file.size });
     const local = { id: fileId, folderId: selectedFolder, topicId: selectedTopic ?? null, name: file.name, type: 'upload', localBlobId: blobId, mimeType: file.type, fileSize: file.size, createdAt };
     try {
-      const res = await fetch('/api/files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(local) });
+      const res = await createFileUploadRequest({
+        ...local,
+        file,
+      });
       toast(res.ok ? `"${file.name}" uploaded` : `"${file.name}" saved locally`, res.ok ? 'success' : 'info');
       if (!res.ok) upsertLocalFile(local);
     } catch { upsertLocalFile(local); toast(`"${file.name}" saved locally`, 'info'); }
@@ -402,9 +409,12 @@ export function WorkspacePanel({
     const newBlobId = uuidv4();
     await idbStore.put(newBlobId, { blob: newFile, name: newFile.name, type: newFile.type, size: newFile.size });
     try {
-      await fetch(`/api/files/${target.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ localBlobId: newBlobId, fileSize: newFile.size }),
+      await createFileReplaceRequest({
+        fileId: target.id,
+        localBlobId: newBlobId,
+        fileSize: newFile.size,
+        mimeType: newFile.type,
+        file: newFile,
       });
     } catch {}
     setFiles(prev => prev.map(f => f.id === target.id ? { ...f, localBlobId: newBlobId, fileSize: newFile.size } : f));

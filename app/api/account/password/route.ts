@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { getUserId, isDemoGuestEmail } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
+import { syncSupabaseAuthUser } from '@/lib/supabase/auth-admin';
 
 // PUT change password
 export async function PUT(request: NextRequest) {
@@ -85,6 +86,26 @@ export async function PUT(request: NextRequest) {
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId));
+
+    const syncedAuthId = await syncSupabaseAuthUser({
+      supabaseAuthId: user[0].supabaseAuthId,
+      email: user[0].email,
+      password: newPassword,
+      name: user[0].name,
+      image: user[0].image,
+      bio: user[0].bio,
+      emailConfirmed: true,
+    });
+
+    if (syncedAuthId && syncedAuthId !== user[0].supabaseAuthId) {
+      await db
+        .update(users)
+        .set({
+          supabaseAuthId: syncedAuthId,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId));
+    }
 
     return NextResponse.json({ success: true, message: 'Password updated' });
   } catch (error) {

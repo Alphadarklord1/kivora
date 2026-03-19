@@ -9,6 +9,7 @@ import { users, accounts } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
+import { syncSupabaseAuthUser } from '@/lib/supabase/auth-admin';
 
 const authSecret =
   process.env.AUTH_SECRET ||
@@ -97,6 +98,21 @@ export const authConfig: NextAuthConfig = {
         const valid = await bcrypt.compare(credentials.password as string, user.passwordHash);
         if (!valid) return null;
 
+        const syncedAuthId = await syncSupabaseAuthUser({
+          supabaseAuthId: user.supabaseAuthId,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+          bio: user.bio,
+          emailConfirmed: true,
+        });
+
+        if (syncedAuthId && syncedAuthId !== user.supabaseAuthId) {
+          await db.update(users)
+            .set({ supabaseAuthId: syncedAuthId, updatedAt: new Date() })
+            .where(eq(users.id, user.id));
+        }
+
         return { id: user.id, email: user.email, name: user.name, image: user.image };
       },
     }),
@@ -136,7 +152,24 @@ export const authConfig: NextAuthConfig = {
             const existingUser = await db.query.users.findFirst({
               where: eq(users.id, existingAccount.userId),
             });
-            if (existingUser) user.id = existingUser.id;
+            if (existingUser) {
+              const syncedAuthId = await syncSupabaseAuthUser({
+                supabaseAuthId: existingUser.supabaseAuthId,
+                email,
+                name: user.name ?? existingUser.name,
+                image: user.image ?? existingUser.image,
+                bio: existingUser.bio,
+                emailConfirmed: true,
+              });
+
+              if (syncedAuthId && syncedAuthId !== existingUser.supabaseAuthId) {
+                await db.update(users)
+                  .set({ supabaseAuthId: syncedAuthId, updatedAt: new Date() })
+                  .where(eq(users.id, existingUser.id));
+              }
+
+              user.id = existingUser.id;
+            }
             return true;
           }
 
@@ -146,13 +179,37 @@ export const authConfig: NextAuthConfig = {
           });
 
           if (!dbUser) {
+            const syncedAuthId = await syncSupabaseAuthUser({
+              email,
+              name: user.name ?? email.split('@')[0],
+              image: user.image ?? null,
+              emailConfirmed: true,
+            });
             const [inserted] = await db.insert(users).values({
               id: uuidv4(),
               email,
               name: user.name ?? email.split('@')[0],
               image: user.image ?? null,
+              supabaseAuthId: syncedAuthId,
             }).returning();
             dbUser = inserted;
+          } else {
+            const syncedAuthId = await syncSupabaseAuthUser({
+              supabaseAuthId: dbUser.supabaseAuthId,
+              email,
+              name: user.name ?? dbUser.name,
+              image: user.image ?? dbUser.image,
+              bio: dbUser.bio,
+              emailConfirmed: true,
+            });
+
+            if (syncedAuthId && syncedAuthId !== dbUser.supabaseAuthId) {
+              const [updatedUser] = await db.update(users)
+                .set({ supabaseAuthId: syncedAuthId, updatedAt: new Date() })
+                .where(eq(users.id, dbUser.id))
+                .returning();
+              dbUser = updatedUser ?? dbUser;
+            }
           }
 
           // Link the OAuth account

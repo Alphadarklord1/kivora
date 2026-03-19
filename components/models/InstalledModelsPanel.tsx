@@ -10,6 +10,7 @@ import {
   type AiRuntimePreferences,
 } from '@/lib/ai/runtime';
 import { invalidateOllamaStatus } from '@/hooks/useOllamaStatus';
+import { createBrowserSupabaseClient } from '@/lib/supabase/client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -169,6 +170,7 @@ export function InstalledModelsPanel() {
   const [filterTier, setFilterTier] = useState<string>('all');
   const [ollamaVersion, setOllamaVersion] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [supabaseClientReady] = useState<boolean>(() => Boolean(createBrowserSupabaseClient()));
 
   const checkStatus = useCallback(async () => {
     setRefreshing(true);
@@ -241,7 +243,12 @@ export function InstalledModelsPanel() {
 
       {/* Top status bar */}
       <div className="mdl-topbar">
-        <ConnectionBadge status={aiStatus} ollamaVersion={ollamaVersion} modelCount={ollamaModels.length} />
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <ConnectionBadge status={aiStatus} ollamaVersion={ollamaVersion} modelCount={ollamaModels.length} />
+          <span className="mc-badge inst" style={{ opacity: supabaseClientReady ? 1 : 0.7 }}>
+            {supabaseClientReady ? 'Supabase client ready' : 'Supabase client not configured'}
+          </span>
+        </div>
         <button className="mdl-refresh-btn" onClick={checkStatus} disabled={refreshing}>
           {refreshing ? '⟳ Checking…' : '↻ Refresh status'}
         </button>

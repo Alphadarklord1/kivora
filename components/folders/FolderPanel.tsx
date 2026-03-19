@@ -5,6 +5,7 @@ import { useToast } from '@/providers/ToastProvider';
 import { idbStore } from '@/lib/idb';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteLocalFilesForFolder, deleteLocalFilesForTopic, upsertLocalFile } from '@/lib/files/local-files';
+import { createFileUploadRequest } from '@/lib/files/client-storage';
 
 interface Topic  { id: string; name: string; folderId: string; }
 interface Folder { id: string; name: string; expanded: boolean; topics: Topic[]; }
@@ -197,10 +198,7 @@ export function FolderPanel({
       localFilePath, mimeType: file.type, fileSize: file.size, createdAt,
     };
     try {
-      const res = await fetch('/api/files', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(local),
-      });
+      const res = await createFileUploadRequest({ ...local, file });
       toast(res.ok ? `"${file.name}" uploaded` : `"${file.name}" saved locally`, res.ok ? 'success' : 'info');
       if (!res.ok) upsertLocalFile(local);
     } catch {
