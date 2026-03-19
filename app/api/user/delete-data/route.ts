@@ -19,6 +19,8 @@ import {
 } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/session';
+import { deleteSupabaseAuthUser } from '@/lib/supabase/auth-admin';
+import { deleteFileFromSupabaseStorage } from '@/lib/supabase/storage';
 
 export async function DELETE() {
   const userId = await getUserId();
@@ -29,6 +31,27 @@ export async function DELETE() {
   if (!isDatabaseConfigured) {
     return NextResponse.json({ ok: true, note: 'No database configured — nothing to delete server-side.' });
   }
+
+  const ownedFiles = await db.query.files.findMany({
+    where: eq(files.userId, userId),
+    columns: {
+      storageBucket: true,
+      storagePath: true,
+    },
+  });
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: {
+      supabaseAuthId: true,
+    },
+  });
+
+  await Promise.all(
+    ownedFiles
+      .filter((file) => file.storageBucket && file.storagePath)
+      .map((file) => deleteFileFromSupabaseStorage(file.storageBucket!, file.storagePath!).catch(() => undefined)),
+  );
 
   // Delete in dependency order (children first, then parent)
   await Promise.all([
@@ -43,6 +66,7 @@ export async function DELETE() {
 
   // Finally delete the user — cascades to sessions, accounts, userSettings
   await db.delete(users).where(eq(users.id, userId));
+  await deleteSupabaseAuthUser(user?.supabaseAuthId);
 
   return NextResponse.json({ ok: true });
 }

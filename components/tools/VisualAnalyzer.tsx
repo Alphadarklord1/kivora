@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useFoldersStore } from '@/lib/store/folders';
 import { getBlob } from '@/lib/idb';
+import { fetchStoredFileBlob } from '@/lib/files/client-storage';
 import { renderAllPDFPages, cropImageRegion, PDFPageRender, extractImagesFromPDF, ExtractedImage } from '@/lib/pdf/image-extract';
 import { MathText } from '@/components/math/MathRenderer';
 import { useI18n } from '@/lib/i18n/useI18n';
@@ -170,6 +171,9 @@ export function VisualAnalyzer() {
         }
 
         let blob = await getBlob(file.localBlobId);
+        if (!blob) {
+          blob = await fetchStoredFileBlob(file.id);
+        }
         if (!blob) {
           throw new Error(t('Could not load file from local storage'));
         }

@@ -4,6 +4,7 @@ import { db, isDatabaseConfigured } from '@/lib/db';
 import { users, userSettings } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { syncSupabaseAuthUser } from '@/lib/supabase/auth-admin';
 
 export async function POST(req: NextRequest) {
   if (!isDatabaseConfigured) {
@@ -39,11 +40,19 @@ export async function POST(req: NextRequest) {
 
     const passwordHash = await bcrypt.hash(password, 12);
     const userId = uuidv4();
+    const trimmedName = name?.trim() || normalised.split('@')[0];
+    const supabaseAuthId = await syncSupabaseAuthUser({
+      email: normalised,
+      password,
+      name: trimmedName,
+      emailConfirmed: true,
+    });
 
     const [newUser] = await db.insert(users).values({
       id: userId,
       email: normalised,
-      name: name?.trim() || normalised.split('@')[0],
+      name: trimmedName,
+      supabaseAuthId,
       passwordHash,
       isGuest: false,
       guestSessionId: null,

@@ -775,71 +775,507 @@ function saveHistory(h: HistoryItem[]) {
   try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(0, 50))); } catch { /* noop */ }
 }
 
-// ── Physics form config ───────────────────────────────────────────────────────
+// ── Structured form config (all solver categories) ────────────────────────────
 
-const PHYSICS_FORMULAS = [
-  {
-    id: 'ohm',
-    label: "Ohm's Law  (V = IR)",
-    latexFormula: 'V = I \\cdot R',
-    params: [
-      { key: 'V', label: 'Voltage V', unit: 'volts' },
-      { key: 'I', label: 'Current I', unit: 'amps' },
-      { key: 'R', label: 'Resistance R', unit: 'ohms (Ω)' },
-    ] as const,
-    note: 'Enter any 2 values — the solver finds the missing one.',
-  },
-  {
-    id: 'KE',
-    label: 'Kinetic Energy  (KE = ½mv²)',
-    latexFormula: 'KE = \\tfrac{1}{2}mv^2',
-    params: [
-      { key: 'm', label: 'Mass m', unit: 'kg' },
-      { key: 'v', label: 'Velocity v', unit: 'm/s' },
-    ] as const,
-    note: 'Enter both values to compute kinetic energy.',
-  },
-  {
-    id: 'projectile',
-    label: 'Projectile Range  (R = v²sin2θ / g)',
-    latexFormula: 'R = \\dfrac{v^2 \\sin 2\\theta}{g}',
-    params: [
-      { key: 'v', label: 'Launch speed v', unit: 'm/s' },
-      { key: 'theta', label: 'Launch angle θ', unit: 'degrees' },
-    ] as const,
-    note: 'Enter both values to compute horizontal range (g = 9.81 m/s²).',
-  },
-  {
-    id: 'wave',
-    label: 'Wave Speed  (v = fλ)',
-    latexFormula: 'v = f \\lambda',
-    params: [
-      { key: 'f', label: 'Frequency f', unit: 'Hz' },
-      { key: 'lambda', label: 'Wavelength λ', unit: 'm' },
-    ] as const,
-    note: 'Enter both values to compute wave speed.',
-  },
-  {
-    id: 'force',
-    label: "Newton's 2nd Law  (F = ma)",
-    latexFormula: 'F = m \\cdot a',
-    params: [
-      { key: 'm', label: 'Mass m', unit: 'kg' },
-      { key: 'a', label: 'Acceleration a', unit: 'm/s²' },
-    ] as const,
-    note: 'Enter both values to compute force.',
-  },
-  {
-    id: 'PE',
-    label: 'Gravitational PE  (PE = mgh)',
-    latexFormula: 'PE = mgh',
-    params: [
-      { key: 'm', label: 'Mass m', unit: 'kg' },
-      { key: 'h', label: 'Height h', unit: 'm' },
-    ] as const,
-    note: 'Enter both values (g = 9.81 m/s²).',
-  },
-] as const;
+interface StructParam {
+  key: string;
+  label: string;
+  unit?: string;
+  placeholder?: string;
+  inputType: 'number' | 'text';
+}
+interface StructForm {
+  id: string;
+  label: string;
+  latexFormula: string;
+  note: string;
+  params: StructParam[];
+  buildCommand: (p: Record<string, string>) => string;
+}
+
+const CATEGORY_FORMS: Record<string, StructForm[]> = {
+
+  /* ── Algebra ─────────────────────────────────────────────────────────── */
+  algebra: [
+    {
+      id: 'quadratic',
+      label: 'Solve Quadratic  (ax² + bx + c = 0)',
+      latexFormula: 'ax^2 + bx + c = 0 \\quad x = \\dfrac{-b \\pm \\sqrt{b^2-4ac}}{2a}',
+      note: 'Enter all three coefficients — the solver finds both roots.',
+      params: [
+        { key: 'a', label: 'Coefficient a  (x²)', inputType: 'number', placeholder: 'e.g. 1' },
+        { key: 'b', label: 'Coefficient b  (x)', inputType: 'number', placeholder: 'e.g. 5' },
+        { key: 'c', label: 'Constant c', inputType: 'number', placeholder: 'e.g. 6' },
+      ],
+      buildCommand: (p) => `Solve ${p.a || '1'}x^2 + ${p.b || '0'}x + ${p.c || '0'} = 0`,
+    },
+    {
+      id: 'linear',
+      label: 'Solve Linear Equation  (ax + b = c)',
+      latexFormula: 'ax + b = c',
+      note: 'Enter the three values to solve for x.',
+      params: [
+        { key: 'a', label: 'Coefficient a', inputType: 'number', placeholder: 'e.g. 2' },
+        { key: 'b', label: 'Constant b', inputType: 'number', placeholder: 'e.g. 3' },
+        { key: 'c', label: 'Right-hand side c', inputType: 'number', placeholder: 'e.g. 7' },
+      ],
+      buildCommand: (p) => `Solve ${p.a || '1'}x + ${p.b || '0'} = ${p.c || '0'}`,
+    },
+    {
+      id: 'factor',
+      label: 'Factor a Polynomial',
+      latexFormula: 'ax^2 + bx + c = (\\cdots)(\\cdots)',
+      note: 'Type the polynomial to factor — e.g. 4x^2 - 9 or x^2 + 5x + 6.',
+      params: [
+        { key: 'expr', label: 'Polynomial expression', inputType: 'text', placeholder: 'e.g. 4x^2 - 9' },
+      ],
+      buildCommand: (p) => `Factor ${p.expr || ''}`,
+    },
+    {
+      id: 'system',
+      label: 'Solve a System of 2 Equations',
+      latexFormula: '\\begin{cases} a_1x + b_1y = c_1 \\\\ a_2x + b_2y = c_2 \\end{cases}',
+      note: 'Enter both equations using variables x and y.',
+      params: [
+        { key: 'eq1', label: 'Equation 1', inputType: 'text', placeholder: 'e.g. x + y = 5' },
+        { key: 'eq2', label: 'Equation 2', inputType: 'text', placeholder: 'e.g. 2x - y = 4' },
+      ],
+      buildCommand: (p) => `Solve system: ${p.eq1 || ''}, ${p.eq2 || ''}`,
+    },
+  ],
+
+  /* ── Calculus ────────────────────────────────────────────────────────── */
+  calculus: [
+    {
+      id: 'differentiate',
+      label: 'Differentiate  f(x)',
+      latexFormula: '\\dfrac{d}{dx}\\bigl[f(x)\\bigr]',
+      note: 'Enter the function — the solver applies differentiation rules step by step.',
+      params: [
+        { key: 'fx', label: 'Function f(x)', inputType: 'text', placeholder: 'e.g. x^3 * sin(x)' },
+      ],
+      buildCommand: (p) => `Differentiate ${p.fx || ''}`,
+    },
+    {
+      id: 'integrate',
+      label: 'Integrate  f(x) dx  (indefinite)',
+      latexFormula: '\\int f(x)\\,dx',
+      note: 'Enter the integrand — the solver finds the antiderivative and adds + C.',
+      params: [
+        { key: 'fx', label: 'Function f(x)', inputType: 'text', placeholder: 'e.g. x^2 * ln(x)' },
+      ],
+      buildCommand: (p) => `Integrate ${p.fx || ''} dx`,
+    },
+    {
+      id: 'limit',
+      label: 'Evaluate a Limit',
+      latexFormula: '\\lim_{x \\to a} f(x)',
+      note: 'Enter f(x) and the value x approaches. Use "inf" for infinity.',
+      params: [
+        { key: 'fx', label: 'Function f(x)', inputType: 'text', placeholder: 'e.g. sin(x)/x' },
+        { key: 'approach', label: 'x approaches', inputType: 'text', placeholder: 'e.g. 0' },
+      ],
+      buildCommand: (p) => `Limit of ${p.fx || ''} as x → ${p.approach || '0'}`,
+    },
+    {
+      id: 'critical',
+      label: 'Find Critical Points  (f′(x) = 0)',
+      latexFormula: "f'(x) = 0",
+      note: 'Enter f(x) to find where the derivative is zero — local maxima and minima.',
+      params: [
+        { key: 'fx', label: 'Function f(x)', inputType: 'text', placeholder: 'e.g. x^3 - 3x' },
+      ],
+      buildCommand: (p) => `Find critical points of f(x) = ${p.fx || ''}`,
+    },
+  ],
+
+  /* ── Geometry ───────────────────────────────────────────────────────── */
+  geometry: [
+    {
+      id: 'triangle-area',
+      label: "Triangle Area  (Heron's Formula)",
+      latexFormula: 'A = \\sqrt{s(s-a)(s-b)(s-c)},\\quad s=\\tfrac{a+b+c}{2}',
+      note: 'Enter all three side lengths to compute the area.',
+      params: [
+        { key: 'a', label: 'Side a', unit: 'units', inputType: 'number', placeholder: 'e.g. 3' },
+        { key: 'b', label: 'Side b', unit: 'units', inputType: 'number', placeholder: 'e.g. 4' },
+        { key: 'c', label: 'Side c', unit: 'units', inputType: 'number', placeholder: 'e.g. 5' },
+      ],
+      buildCommand: (p) => `Area of triangle with sides ${p.a}, ${p.b}, ${p.c}`,
+    },
+    {
+      id: 'circle',
+      label: 'Circle Equation  (x−h)² + (y−k)² = r²',
+      latexFormula: '(x-h)^2 + (y-k)^2 = r^2',
+      note: 'Enter the center coordinates and radius to get the standard equation.',
+      params: [
+        { key: 'h', label: 'Center x  (h)', inputType: 'number', placeholder: 'e.g. 2' },
+        { key: 'k', label: 'Center y  (k)', inputType: 'number', placeholder: 'e.g. -3' },
+        { key: 'r', label: 'Radius r', unit: 'units', inputType: 'number', placeholder: 'e.g. 5' },
+      ],
+      buildCommand: (p) => `Equation of circle: center (${p.h},${p.k}), radius ${p.r}`,
+    },
+    {
+      id: 'distance',
+      label: 'Distance Between Two Points',
+      latexFormula: 'd = \\sqrt{(x_2-x_1)^2+(y_2-y_1)^2}',
+      note: 'Enter the coordinates of both points.',
+      params: [
+        { key: 'x1', label: 'Point A  x₁', inputType: 'number', placeholder: 'e.g. 1' },
+        { key: 'y1', label: 'Point A  y₁', inputType: 'number', placeholder: 'e.g. 2' },
+        { key: 'x2', label: 'Point B  x₂', inputType: 'number', placeholder: 'e.g. 4' },
+        { key: 'y2', label: 'Point B  y₂', inputType: 'number', placeholder: 'e.g. 6' },
+      ],
+      buildCommand: (p) => `Distance between (${p.x1},${p.y1}) and (${p.x2},${p.y2})`,
+    },
+    {
+      id: 'sphere',
+      label: 'Volume of a Sphere',
+      latexFormula: 'V = \\tfrac{4}{3}\\pi r^3',
+      note: 'Enter the radius to compute the volume.',
+      params: [
+        { key: 'r', label: 'Radius r', unit: 'units', inputType: 'number', placeholder: 'e.g. 7' },
+      ],
+      buildCommand: (p) => `Volume of sphere with radius ${p.r}`,
+    },
+    {
+      id: 'polygon',
+      label: 'Regular Polygon Area',
+      latexFormula: 'A = \\dfrac{ns^2}{4}\\cot\\!\\left(\\dfrac{\\pi}{n}\\right)',
+      note: 'Enter the number of sides and side length.',
+      params: [
+        { key: 'n', label: 'Number of sides n', inputType: 'number', placeholder: 'e.g. 6' },
+        { key: 's', label: 'Side length s', unit: 'units', inputType: 'number', placeholder: 'e.g. 4' },
+      ],
+      buildCommand: (p) => `Area of regular ${p.n}-gon with side ${p.s}`,
+    },
+  ],
+
+  /* ── Trigonometry ───────────────────────────────────────────────────── */
+  trigonometry: [
+    {
+      id: 'solve-trig',
+      label: 'Solve a Trig Equation',
+      latexFormula: 'f(x) = c, \\quad x \\in [0,\\, 2\\pi]',
+      note: 'Enter the equation — the solver finds all solutions in [0, 2π].',
+      params: [
+        { key: 'eq', label: 'Trig equation', inputType: 'text', placeholder: 'e.g. 2 sin(x) = 1' },
+      ],
+      buildCommand: (p) => `Solve ${p.eq || ''} for x in [0, 2π]`,
+    },
+    {
+      id: 'exact-value',
+      label: 'Find an Exact Trig Value',
+      latexFormula: '\\cos 75^\\circ,\\; \\sin\\tfrac{\\pi}{3},\\; \\tan 45^\\circ \\ldots',
+      note: 'Type an expression like cos(75°) or sin(π/3) to get the exact value.',
+      params: [
+        { key: 'expr', label: 'Expression', inputType: 'text', placeholder: 'e.g. cos(75°)' },
+      ],
+      buildCommand: (p) => `Find ${p.expr || ''} exactly`,
+    },
+    {
+      id: 'solve-triangle',
+      label: 'Solve a Triangle  (SAS)',
+      latexFormula: 'c^2 = a^2 + b^2 - 2ab\\cos C',
+      note: 'Enter two sides and the angle between them (law of cosines).',
+      params: [
+        { key: 'a', label: 'Side a', unit: 'units', inputType: 'number', placeholder: 'e.g. 5' },
+        { key: 'b', label: 'Side b', unit: 'units', inputType: 'number', placeholder: 'e.g. 7' },
+        { key: 'C', label: 'Included angle C', unit: '°', inputType: 'number', placeholder: 'e.g. 60' },
+      ],
+      buildCommand: (p) => `Solve triangle: a=${p.a}, b=${p.b}, C=${p.C}°`,
+    },
+    {
+      id: 'identity',
+      label: 'Simplify a Trig Identity',
+      latexFormula: '\\sin^2 x + \\cos^2 x = 1',
+      note: 'Enter a trig expression to simplify or verify.',
+      params: [
+        { key: 'expr', label: 'Trig expression', inputType: 'text', placeholder: 'e.g. sin^2(x) + cos^2(x)' },
+      ],
+      buildCommand: (p) => `Simplify ${p.expr || ''}`,
+    },
+  ],
+
+  /* ── Statistics ─────────────────────────────────────────────────────── */
+  statistics: [
+    {
+      id: 'mean-sd',
+      label: 'Mean & Standard Deviation',
+      latexFormula: '\\bar{x} = \\dfrac{\\sum x_i}{n}, \\quad \\sigma = \\sqrt{\\dfrac{\\sum(x_i-\\bar{x})^2}{n}}',
+      note: 'Enter a comma-separated list of numbers.',
+      params: [
+        { key: 'data', label: 'Data values  (comma-separated)', inputType: 'text', placeholder: 'e.g. 4, 8, 15, 16, 23, 42' },
+      ],
+      buildCommand: (p) => `Mean and SD of [${p.data || ''}]`,
+    },
+    {
+      id: 'binomial',
+      label: 'Binomial Probability  P(X = k)',
+      latexFormula: 'P(X=k) = \\binom{n}{k}p^k(1-p)^{n-k}',
+      note: 'Enter the number of trials n, successes k, and probability p.',
+      params: [
+        { key: 'n', label: 'Trials n', inputType: 'number', placeholder: 'e.g. 10' },
+        { key: 'k', label: 'Successes k', inputType: 'number', placeholder: 'e.g. 3' },
+        { key: 'p', label: 'Probability p', unit: '(0 to 1)', inputType: 'number', placeholder: 'e.g. 0.4' },
+      ],
+      buildCommand: (p) => `Binomial P(X=${p.k}) with n=${p.n}, p=${p.p}`,
+    },
+    {
+      id: 'confidence',
+      label: 'Confidence Interval for Mean',
+      latexFormula: 'CI = \\bar{x} \\pm z_{\\alpha/2} \\cdot \\dfrac{s}{\\sqrt{n}}',
+      note: 'Enter sample size, sample mean, and sample standard deviation.',
+      params: [
+        { key: 'n', label: 'Sample size n', inputType: 'number', placeholder: 'e.g. 25' },
+        { key: 'xbar', label: 'Sample mean x̄', inputType: 'number', placeholder: 'e.g. 50' },
+        { key: 's', label: 'Std deviation s', inputType: 'number', placeholder: 'e.g. 8' },
+      ],
+      buildCommand: (p) => `Confidence interval for mean, n=${p.n}, x̄=${p.xbar}, s=${p.s}`,
+    },
+  ],
+
+  /* ── Linear Algebra ─────────────────────────────────────────────────── */
+  'linear-algebra': [
+    {
+      id: 'eigenvalues',
+      label: 'Eigenvalues of a 2×2 Matrix',
+      latexFormula: '\\det(A - \\lambda I) = 0',
+      note: 'Enter all four entries of the 2×2 matrix row by row.',
+      params: [
+        { key: 'a', label: 'Row 1 →  a', inputType: 'number', placeholder: 'e.g. 2' },
+        { key: 'b', label: 'Row 1 →  b', inputType: 'number', placeholder: 'e.g. 1' },
+        { key: 'c', label: 'Row 2 →  c', inputType: 'number', placeholder: 'e.g. 1' },
+        { key: 'd', label: 'Row 2 →  d', inputType: 'number', placeholder: 'e.g. 2' },
+      ],
+      buildCommand: (p) => `Eigenvalues of [[${p.a},${p.b}],[${p.c},${p.d}]]`,
+    },
+    {
+      id: 'determinant',
+      label: 'Determinant of a 3×3 Matrix',
+      latexFormula: '\\det\\begin{pmatrix}a&b&c\\\\d&e&f\\\\g&h&i\\end{pmatrix}',
+      note: 'Enter all nine entries row by row.',
+      params: [
+        { key: 'a11', label: 'Row 1 →  a', inputType: 'number', placeholder: '1' },
+        { key: 'a12', label: 'Row 1 →  b', inputType: 'number', placeholder: '2' },
+        { key: 'a13', label: 'Row 1 →  c', inputType: 'number', placeholder: '3' },
+        { key: 'a21', label: 'Row 2 →  d', inputType: 'number', placeholder: '4' },
+        { key: 'a22', label: 'Row 2 →  e', inputType: 'number', placeholder: '5' },
+        { key: 'a23', label: 'Row 2 →  f', inputType: 'number', placeholder: '6' },
+        { key: 'a31', label: 'Row 3 →  g', inputType: 'number', placeholder: '7' },
+        { key: 'a32', label: 'Row 3 →  h', inputType: 'number', placeholder: '8' },
+        { key: 'a33', label: 'Row 3 →  i', inputType: 'number', placeholder: '9' },
+      ],
+      buildCommand: (p) => `Determinant of [[${p.a11},${p.a12},${p.a13}],[${p.a21},${p.a22},${p.a23}],[${p.a31},${p.a32},${p.a33}]]`,
+    },
+    {
+      id: 'solve-axb',
+      label: 'Solve  Ax = b  (2×2 System)',
+      latexFormula: 'A\\mathbf{x} = \\mathbf{b} \\implies \\mathbf{x} = A^{-1}\\mathbf{b}',
+      note: 'Enter the 2×2 matrix A and the right-hand side vector b.',
+      params: [
+        { key: 'a11', label: 'A  row 1, col 1', inputType: 'number', placeholder: 'e.g. 2' },
+        { key: 'a12', label: 'A  row 1, col 2', inputType: 'number', placeholder: 'e.g. 1' },
+        { key: 'a21', label: 'A  row 2, col 1', inputType: 'number', placeholder: 'e.g. 1' },
+        { key: 'a22', label: 'A  row 2, col 2', inputType: 'number', placeholder: 'e.g. 3' },
+        { key: 'b1', label: 'b₁', inputType: 'number', placeholder: 'e.g. 5' },
+        { key: 'b2', label: 'b₂', inputType: 'number', placeholder: 'e.g. 10' },
+      ],
+      buildCommand: (p) => `Solve Ax=b: A=[[${p.a11},${p.a12}],[${p.a21},${p.a22}]], b=[${p.b1},${p.b2}]`,
+    },
+    {
+      id: 'dot-product',
+      label: 'Dot Product of Two Vectors',
+      latexFormula: '\\mathbf{u} \\cdot \\mathbf{v} = \\sum u_i v_i',
+      note: 'Enter two comma-separated vectors of the same length.',
+      params: [
+        { key: 'u', label: 'Vector u', inputType: 'text', placeholder: 'e.g. 1, 2, 3' },
+        { key: 'v', label: 'Vector v', inputType: 'text', placeholder: 'e.g. 4, 5, 6' },
+      ],
+      buildCommand: (p) => `Dot product of [${p.u || ''}] and [${p.v || ''}]`,
+    },
+  ],
+
+  /* ── Differential Equations ─────────────────────────────────────────── */
+  'differential-equations': [
+    {
+      id: '2nd-order',
+      label: "2nd-Order Homogeneous  (ay″ + by′ + cy = 0)",
+      latexFormula: "ay'' + by' + cy = 0",
+      note: 'Enter the three coefficients. The solver uses the characteristic equation method.',
+      params: [
+        { key: 'a', label: "Coefficient a  (y″)", inputType: 'number', placeholder: 'e.g. 1' },
+        { key: 'b', label: "Coefficient b  (y′)", inputType: 'number', placeholder: 'e.g. 3' },
+        { key: 'c', label: 'Coefficient c  (y)', inputType: 'number', placeholder: 'e.g. 2' },
+      ],
+      buildCommand: (p) => `${p.a || '1'}y'' + ${p.b || '0'}y' + ${p.c || '0'}y = 0`,
+    },
+    {
+      id: '1st-separable',
+      label: "1st-Order Separable  (y′ = ky)",
+      latexFormula: "y' = ky \\implies y = Ce^{kx}",
+      note: 'Enter the constant k. The solution is y = Ce^(kx).',
+      params: [
+        { key: 'k', label: 'Constant k', inputType: 'number', placeholder: 'e.g. -2' },
+      ],
+      buildCommand: (p) => `y' = ${p.k || '1'}y`,
+    },
+    {
+      id: '1st-direct',
+      label: 'Direct Integration  (dy/dx = f(x))',
+      latexFormula: '\\dfrac{dy}{dx} = f(x) \\implies y = \\int f(x)\\,dx',
+      note: 'Enter f(x) — the solver integrates the right-hand side directly.',
+      params: [
+        { key: 'fx', label: 'Right-hand side f(x)', inputType: 'text', placeholder: 'e.g. 3x^2' },
+      ],
+      buildCommand: (p) => `dy/dx = ${p.fx || ''}`,
+    },
+    {
+      id: '1st-linear',
+      label: "1st-Order Linear  (y′ + P(x)y = Q(x))",
+      latexFormula: "y' + P(x)y = Q(x)",
+      note: 'Enter P(x) and Q(x) — the solver applies the integrating factor method.',
+      params: [
+        { key: 'P', label: 'P(x)  (multiplied by y)', inputType: 'text', placeholder: 'e.g. 2' },
+        { key: 'Q', label: 'Q(x)  (right-hand side)', inputType: 'text', placeholder: 'e.g. 4' },
+      ],
+      buildCommand: (p) => `y' + ${p.P || ''}y = ${p.Q || ''}`,
+    },
+  ],
+
+  /* ── Discrete Math ──────────────────────────────────────────────────── */
+  discrete: [
+    {
+      id: 'gcd',
+      label: 'Greatest Common Divisor  gcd(m, n)',
+      latexFormula: '\\gcd(m, n) \\text{ — Euclidean algorithm}',
+      note: 'Enter two positive integers. Shows each division step.',
+      params: [
+        { key: 'm', label: 'First number m', inputType: 'number', placeholder: 'e.g. 48' },
+        { key: 'n', label: 'Second number n', inputType: 'number', placeholder: 'e.g. 36' },
+      ],
+      buildCommand: (p) => `gcd(${p.m || ''}, ${p.n || ''})`,
+    },
+    {
+      id: 'combination',
+      label: 'Combination  C(n, k)',
+      latexFormula: 'C(n,k) = \\dbinom{n}{k} = \\dfrac{n!}{k!\\,(n-k)!}',
+      note: 'Enter n (total items) and k (items chosen, order does not matter).',
+      params: [
+        { key: 'n', label: 'Total items n', inputType: 'number', placeholder: 'e.g. 10' },
+        { key: 'k', label: 'Choose k', inputType: 'number', placeholder: 'e.g. 3' },
+      ],
+      buildCommand: (p) => `C(${p.n || ''}, ${p.k || ''})`,
+    },
+    {
+      id: 'permutation',
+      label: 'Permutation  P(n, k)',
+      latexFormula: 'P(n,k) = \\dfrac{n!}{(n-k)!}',
+      note: 'Enter n (total items) and k (positions to arrange, order matters).',
+      params: [
+        { key: 'n', label: 'Total items n', inputType: 'number', placeholder: 'e.g. 5' },
+        { key: 'k', label: 'Arrange k', inputType: 'number', placeholder: 'e.g. 2' },
+      ],
+      buildCommand: (p) => `P(${p.n || ''}, ${p.k || ''})`,
+    },
+    {
+      id: 'fibonacci',
+      label: 'Fibonacci Number  F(n)',
+      latexFormula: 'F_n = F_{n-1} + F_{n-2}, \\quad F_0=0,\\; F_1=1',
+      note: 'Enter n to get the nth Fibonacci number (0-indexed).',
+      params: [
+        { key: 'n', label: 'Index n', inputType: 'number', placeholder: 'e.g. 10' },
+      ],
+      buildCommand: (p) => `fibonacci(${p.n || ''})`,
+    },
+    {
+      id: 'modular',
+      label: 'Modular Exponentiation  (aᵇ mod m)',
+      latexFormula: 'a^b \\bmod m',
+      note: 'Compute aᵇ mod m using fast exponentiation — useful in cryptography.',
+      params: [
+        { key: 'a', label: 'Base a', inputType: 'number', placeholder: 'e.g. 2' },
+        { key: 'b', label: 'Exponent b', inputType: 'number', placeholder: 'e.g. 10' },
+        { key: 'm', label: 'Modulus m', inputType: 'number', placeholder: 'e.g. 7' },
+      ],
+      buildCommand: (p) => `${p.a || ''}^${p.b || ''} mod ${p.m || ''}`,
+    },
+  ],
+
+  /* ── Physics ────────────────────────────────────────────────────────── */
+  physics: [
+    {
+      id: 'ohm',
+      label: "Ohm's Law  (V = IR)",
+      latexFormula: 'V = I \\cdot R',
+      note: 'Enter any 2 values — the solver finds the missing one.',
+      params: [
+        { key: 'V', label: 'Voltage V', unit: 'volts', inputType: 'number', placeholder: 'leave blank to solve' },
+        { key: 'I', label: 'Current I', unit: 'amps', inputType: 'number', placeholder: 'leave blank to solve' },
+        { key: 'R', label: 'Resistance R', unit: 'ohms (Ω)', inputType: 'number', placeholder: 'leave blank to solve' },
+      ],
+      buildCommand: (p) => {
+        const parts = Object.entries(p).filter(([, v]) => v.trim() !== '').map(([k, v]) => `${k}=${v}`);
+        return `ohm ${parts.join(' ')}`;
+      },
+    },
+    {
+      id: 'KE',
+      label: 'Kinetic Energy  (KE = ½mv²)',
+      latexFormula: 'KE = \\tfrac{1}{2}mv^2',
+      note: 'Enter both values to compute kinetic energy.',
+      params: [
+        { key: 'm', label: 'Mass m', unit: 'kg', inputType: 'number', placeholder: 'e.g. 10' },
+        { key: 'v', label: 'Velocity v', unit: 'm/s', inputType: 'number', placeholder: 'e.g. 5' },
+      ],
+      buildCommand: (p) => `KE m=${p.m || ''} v=${p.v || ''}`,
+    },
+    {
+      id: 'projectile',
+      label: 'Projectile Range  (R = v²sin2θ / g)',
+      latexFormula: 'R = \\dfrac{v^2 \\sin 2\\theta}{g}',
+      note: 'Enter both values to compute horizontal range (g = 9.81 m/s²).',
+      params: [
+        { key: 'v', label: 'Launch speed v', unit: 'm/s', inputType: 'number', placeholder: 'e.g. 50' },
+        { key: 'theta', label: 'Launch angle θ', unit: 'degrees', inputType: 'number', placeholder: 'e.g. 45' },
+      ],
+      buildCommand: (p) => `projectile v=${p.v || ''} theta=${p.theta || ''}`,
+    },
+    {
+      id: 'wave',
+      label: 'Wave Speed  (v = fλ)',
+      latexFormula: 'v = f \\lambda',
+      note: 'Enter both values to compute wave speed.',
+      params: [
+        { key: 'f', label: 'Frequency f', unit: 'Hz', inputType: 'number', placeholder: 'e.g. 440' },
+        { key: 'lambda', label: 'Wavelength λ', unit: 'm', inputType: 'number', placeholder: 'e.g. 0.78' },
+      ],
+      buildCommand: (p) => `wave f=${p.f || ''} lambda=${p.lambda || ''}`,
+    },
+    {
+      id: 'force',
+      label: "Newton's 2nd Law  (F = ma)",
+      latexFormula: 'F = m \\cdot a',
+      note: 'Enter both values to compute the net force.',
+      params: [
+        { key: 'm', label: 'Mass m', unit: 'kg', inputType: 'number', placeholder: 'e.g. 5' },
+        { key: 'a', label: 'Acceleration a', unit: 'm/s²', inputType: 'number', placeholder: 'e.g. 3' },
+      ],
+      buildCommand: (p) => `force m=${p.m || ''} a=${p.a || ''}`,
+    },
+    {
+      id: 'PE',
+      label: 'Gravitational PE  (PE = mgh)',
+      latexFormula: 'PE = mgh',
+      note: 'Enter both values (g = 9.81 m/s²).',
+      params: [
+        { key: 'm', label: 'Mass m', unit: 'kg', inputType: 'number', placeholder: 'e.g. 10' },
+        { key: 'h', label: 'Height h', unit: 'm', inputType: 'number', placeholder: 'e.g. 5' },
+      ],
+      buildCommand: (p) => `PE m=${p.m || ''} h=${p.h || ''}`,
+    },
+  ],
+};
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -905,11 +1341,20 @@ export function MathSolverPage() {
   const [toUnit, setToUnit] = useState(1);
   const [unitValue, setUnitValue] = useState('1');
 
-  // Physics form state
-  const [physicsType, setPhysicsType] = useState('ohm');
-  const [physicsParams, setPhysicsParams] = useState<Record<string, string>>({});
+  // Structured form state (shared across all solver categories)
+  const [structFormType, setStructFormType] = useState('quadratic'); // first algebra form
+  const [structFormParams, setStructFormParams] = useState<Record<string, string>>({});
 
   useEffect(() => { setHistory(loadHistory()); }, []);
+
+  // Reset structured form when switching to a different solver category
+  useEffect(() => {
+    const forms = CATEGORY_FORMS[String(active)];
+    if (forms?.length) {
+      setStructFormType(forms[0].id);
+      setStructFormParams({});
+    }
+  }, [active]);
 
   useEffect(() => {
     const context = readMathContext();
@@ -1266,45 +1711,84 @@ export function MathSolverPage() {
       <div style={S.main}>
 
         {/* Header */}
-        <div style={{ padding: '16px 24px 12px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-elevated)', flexShrink: 0 }}>
-          <span style={{ fontSize: 20 }}>{currentTopic?.icon ?? specialMeta?.icon ?? '∑'}</span>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
-              {activeTitle}
+        <div style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', flexShrink: 0, position: 'relative' }}>
+          {/* Accent color strip at the very top */}
+          <div style={{ height: 3, background: `linear-gradient(90deg, ${currentAccent}, ${currentAccent}80)`, position: 'absolute', top: 0, left: 0, right: 0, borderRadius: '0 0 0 0' }} />
+          <div style={{ padding: '14px 24px 12px', display: 'flex', alignItems: 'center', gap: 14, paddingTop: 17 }}>
+            {/* Category icon with colored circle backdrop */}
+            <div style={{
+              width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+              background: `${currentAccent}18`,
+              border: `1.5px solid ${currentAccent}30`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, fontStyle: 'normal',
+            }}>
+              {currentTopic?.icon ?? specialMeta?.icon ?? '∑'}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              {activeSubtitle}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                {activeTitle}
+                {currentTopic && (
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: `${currentAccent}15`, color: currentAccent, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
+                    Solver
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {activeSubtitle}
+              </div>
             </div>
+            {history.length > 0 && (
+              <button onClick={() => setShowHistory(h => !h)}
+                style={{ marginLeft: 'auto', padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${showHistory ? currentAccent : 'var(--border-subtle)'}`, background: showHistory ? `${currentAccent}12` : 'var(--bg-elevated)', color: showHistory ? currentAccent : 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s', flexShrink: 0 }}>
+                🕐 History
+                <span style={{ background: showHistory ? currentAccent : 'var(--border-mid, var(--border-subtle))', color: showHistory ? '#fff' : 'var(--text-muted)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, minWidth: 16, textAlign: 'center' }}>{history.length}</span>
+              </button>
+            )}
           </div>
-          {history.length > 0 && (
-            <button onClick={() => setShowHistory(h => !h)}
-              style={{ marginLeft: 'auto', padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${showHistory ? 'var(--primary)' : 'var(--border-subtle)'}`, background: showHistory ? 'color-mix(in srgb, var(--primary) 10%, var(--bg-elevated))' : 'var(--bg-elevated)', color: showHistory ? 'var(--primary)' : 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
-              🕐 History
-              <span style={{ background: showHistory ? 'var(--primary)' : 'var(--border-mid, var(--border-subtle))', color: showHistory ? '#fff' : 'var(--text-muted)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999 }}>{history.length}</span>
-            </button>
-          )}
         </div>
 
         {/* History drawer */}
         {showHistory && (
-          <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-2)' }}>
+          <div style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-2)' }}>
+            <div style={{ padding: '10px 24px 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>Recent Problems</span>
+              {history.length > 0 && (
+                <button onClick={() => { setHistory([]); try { localStorage.removeItem('kivora_math_history'); } catch { /* noop */ } }}
+                  style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4 }}>
+                  Clear all
+                </button>
+              )}
+            </div>
             {history.length === 0 ? (
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No history yet</div>
+              <div style={{ padding: '12px 24px 14px', fontSize: 12, color: 'var(--text-muted)' }}>No history yet</div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
-                {history.map(h => (
-                  <button key={h.id} onClick={() => {
-                    const nextCategory = (TOPICS.find(topic => topic.id === h.category)?.id ?? 'algebra') as TopicId;
-                    setInput(h.problem);
-                    setShowHistory(false);
-                    setActive(nextCategory);
-                    setTimeout(() => { void solve(h.problem, nextCategory); }, 0);
-                  }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', cursor: 'pointer', textAlign: 'left' }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.problem}</span>
-                    <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600, flexShrink: 0 }}>{h.answer.slice(0, 30)}{h.answer.length > 30 ? '…' : ''}</span>
-                  </button>
-                ))}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 200, overflowY: 'auto', padding: '4px 24px 12px' }}>
+                {history.map(h => {
+                  const catTopic = TOPICS.find(topic => topic.id === h.category);
+                  const catColor = catTopic?.color ?? 'var(--primary)';
+                  const catIcon = catTopic?.icon ?? '∑';
+                  return (
+                    <button key={h.id} onClick={() => {
+                      const nextCategory = (catTopic?.id ?? 'algebra') as TopicId;
+                      setInput(h.problem);
+                      setShowHistory(false);
+                      setActive(nextCategory);
+                      setTimeout(() => { void solve(h.problem, nextCategory); }, 0);
+                    }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = catColor; e.currentTarget.style.background = `color-mix(in srgb, ${catColor} 5%, var(--bg-elevated))`; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.background = 'var(--bg-elevated)'; }}
+                    >
+                      {/* Category color dot + icon */}
+                      <div style={{ width: 24, height: 24, borderRadius: 6, background: `${catColor}18`, border: `1px solid ${catColor}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>
+                        {catIcon}
+                      </div>
+                      <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: '"JetBrains Mono", monospace' }}>{h.problem}</span>
+                      <span style={{ fontSize: 11, color: catColor, fontWeight: 600, flexShrink: 0, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>= {h.answer.slice(0, 28)}{h.answer.length > 28 ? '…' : ''}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1312,15 +1796,10 @@ export function MathSolverPage() {
 
         {/* ── SOLVER PHASE ── */}
         {active !== 'formulas' && active !== 'graph' && active !== 'units' && active !== 'scan' && active !== 'integrate' && (
-          <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16, flex: 1 }}>
-            <WorkflowCard
-              accent={currentAccent}
-              title="Solver flow"
-              steps={SOLVER_WORKFLOW}
-            />
+          <div style={{ padding: '18px 24px 24px', display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
 
-            {/* Quick examples — hidden for physics (uses its own structured form) */}
-            {currentTopic && active !== 'physics' && (
+            {/* Quick examples — hidden for categories that use the structured form */}
+            {currentTopic && !CATEGORY_FORMS[String(active)] && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {currentTopic.examples.map(ex => (
                   <button key={ex} onClick={() => { setInput(ex); void solve(ex, currentTopic.id); }}
@@ -1334,7 +1813,7 @@ export function MathSolverPage() {
               </div>
             )}
 
-            {active !== 'physics' && (
+            {!CATEGORY_FORMS[String(active)] && (
               <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                   Best for: one problem, one result, and clear working steps.
@@ -1351,172 +1830,155 @@ export function MathSolverPage() {
               </div>
             )}
 
-            {/* ── Physics structured input ── */}
-            {active === 'physics' ? (() => {
-              const pf = PHYSICS_FORMULAS.find(f => f.id === physicsType) ?? PHYSICS_FORMULAS[0];
-              const handlePhysicsSolve = () => {
-                const parts = Object.entries(physicsParams)
-                  .filter(([, v]) => v.trim() !== '')
-                  .map(([k, v]) => `${k}=${v.trim()}`);
-                const cmd = `${pf.id} ${parts.join(' ')}`.trim();
+            {/* ── Structured form (all solver categories) ── */}
+            {(() => {
+              const forms = CATEGORY_FORMS[String(active)];
+              if (!forms?.length) return null;
+              const pf = forms.find(f => f.id === structFormType) ?? forms[0];
+              const handleStructSolve = () => {
+                const cmd = pf.buildCommand(structFormParams);
+                if (!cmd.trim()) return;
                 setInput(cmd);
-                void solve(cmd, 'physics');
+                void solve(cmd, active as TopicId);
               };
+              // Derive a short pill label: everything before the first double-space
+              const pillLabel = (label: string) => label.split('  ')[0];
               return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {/* Formula selector */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>Formula</label>
-                    <select
-                      value={physicsType}
-                      onChange={e => { setPhysicsType(e.target.value); setPhysicsParams({}); setResult(null); }}
-                      style={{ padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', outline: 'none' }}
-                    >
-                      {PHYSICS_FORMULAS.map(f => (
-                        <option key={f.id} value={f.id}>{f.label}</option>
-                      ))}
-                    </select>
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-                  {/* Formula preview */}
-                  <div style={{ padding: '10px 14px', borderRadius: 10, background: `${currentAccent}0d`, border: `1px solid ${currentAccent}25`, display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 18 }}>⚛</span>
-                    <div>
-                      <div style={{ fontSize: 11, color: currentAccent, fontWeight: 700, marginBottom: 2 }}>{pf.label}</div>
-                      <Latex latex={pf.latexFormula} display={false} />
+                  {/* ── Problem type pill tabs ── */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>Problem type</span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {forms.map(f => {
+                        const isSelected = (structFormType === f.id) || (!structFormType && f === forms[0]);
+                        return (
+                          <button
+                            key={f.id}
+                            onClick={() => { setStructFormType(f.id); setStructFormParams({}); setResult(null); }}
+                            style={{
+                              padding: '6px 14px', borderRadius: 20,
+                              border: `1.5px solid ${isSelected ? currentAccent : 'var(--border-subtle)'}`,
+                              background: isSelected ? `${currentAccent}18` : 'var(--bg-2)',
+                              color: isSelected ? currentAccent : 'var(--text-secondary)',
+                              fontSize: 12, fontWeight: isSelected ? 700 : 400,
+                              cursor: 'pointer', transition: 'all 0.12s', whiteSpace: 'nowrap',
+                            }}
+                            onMouseEnter={e => { if (!isSelected) { e.currentTarget.style.borderColor = `${currentAccent}80`; e.currentTarget.style.color = currentAccent; } }}
+                            onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
+                          >
+                            {pillLabel(f.label)}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* Parameter inputs */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-                    {pf.params.map(param => (
-                      <div key={param.key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  {/* ── Formula preview (left accent rail) ── */}
+                  <div style={{
+                    display: 'flex', alignItems: 'stretch', borderRadius: 12,
+                    border: '1px solid var(--border-subtle)', overflow: 'hidden',
+                    background: 'var(--bg-elevated)',
+                  }}>
+                    {/* Left accent rail */}
+                    <div style={{ width: 4, flexShrink: 0, background: currentAccent, borderRadius: '0' }} />
+                    <div style={{ padding: '14px 18px', flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: currentAccent, marginBottom: 6 }}>
+                        {pillLabel(pf.label)}
+                      </div>
+                      <div style={{ overflowX: 'auto', fontSize: 16 }}>
+                        <Latex latex={pf.latexFormula} display />
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
+                        {pf.note}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Parameter inputs ── */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: pf.params.length >= 6
+                      ? 'repeat(3, 1fr)'
+                      : pf.params.length >= 4
+                        ? 'repeat(2, 1fr)'
+                        : `repeat(${Math.min(pf.params.length, 3)}, 1fr)`,
+                    gap: 12,
+                  }}>
+                    {pf.params.map((param, idx) => (
+                      <div key={param.key} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        <label style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            width: 16, height: 16, borderRadius: '50%', background: `${currentAccent}20`,
+                            color: currentAccent, fontSize: 9, fontWeight: 800, flexShrink: 0,
+                          }}>{idx + 1}</span>
                           {param.label}
-                          <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>({param.unit})</span>
+                          {param.unit && <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-muted)' }}>({param.unit})</span>}
                         </label>
                         <input
-                          type="number"
+                          type={param.inputType === 'number' ? 'number' : 'text'}
                           step="any"
-                          placeholder="Enter value…"
-                          value={physicsParams[param.key] ?? ''}
-                          onChange={e => setPhysicsParams(prev => ({ ...prev, [param.key]: e.target.value }))}
-                          onKeyDown={e => { if (e.key === 'Enter') handlePhysicsSolve(); }}
+                          placeholder={param.placeholder ?? '…'}
+                          value={structFormParams[param.key] ?? ''}
+                          onChange={e => setStructFormParams(prev => ({ ...prev, [param.key]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') handleStructSolve(); }}
                           style={{
-                            padding: '10px 12px', borderRadius: 10, border: '1.5px solid var(--border-subtle)',
-                            background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14,
-                            outline: 'none', fontFamily: '"JetBrains Mono", monospace', transition: 'border-color 0.15s',
+                            padding: '9px 12px', borderRadius: 10,
+                            border: `1.5px solid var(--border-subtle)`,
+                            background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 14,
+                            outline: 'none',
+                            fontFamily: param.inputType === 'text' ? '"JetBrains Mono", monospace' : 'inherit',
+                            transition: 'border-color 0.15s, box-shadow 0.15s',
+                            width: '100%', boxSizing: 'border-box',
                           }}
-                          onFocus={e => { e.currentTarget.style.borderColor = currentAccent; }}
-                          onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; }}
+                          onFocus={e => {
+                            e.currentTarget.style.borderColor = currentAccent;
+                            e.currentTarget.style.boxShadow = `0 0 0 3px ${currentAccent}18`;
+                          }}
+                          onBlur={e => {
+                            e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }}
                         />
                       </div>
                     ))}
                   </div>
 
-                  {/* Note + Solve button */}
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>💡 {pf.note}</span>
+                  {/* ── Solve / Clear row ── */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    {result && !loading && (
+                      <button
+                        onClick={() => { setStructFormParams({}); setResult(null); }}
+                        style={{ fontSize: 12, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '7px 14px', cursor: 'pointer' }}
+                      >
+                        ✕ Clear result
+                      </button>
+                    )}
                     <button
-                      onClick={handlePhysicsSolve}
+                      onClick={handleStructSolve}
                       disabled={loading}
                       style={{
-                        padding: '11px 24px', borderRadius: 12, border: 'none', cursor: loading ? 'default' : 'pointer',
-                        background: loading ? 'var(--primary-muted, #6366f133)' : currentAccent,
-                        color: loading ? currentAccent : '#fff', fontWeight: 700, fontSize: 14, flexShrink: 0,
-                        transition: 'all 0.15s',
+                        marginLeft: 'auto', padding: '10px 28px', borderRadius: 12, border: 'none',
+                        cursor: loading ? 'default' : 'pointer',
+                        background: loading ? `${currentAccent}33` : currentAccent,
+                        color: loading ? currentAccent : '#fff',
+                        fontWeight: 700, fontSize: 14, flexShrink: 0, transition: 'all 0.15s',
+                        display: 'flex', alignItems: 'center', gap: 8,
                       }}
                     >
-                      {loading ? '⏳ Calculating…' : '⚡ Calculate'}
+                      {loading
+                        ? <><span style={{ display: 'inline-block', animation: 'spin 0.8s linear infinite' }}>⏳</span> Solving…</>
+                        : '▶  Solve'}
                     </button>
-                    {result && <button onClick={() => { setPhysicsParams({}); setResult(null); }}
-                      style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>✕ Clear</button>}
                   </div>
+                  <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
                 </div>
               );
-            })() : (
-              <>
-                {/* Input box (all non-physics categories) */}
-                <div style={{ position: 'relative' }}>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1, position: 'relative' }}>
-                      <textarea
-                        ref={inputRef}
-                        value={input}
-                        onChange={e => setInput(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void solve(); } }}
-                        placeholder="Enter a math problem, equation, or expression… (Enter to solve)"
-                        rows={2}
-                        style={{
-                          width: '100%', padding: '12px 16px', borderRadius: 12, resize: 'none',
-                          border: `1.5px solid ${loading ? 'var(--primary)' : 'var(--border-subtle)'}`,
-                          background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 15,
-                          fontFamily: '"JetBrains Mono", monospace', boxSizing: 'border-box', outline: 'none',
-                          transition: 'border-color 0.15s',
-                        }}
-                      />
-                    </div>
-                    <button onClick={() => void solve()} disabled={loading || !input.trim()}
-                      style={{
-                        padding: '12px 20px', borderRadius: 12, border: 'none', cursor: loading ? 'default' : 'pointer',
-                        background: loading ? 'var(--primary-muted, #6366f133)' : 'var(--primary)',
-                        color: loading ? 'var(--primary)' : '#fff', fontWeight: 700, fontSize: 14,
-                        transition: 'all 0.15s', flexShrink: 0, minWidth: 90, height: 52,
-                      }}>
-                      {loading ? '⏳' : '▶ Solve'}
-                    </button>
-                  </div>
-                  {/* Live LaTeX preview of the typed input */}
-                  {(() => {
-                    if (!input.trim()) return null;
-                    try {
-                      const node = math.parse(input.trim());
-                      const tex = node.toTex({ parenthesis: 'keep' });
-                      return (
-                        <div style={{ marginTop: 4, padding: '6px 12px', borderRadius: 8, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 14, overflowX: 'auto' }}>
-                          <Latex latex={tex} display={false} />
-                        </div>
-                      );
-                    } catch { return null; }
-                  })()}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
-                    <button onClick={() => setShowSymbols(s => !s)}
-                      style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>
-                      {showSymbols ? '▲ Hide symbols' : '▼ Symbols'}
-                    </button>
-                    {input && <button onClick={() => { setInput(''); setResult(null); inputRef.current?.focus(); }}
-                      style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>✕ Clear</button>}
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>Shift+Enter for new line</span>
-                  </div>
-                </div>
+            })()}
 
-                {/* Symbol pad */}
-                {showSymbols && (
-                  <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '10px 12px' }}>
-                    <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-                      {SYMBOL_GROUPS.map((g, i) => (
-                        <button key={i} onClick={() => setSymbolTab(i)}
-                          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', background: symbolTab === i ? 'var(--primary)' : 'var(--bg-elevated)', color: symbolTab === i ? '#fff' : 'var(--text-secondary)', fontWeight: symbolTab === i ? 600 : 400 }}>
-                          {g.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {SYMBOL_GROUPS[symbolTab].symbols.map(s => (
-                        <button key={s} onClick={() => insertSymbol(s)}
-                          style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', minWidth: 38, transition: 'all 0.1s' }}
-                          onMouseEnter={e => { (e.currentTarget).style.borderColor = 'var(--primary)'; (e.currentTarget).style.color = 'var(--primary)'; }}
-                          onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; (e.currentTarget).style.color = 'var(--text-primary)'; }}
-                        >{s}</button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Recent history chips — only for non-physics categories */}
-            {active !== 'physics' && history.length > 0 && !loading && !result && (
+            {/* Recent history chips — free-text categories only */}
+            {!CATEGORY_FORMS[String(active)] && history.length > 0 && !loading && !result && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>Recent:</span>
                 {history.slice(0, 3).map(h => (
@@ -1541,10 +2003,34 @@ export function MathSolverPage() {
             {/* Loading skeleton */}
             {loading && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ height: 60, borderRadius: 12, background: 'var(--bg-2)', animation: 'pulse 1.4s ease-in-out infinite' }} />
-                <div style={{ height: 40, borderRadius: 8, background: 'var(--bg-2)', animation: 'pulse 1.4s ease-in-out 0.2s infinite', width: '75%' }} />
-                <div style={{ height: 40, borderRadius: 8, background: 'var(--bg-2)', animation: 'pulse 1.4s ease-in-out 0.4s infinite', width: '55%' }} />
-                <style>{`@keyframes pulse { 0%,100%{opacity:0.5} 50%{opacity:1} }`}</style>
+                <style>{`
+                  @keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:0.9} }
+                  @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+                  .sk-shimmer {
+                    background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-elevated) 50%, var(--bg-2) 75%);
+                    background-size: 200% 100%;
+                    animation: shimmer 1.6s ease-in-out infinite;
+                  }
+                `}</style>
+                {/* Answer card skeleton */}
+                <div className="sk-shimmer" style={{ height: 90, borderRadius: 14, border: `1.5px solid ${currentAccent}20` }} />
+                {/* Step skeleton rows */}
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{ borderRadius: 12, border: '1px solid var(--border-subtle)', overflow: 'hidden', animationDelay: `${i * 0.15}s` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: `${currentAccent}06` }}>
+                      <div className="sk-shimmer" style={{ width: 22, height: 22, borderRadius: '50%' }} />
+                      <div className="sk-shimmer" style={{ height: 14, borderRadius: 6, flex: 1, maxWidth: ['70%', '55%', '45%'][i] }} />
+                    </div>
+                    <div style={{ padding: '12px 18px' }}>
+                      <div className="sk-shimmer" style={{ height: 12, borderRadius: 6, width: '40%' }} />
+                    </div>
+                  </div>
+                ))}
+                {/* Thinking status pill */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20, background: `${currentAccent}0d`, border: `1px solid ${currentAccent}25`, alignSelf: 'flex-start', marginTop: 2 }}>
+                  <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', fontSize: 12 }}>⚙</span>
+                  <span style={{ fontSize: 11, color: currentAccent, fontWeight: 600 }}>Solving step by step…</span>
+                </div>
               </div>
             )}
 
@@ -1552,24 +2038,40 @@ export function MathSolverPage() {
             {result && !loading && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {result.error ? (
-                  <div style={{ padding: '14px 18px', borderRadius: 10, background: '#ef444410', border: '1px solid #ef444440', color: '#ef4444', fontSize: 13 }}>
-                    ⚠ {result.error}
+                  <div style={{ borderRadius: 14, background: '#ef444408', border: '1.5px solid #ef444430', overflow: 'hidden' }}>
+                    {/* Error header strip */}
+                    <div style={{ height: 3, background: 'linear-gradient(90deg, #ef4444, #ef444460)' }} />
+                    <div style={{ padding: '14px 18px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: '#ef444415', border: '1px solid #ef444430', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>⚠</div>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: '#ef4444', marginBottom: 4 }}>Could not solve this problem</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{result.error}</div>
+                        <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
+                          Try rephrasing your input, checking for typos, or switching to a different problem type.
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <>
                     {/* Answer card */}
-                    <div style={{ borderRadius: 14, background: `${currentAccent}0d`, border: `1.5px solid ${currentAccent}30`, overflow: 'hidden' }}>
+                    <div style={{ borderRadius: 14, background: `${currentAccent}0a`, border: `1.5px solid ${currentAccent}28`, overflow: 'hidden' }}>
+                      {/* Thin top accent strip */}
+                      <div style={{ height: 3, background: `linear-gradient(90deg, ${currentAccent}, ${currentAccent}50)` }} />
                       <div style={{ padding: '12px 20px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: currentAccent }}>Result</div>
-                        <div style={{ height: 1, flex: 1, background: `${currentAccent}25` }} />
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{result.engine === 'ai' ? '✨ AI' : '🔢 symbolic'}</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: currentAccent }}>Answer</div>
+                        <div style={{ height: 1, flex: 1, background: `${currentAccent}20` }} />
+                        <div style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, background: `${currentAccent}12`, color: currentAccent, fontWeight: 600 }}>
+                          {result.engine === 'ai' ? '✨ AI' : '🔢 symbolic'}
+                        </div>
                       </div>
-                      <div style={{ padding: '10px 20px 16px', fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', overflowX: 'auto' }}>
+                      <div style={{ padding: '10px 20px 16px', fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', overflowX: 'auto' }}>
                         {result.answerLatex ? <Latex latex={result.answerLatex} display /> : <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{result.answer}</span>}
                       </div>
                       {input && (
-                        <div style={{ padding: '8px 20px 12px', borderTop: `1px solid ${currentAccent}20`, fontSize: 11, color: 'var(--text-muted)', fontFamily: '"JetBrains Mono", monospace', overflowX: 'auto', whiteSpace: 'nowrap' }}>
-                          Input: <span style={{ color: 'var(--text-secondary)' }}>{input.length > 80 ? input.slice(0, 80) + '…' : input}</span>
+                        <div style={{ padding: '8px 20px 12px', borderTop: `1px solid ${currentAccent}18`, fontSize: 11, color: 'var(--text-muted)', fontFamily: '"JetBrains Mono", monospace', overflowX: 'auto', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>Input:</span>
+                          <span style={{ color: 'var(--text-secondary)' }}>{input.length > 80 ? input.slice(0, 80) + '…' : input}</span>
                         </div>
                       )}
                     </div>

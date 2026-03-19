@@ -4,6 +4,8 @@ import { users, accounts, folders, files, libraryItems } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getUserId, isDemoGuestEmail } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
+import { deleteSupabaseAuthUser, syncSupabaseAuthUser } from '@/lib/supabase/auth-admin';
+import { deleteFileFromSupabaseStorage } from '@/lib/supabase/storage';
 
 // GET user account info
 export async function GET(request: NextRequest) {
@@ -26,6 +28,7 @@ export async function GET(request: NextRequest) {
         name: users.name,
         image: users.image,
         bio: users.bio,
+        supabaseAuthId: users.supabaseAuthId,
         createdAt: users.createdAt,
         hasPassword: users.passwordHash,
         twoFactorEnabled: users.twoFactorEnabled,
@@ -68,9 +71,15 @@ export async function GET(request: NextRequest) {
       .where(eq(libraryItems.userId, userId));
 
     return NextResponse.json({
-      ...user[0],
+      id: user[0].id,
+      email: user[0].email,
+      name: user[0].name,
+      image: user[0].image,
+      bio: user[0].bio,
+      createdAt: user[0].createdAt,
       hasPassword: !!user[0].hasPassword,
       twoFactorEnabled: !!user[0].twoFactorEnabled,
+      supabaseLinked: !!user[0].supabaseAuthId,
       isGuest: isDemoGuestEmail(user[0].email),
       connectedAccounts: connectedAccounts.map(a => a.provider),
       stats: {
@@ -219,9 +228,34 @@ export async function PUT(request: NextRequest) {
         name: users.name,
         image: users.image,
         bio: users.bio,
+        supabaseAuthId: users.supabaseAuthId,
       });
 
-    return NextResponse.json(updated[0]);
+    const syncedAuthId = await syncSupabaseAuthUser({
+      supabaseAuthId: updated[0].supabaseAuthId,
+      email: updated[0].email,
+      name: updated[0].name,
+      image: updated[0].image,
+      bio: updated[0].bio,
+      emailConfirmed: true,
+    });
+
+    if (syncedAuthId && syncedAuthId !== updated[0].supabaseAuthId) {
+      await db
+        .update(users)
+        .set({ supabaseAuthId: syncedAuthId, updatedAt: new Date() })
+        .where(eq(users.id, userId));
+      updated[0].supabaseAuthId = syncedAuthId;
+    }
+
+    return NextResponse.json({
+      id: updated[0].id,
+      email: updated[0].email,
+      name: updated[0].name,
+      image: updated[0].image,
+      bio: updated[0].bio,
+      supabaseLinked: !!updated[0].supabaseAuthId,
+    });
   } catch (error) {
     console.error(`[Account][${requestId}] PUT failed`, error);
     return apiError(500, {
@@ -266,6 +300,22 @@ export async function DELETE(request: NextRequest) {
         requestId,
       });
     }
+
+    const ownedFiles = await db.query.files.findMany({
+      where: eq(files.userId, userId),
+      columns: {
+        storageBucket: true,
+        storagePath: true,
+      },
+    });
+
+    await Promise.all(
+      ownedFiles
+        .filter((file) => file.storageBucket && file.storagePath)
+        .map((file) => deleteFileFromSupabaseStorage(file.storageBucket!, file.storagePath!).catch(() => undefined)),
+    );
+
+    await deleteSupabaseAuthUser(currentUser?.supabaseAuthId);
 
     // Delete user (cascades to all related data)
     await db.delete(users).where(eq(users.id, userId));
