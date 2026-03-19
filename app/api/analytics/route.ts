@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { quizAttempts, files, libraryItems, srsDecks, srsPreferences, srsReviewHistory, studyPlans } from '@/lib/db/schema';
-import { eq, count, avg, desc, gte, and } from 'drizzle-orm';
+import { eq, count, avg, desc } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/session';
 import type { SRSDeck } from '@/lib/srs/sm2';
 
@@ -425,6 +425,96 @@ export async function GET(req: NextRequest) {
       insights.push(`📅 ${planStats.activePlans} active study plan${planStats.activePlans !== 1 ? 's' : ''}. ${planStats.averageProgress}% average progress — keep it up!`);
     }
 
+    // ── Coach actions ─────────────────────────────────────────────────────
+    const coachActions: Array<{
+      id: string;
+      label: string;
+      type: 'practice' | 'review' | 'plan';
+      payload: Record<string, string>;
+    }> = [];
+
+    if (dueCardsTotal > 0) {
+      const reviewDeck = deckStats.topDecks.find((deck) => deck.dueCards > 0) ?? deckStats.topDecks[0];
+      coachActions.push({
+        id: 'review-due-cards',
+        label: reviewDeck
+          ? `Review ${reviewDeck.dueCards} due card${reviewDeck.dueCards === 1 ? '' : 's'} in ${reviewDeck.name}`
+          : `Review ${dueCardsTotal} due card${dueCardsTotal === 1 ? '' : 's'} today`,
+        type: 'review',
+        payload: {
+          href: '/decks',
+          cta: 'Open decks',
+          detail: reviewDeck
+            ? `${reviewDeck.accuracy}% retention in your most active deck`
+            : 'Keep today’s review queue under control to protect retention.',
+        },
+      });
+    }
+
+    if (weakAreas.length > 0) {
+      const weakestArea = weakAreas[0];
+      coachActions.push({
+        id: 'practice-weakest-area',
+        label: `Practice ${weakestArea.topic} next`,
+        type: 'practice',
+        payload: {
+          href: '/workspace',
+          cta: 'Open workspace',
+          detail: `${Math.round(weakestArea.accuracy)}% accuracy · about ${weakestArea.estimatedMinutes} minutes to recover`,
+        },
+      });
+    }
+
+    if (planStats.activePlans === 0) {
+      coachActions.push({
+        id: 'create-study-plan',
+        label: 'Create a study plan for your next exam',
+        type: 'plan',
+        payload: {
+          href: '/planner',
+          cta: 'Open planner',
+          detail: 'Turn your next revision block into a schedule with daily targets.',
+        },
+      });
+    } else if (planStats.averageProgress < 60) {
+      coachActions.push({
+        id: 'catch-up-plan',
+        label: 'Catch up on your active plan',
+        type: 'plan',
+        payload: {
+          href: '/planner',
+          cta: 'Review plan',
+          detail: `${planStats.averageProgress}% average progress across ${planStats.activePlans} active plan${planStats.activePlans === 1 ? '' : 's'}.`,
+        },
+      });
+    }
+
+    if (deckStats.totalDecks === 0) {
+      coachActions.push({
+        id: 'create-first-deck',
+        label: 'Create or import your first deck',
+        type: 'review',
+        payload: {
+          href: '/decks',
+          cta: 'Open decks',
+          detail: 'Decks unlock review history, daily goals, and stronger spaced repetition analytics.',
+        },
+      });
+    }
+
+    if (currentStreak === 0 && periodAttempts.length > 0) {
+      coachActions.push({
+        id: 'restart-streak',
+        label: 'Restart your study streak today',
+        type: 'review',
+        payload: {
+          href: '/workspace',
+          cta: 'Study now',
+          detail: 'One short session today is enough to rebuild momentum.',
+        },
+      });
+    }
+
     return NextResponse.json({
       period,
       quizStats: {
@@ -439,7 +529,7 @@ export async function GET(req: NextRequest) {
       },
       planStats,
       weakAreas,
-      coachActions: [],
+      coachActions: coachActions.slice(0, 4),
       activity: {
         currentStreak, totalActiveDays, weeklyActivity, dailyActivity,
       },

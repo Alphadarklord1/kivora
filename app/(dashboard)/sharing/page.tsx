@@ -48,6 +48,15 @@ const LOCAL_AR: Record<string, string> = {
   Shared: 'تمت المشاركة',
   'Loading shares…': 'جاري تحميل المشاركات...',
   'Link copied': 'تم نسخ الرابط',
+  'Share from workspace': 'شارك من مساحة العمل',
+  'Open shared hub': 'افتح مركز المشاركات',
+  'Items shared with you': 'العناصر التي تمت مشاركتها معك',
+  'Items you shared': 'العناصر التي شاركتها',
+  'Link shares': 'مشاركات الروابط',
+  'Direct shares': 'مشاركات مباشرة',
+  'Expiring soon': 'تنتهي قريبًا',
+  'matching results': 'نتائج مطابقة',
+  'Filtered by': 'تمت التصفية حسب',
 };
 
 export default function SharedWithMePage() {
@@ -142,6 +151,16 @@ export default function SharedWithMePage() {
     all: t('All'), file: t('File'), folder: t('Folder'), topic: t('Topic'), library: t('Library'),
   };
 
+  const activeShares = shares.filter((share) => !isExpired(share.expiresAt));
+  const expiringSoon = activeShares.filter((share) => {
+    if (!share.expiresAt) return false;
+    const expiry = new Date(share.expiresAt).getTime();
+    const threeDays = 3 * 24 * 60 * 60 * 1000;
+    return expiry - Date.now() <= threeDays;
+  });
+  const linkShares = shares.filter((share) => share.shareType === 'link');
+  const directShares = shares.filter((share) => share.shareType === 'user');
+
   return (
     <div className="sp-page" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
       {/* ── Header ── */}
@@ -149,6 +168,41 @@ export default function SharedWithMePage() {
         <div>
           <h1 className="sp-page-title">{t('Sharing')}</h1>
           <p className="sp-page-sub">{t('Manage content shared with you and by you')}</p>
+        </div>
+        <div className="sp-header-actions">
+          <Link href="/workspace" className="sp-btn sp-btn-primary">{t('Share from workspace')}</Link>
+          <Link href="/shared" className="sp-btn sp-btn-ghost">{t('Open shared hub')}</Link>
+        </div>
+      </div>
+
+      <div className="sp-stats">
+        <div className="sp-stat-card">
+          <span className="sp-stat-icon">{activeTab === 'received' ? '📥' : '📤'}</span>
+          <div>
+            <strong>{shares.length}</strong>
+            <span>{activeTab === 'received' ? t('Items shared with you') : t('Items you shared')}</span>
+          </div>
+        </div>
+        <div className="sp-stat-card">
+          <span className="sp-stat-icon">🔗</span>
+          <div>
+            <strong>{linkShares.length}</strong>
+            <span>{t('Link shares')}</span>
+          </div>
+        </div>
+        <div className="sp-stat-card">
+          <span className="sp-stat-icon">👥</span>
+          <div>
+            <strong>{directShares.length}</strong>
+            <span>{t('Direct shares')}</span>
+          </div>
+        </div>
+        <div className="sp-stat-card">
+          <span className="sp-stat-icon">⏳</span>
+          <div>
+            <strong>{expiringSoon.length}</strong>
+            <span>{t('Expiring soon')}</span>
+          </div>
         </div>
       </div>
 
@@ -186,6 +240,10 @@ export default function SharedWithMePage() {
               {typeLabels[type]}
             </button>
           ))}
+        </div>
+        <div className="sp-toolbar-meta">
+          <span>{filtered.length} {t('matching results')}</span>
+          {typeFilter !== 'all' && <span>{t('Filtered by')} {typeLabels[typeFilter]}</span>}
         </div>
       </div>
 
@@ -292,11 +350,32 @@ export default function SharedWithMePage() {
       )}
 
       <style jsx>{`
-        .sp-page { max-width: 900px; margin: 0 auto; padding: 0 0 60px; }
+        .sp-page { max-width: 1080px; margin: 0 auto; padding: 0 0 60px; }
 
-        .sp-page-header { margin-bottom: 28px; }
+        .sp-page-header { margin-bottom: 20px; display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; }
         .sp-page-title  { font-size: var(--text-3xl, 1.75rem); font-weight: 700; margin: 0 0 4px; }
         .sp-page-sub    { color: var(--text-3); font-size: var(--text-sm); margin: 0; }
+        .sp-header-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+        .sp-stats {
+          display:grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+          margin-bottom: 18px;
+        }
+        .sp-stat-card {
+          display:flex; align-items:center; gap:12px; padding:14px 16px;
+          border-radius: 16px; border: 1px solid var(--border-2);
+          background: var(--bg-elevated);
+        }
+        .sp-stat-icon {
+          width: 40px; height: 40px; border-radius: 12px;
+          display:flex; align-items:center; justify-content:center;
+          background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
+          font-size: 18px;
+        }
+        .sp-stat-card strong { display:block; font-size: 20px; line-height: 1; color: var(--text-1); }
+        .sp-stat-card span:last-child { display:block; margin-top: 3px; font-size: 12px; color: var(--text-3); }
 
         /* Banner */
         .sp-banner {
@@ -329,6 +408,7 @@ export default function SharedWithMePage() {
         }
         .sp-search::placeholder { color: var(--text-3); }
         .sp-filter-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+        .sp-toolbar-meta { display:flex; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--text-3); }
         .sp-pill {
           display: flex; align-items: center; gap: 5px;
           padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border-2);
@@ -401,6 +481,7 @@ export default function SharedWithMePage() {
         .sp-btn-danger:hover { background: color-mix(in srgb, var(--danger, #ef4444) 10%, var(--bg-inset)) !important; }
 
         @media (max-width: 600px) {
+          .sp-stats { grid-template-columns: 1fr 1fr; }
           .sp-card { flex-direction: column; align-items: flex-start; }
           .sp-card-actions { width: 100%; margin-top: 8px; }
           .sp-card-actions .sp-btn { flex: 1; justify-content: center; }
