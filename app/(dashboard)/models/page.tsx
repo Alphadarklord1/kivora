@@ -13,23 +13,29 @@ export default async function ModelsPage({ searchParams }: { searchParams?: Prom
     <div className={styles.page}>
       <section className={styles.hero}>
         <div>
-          <span className={styles.eyebrow}>Models & Downloads</span>
-          <h1>Choose privacy-first local AI, cloud convenience, or both.</h1>
+          <span className={styles.eyebrow}>AI Models</span>
+          <h1>Local AI, cloud AI, or both</h1>
           <p>
-            Kivora now treats offline local models and cloud APIs as one routing system. Pick the mode that fits the student:
-            local for privacy and no internet, cloud for convenience, or auto to prefer local first and fall back when needed.
+            Run free AI models privately on your device using Ollama, or connect a cloud API for
+            maximum power. The routing panel lets you switch between them at any time.
           </p>
           <div className={styles.highlights}>
-            <span>Local keeps files on-device</span>
-            <span>Cloud is faster to start</span>
-            <span>Auto balances both</span>
+            <span>🔒 Local = private, offline, free</span>
+            <span>☁ Cloud = fast, powerful, needs internet</span>
+            <span>⚡ Auto = best of both</span>
           </div>
         </div>
         <div className={styles.actions}>
-          <Link href="/models" className={`${styles.tabLink} ${activeTab === 'models' ? styles.active : ''}`}>
-            Routing &amp; Setup
+          <Link
+            href="/models"
+            className={`${styles.tabLink} ${activeTab === 'models' ? styles.active : ''}`}
+          >
+            Models &amp; Setup
           </Link>
-          <Link href="/models?tab=downloads" className={`${styles.tabLink} ${activeTab === 'downloads' ? styles.active : ''}`}>
+          <Link
+            href="/models?tab=downloads"
+            className={`${styles.tabLink} ${activeTab === 'downloads' ? styles.active : ''}`}
+          >
             Downloads &amp; Releases
           </Link>
         </div>

@@ -335,6 +335,44 @@ export async function GET(req: NextRequest) {
         .slice(0, 6),
     };
 
+    // ── Daily reviews time-series (for combined activity chart) ─────────────
+    const dailyReviews: { date: string; reviews: number; correct: number }[] = [];
+    for (let i = period - 1; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const ds = d.toISOString().slice(0, 10);
+      const dayRevs = periodReviewRows.filter(r =>
+        r.reviewedAt && new Date(r.reviewedAt).toISOString().slice(0, 10) === ds,
+      );
+      dailyReviews.push({
+        date: ds,
+        reviews: dayRevs.length,
+        correct: dayRevs.filter(r => r.correct).length,
+      });
+    }
+
+    // ── SRS Retention curve (accuracy by card interval bucket) ───────────────
+    const intervalBuckets = [
+      { label: 'New', min: 0, max: 1 },
+      { label: '3d', min: 2, max: 3 },
+      { label: '1w', min: 4, max: 7 },
+      { label: '2w', min: 8, max: 14 },
+      { label: '1mo', min: 15, max: 30 },
+      { label: '2mo+', min: 31, max: Infinity },
+    ];
+    const retentionByInterval = intervalBuckets.map(bucket => {
+      const bucketCards = allCards.filter(c => {
+        const iv = c.interval ?? 0;
+        return iv >= bucket.min && iv <= bucket.max;
+      });
+      const totalRev = bucketCards.reduce((s, c) => s + c.totalReviews, 0);
+      const totalCorr = bucketCards.reduce((s, c) => s + c.correctReviews, 0);
+      return {
+        label: bucket.label,
+        cardCount: bucketCards.length,
+        retention: totalRev > 0 ? Math.round((totalCorr / totalRev) * 100) : null,
+      };
+    });
+
     // ── Week-over-week comparison ──────────────────────────────────────────
     const thisWeekStart = new Date(); thisWeekStart.setDate(thisWeekStart.getDate() - 7);
     const lastWeekStart = new Date(); lastWeekStart.setDate(lastWeekStart.getDate() - 14);
@@ -406,6 +444,8 @@ export async function GET(req: NextRequest) {
         currentStreak, totalActiveDays, weeklyActivity, dailyActivity,
       },
       weekOverWeek: { thisWeekAvg, lastWeekAvg, weekDelta },
+      dailyReviews,
+      retentionByInterval,
       insights,
       usage: {
         totalFiles: fileCount?.value ?? 0,

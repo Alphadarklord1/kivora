@@ -20,7 +20,7 @@ const TEMPLATE_MAP: Record<ReportType, string> = {
 export default function ReportPage() {
   const pathname = usePathname();
   const { settings } = useSettings();
-  const { t, isArabic } = useI18n({
+  const { t, isRTL } = useI18n({
     'Report issue': 'الإبلاغ عن مشكلة',
     'Capture what went wrong and open the right GitHub issue template with your diagnostics prefilled.': 'سجل ما حدث وافتح قالب البلاغ الصحيح على GitHub مع تعبئة البيانات التشخيصية تلقائيًا.',
     'Issue type': 'نوع البلاغ',
@@ -117,7 +117,7 @@ export default function ReportPage() {
   }
 
   return (
-    <section className={styles.page} dir={isArabic ? 'rtl' : 'ltr'}>
+    <section className={styles.page} dir={isRTL ? 'rtl' : 'ltr'}>
       <div className={styles.hero}>
         <div>
           <span className="sp-eyebrow">{t('Report issue')}</span>

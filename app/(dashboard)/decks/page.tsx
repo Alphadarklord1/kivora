@@ -523,17 +523,50 @@ export default function DeckLibraryPage() {
 
           <div className={styles.formStack}>
             {importMode === 'url' && (
-              <div className={styles.importRow}>
-                <input
-                  value={importUrl}
-                  onChange={(event) => setImportUrl(event.target.value)}
-                  placeholder="Paste Quizlet or Kivora deck URL"
-                  className={styles.searchInput}
-                />
-                <button className={styles.primaryButton} onClick={importDeckFromUrl} disabled={importingMode === 'url' || !importUrl.trim()}>
-                  {importingMode === 'url' ? 'Importing…' : 'Import URL'}
-                </button>
-              </div>
+              <>
+                <div className={styles.importRow}>
+                  <input
+                    value={importUrl}
+                    onChange={(event) => setImportUrl(event.target.value)}
+                    placeholder="Paste a Kivora shared-deck URL  (e.g. /shared/…)"
+                    className={styles.searchInput}
+                  />
+                  <button className={styles.primaryButton} onClick={importDeckFromUrl} disabled={importingMode === 'url' || !importUrl.trim()}>
+                    {importingMode === 'url' ? 'Importing…' : 'Import URL'}
+                  </button>
+                </div>
+                <div style={{
+                  padding: '14px 16px', borderRadius: 12,
+                  background: 'color-mix(in srgb, #f59e0b 8%, var(--bg-elevated))',
+                  border: '1px solid color-mix(in srgb, #f59e0b 25%, transparent)',
+                  fontSize: 13, lineHeight: 1.65, color: 'var(--text-secondary)',
+                  display: 'flex', flexDirection: 'column', gap: 8,
+                }}>
+                  <strong style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>💡</span> Importing from Quizlet?
+                  </strong>
+                  <span>
+                    Quizlet loads cards via JavaScript and blocks automated import. The most reliable method is to <strong>export and paste</strong>:
+                  </span>
+                  <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <li>Open the Quizlet set in your browser.</li>
+                    <li>Click <strong>•••</strong> → <strong>Export</strong> and copy the exported text.</li>
+                    <li>Switch to the <strong>Paste</strong> tab and paste — Kivora will parse the terms and definitions automatically.</li>
+                  </ol>
+                  <button
+                    type="button"
+                    onClick={() => setImportMode('paste')}
+                    style={{
+                      alignSelf: 'flex-start', padding: '6px 14px', borderRadius: 8,
+                      background: 'color-mix(in srgb, #f59e0b 18%, var(--bg-surface))',
+                      border: '1px solid color-mix(in srgb, #f59e0b 35%, transparent)',
+                      color: '#f59e0b', fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                    }}
+                  >
+                    Switch to Paste import →
+                  </button>
+                </div>
+              </>
             )}
 
             {importMode === 'csv' && (
@@ -575,7 +608,7 @@ export default function DeckLibraryPage() {
                   value={pasteText}
                   onChange={(event) => setPasteText(event.target.value)}
                   className={styles.textArea}
-                  placeholder={'Cell :: Basic unit of life\nMitochondria :: Powerhouse of the cell\n\nOr paste alternating lines:\nVector\nQuantity with magnitude and direction'}
+                  placeholder={'Paste cards in any of these formats:\n\n• Quizlet export (tab-separated):\nPhotosynthesis\tConverts light into energy\nMitochondria\tPowerhouse of the cell\n\n• Separated with :: or —\nCell :: Basic unit of life\nVector — Quantity with magnitude and direction\n\n• Alternating lines:\nOsmosis\nMovement of water through a membrane'}
                 />
               </>
             )}

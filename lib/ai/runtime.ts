@@ -10,25 +10,41 @@ export interface AiRuntimePreferences {
 
 export const AI_PREFS_UPDATED_EVENT = 'kivora:ai-preferences-updated';
 
-export const DEFAULT_LOCAL_MODEL = 'mistral';
-export const DEFAULT_CLOUD_MODEL = 'gpt-4o-mini';
+export const DEFAULT_LOCAL_MODEL  = 'mistral';
+export const DEFAULT_CLOUD_MODEL  = 'grok-3-fast';   // Primary: Grok (xAI)
+export const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';   // Secondary cloud fallback
 
+// ── Local (Ollama) models ─────────────────────────────────────────────────────
 export const LOCAL_MODEL_OPTIONS = [
-  { id: 'mistral', label: 'Mistral 7B', hint: 'Balanced local model for most study tasks' },
-  { id: 'qwen2.5', label: 'Qwen2.5 1.5B', hint: 'Fastest option for lighter hardware' },
-  { id: 'qwen2.5-math', label: 'Qwen2.5-Math 1.5B', hint: 'Best local choice for school math' },
-  { id: 'phi4-mini', label: 'Phi-4 Mini 3.8B', hint: 'Strong STEM reasoning' },
-  { id: 'llama3.2:3b', label: 'Llama 3.2 3B', hint: 'Quick all-round local assistant' },
-  { id: 'gemma3:4b', label: 'Gemma 3 4B', hint: 'Writing and structured output' },
-  { id: 'deepseek-r1:7b', label: 'DeepSeek R1 7B', hint: 'Heavy reasoning on stronger machines' },
-  { id: 'mistral:latest', label: 'Mistral Large 24B', hint: 'Highest local quality if hardware allows' },
+  { id: 'mistral',         label: 'Mistral 7B',          hint: 'Balanced local model for most study tasks' },
+  { id: 'qwen2.5',         label: 'Qwen2.5 1.5B',        hint: 'Fastest option for lighter hardware' },
+  { id: 'qwen2.5-math',    label: 'Qwen2.5-Math 1.5B',   hint: 'Best local choice for school math' },
+  { id: 'phi4-mini',       label: 'Phi-4 Mini 3.8B',     hint: 'Strong STEM reasoning' },
+  { id: 'llama3.2:3b',     label: 'Llama 3.2 3B',        hint: 'Quick all-round local assistant' },
+  { id: 'gemma3:4b',       label: 'Gemma 3 4B',          hint: 'Writing and structured output' },
+  { id: 'deepseek-r1:7b',  label: 'DeepSeek R1 7B',      hint: 'Heavy reasoning on stronger machines' },
+  { id: 'mistral:latest',  label: 'Mistral Large 24B',   hint: 'Highest local quality if hardware allows' },
 ] as const;
 
+// ── Cloud models (Grok primary, OpenAI secondary) ─────────────────────────────
 export const CLOUD_MODEL_OPTIONS = [
-  { id: 'gpt-4o-mini', label: 'GPT-4o mini', hint: 'Fast and lower cost cloud default' },
-  { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini', hint: 'Stronger cloud reasoning with quick responses' },
-  { id: 'gpt-4.1', label: 'GPT-4.1', hint: 'Best cloud quality for hard study tasks' },
+  // ── Grok (xAI) — primary provider ──────────────────────────────────────────
+  { id: 'grok-3-fast',  label: 'Grok 3 Fast',   hint: 'Best balance of speed and quality — recommended', provider: 'grok' as const },
+  { id: 'grok-3',       label: 'Grok 3',         hint: 'Maximum capability for complex study tasks',      provider: 'grok' as const },
+  { id: 'grok-3-mini',  label: 'Grok 3 Mini',   hint: 'Compact model, great for quick tasks',             provider: 'grok' as const },
+  { id: 'grok-2',       label: 'Grok 2',         hint: 'Previous generation — fast and reliable',         provider: 'grok' as const },
+  // ── OpenAI — secondary / backup ────────────────────────────────────────────
+  { id: 'gpt-4o-mini',  label: 'GPT-4o mini',   hint: 'OpenAI backup — fast and lower cost',             provider: 'openai' as const },
+  { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini',  hint: 'OpenAI backup — stronger reasoning',              provider: 'openai' as const },
+  { id: 'gpt-4.1',      label: 'GPT-4.1',        hint: 'OpenAI backup — highest quality',                 provider: 'openai' as const },
 ] as const;
+
+export type CloudProvider = 'grok' | 'openai';
+
+/** Determine which provider a model ID belongs to */
+export function cloudProviderForModel(modelId: string): CloudProvider {
+  return modelId.startsWith('grok') ? 'grok' : 'openai';
+}
 
 export function normalizeAiMode(value: string | null | undefined): AiMode {
   switch (value) {
@@ -39,6 +55,7 @@ export function normalizeAiMode(value: string | null | undefined): AiMode {
       return 'local';
     case 'cloud':
     case 'openai':
+    case 'grok':
       return 'cloud';
     case 'auto':
       return 'auto';

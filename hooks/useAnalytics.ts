@@ -89,6 +89,18 @@ export interface WeekOverWeek {
   weekDelta: number | null;
 }
 
+export interface RetentionBucket {
+  label: string;
+  cardCount: number;
+  retention: number | null;
+}
+
+export interface DailyReview {
+  date: string;
+  reviews: number;
+  correct: number;
+}
+
 export interface AnalyticsData {
   period: number;
   quizStats: QuizStats;
@@ -100,6 +112,8 @@ export interface AnalyticsData {
   usage: UsageStats;
   deckStats: DeckStats;
   weekOverWeek?: WeekOverWeek;
+  dailyReviews?: DailyReview[];
+  retentionByInterval?: RetentionBucket[];
   fallback?: boolean;
   warning?: string;
   requestId?: string;
