@@ -42,14 +42,16 @@ export const MATH_CATEGORIES: Record<MathCategoryId, MathCategoryConfig> = {
   geometry: {
     id: 'geometry',
     label: 'Geometry',
-    supportedActions: ['Pythagorean theorem', 'Distance', 'Circle area', 'Triangle area'],
-    practicePrompt: 'Create geometry practice for high-school and first-year undergraduate students with diagrams described in words, worked answers, and one applied measurement problem.',
+    supportedActions: ['Pythagorean theorem', 'Distance', 'Midpoint', 'Line through points', 'Circle equation', 'Triangle area', 'Sphere volume'],
+    practicePrompt: 'Create geometry and analytic-geometry practice for high-school and first-year undergraduate students with coordinate geometry, circles, and one applied measurement problem.',
     examples: [
       { expr: 'hypotenuse 3 4', desc: 'Use the Pythagorean theorem' },
       { expr: 'distance (0,0) (3,4)', desc: 'Find the distance between two points' },
-      { expr: 'area circle radius 5', desc: 'Compute the area of a circle' },
-      { expr: 'circumference circle radius 5', desc: 'Find a circle circumference' },
-      { expr: 'area triangle base 10 height 4', desc: 'Compute triangle area' },
+      { expr: 'midpoint of (0,0) and (6,4)', desc: 'Find the midpoint of a segment' },
+      { expr: 'line through (1,2) and (4,6)', desc: 'Build a line equation from two points' },
+      { expr: 'equation of circle: center (2,-3), radius 5', desc: 'Write a graphable circle equation' },
+      { expr: 'area of triangle with sides 3, 4, 5', desc: 'Compute triangle area from the sides' },
+      { expr: 'volume of sphere with radius 7', desc: 'Compute the volume of a sphere' },
     ],
   },
   calculus: {

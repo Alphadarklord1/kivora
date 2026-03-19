@@ -189,7 +189,7 @@ function categoryFromProblem(normalizedInput: string): MathCategoryId {
   if (/dot product|magnitude|angle between|\[[^\]]+\]\s*\[[^\]]+\]/i.test(normalizedInput)) return 'vectors';
   if (/\[\[[^\]]+\]\]/.test(normalizedInput) || /\bdet\(|\binv\(/.test(lower)) return 'matrices';
   if (/mean\(|median\(|variance\(|std\(/.test(lower)) return 'statistics';
-  if (/hypotenuse|distance\s*\(|distance between|area circle|circumference circle|area triangle|area rectangle|pythagorean/.test(lower)) return 'geometry';
+  if (/hypotenuse|distance\s*\(|distance between|midpoint of|line through|equation of circle|area circle|circumference circle|area triangle|area rectangle|volume of sphere|pythagorean/.test(lower)) return 'geometry';
   if (/derivative|integral|limit|d\/dx|\bint\b|\blim\b/.test(lower)) return 'calculus';
   if (/\bsin\(|\bcos\(|\btan\(|\bcot\(|\bsec\(|\bcsc\(/.test(lower)) return 'trigonometry';
   if (/arithmetic (?:nth|sum)|geometric (?:nth|sum)|sequence|series/.test(lower)) return 'sequences-series';
@@ -483,6 +483,13 @@ function solveGeometryProblem(normalizedInput: string): SolverResult {
   const result = baseResult('geometry', normalizedInput, 'mathjs');
   const lower = normalizedInput.toLowerCase();
 
+  const lineFromPoints = (x1: number, y1: number, x2: number, y2: number) => {
+    if (isNearlyZero(x2 - x1)) return `x = ${formatNumber(x1)}`;
+    const m = (y2 - y1) / (x2 - x1);
+    const b = y1 - (m * x1);
+    return `y = ${formatNumber(m)} * x ${b < 0 ? '-' : '+'} ${formatNumber(Math.abs(b))}`;
+  };
+
   const hypotenuse = lower.match(/^hypotenuse\s+(.+?)\s+(.+)$/);
   if (hypotenuse) {
     const a = Number(math.evaluate(hypotenuse[1]));
@@ -529,7 +536,69 @@ function solveGeometryProblem(normalizedInput: string): SolverResult {
     });
     result.answer = formatNumber(answer);
     result.answerLatex = expressionToLatex(result.answer);
+    result.graphExpr = lineFromPoints(x1, y1, x2, y2);
     result.explanation = 'Computed the distance between the two points.';
+    return result;
+  }
+
+  const midpoint = lower.match(/^midpoint of\s*\((.+?),(.+?)\)\s*and\s*\((.+?),(.+?)\)$/);
+  if (midpoint) {
+    const x1 = Number(math.evaluate(midpoint[1]));
+    const y1 = Number(math.evaluate(midpoint[2]));
+    const x2 = Number(math.evaluate(midpoint[3]));
+    const y2 = Number(math.evaluate(midpoint[4]));
+    const midX = (x1 + x2) / 2;
+    const midY = (y1 + y2) / 2;
+
+    result.steps.push({
+      step: 1,
+      description: 'Use the midpoint formula',
+      expression: 'M = \\left(\\frac{x_1+x_2}{2},\\frac{y_1+y_2}{2}\\right)',
+      explanation: 'Average the x-coordinates and the y-coordinates separately.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Substitute the coordinates',
+      expression: `M = \\left(\\frac{${expressionToLatex(formatNumber(x1))}+${expressionToLatex(formatNumber(x2))}}{2},\\frac{${expressionToLatex(formatNumber(y1))}+${expressionToLatex(formatNumber(y2))}}{2}\\right) = \\left(${expressionToLatex(formatNumber(midX))},${expressionToLatex(formatNumber(midY))}\\right)`,
+      explanation: 'The midpoint sits halfway between the two endpoints of the segment.',
+    });
+    result.answer = `(${formatNumber(midX)}, ${formatNumber(midY)})`;
+    result.answerLatex = `\\left(${expressionToLatex(formatNumber(midX))}, ${expressionToLatex(formatNumber(midY))}\\right)`;
+    result.graphExpr = lineFromPoints(x1, y1, x2, y2);
+    result.explanation = 'Computed the midpoint of the segment and prepared the line through the points for graphing.';
+    return result;
+  }
+
+  const line = lower.match(/^line through\s*\((.+?),(.+?)\)\s*and\s*\((.+?),(.+?)\)$/);
+  if (line) {
+    const x1 = Number(math.evaluate(line[1]));
+    const y1 = Number(math.evaluate(line[2]));
+    const x2 = Number(math.evaluate(line[3]));
+    const y2 = Number(math.evaluate(line[4]));
+    const graphExpr = lineFromPoints(x1, y1, x2, y2);
+
+    result.steps.push({
+      step: 1,
+      description: 'Compute the slope',
+      expression: isNearlyZero(x2 - x1)
+        ? 'x_2 - x_1 = 0'
+        : `m = \\frac{${expressionToLatex(formatNumber(y2))}-${expressionToLatex(formatNumber(y1))}}{${expressionToLatex(formatNumber(x2))}-${expressionToLatex(formatNumber(x1))}}`,
+      explanation: isNearlyZero(x2 - x1)
+        ? 'Because the x-values are the same, the line is vertical.'
+        : 'Use rise over run to determine the slope of the line.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Write the line equation',
+      expression: expressionToLatex(graphExpr.replace(/^y\s*=\s*/i, '').replace(/^x\s*=\s*/i, (match) => match)),
+      explanation: isNearlyZero(x2 - x1)
+        ? 'A vertical line has the form x = constant.'
+        : 'Substitute one point into point-slope form and simplify.',
+    });
+    result.answer = graphExpr;
+    result.answerLatex = expressionToLatex(graphExpr);
+    result.graphExpr = graphExpr;
+    result.explanation = 'Built the line equation through the two points and sent it to the graph plotter.';
     return result;
   }
 
@@ -600,12 +669,93 @@ function solveGeometryProblem(normalizedInput: string): SolverResult {
     return result;
   }
 
+  const triangleSides = lower.match(/^area of triangle with sides\s+(.+?)\s*,\s*(.+?)\s*,\s*(.+)$/);
+  if (triangleSides) {
+    const a = Number(math.evaluate(triangleSides[1]));
+    const b = Number(math.evaluate(triangleSides[2]));
+    const c = Number(math.evaluate(triangleSides[3]));
+    const s = (a + b + c) / 2;
+    const answer = Math.sqrt(Math.max(s * (s - a) * (s - b) * (s - c), 0));
+
+    result.steps.push({
+      step: 1,
+      description: "Use Heron's formula",
+      expression: 'A = \\sqrt{s(s-a)(s-b)(s-c)},\\quad s = \\frac{a+b+c}{2}',
+      explanation: 'When all three sides are known, Heron’s formula gives the area directly.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Compute the semiperimeter',
+      expression: `s = \\frac{${expressionToLatex(formatNumber(a))}+${expressionToLatex(formatNumber(b))}+${expressionToLatex(formatNumber(c))}}{2} = ${expressionToLatex(formatNumber(s))}`,
+      explanation: 'Add the three sides and divide by two.',
+    });
+    result.steps.push({
+      step: 3,
+      description: 'Substitute into the area formula',
+      expression: `A = ${expressionToLatex(formatNumber(answer))}`,
+      explanation: 'Substitute the semiperimeter and sides into Heron’s formula and simplify.',
+    });
+    result.answer = formatNumber(answer);
+    result.answerLatex = expressionToLatex(result.answer);
+    result.explanation = 'Computed the triangle area from the three side lengths.';
+    return result;
+  }
+
+  const circleEquation = lower.match(/^equation of circle:\s*center\s*\((.+?),(.+?)\)\s*,\s*radius\s+(.+)$/);
+  if (circleEquation) {
+    const h = Number(math.evaluate(circleEquation[1]));
+    const k = Number(math.evaluate(circleEquation[2]));
+    const r = Number(math.evaluate(circleEquation[3]));
+    const graphExpr = `(x - (${formatNumber(h)}))^2 + (y - (${formatNumber(k)}))^2 = ${formatNumber(r ** 2)}`;
+
+    result.steps.push({
+      step: 1,
+      description: 'Use the standard circle form',
+      expression: '(x-h)^2 + (y-k)^2 = r^2',
+      explanation: 'A circle is defined by its center and radius in standard form.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Substitute the center and radius',
+      expression: expressionToLatex(graphExpr),
+      explanation: 'Replace h, k, and r with the given values.',
+    });
+    result.answer = graphExpr;
+    result.answerLatex = expressionToLatex(graphExpr);
+    result.graphExpr = graphExpr;
+    result.explanation = 'Built the circle equation and prepared it for the graph plotter.';
+    return result;
+  }
+
+  const sphere = lower.match(/^volume of sphere with radius\s+(.+)$/);
+  if (sphere) {
+    const r = Number(math.evaluate(sphere[1]));
+    const answer = (4 / 3) * Math.PI * (r ** 3);
+
+    result.steps.push({
+      step: 1,
+      description: 'Use the sphere volume formula',
+      expression: 'V = \\frac{4}{3}\\pi r^3',
+      explanation: 'A sphere’s volume depends on the cube of its radius.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Substitute the radius',
+      expression: `V = \\frac{4}{3}\\pi (${expressionToLatex(formatNumber(r))})^3 = ${expressionToLatex(formatNumber(answer))}`,
+      explanation: 'Cube the radius, then multiply by 4π/3.',
+    });
+    result.answer = formatNumber(answer);
+    result.answerLatex = expressionToLatex(result.answer);
+    result.explanation = 'Computed the sphere volume from the radius.';
+    return result;
+  }
+
   return {
     ...result,
     verified: false,
     answer: 'Unsupported geometry problem',
     answerLatex: '\\text{Unsupported geometry problem}',
-    explanation: 'Try hypotenuse 3 4, distance (0,0) (3,4), area circle radius 5, or area triangle base 10 height 4.',
+    explanation: 'Try line through (1,2) and (4,6), equation of circle: center (2,-3), radius 5, midpoint of (1,2) and (4,6), or area of triangle with sides 3, 4, 5.',
   };
 }
 
@@ -2032,7 +2182,7 @@ export function solveMathProblem(problem: string, requestedCategory?: string | n
     if (lower.startsWith('derivative of') || lower.startsWith('d/dx')) return solveDerivative(normalizedInput);
     if (lower.startsWith('integral from') || lower.startsWith('integral of') || lower.startsWith('integrate')) return solveIntegral(normalizedInput);
     if (lower.startsWith('limit ')) return solveLimit(normalizedInput);
-    if (/hypotenuse|distance\s*\(|distance between|area circle|circumference circle|area triangle|area rectangle|pythagorean/.test(lower)) return solveGeometryProblem(normalizedInput);
+    if (/hypotenuse|distance\s*\(|distance between|midpoint of|line through|equation of circle|area circle|circumference circle|area triangle|area rectangle|volume of sphere|pythagorean/.test(lower)) return solveGeometryProblem(normalizedInput);
     if (/arithmetic (?:nth|sum)|geometric (?:nth|sum)|sequence|series/.test(lower)) return solveSequenceSeries(normalizedInput);
     if (lower.startsWith('system ') || lower.startsWith('solve system ') || (normalizedInput.includes(';') && normalizedInput.includes('='))) return solveSystem(normalizedInput);
     if (/dot product|magnitude|angle between|^\[[^\]]+\]\s*\[[^\]]+\]$/i.test(normalizedInput)) return solveVectorProblem(normalizedInput);

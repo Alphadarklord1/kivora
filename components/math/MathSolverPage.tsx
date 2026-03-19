@@ -111,10 +111,10 @@ const TOPICS = [
     icon: '△',
     color: '#10b981',
     examples: [
-      'Area of triangle with sides 3, 4, 5',
+      'Line through (1,2) and (4,6)',
       'Equation of circle: center (2,-3), radius 5',
-      'Distance between (1,2) and (4,6)',
-      'Area of regular hexagon with side 4',
+      'Midpoint of (1,2) and (4,6)',
+      'Area of triangle with sides 3, 4, 5',
       'Volume of sphere with radius 7',
     ],
   },
@@ -175,25 +175,12 @@ const TOPICS = [
 ] as const;
 
 type TopicId = typeof TOPICS[number]['id'];
-type SpecialView = 'formulas' | 'graph' | 'units' | 'scan' | 'integrate';
+type SpecialView = 'formulas' | 'graph' | 'units' | 'scan';
 type ActiveView = TopicId | SpecialView;
 
 const DEFAULT_ACCENT = 'var(--primary)';
 
 const SPECIAL_VIEW_META: Record<SpecialView, { title: string; subtitle: string; icon: string; accent: string; workflowTitle: string; workflow: WorkflowStep[] }> = {
-  integrate: {
-    title: 'Integration',
-    subtitle: 'Compute indefinite and definite integrals with full step-by-step working and rendered LaTeX.',
-    icon: '∫₀',
-    accent: '#7c3aed',
-    workflowTitle: 'Integration workflow',
-    workflow: [
-      { label: 'Enter f(x)', detail: 'Type the integrand — e.g. x^2, sin(x), or x*e^x.' },
-      { label: 'Choose type', detail: 'Pick indefinite (find the antiderivative) or definite (evaluate from a to b).' },
-      { label: 'Set bounds', detail: 'For definite integrals enter the lower limit a and upper limit b.' },
-      { label: 'Compute', detail: 'The symbolic engine finds the exact antiderivative and evaluates bounds when set.' },
-    ],
-  },
   formulas: {
     title: 'Formula Sheets',
     subtitle: 'Quick-reference formulas organized by topic, ready to review before homework or exams.',
@@ -208,7 +195,7 @@ const SPECIAL_VIEW_META: Record<SpecialView, { title: string; subtitle: string; 
   },
   graph: {
     title: 'Graph Plotter',
-    subtitle: 'Plot functions, vertical lines, and implicit relations without the old graph-runtime crashes.',
+    subtitle: 'Plot functions, analytic-geometry lines, circles, and implicit relations without the old graph-runtime crashes.',
     icon: '📈',
     accent: '#22c55e',
     workflowTitle: 'Graph workflow',
@@ -246,13 +233,6 @@ const SPECIAL_VIEW_META: Record<SpecialView, { title: string; subtitle: string; 
     ],
   },
 };
-
-const SOLVER_WORKFLOW: WorkflowStep[] = [
-  { label: 'Pick or type a problem', detail: 'Start from an example or enter your own question in plain math text.' },
-  { label: 'Solve it', detail: 'Run the local solver first, then fall back to AI only when the result needs help.' },
-  { label: 'Review the method', detail: 'Read each step and explanation so this feels like guided tutoring, not a black box.' },
-  { label: 'Send graphable work to Graph', detail: 'If the result includes a graph expression, open it in the Graph tab instantly.' },
-];
 
 // ── Formula reference data ────────────────────────────────────────────────────
 
@@ -343,17 +323,6 @@ const FORMULAS: Record<string, Array<{ title: string; latex: string; note?: stri
   ],
 };
 
-// ── Symbol pad ────────────────────────────────────────────────────────────────
-
-const SYMBOL_GROUPS = [
-  { label: 'Basic', symbols: ['√', '∛', 'π', 'e', '∞', '±', '×', '÷', '≤', '≥', '≠', '≈'] },
-  { label: 'Algebra', symbols: ['²', '³', '^', '|x|', '(', ')', '[', ']', '{', '}', '∝', 'Σ'] },
-  { label: 'Calculus', symbols: ['∫', '∂', '∑', '∏', 'd/dx', 'lim', '→', '∆', '∇', '∮', '⁻¹', '∞'] },
-  { label: 'Trig', symbols: ['sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh'] },
-  { label: 'Greek', symbols: ['α', 'β', 'γ', 'δ', 'ε', 'θ', 'λ', 'μ', 'σ', 'τ', 'φ', 'ω'] },
-  { label: 'Logic', symbols: ['∧', '∨', '¬', '⇒', '⇔', '∀', '∃', '∈', '∉', '⊆', '⊇', '∅'] },
-];
-
 const GRAPH_COLORS = ['#6366f1', '#f97316', '#22c55e', '#ef4444', '#a855f7', '#0ea5e9'];
 const GRAPH_PRESETS = [
   { label: 'y = x²',       expr: 'y = x^2' },
@@ -363,7 +332,9 @@ const GRAPH_PRESETS = [
   { label: 'y = ln(x)',   expr: 'y = log(x)' },
   { label: 'y = 1/x',    expr: 'y = 1/x' },
   { label: 'y = |x|',    expr: 'y = abs(x)' },
+  { label: 'Line',       expr: 'y = 1.333333*x + 0.666667' },
   { label: 'Circle',     expr: 'x^2 + y^2 = 25' },
+  { label: 'Shifted circle', expr: '(x - 2)^2 + (y + 3)^2 = 25' },
   { label: 'y = tan(x)', expr: 'y = tan(x)' },
   { label: 'x = 2',      expr: 'x = 2' },
 ];
@@ -406,7 +377,6 @@ function buildGraphSvg(
   expressions: GraphExpression[],
   xDomain: [number, number],
   yDomain: [number, number],
-  integBounds?: { lower: number; upper: number; color: string },
 ) {
   const width = 920;
   const height = 420;
@@ -613,46 +583,6 @@ function buildGraphSvg(
     })
     .join('');
 
-  // Integration shading — drawn over grid/axis but under curve strokes
-  let integShading = '';
-  if (integBounds) {
-    const { lower, upper, color: integColor } = integBounds;
-    const firstFn = expressions.find(e => {
-      if (!e.enabled || !e.expr.trim()) return false;
-      const n = normalizeGraphExpression(e.expr);
-      return n?.type === 'function';
-    });
-    if (firstFn) {
-      const norm = normalizeGraphExpression(firstFn.expr)!;
-      const N = 160;
-      const aClamp = Math.max(lower, xDomain[0]);
-      const bClamp = Math.min(upper, xDomain[1]);
-      if (aClamp < bClamp) {
-        const shadePts: string[] = [];
-        const y0 = toSvgY(0);
-        // Start at baseline
-        shadePts.push(`M ${toSvgX(aClamp).toFixed(2)} ${y0.toFixed(2)}`);
-        for (let i = 0; i <= N; i++) {
-          const x = aClamp + ((bClamp - aClamp) * i) / N;
-          try {
-            const y = evaluate(norm.value, { x });
-            if (!Number.isFinite(y)) continue;
-            shadePts.push(`L ${toSvgX(x).toFixed(2)} ${toSvgY(y).toFixed(2)}`);
-          } catch { /* skip */ }
-        }
-        // Close back to baseline
-        shadePts.push(`L ${toSvgX(bClamp).toFixed(2)} ${y0.toFixed(2)} Z`);
-        integShading = `
-          <path d="${shadePts.join(' ')}" fill="${integColor}" opacity="0.22" />
-          <line x1="${toSvgX(aClamp).toFixed(2)}" y1="${padding}" x2="${toSvgX(aClamp).toFixed(2)}" y2="${height - padding}" stroke="${integColor}" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.7" />
-          <line x1="${toSvgX(bClamp).toFixed(2)}" y1="${padding}" x2="${toSvgX(bClamp).toFixed(2)}" y2="${height - padding}" stroke="${integColor}" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.7" />
-          <text x="${toSvgX(aClamp).toFixed(2)}" y="${padding - 4}" text-anchor="middle" fill="${integColor}" font-size="10" font-weight="600">a=${lower}</text>
-          <text x="${toSvgX(bClamp).toFixed(2)}" y="${padding - 4}" text-anchor="middle" fill="${integColor}" font-size="10" font-weight="600">b=${upper}</text>
-        `;
-      }
-    }
-  }
-
   return `
     <svg viewBox="0 0 ${width} ${height}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Math graph">
       ${markerDefs}
@@ -660,7 +590,6 @@ function buildGraphSvg(
       ${gridLines}
       ${intersectionDots}
       ${axisLines}
-      ${integShading}
       ${layers}
     </svg>
   `;
@@ -929,6 +858,32 @@ const CATEGORY_FORMS: Record<string, StructForm[]> = {
       buildCommand: (p) => `Distance between (${p.x1},${p.y1}) and (${p.x2},${p.y2})`,
     },
     {
+      id: 'midpoint',
+      label: 'Midpoint of a Segment',
+      latexFormula: 'M = \\left(\\tfrac{x_1+x_2}{2},\\tfrac{y_1+y_2}{2}\\right)',
+      note: 'Enter two points to find the midpoint and the segment they define.',
+      params: [
+        { key: 'x1', label: 'Point A  x₁', inputType: 'number', placeholder: 'e.g. 1' },
+        { key: 'y1', label: 'Point A  y₁', inputType: 'number', placeholder: 'e.g. 2' },
+        { key: 'x2', label: 'Point B  x₂', inputType: 'number', placeholder: 'e.g. 4' },
+        { key: 'y2', label: 'Point B  y₂', inputType: 'number', placeholder: 'e.g. 6' },
+      ],
+      buildCommand: (p) => `Midpoint of (${p.x1},${p.y1}) and (${p.x2},${p.y2})`,
+    },
+    {
+      id: 'line-through-points',
+      label: 'Line Through Two Points',
+      latexFormula: 'm = \\dfrac{y_2-y_1}{x_2-x_1},\\quad y-y_1=m(x-x_1)',
+      note: 'Enter two points to build the line equation and plot it in the graph tab.',
+      params: [
+        { key: 'x1', label: 'Point A  x₁', inputType: 'number', placeholder: 'e.g. 1' },
+        { key: 'y1', label: 'Point A  y₁', inputType: 'number', placeholder: 'e.g. 2' },
+        { key: 'x2', label: 'Point B  x₂', inputType: 'number', placeholder: 'e.g. 4' },
+        { key: 'y2', label: 'Point B  y₂', inputType: 'number', placeholder: 'e.g. 6' },
+      ],
+      buildCommand: (p) => `Line through (${p.x1},${p.y1}) and (${p.x2},${p.y2})`,
+    },
+    {
       id: 'sphere',
       label: 'Volume of a Sphere',
       latexFormula: 'V = \\tfrac{4}{3}\\pi r^3',
@@ -937,17 +892,6 @@ const CATEGORY_FORMS: Record<string, StructForm[]> = {
         { key: 'r', label: 'Radius r', unit: 'units', inputType: 'number', placeholder: 'e.g. 7' },
       ],
       buildCommand: (p) => `Volume of sphere with radius ${p.r}`,
-    },
-    {
-      id: 'polygon',
-      label: 'Regular Polygon Area',
-      latexFormula: 'A = \\dfrac{ns^2}{4}\\cot\\!\\left(\\dfrac{\\pi}{n}\\right)',
-      note: 'Enter the number of sides and side length.',
-      params: [
-        { key: 'n', label: 'Number of sides n', inputType: 'number', placeholder: 'e.g. 6' },
-        { key: 's', label: 'Side length s', unit: 'units', inputType: 'number', placeholder: 'e.g. 4' },
-      ],
-      buildCommand: (p) => `Area of regular ${p.n}-gon with side ${p.s}`,
     },
   ],
 
@@ -1287,8 +1231,6 @@ export function MathSolverPage() {
     try { return localStorage.getItem(MATH_SIDEBAR_KEY) !== 'closed'; } catch { return true; }
   });
   const [input, setInput] = useState('');
-  const [symbolTab, setSymbolTab] = useState(0);
-  const [showSymbols, setShowSymbols] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SolveResult | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -1307,25 +1249,6 @@ export function MathSolverPage() {
   const [themeTick, setThemeTick] = useState(0);
   // Hover coordinates
   const [hoverCoord, setHoverCoord] = useState<{ x: number; y: number; svgX: number; svgY: number } | null>(null);
-  // Integration bounds
-  const [integMode, setIntegMode] = useState(false);
-  const [integLower, setIntegLower] = useState('-1');
-  const [integUpper, setIntegUpper] = useState('1');
-  const [integResult, setIntegResult] = useState<string | null>(null);
-
-  // ── Integration module state ────────────────────────────────────────────────
-  const [intgFn, setIntgFn] = useState('x^2');
-  const [intgVar, setIntgVar] = useState('x');
-  const [intgType, setIntgType] = useState<'indefinite' | 'definite'>('indefinite');
-  const [intgLower, setIntgLower] = useState('0');
-  const [intgUpper, setIntgUpper] = useState('1');
-  const [intgLoading, setIntgLoading] = useState(false);
-  interface IntgStep { step: number; description: string; expression: string; explanation: string }
-  const [intgSteps, setIntgSteps] = useState<IntgStep[]>([]);
-  const [intgAnswer, setIntgAnswer] = useState('');
-  const [intgAnswerLatex, setIntgAnswerLatex] = useState('');
-  const [intgError, setIntgError] = useState('');
-  const [intgNumerical, setIntgNumerical] = useState<string | null>(null);
   const [formulaSearch, setFormulaSearch] = useState('');
 
   const [contextName, setContextName] = useState('');
@@ -1454,92 +1377,7 @@ export function MathSolverPage() {
     }
   }, [input, active, replaceGraphWith]);
 
-  // ── Integration module ─────────────────────────────────────────────────────
-
-  const runIntegration = useCallback(async () => {
-    const fn = intgFn.trim();
-    if (!fn) return;
-    setIntgLoading(true);
-    setIntgError('');
-    setIntgSteps([]);
-    setIntgAnswer('');
-    setIntgAnswerLatex('');
-    setIntgNumerical(null);
-
-    const problem = intgType === 'definite'
-      ? `integral from ${intgLower} to ${intgUpper} of ${fn} d${intgVar}`
-      : `integrate ${fn} d${intgVar}`;
-
-    try {
-      const res = await fetch('/api/math/solve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ problem, category: 'calculus' }),
-      });
-      const data = await res.json() as { answer?: string; answerLatex?: string; steps?: IntgStep[]; error?: string };
-      if (data.error) { setIntgError(data.error); return; }
-      setIntgAnswer(data.answer ?? '');
-      setIntgAnswerLatex(data.answerLatex ?? data.answer ?? '');
-      setIntgSteps(data.steps ?? []);
-
-      // Numerical estimate for definite integral
-      if (intgType === 'definite') {
-        const a = parseFloat(intgLower);
-        const b = parseFloat(intgUpper);
-        if (Number.isFinite(a) && Number.isFinite(b)) {
-          const N = 2000;
-          const h = (b - a) / N;
-          let sum = 0;
-          try {
-            for (let i = 0; i <= N; i++) {
-              const xv = a + h * i;
-              const yv = math.evaluate(fn, { [intgVar]: xv });
-              const val = typeof yv === 'number' ? yv : Number(yv);
-              if (!Number.isFinite(val)) continue;
-              const w = i === 0 || i === N ? 1 : i % 2 === 0 ? 2 : 4;
-              sum += w * val;
-            }
-            setIntgNumerical(((h / 3) * sum).toFixed(8));
-          } catch { /* skip */ }
-        }
-      }
-    } catch (err) {
-      setIntgError(err instanceof Error ? err.message : 'Solver error');
-    } finally {
-      setIntgLoading(false);
-    }
-  }, [intgFn, intgVar, intgType, intgLower, intgUpper]);
-
   // ── Graph rendering ────────────────────────────────────────────────────────
-
-  const computeIntegral = useCallback((lower: number, upper: number): string => {
-    const firstFn = graphExprs.find(e => {
-      if (!e.enabled || !e.expr.trim()) return false;
-      const n = normalizeGraphExpression(e.expr);
-      return n?.type === 'function';
-    });
-    if (!firstFn) return 'No function to integrate';
-    const norm = normalizeGraphExpression(firstFn.expr);
-    if (!norm || norm.type !== 'function') return 'No function to integrate';
-    // Adaptive Simpson's rule (N=1000 subintervals)
-    const N = 1000;
-    const h = (upper - lower) / N;
-    let sum = 0;
-    try {
-      for (let i = 0; i <= N; i++) {
-        const x = lower + h * i;
-        const y = math.evaluate(norm.value, { x });
-        const val = typeof y === 'number' ? y : Number(y);
-        if (!Number.isFinite(val)) continue;
-        const weight = i === 0 || i === N ? 1 : i % 2 === 0 ? 2 : 4;
-        sum += weight * val;
-      }
-      const result = (h / 3) * sum;
-      return Number.isFinite(result) ? result.toFixed(6) : 'undefined';
-    } catch {
-      return 'Error';
-    }
-  }, [graphExprs]);
 
   const renderGraph = useCallback(() => {
     if (!graphRef.current) return;
@@ -1550,21 +1388,13 @@ export function MathSolverPage() {
       return;
     }
     try {
-      const lower = parseFloat(integLower);
-      const upper = parseFloat(integUpper);
-      const bounds = integMode && Number.isFinite(lower) && Number.isFinite(upper) && lower < upper
-        ? { lower, upper, color: '#6366f1' }
-        : undefined;
-      graphRef.current.innerHTML = buildGraphSvg(enabled, xDomain, yDomain, bounds);
-      if (bounds) {
-        setIntegResult(computeIntegral(lower, upper));
-      }
+      graphRef.current.innerHTML = buildGraphSvg(enabled, xDomain, yDomain);
       setGraphError('');
     } catch (err) {
       graphRef.current.innerHTML = '';
       setGraphError(err instanceof Error ? err.message : String(err));
     }
-  }, [graphExprs, xDomain, yDomain, integMode, integLower, integUpper, computeIntegral]);
+  }, [graphExprs, xDomain, yDomain]);
 
   useEffect(() => {
     if (active === 'graph') renderGraph();
@@ -1575,7 +1405,7 @@ export function MathSolverPage() {
     if (active !== 'graph') return;
     const t = setTimeout(() => renderGraph(), 320);
     return () => clearTimeout(t);
-  }, [graphExprs, xDomain, yDomain, integMode, integLower, integUpper, active, renderGraph]);
+  }, [graphExprs, xDomain, yDomain, active, renderGraph]);
 
   function resetGraphView() {
     setXDomain([-12, 12]);
@@ -1585,18 +1415,6 @@ export function MathSolverPage() {
   function zoomGraph(factor: number) {
     setXDomain(([min, max]) => [Number((min * factor).toFixed(2)), Number((max * factor).toFixed(2))]);
     setYDomain(([min, max]) => [Number((min * factor).toFixed(2)), Number((max * factor).toFixed(2))]);
-  }
-
-  // ── Symbol insertion ────────────────────────────────────────────────────────
-
-  function insertSymbol(sym: string) {
-    const el = inputRef.current;
-    if (!el) { setInput(p => p + sym); return; }
-    const s = el.selectionStart ?? input.length;
-    const e = el.selectionEnd ?? s;
-    const next = input.slice(0, s) + sym + input.slice(e);
-    setInput(next);
-    setTimeout(() => { el.focus(); el.setSelectionRange(s + sym.length, s + sym.length); }, 0);
   }
 
   // ── Computed ────────────────────────────────────────────────────────────────
@@ -1701,7 +1519,6 @@ export function MathSolverPage() {
           )}
           <NavItem id="formulas"  icon="📚" label="Formula Sheets" />
           <NavItem id="graph"     icon="📈" label="Graph Plotter"  color="#22c55e" />
-          <NavItem id="integrate" icon="∫₀" label="Integration"    color="#7c3aed" />
           <NavItem id="units"     icon="⚖" label="Unit Converter" color="#f59e0b" />
           <NavItem id="scan"      icon="🧾" label="Question Scan"  color="#38bdf8" />
         </div>
@@ -1795,7 +1612,7 @@ export function MathSolverPage() {
         )}
 
         {/* ── SOLVER PHASE ── */}
-        {active !== 'formulas' && active !== 'graph' && active !== 'units' && active !== 'scan' && active !== 'integrate' && (
+        {active !== 'formulas' && active !== 'graph' && active !== 'units' && active !== 'scan' && (
           <div style={{ padding: '18px 24px 24px', display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
 
             {/* Quick examples — hidden for categories that use the structured form */}
@@ -2244,7 +2061,7 @@ export function MathSolverPage() {
 
             <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                Supported: <code>y = x^2</code>, <code>x = 2</code>, <code>x^2 + y^2 = 25</code>.
+                Supported: <code>y = x^2</code>, <code>x = 2</code>, <code>x^2 + y^2 = 25</code>, line equations, and geometry results from the solver.
               </span>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 Window x:[{xDomain[0]}, {xDomain[1]}] · y:[{yDomain[0]}, {yDomain[1]}]
@@ -2293,43 +2110,6 @@ export function MathSolverPage() {
               )}
             </div>
             {graphError && <div style={{ fontSize: 12, color: '#ef4444' }}>⚠ {graphError}</div>}
-
-            {/* Integration controls */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 12px', borderRadius: 10, background: integMode ? '#6366f114' : 'var(--bg-2)', border: `1px solid ${integMode ? '#6366f140' : 'var(--border-subtle)'}` }}>
-              <button
-                onClick={() => { setIntegMode(m => !m); }}
-                style={{ fontSize: 12, padding: '4px 12px', borderRadius: 8, border: 'none', background: integMode ? '#6366f1' : 'var(--bg-elevated)', color: integMode ? '#fff' : 'var(--text-secondary)', cursor: 'pointer', fontWeight: integMode ? 700 : 400 }}
-              >
-                ∫ Integration
-              </button>
-              {integMode && (
-                <>
-                  <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>a =</label>
-                  <input
-                    type="number"
-                    value={integLower}
-                    onChange={e => setIntegLower(e.target.value)}
-                    style={{ width: 68, padding: '4px 8px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13 }}
-                  />
-                  <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>b =</label>
-                  <input
-                    type="number"
-                    value={integUpper}
-                    onChange={e => setIntegUpper(e.target.value)}
-                    style={{ width: 68, padding: '4px 8px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13 }}
-                  />
-                  {integResult !== null && (
-                    <div style={{ marginLeft: 8, fontSize: 13, color: 'var(--text-primary)' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>∫ f(x) dx ≈</span>
-                      <strong style={{ color: '#6366f1', marginLeft: 4 }}>{integResult}</strong>
-                    </div>
-                  )}
-                </>
-              )}
-              {!integMode && (
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Toggle to shade area under curve and compute ∫f(x)dx</span>
-              )}
-            </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {graphExprs.map((ge) => {
@@ -2398,160 +2178,6 @@ export function MathSolverPage() {
                 </button>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* ── INTEGRATION MODULE ── */}
-        {active === 'integrate' && (
-          <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 820 }}>
-            <WorkflowCard
-              accent="#8b5cf6"
-              title={SPECIAL_VIEW_META.integrate.workflowTitle}
-              steps={SPECIAL_VIEW_META.integrate.workflow}
-            />
-
-            {/* Type toggle */}
-            <div style={{ display: 'flex', gap: 8 }}>
-              {(['indefinite', 'definite'] as const).map(t => (
-                <button key={t} onClick={() => setIntgType(t)}
-                  style={{ padding: '6px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: intgType === t ? 700 : 400, fontSize: 13, background: intgType === t ? '#8b5cf6' : 'var(--bg-2)', color: intgType === t ? '#fff' : 'var(--text-secondary)', transition: 'all 0.12s' }}>
-                  {t === 'indefinite' ? '∫ f(x) dx' : '∫ₐᵇ f(x) dx'}
-                </button>
-              ))}
-            </div>
-
-            {/* Large rendered integral preview */}
-            <div style={{ padding: '16px 20px', borderRadius: 14, background: '#8b5cf608', border: '1.5px solid #8b5cf630', minHeight: 56, display: 'flex', alignItems: 'center', gap: 8 }}>
-              {(() => {
-                if (!intgFn.trim()) return <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Enter f(x) below to see a preview</span>;
-                try {
-                  let tex = '';
-                  if (intgType === 'definite') {
-                    const fnNode = math.parse(intgFn.trim());
-                    tex = `\\int_{${intgLower}}^{${intgUpper}} ${fnNode.toTex({ parenthesis: 'keep' })} \\, d${intgVar}`;
-                  } else {
-                    const fnNode = math.parse(intgFn.trim());
-                    tex = `\\int ${fnNode.toTex({ parenthesis: 'keep' })} \\, d${intgVar}`;
-                  }
-                  return <Latex latex={tex} display />;
-                } catch {
-                  return <span style={{ fontSize: 13, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{intgFn}</span>;
-                }
-              })()}
-            </div>
-
-            {/* Inputs */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <label style={{ fontSize: 13, color: 'var(--text-muted)', minWidth: 60 }}>f({intgVar}) =</label>
-                <input
-                  value={intgFn}
-                  onChange={e => setIntgFn(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && void runIntegration()}
-                  placeholder="x^2, sin(x), x*e^x, …"
-                  style={{ flex: 1, minWidth: 200, padding: '8px 12px', borderRadius: 8, border: '1.5px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14, fontFamily: '"JetBrains Mono", monospace', outline: 'none' }}
-                />
-                <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>d</label>
-                <input
-                  value={intgVar}
-                  onChange={e => setIntgVar(e.target.value.replace(/[^a-zA-Z]/g, '').slice(0, 2) || 'x')}
-                  style={{ width: 48, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14, fontFamily: '"JetBrains Mono", monospace', textAlign: 'center', outline: 'none' }}
-                />
-              </div>
-
-              {intgType === 'definite' && (
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>Lower bound a =</label>
-                  <input type="number" value={intgLower} onChange={e => setIntgLower(e.target.value)}
-                    style={{ width: 80, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14, outline: 'none' }} />
-                  <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>Upper bound b =</label>
-                  <input type="number" value={intgUpper} onChange={e => setIntgUpper(e.target.value)}
-                    style={{ width: 80, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14, outline: 'none' }} />
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button
-                onClick={() => void runIntegration()}
-                disabled={intgLoading || !intgFn.trim()}
-                style={{ padding: '10px 24px', borderRadius: 10, border: 'none', background: intgLoading ? '#8b5cf650' : '#8b5cf6', color: '#fff', fontSize: 14, fontWeight: 700, cursor: intgLoading ? 'default' : 'pointer', transition: 'all 0.15s' }}>
-                {intgLoading ? '⏳ Computing…' : '▶ Compute'}
-              </button>
-              <button
-                onClick={() => { setIntgSteps([]); setIntgAnswer(''); setIntgAnswerLatex(''); setIntgError(''); setIntgNumerical(null); }}
-                style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}>
-                Clear
-              </button>
-              {/* Quick examples */}
-              {(['x^2', 'sin(x)', 'e^x', 'x*ln(x)', '1/x', 'sqrt(x)'] as const).map(ex => (
-                <button key={ex} onClick={() => setIntgFn(ex)}
-                  style={{ padding: '5px 12px', borderRadius: 20, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer' }}>
-                  {ex}
-                </button>
-              ))}
-            </div>
-
-            {intgError && (
-              <div style={{ padding: '12px 16px', borderRadius: 10, background: '#ef444410', border: '1px solid #ef444440', color: '#ef4444', fontSize: 13 }}>
-                ⚠ {intgError}
-              </div>
-            )}
-
-            {/* Result */}
-            {intgAnswerLatex && !intgLoading && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {/* Main result card */}
-                <div style={{ padding: '18px 20px', borderRadius: 14, background: '#8b5cf60d', border: '1.5px solid #8b5cf630' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#8b5cf6', marginBottom: 10 }}>
-                    {intgType === 'definite' ? 'Definite Integral Result' : 'Antiderivative'}
-                  </div>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', overflowX: 'auto' }}>
-                    <Latex latex={intgAnswerLatex} display />
-                  </div>
-                  {intgNumerical && (
-                    <div style={{ marginTop: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
-                      Numerical estimate (Simpson&apos;s rule, N=2000): <strong style={{ color: '#8b5cf6' }}>{intgNumerical}</strong>
-                    </div>
-                  )}
-                </div>
-
-                {/* Steps */}
-                {intgSteps.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Step-by-step working</div>
-                    {intgSteps.map((step, i) => {
-                      const expr = step.expression ?? '';
-                      let exprLatex = expr;
-                      if (expr && !expr.includes('\\') && !expr.includes('{')) {
-                        try { exprLatex = math.parse(expr).toTex({ parenthesis: 'keep' }); } catch { /* keep */ }
-                      }
-                      return (
-                        <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 16px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', alignItems: 'flex-start' }}>
-                          <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#8b5cf6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{step.step ?? i + 1}</div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>{step.description}</div>
-                            {exprLatex && (
-                              <div style={{ overflowX: 'auto', padding: '8px 12px', marginBottom: 4, background: '#8b5cf608', borderRadius: 8, border: '1px solid #8b5cf620' }}>
-                                <Latex latex={exprLatex} display />
-                              </div>
-                            )}
-                            {step.explanation && <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{step.explanation}</div>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Send to graph button */}
-                <button
-                  onClick={() => { setGraphExprs([{ id: crypto.randomUUID(), expr: `y = ${intgFn}`, color: '#8b5cf6', enabled: true }]); setActive('graph'); }}
-                  style={{ alignSelf: 'flex-start', padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
-                  📈 Plot f({intgVar}) = {intgFn} on Graph
-                </button>
-              </div>
-            )}
           </div>
         )}
 
