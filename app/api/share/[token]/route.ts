@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
-import { shares, libraryItems } from '@/lib/db/schema';
+import { shares, libraryItems, users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
@@ -26,6 +26,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
     let content: string | undefined;
     let resourceName = 'Shared Content';
     let resourceType = 'content';
+    const owner = await db.query.users.findFirst({
+      where: eq(users.id, share.ownerId),
+      columns: { name: true, email: true },
+    });
+    const ownerName = owner?.name || owner?.email || undefined;
 
     // If it points to a library item, fetch the content
     if (share.libraryItemId) {
@@ -34,7 +39,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       });
       if (item) {
         content = item.content;
-        resourceName = `${item.mode} — ${new Date(item.createdAt).toLocaleDateString()}`;
+        const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+        resourceName = String(metadata.title ?? `${item.mode} — ${new Date(item.createdAt).toLocaleDateString()}`);
         resourceType = item.mode;
       }
     }
@@ -47,6 +53,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       resourceName,
       resourceType,
       content,
+      ownerName,
       createdAt: share.createdAt,
       expiresAt: share.expiresAt,
     });

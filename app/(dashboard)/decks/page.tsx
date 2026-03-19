@@ -171,6 +171,16 @@ export default function DeckLibraryPage() {
     void refreshMyDecks();
   }, [loadDecksFromApi, refreshMyDecks]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sharedImportUrl = new URLSearchParams(window.location.search).get('importUrl');
+    if (!sharedImportUrl) return;
+
+    setActiveTab('import');
+    setImportMode('url');
+    setImportUrl(sharedImportUrl);
+  }, []);
+
   function resetImportInputs() {
     setImportUrl('');
     setImportTitle('');
@@ -267,8 +277,11 @@ export default function DeckLibraryPage() {
     if (!importUrl.trim()) return;
     setImportingMode('url');
     try {
+      const normalizedUrl = importUrl.trim().startsWith('/')
+        ? new URL(importUrl.trim(), window.location.origin).toString()
+        : importUrl.trim();
       await requestImport(
-        { kind: 'url', url: importUrl.trim() },
+        { kind: 'url', url: normalizedUrl },
         { type: 'manual', label: 'Deck import' },
       );
     } finally {
@@ -644,7 +657,7 @@ export default function DeckLibraryPage() {
                   <input
                     value={importUrl}
                     onChange={(event) => setImportUrl(event.target.value)}
-                    placeholder="Paste a Kivora shared-deck URL  (e.g. /shared/…)"
+                    placeholder="Paste a Kivora shared-deck URL (e.g. /share/... or /shared/...)"
                     className={styles.searchInput}
                   />
                   <button className={styles.primaryButton} onClick={importDeckFromUrl} disabled={importingMode === 'url' || !importUrl.trim()}>

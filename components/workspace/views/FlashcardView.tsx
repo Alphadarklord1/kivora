@@ -532,7 +532,7 @@ export function FlashcardView({
       const shareRes = await fetch('/api/share', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ libraryItemId: libItem.id, permission: 'view' }) });
       if (!shareRes.ok) throw new Error();
       const sd = await shareRes.json();
-      const url: string = sd.shareUrl ?? `${window.location.origin}/shared/${sd.shareToken}`;
+      const url: string = sd.shareUrl ?? `${window.location.origin}/share/${sd.shareToken}`;
       setShareUrl(url);
       await navigator.clipboard.writeText(url).catch(() => {});
       setShareStatus('done');
