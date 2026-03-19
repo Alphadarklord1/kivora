@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { createCard, deleteDeck, loadDecks, saveDeck, type SRSDeck } from '@/lib/srs/sm2';
+import { getDeckStudyPhaseFromMode, type DeckStudyPhase } from '@/lib/srs/deck-route';
 import {
   buildDeckQuizContent,
   deckToContent,
@@ -39,11 +40,12 @@ export default function DeckDetailPage() {
 
   const deckId = params.deckId;
   const imported = searchParams.get('imported') === '1';
+  const requestedMode = getDeckStudyPhaseFromMode(searchParams.get('mode'));
 
   const [deck, setDeck] = useState<SRSDeck | null>(null);
   const [missing, setMissing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [requestedPhase, setRequestedPhase] = useState<'review' | 'stats' | 'import' | 'test' | 'write' | 'match' | 'learn' | null>(null);
+  const [requestedPhase, setRequestedPhase] = useState<DeckStudyPhase | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publicUrl, setPublicUrl] = useState('');
   const [explaining, setExplaining] = useState(false);
@@ -94,6 +96,16 @@ export default function DeckDetailPage() {
     void loadDeck();
   }, [loadDeck]);
 
+  useEffect(() => {
+    if (!requestedMode) return;
+    setRequestedPhase(requestedMode);
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete('mode');
+    const nextQuery = nextParams.toString();
+    router.replace(nextQuery ? `/decks/${deckId}?${nextQuery}` : `/decks/${deckId}`, { scroll: false });
+  }, [deckId, requestedMode, router, searchParams]);
+
   async function applyDeckUpdate(nextDeck: SRSDeck, successMessage: string) {
     setSavingDeckState(true);
     saveDeck(nextDeck);
@@ -127,7 +139,7 @@ export default function DeckDetailPage() {
     }
   }
 
-  function openStudy(mode: 'review' | 'stats' | 'import' | 'test' | 'write' | 'match' | 'learn') {
+  function openStudy(mode: DeckStudyPhase) {
     setRequestedPhase(mode);
     studyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
