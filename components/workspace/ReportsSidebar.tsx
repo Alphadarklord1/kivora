@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
 // ── Mini-report types ──────────────────────────────────────────────────────
@@ -230,8 +231,8 @@ export function ReportsSidebar({ open, onClose }: ReportsSidebarProps) {
 
             {/* Due cards alert */}
             {stats.dueCards > 0 && (
-              <a
-                href="/decks"
+              <Link
+                href="/study"
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
                   borderRadius: 8, textDecoration: 'none',
@@ -246,7 +247,7 @@ export function ReportsSidebar({ open, onClose }: ReportsSidebarProps) {
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--text-3)' }}>Tap to review →</div>
                 </div>
-              </a>
+              </Link>
             )}
 
             {/* Library count */}

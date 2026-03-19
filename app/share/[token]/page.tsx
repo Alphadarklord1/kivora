@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 interface ShareData {
@@ -19,13 +20,14 @@ interface ShareData {
 export default function ShareViewerPage() {
   const params = useParams();
   const token = params?.token as string;
+  const hasToken = Boolean(token);
   const [data, setData] = useState<ShareData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(hasToken);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!token) { setError('Invalid share link.'); setLoading(false); return; }
+    if (!token) return;
     fetch(`/api/share/${token}`)
       .then(r => r.ok ? r.json() : r.json().then((d: { error?: string }) => Promise.reject(d.error || 'Not found')))
       .then((d: ShareData) => setData(d))
@@ -45,6 +47,29 @@ export default function ShareViewerPage() {
     summarize: '📝', quiz: '❓', mcq: '✅', flashcards: '🃏',
     notes: '📓', assignment: '📋', rephrase: '✍️',
   };
+  const importDeckHref = token ? `/study?importUrl=${encodeURIComponent(`/share/${token}`)}` : '/study';
+
+  if (!hasToken) {
+    return (
+      <div className="sv-shell">
+        <div className="sv-content">
+          <div className="sv-error">
+            <div className="sv-error-icon">🔗</div>
+            <h2>Invalid share link</h2>
+            <p>This link is missing its share token.</p>
+            <Link href="/" className="sv-cta">Go to Kivora</Link>
+          </div>
+        </div>
+        <style jsx>{`
+          .sv-shell { min-height: 100vh; background: var(--bg-surface); display: flex; }
+          .sv-content { flex: 1; display: grid; place-items: center; padding: 24px; }
+          .sv-error { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+          .sv-error-icon { font-size: 48px; }
+          .sv-cta { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 16px; border-radius: 10px; background: var(--primary); color: white; text-decoration: none; font-weight: 700; }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <div className="sv-shell">
@@ -54,7 +79,7 @@ export default function ShareViewerPage() {
           <span className="sv-logo-mark">K</span>
           <span className="sv-logo-name">Kivora</span>
         </div>
-        <a href="/" className="sv-signup">Try Kivora free →</a>
+        <Link href="/" className="sv-signup">Try Kivora free →</Link>
       </div>
 
       <div className="sv-content">
@@ -70,7 +95,7 @@ export default function ShareViewerPage() {
             <div className="sv-error-icon">🔒</div>
             <h2>Share not found</h2>
             <p>{error}</p>
-            <a href="/" className="sv-cta">Go to Kivora</a>
+            <Link href="/" className="sv-cta">Go to Kivora</Link>
           </div>
         )}
 
@@ -91,6 +116,12 @@ export default function ShareViewerPage() {
                   <span className="sv-badge exp">Expires {new Date(data.expiresAt).toLocaleDateString()}</span>
                 )}
               </div>
+              {data.resourceType === 'flashcards' && (
+                <div className="sv-import-bar">
+                  <span>This link opens as a deck preview. To study it in Kivora, import it into your Study Hub.</span>
+                  <Link href={importDeckHref} className="sv-import-btn">Import into Kivora</Link>
+                </div>
+              )}
             </div>
 
             {data.content ? (
@@ -108,7 +139,7 @@ export default function ShareViewerPage() {
             ) : (
               <div className="sv-no-content">
                 <p>This share link points to a file. Sign in to Kivora to view it.</p>
-                <a href="/login" className="sv-cta">Sign in to view →</a>
+                <Link href="/login" className="sv-cta">Sign in to view →</Link>
               </div>
             )}
 
@@ -118,7 +149,7 @@ export default function ShareViewerPage() {
                 <strong>Want to generate your own study content?</strong>
                 <p>Kivora uses AI to create quizzes, summaries, and flashcards from your uploaded files — fully offline.</p>
               </div>
-              <a href="/" className="sv-promo-btn">Try for free →</a>
+              <Link href="/" className="sv-promo-btn">Try for free →</Link>
             </div>
           </>
         )}
@@ -147,6 +178,8 @@ export default function ShareViewerPage() {
         .sv-badges { display: flex; gap: 6px; flex-wrap: wrap; }
         .sv-badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; background: var(--bg-elevated); border: 1px solid var(--border-subtle); color: var(--text-muted); text-transform: capitalize; }
         .sv-badge.exp { color: #f59e0b; border-color: color-mix(in srgb, #f59e0b 30%, transparent); background: color-mix(in srgb, #f59e0b 8%, transparent); }
+        .sv-import-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--primary) 8%, var(--bg-elevated)); border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent); font-size: 13px; color: var(--text-secondary); }
+        .sv-import-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 14px; border-radius: 10px; background: var(--primary); color: white; text-decoration: none; font-size: 13px; font-weight: 700; white-space: nowrap; }
         .sv-card { background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; }
         .sv-card-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
         .sv-copy { padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all 0.1s; }

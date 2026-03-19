@@ -10,6 +10,10 @@ function generateShareToken(): string {
   return randomBytes(16).toString('hex');
 }
 
+function buildShareUrl(origin: string, shareToken: string) {
+  return `${origin}/share/${shareToken}`;
+}
+
 // GET /api/share - List all shares for the current user
 export async function GET(request: NextRequest) {
   const requestId = createRequestId(request);
@@ -92,7 +96,7 @@ export async function GET(request: NextRequest) {
           resourceName,
           resourceType,
           sharedWithEmail,
-          shareUrl: share.shareToken ? `${origin}/shared/${share.shareToken}` : null,
+          shareUrl: share.shareToken ? buildShareUrl(origin, share.shareToken) : null,
         };
       })
     );
@@ -250,9 +254,7 @@ export async function POST(request: NextRequest) {
     expiresAt,
   }).returning();
 
-  const shareUrl = shareToken
-    ? `${request.nextUrl.origin}/shared/${shareToken}`
-    : null;
+  const shareUrl = shareToken ? buildShareUrl(request.nextUrl.origin, shareToken) : null;
 
     return NextResponse.json({
       ...newShare,

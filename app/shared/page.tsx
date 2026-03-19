@@ -39,7 +39,7 @@ export default function SharedLandingPage() {
       return;
     }
     setError(null);
-    router.push(`/shared/${token}`);
+    router.push(`/share/${token}`);
   };
 
   return (
@@ -76,7 +76,7 @@ export default function SharedLandingPage() {
           </form>
           {error && <p className="form-error">{error}</p>}
           <p className="helper">
-            Example: {PUBLIC_APP_URL}/shared/abc123
+            Example: {PUBLIC_APP_URL}/share/abc123
           </p>
         </section>
 

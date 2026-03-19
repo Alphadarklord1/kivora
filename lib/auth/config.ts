@@ -256,6 +256,7 @@ export const authConfig: NextAuthConfig = {
       const isDashboard =
         pathname.startsWith('/workspace') ||
         pathname.startsWith('/library') ||
+        pathname.startsWith('/study') ||
         pathname.startsWith('/decks') ||
         pathname.startsWith('/settings') ||
         pathname.startsWith('/planner') ||

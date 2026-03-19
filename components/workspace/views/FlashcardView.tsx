@@ -175,6 +175,7 @@ export function FlashcardView({
   onRequestedPhaseHandled,
   onDeckChange,
   showBrowseButton = true,
+  showPublicActions = true,
 }: {
   content?: string;
   title?: string;
@@ -183,6 +184,7 @@ export function FlashcardView({
   onRequestedPhaseHandled?: () => void;
   onDeckChange?: (deck: SRSDeck) => void;
   showBrowseButton?: boolean;
+  showPublicActions?: boolean;
 }) {
   const router = useRouter();
   const { t, formatDate, formatNumber } = useI18n({
@@ -219,6 +221,7 @@ export function FlashcardView({
     'Stats': 'الإحصاءات',
     'Import': 'استيراد',
     'Browse': 'استعراض',
+    'Study Hub': 'مركز الدراسة',
     'Share': 'مشاركة',
     'Shared': 'تمت المشاركة',
     'Error': 'خطأ',
@@ -523,7 +526,7 @@ export function FlashcardView({
             cardCount: deck.cards.length,
             sourceDeckId: deck.id,
             sourceDeckName: deck.name,
-            savedFrom: initialDeck ? `/decks/${deck.id}` : '/workspace',
+            savedFrom: initialDeck ? `/study/${deck.id}` : '/workspace',
           },
         }),
       });
@@ -532,7 +535,7 @@ export function FlashcardView({
       const shareRes = await fetch('/api/share', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ libraryItemId: libItem.id, permission: 'view' }) });
       if (!shareRes.ok) throw new Error();
       const sd = await shareRes.json();
-      const url: string = sd.shareUrl ?? `${window.location.origin}/shared/${sd.shareToken}`;
+      const url: string = sd.shareUrl ?? `${window.location.origin}/share/${sd.shareToken}`;
       setShareUrl(url);
       await navigator.clipboard.writeText(url).catch(() => {});
       setShareStatus('done');
@@ -870,7 +873,7 @@ export function FlashcardView({
           <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('stats')}>📊 {t('Stats')}</button>
           <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('import')}>📥 {t('Import')}</button>
           {showBrowseButton ? (
-            <button className="btn btn-ghost btn-sm" onClick={() => router.push('/decks')}>🌐 {t('Browse')}</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => router.push('/study')}>🃏 {t('Study Hub')}</button>
           ) : (
             <span />
           )}
@@ -880,12 +883,16 @@ export function FlashcardView({
         <div style={{ display: 'flex', gap: 6, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => exportDeckCsv(deck)}>⬇ {t('Export CSV')}</button>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { void exportDeckApkg(deck); }}>📦 {t('Export Anki')}</button>
-          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px', color: shareStatus==='done'?'#52b788':shareStatus==='error'?'#ef4444':undefined }} disabled={shareStatus==='loading'} onClick={handleShare}>
-            {shareStatus==='loading'?'⏳':shareStatus==='done'?`✓ ${t('Shared')}`:shareStatus==='error'?`✗ ${t('Error')}`:`🔗 ${t('Share')}`}
-          </button>
-          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px', color: publicStatus==='done'?'#52b788':publicStatus==='error'?'#ef4444':undefined }} disabled={publicStatus==='loading'} onClick={publishPublicDeck}>
-            {publicStatus==='loading' ? `⏳ ${t('Publishing')}` : publicStatus==='done' ? `✓ ${t('Public')}` : publicStatus==='error' ? `✗ ${t('Retry')}` : `🚀 ${t('Publish')}`}
-          </button>
+          {showPublicActions && (
+            <>
+              <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px', color: shareStatus==='done'?'#52b788':shareStatus==='error'?'#ef4444':undefined }} disabled={shareStatus==='loading'} onClick={handleShare}>
+                {shareStatus==='loading'?'⏳':shareStatus==='done'?`✓ ${t('Shared')}`:shareStatus==='error'?`✗ ${t('Error')}`:`🔗 ${t('Share')}`}
+              </button>
+              <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px', color: publicStatus==='done'?'#52b788':publicStatus==='error'?'#ef4444':undefined }} disabled={publicStatus==='loading'} onClick={publishPublicDeck}>
+                {publicStatus==='loading' ? `⏳ ${t('Publishing')}` : publicStatus==='done' ? `✓ ${t('Public')}` : publicStatus==='error' ? `✗ ${t('Retry')}` : `🚀 ${t('Publish')}`}
+              </button>
+            </>
+          )}
           <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginLeft: 'auto' }}>
             <input type="checkbox" checked={ttsEnabled} onChange={e => { setTtsEnabled(e.target.checked); try { localStorage.setItem('kivora-tts', e.target.checked ? '1' : '0'); } catch { /* noop */ } }} />
             {t('TTS on flip')}
@@ -910,13 +917,13 @@ export function FlashcardView({
         </div>
 
         {/* Inline URL feedback */}
-        {shareStatus === 'done' && shareUrl && (
+        {showPublicActions && shareStatus === 'done' && shareUrl && (
           <div style={{ fontSize:'var(--text-xs)', color:'var(--text-3)', marginBottom:10, display:'flex', alignItems:'center', gap:8, background:'var(--surface)', border:'1px solid var(--border-2)', borderRadius:8, padding:'6px 10px' }}>
             <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{shareUrl}</span>
             <button className="btn btn-ghost btn-sm" style={{ padding:'2px 8px', fontSize:11, flexShrink:0 }} onClick={() => navigator.clipboard.writeText(shareUrl)}>📋 {t('Copy')}</button>
           </div>
         )}
-        {publicStatus === 'done' && publicUrl && (
+        {showPublicActions && publicStatus === 'done' && publicUrl && (
           <div style={{ fontSize:'var(--text-xs)', color:'var(--text-3)', marginBottom:10, display:'flex', alignItems:'center', gap:8, background:'var(--surface)', border:'1px solid var(--border-2)', borderRadius:8, padding:'6px 10px' }}>
             <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{publicUrl}</span>
             <button className="btn btn-ghost btn-sm" style={{ padding:'2px 8px', fontSize:11, flexShrink:0 }} onClick={() => navigator.clipboard.writeText(publicUrl)}>📋 {t('Copy')}</button>
@@ -924,7 +931,7 @@ export function FlashcardView({
         )}
 
         {/* Description (publish) — shown only when publish flow is active */}
-        {(publicStatus === 'idle' || publicStatus === 'error') && (
+        {showPublicActions && (publicStatus === 'idle' || publicStatus === 'error') && (
           <div style={{ marginBottom: 10 }}>
             <input
               value={publicDescription}

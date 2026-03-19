@@ -24,12 +24,12 @@ const STEPS = [
   },
   {
     icon: '🃏',
-    title: 'Flashcards, decks & streaks',
+    title: 'Study Hub & streaks',
     desc: 'Study with Flip, Write, Test, Match, or Learn mode. Cards are scheduled by the FSRS-4.5 algorithm. Build a daily 🔥 streak and track your progress with a visual heatmap.',
-    highlight: 'Decks → open any deck → choose a study mode',
+    highlight: 'Study Hub → open any deck → choose a study mode',
     tip: 'Your streak counter and next-review forecast live in the sidebar. Review at least one card a day to keep it alive!',
-    actionLabel: 'Open deck library',
-    href: '/decks',
+    actionLabel: 'Open Study Hub',
+    href: '/study',
   },
   {
     icon: '🧮',

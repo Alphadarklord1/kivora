@@ -1252,7 +1252,7 @@ export function WorkspacePanel({
                           </div>
                         </div>
                         <button className="btn btn-primary btn-sm"
-                          onClick={() => router.push(`/decks/${deck.id}`)}>
+                          onClick={() => router.push(`/study/${deck.id}`)}>
                           {st.due > 0 ? `▶ Review ${st.due}` : 'Open deck'}
                         </button>
                         <button className="btn-icon" style={{ color: 'var(--text-3)', width: 24, height: 24, fontSize: 12 }}

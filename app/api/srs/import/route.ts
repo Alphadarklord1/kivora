@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     }
 
     const hostname = parsedUrl.hostname.toLowerCase();
-    const isKivoraShare = parsedUrl.pathname.includes('/shared/');
+    const isKivoraShare = parsedUrl.pathname.includes('/shared/') || parsedUrl.pathname.includes('/share/');
     if (isKivoraShare) {
       const result = await importKivoraShare(parsedUrl);
       return NextResponse.json({ source: 'kivora-share', ...result });

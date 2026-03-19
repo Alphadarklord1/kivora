@@ -5,6 +5,10 @@ import { getUserId } from '@/lib/auth/get-user-id';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { libraryItems, shares } from '@/lib/db/schema';
 
+function buildDeckShareUrl(origin: string, shareToken: string) {
+  return `${origin}/share/${shareToken}`;
+}
+
 function normalizeQuery(value: string | null) {
   return (value ?? '').trim().toLowerCase();
 }
@@ -44,7 +48,7 @@ export async function GET(request: NextRequest) {
         id: item.id,
         shareId: share.id,
         shareToken: share.shareToken,
-        shareUrl: `${request.nextUrl.origin}/shared/${share.shareToken}`,
+        shareUrl: buildDeckShareUrl(request.nextUrl.origin, share.shareToken),
         title,
         description,
         cardCount,
@@ -95,7 +99,7 @@ export async function POST(request: NextRequest) {
         cardCount: body.cardCount ?? 0,
         sourceDeckId: body.sourceDeckId ?? null,
         sourceDeckName: body.title,
-        savedFrom: body.sourceDeckId ? `/decks/${body.sourceDeckId}` : '/decks',
+        savedFrom: body.sourceDeckId ? `/study/${body.sourceDeckId}` : '/study',
       },
     }).returning();
 
@@ -108,12 +112,16 @@ export async function POST(request: NextRequest) {
       permission: 'view',
     }).returning();
 
+    if (!share.shareToken) {
+      throw new Error('Share token was not created');
+    }
+
     return NextResponse.json({
       ok: true,
       itemId: item.id,
       shareId: share.id,
       shareToken: share.shareToken,
-      shareUrl: `${request.nextUrl.origin}/shared/${share.shareToken}`,
+      shareUrl: buildDeckShareUrl(request.nextUrl.origin, share.shareToken),
     });
   } catch (error) {
     console.error('[srs/library][POST]', error);
