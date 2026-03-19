@@ -1467,3 +1467,216 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   border-radius: var(--r-lg);
   margin-bottom: 16px;
 }
+
+/* ── Extended Mobile Improvements (768px and below) ────────────────────── */
+@media (max-width: 768px) {
+  /* ── Workspace generate tab: tool pills on mobile ── */
+  .tab-btn-text {
+    font-size: 11px;
+  }
+
+  /* ── File card: stack action buttons vertically on very small screens ── */
+  .file-card .btn.btn-sm {
+    font-size: 10px !important;
+    padding: 2px 6px !important;
+  }
+
+  /* ── Generate output area ── */
+  .tool-output {
+    padding: 12px !important;
+  }
+
+  /* ── Panel headers ── */
+  .panel-header {
+    padding: 8px 12px;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  /* ── Stats grid: 2 columns on mobile ── */
+  .stats-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ── Workspace sidebar: smaller on tablet ── */
+  .folder-sidebar {
+    max-height: 220px;
+  }
+
+  /* ── Modal improvements on mobile ── */
+  .modal-overlay {
+    padding: 0 !important;
+    align-items: flex-end !important;
+  }
+
+  /* Slide-up sheet style for modals on mobile */
+  .modal-container,
+  .modal-box {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 20px 20px 0 0 !important;
+    margin: 0 !important;
+    max-height: 90dvh !important;
+    overflow-y: auto !important;
+  }
+
+  /* Planner modal footer: full-width buttons on mobile */
+  .modal-footer {
+    flex-direction: column-reverse;
+    gap: 8px !important;
+  }
+  .modal-footer .modal-btn,
+  .modal-footer button {
+    width: 100% !important;
+  }
+
+  /* ── Calendar: show agenda view on mobile by default ── */
+  .cal-sidebar {
+    display: none !important;
+  }
+  .cal-shell {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Analytics: full-width tabs ── */
+  .an-tabs {
+    width: 100%;
+  }
+  .an-tab {
+    flex: 1;
+    text-align: center;
+    padding: 8px 8px !important;
+    font-size: 12px !important;
+  }
+
+  /* ── Score chart ── */
+  .score-chart {
+    height: 140px !important;
+  }
+
+  /* ── Deck performance grid: 1 column on mobile ── */
+  .deck-grid-perf {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Library filter pills: wrap nicely ── */
+  .lib-filters {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* ── Chat panel ── */
+  .chat-panel {
+    padding: 8px !important;
+  }
+
+  /* ── Sharing cards ── */
+  .sharing-list {
+    gap: 10px;
+  }
+
+  /* ── Settings layout ── */
+  .settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Models page: 1 column on mobile ── */
+  .models-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Deck study view: larger hit targets ── */
+  .deck-btn {
+    min-height: 48px;
+    font-size: 14px;
+  }
+
+  /* ── Breadcrumb: hide on very small screens ── */
+  .panel-title > span {
+    display: none;
+  }
+
+  /* ── Heatmap: scroll horizontally ── */
+  .heatmap-container {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ── Small phones (480px) ── */
+@media (max-width: 480px) {
+  /* Stats grid: single column on tiny screens */
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Workspace tab bar: icon only */
+  .tab-btn-text {
+    display: none;
+  }
+  .tab-btn-icon {
+    font-size: 18px;
+  }
+  .tab-btn {
+    min-width: 44px;
+    justify-content: center;
+  }
+
+  /* File cards: tighter spacing */
+  .file-card {
+    padding: 8px 10px !important;
+  }
+
+  /* Panel header: compact */
+  .panel-header {
+    padding: 6px 10px !important;
+  }
+
+  /* Analytics stat card: compact */
+  .stat-card {
+    padding: 12px !important;
+  }
+  .stat-value {
+    font-size: 20px !important;
+  }
+}
+
+/* ── Touch-friendly interactive elements ── */
+@media (pointer: coarse) {
+  /* Minimum 44px tap targets for buttons */
+  button:not(.btn-icon):not(.tab-btn):not(.modal-btn) {
+    min-height: 36px;
+  }
+
+  /* Larger close/icon buttons */
+  .btn-icon {
+    min-width: 36px !important;
+    min-height: 36px !important;
+  }
+
+  /* Checkbox and toggle: larger hit area */
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Scroll snap for card lists */
+  .deck-row,
+  .flashcard-grid {
+    scroll-snap-type: x mandatory;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ── Safe area insets (iPhone notch/home bar) ── */
+@supports (padding: max(0px)) {
+  .app-shell {
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+  .mobile-header {
+    padding-top: max(0px, env(safe-area-inset-top));
+    height: calc(52px + max(0px, env(safe-area-inset-top)));
+  }
+}

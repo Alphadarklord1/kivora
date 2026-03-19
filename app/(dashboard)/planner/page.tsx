@@ -698,7 +698,7 @@ export default function PlannerPage() {
         .type-opt:hover:not(.active) { border-color: var(--primary); color: var(--primary); }
         .time-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .modal-footer {
-          display: flex; justify-content: flex-end; gap: 10px;
+          display: flex; justify-content: space-between; align-items: center; gap: 10px;
           padding: 12px 20px 20px; border-top: 1px solid var(--border-subtle);
         }
         .modal-btn {
@@ -953,8 +953,8 @@ function WeekView({ cursor, today, events, scrollRef, onEventClick, onSlotClick 
                   className="week-evt"
                   style={{
                     top, height,
-                    left: `calc(${(dayIndex/7)*100}% + 68px + 4px)`,
-                    width: `calc(${100/7}% - 10px)`,
+                    left: `calc(60px + (100% - 60px) * ${dayIndex} / 7 + 3px)`,
+                    width: `calc((100% - 60px) / 7 - 6px)`,
                     background: EVENT_COLORS[evt.type]+'dd',
                     textDecoration: evt.completed ? 'line-through' : 'none',
                   }}

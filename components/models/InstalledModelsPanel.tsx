@@ -26,6 +26,7 @@ interface ModelInfo {
   mathOptimized?: boolean;
   pullCommand: string;
   bestFor: string;
+  recommended?: boolean;
 }
 
 type AIStatus = 'checking' | 'ollama-ok' | 'llama-ok' | 'none';
@@ -47,8 +48,8 @@ const MODELS: ModelInfo[] = [
     sizeBytes: 1_100_000_000,
     tier: 'nano',
     mathOptimized: true,
-    description: 'Specialized math model by Alibaba. Best for arithmetic, algebra, and calculus step-by-step.',
-    strengths: ['Derivatives', 'Integrals', 'Word problems', 'Step-by-step proofs'],
+    description: 'Specialized math model. Best for arithmetic, algebra, and calculus with step-by-step solutions.',
+    strengths: ['Derivatives', 'Integrals', 'Word problems', 'Proofs'],
     ramRequired: '4 GB',
     pullCommand: 'ollama pull qwen2.5-math:1.5b',
     bestFor: 'Math & STEM',
@@ -73,11 +74,12 @@ const MODELS: ModelInfo[] = [
     size: '4.1 GB',
     sizeBytes: 4_100_000_000,
     tier: 'small',
-    description: 'The recommended default. Balanced performance — excellent writing, reasoning, and generation.',
+    recommended: true,
+    description: 'The recommended default. Excellent writing, reasoning, and generation. Works on 8 GB RAM.',
     strengths: ['All tools', 'Writing', 'Reasoning', 'Coding'],
     ramRequired: '8 GB',
     pullCommand: 'ollama pull mistral',
-    bestFor: 'General purpose (recommended)',
+    bestFor: 'General purpose',
   },
   {
     id: 'llama3.2',
@@ -86,11 +88,11 @@ const MODELS: ModelInfo[] = [
     size: '2.0 GB',
     sizeBytes: 2_000_000_000,
     tier: 'nano',
-    description: "Meta's efficient model. Good balance of speed and capability on 8GB RAM machines.",
+    description: "Meta's efficient model. Good speed and capability on 8 GB RAM machines.",
     strengths: ['Fast responses', 'Reasoning', 'Summaries'],
     ramRequired: '6 GB',
     pullCommand: 'ollama pull llama3.2:3b',
-    bestFor: 'Fast, balanced',
+    bestFor: 'Fast & balanced',
   },
   {
     id: 'phi4-mini',
@@ -99,7 +101,7 @@ const MODELS: ModelInfo[] = [
     size: '2.3 GB',
     sizeBytes: 2_300_000_000,
     tier: 'small',
-    description: "Microsoft's Phi-4 Mini — exceptional reasoning for its size. Great for STEM.",
+    description: "Microsoft's Phi-4 Mini — exceptional STEM reasoning for its size.",
     strengths: ['STEM', 'Math reasoning', 'Logic', 'Coding'],
     ramRequired: '6 GB',
     pullCommand: 'ollama pull phi4-mini',
@@ -112,7 +114,7 @@ const MODELS: ModelInfo[] = [
     size: '3.3 GB',
     sizeBytes: 3_300_000_000,
     tier: 'small',
-    description: "Google's Gemma 3 — strong at language tasks, structured outputs, and analysis.",
+    description: "Google's Gemma 3 — strong at language, structured outputs, and essay writing.",
     strengths: ['Writing', 'Analysis', 'Structured output', 'MCQ'],
     ramRequired: '8 GB',
     pullCommand: 'ollama pull gemma3:4b',
@@ -125,7 +127,7 @@ const MODELS: ModelInfo[] = [
     size: '4.7 GB',
     sizeBytes: 4_700_000_000,
     tier: 'medium',
-    description: 'Chain-of-thought reasoning model. Shows its thinking process step by step.',
+    description: 'Chain-of-thought model that shows its thinking step by step. Great for hard proofs.',
     strengths: ['Step-by-step proofs', 'Math', 'Hard reasoning', 'Coding'],
     ramRequired: '12 GB',
     pullCommand: 'ollama pull deepseek-r1:7b',
@@ -138,7 +140,7 @@ const MODELS: ModelInfo[] = [
     size: '14 GB',
     sizeBytes: 14_000_000_000,
     tier: 'large',
-    description: 'Top-tier Mistral model. Best quality for complex exam prep and essay generation.',
+    description: 'Top-tier quality for complex exam prep and essay generation. Needs 24 GB RAM.',
     strengths: ['Exam prep', 'Essay writing', 'Complex reasoning', 'All tools'],
     ramRequired: '24 GB',
     pullCommand: 'ollama pull mistral:latest',
@@ -146,18 +148,11 @@ const MODELS: ModelInfo[] = [
   },
 ];
 
-const TIER_COLORS: Record<string, string> = {
-  nano: '#52b788',
-  small: '#4f86f7',
-  medium: '#a78bfa',
-  large: '#e07a52',
-};
-
-const TIER_LABELS: Record<string, string> = {
-  nano: 'Nano · Fast',
-  small: 'Small · Balanced',
-  medium: 'Medium · Powerful',
-  large: 'Large · Maximum',
+const TIER_CONFIG: Record<string, { color: string; label: string; emoji: string }> = {
+  nano:   { color: '#52b788', label: 'Nano',   emoji: '⚡' },
+  small:  { color: '#4f86f7', label: 'Small',  emoji: '🔵' },
+  medium: { color: '#a78bfa', label: 'Medium', emoji: '🟣' },
+  large:  { color: '#e07a52', label: 'Large',  emoji: '🔶' },
 };
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -166,7 +161,7 @@ export function InstalledModelsPanel() {
   const [aiStatus, setAiStatus] = useState<AIStatus>('checking');
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
-  const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [expandedModel, setExpandedModel] = useState<string | null>(null);
   const [defaultModel, setDefaultModel] = useState<string>(() => {
     if (typeof window === 'undefined') return DEFAULT_LOCAL_MODEL;
     return loadAiRuntimePreferences().localModel || DEFAULT_LOCAL_MODEL;
@@ -178,20 +173,17 @@ export function InstalledModelsPanel() {
   const checkStatus = useCallback(async () => {
     setRefreshing(true);
     setAiStatus('checking');
-    // Bust the shared singleton cache so AiRuntimeControls re-reads fresh state.
     invalidateOllamaStatus();
-    // Check Ollama
     try {
       const ollamaBase = process.env.NEXT_PUBLIC_OLLAMA_URL ?? 'http://localhost:11434';
       const res = await fetch(`${ollamaBase}/api/version`, { signal: AbortSignal.timeout(3000) });
       if (res.ok) {
-        const ver = await res.json();
+        const ver = await res.json() as { version?: string };
         setOllamaVersion(ver?.version ?? 'unknown');
         setAiStatus('ollama-ok');
-        // List installed models
         const listRes = await fetch(`${ollamaBase}/api/tags`, { signal: AbortSignal.timeout(5000) });
         if (listRes.ok) {
-          const data = await listRes.json();
+          const data = await listRes.json() as { models?: OllamaModel[] };
           setOllamaModels(data?.models ?? []);
         }
         setRefreshing(false);
@@ -199,7 +191,6 @@ export function InstalledModelsPanel() {
       }
     } catch { /* noop */ }
 
-    // Check llama.cpp
     try {
       const res = await fetch('/api/llama-status', { signal: AbortSignal.timeout(3000) });
       if (res.ok) { setAiStatus('llama-ok'); setRefreshing(false); return; }
@@ -216,9 +207,7 @@ export function InstalledModelsPanel() {
   }
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      void checkStatus();
-    });
+    const frame = requestAnimationFrame(() => { void checkStatus(); });
     return () => cancelAnimationFrame(frame);
   }, [checkStatus]);
 
@@ -228,7 +217,6 @@ export function InstalledModelsPanel() {
       if (!detail) return;
       setDefaultModel(detail.localModel || DEFAULT_LOCAL_MODEL);
     }
-
     window.addEventListener(AI_PREFS_UPDATED_EVENT, handlePrefsUpdate as EventListener);
     return () => window.removeEventListener(AI_PREFS_UPDATED_EVENT, handlePrefsUpdate as EventListener);
   }, []);
@@ -240,329 +228,393 @@ export function InstalledModelsPanel() {
   }, []);
 
   const isInstalled = useCallback((model: ModelInfo) => {
-    return ollamaModels.some(m => m.name.toLowerCase().includes(model.id.toLowerCase()) ||
-      m.name.toLowerCase().includes(model.pullCommand.split('/').pop()?.split(':')[0] ?? ''));
+    return ollamaModels.some(m =>
+      m.name.toLowerCase().includes(model.id.toLowerCase()) ||
+      m.name.toLowerCase().includes(model.pullCommand.split('/').pop()?.split(':')[0] ?? '')
+    );
   }, [ollamaModels]);
 
   const filteredModels = filterTier === 'all' ? MODELS : MODELS.filter(m => m.tier === filterTier);
 
   return (
     <div className="mdl-shell">
-      {/* Controls bar */}
-      <div className="mdl-controls">
-        <StatusBanner status={aiStatus} ollamaVersion={ollamaVersion} modelsInstalled={ollamaModels.length} inline />
-        <button className="mdl-refresh-btn" onClick={checkStatus} disabled={refreshing}
-          style={{ opacity: refreshing ? 0.7 : 1, flexShrink: 0 }}>
-          {refreshing ? '⟳ Checking…' : '↻ Refresh'}
+
+      {/* Top status bar */}
+      <div className="mdl-topbar">
+        <ConnectionBadge status={aiStatus} ollamaVersion={ollamaVersion} modelCount={ollamaModels.length} />
+        <button className="mdl-refresh-btn" onClick={checkStatus} disabled={refreshing}>
+          {refreshing ? '⟳ Checking…' : '↻ Refresh status'}
         </button>
       </div>
 
-      <div className="mdl-section">
+      {/* AI routing controls */}
+      <section className="mdl-section">
+        <div className="mdl-section-header">
+          <h2>AI routing</h2>
+          <p>Choose whether Kivora uses local AI (private, offline), cloud AI (convenient), or both automatically.</p>
+        </div>
         <AiRuntimeControls />
-      </div>
+      </section>
 
-      {/* Setup guide */}
+      {/* Setup guide — only shown when no runtime found */}
       {aiStatus === 'none' && <SetupGuide />}
 
       {/* Installed models */}
       {aiStatus === 'ollama-ok' && ollamaModels.length > 0 && (
-        <div className="mdl-section">
-          <h2 className="mdl-section-title">Installed Models</h2>
-          <div className="installed-list">
+        <section className="mdl-section">
+          <div className="mdl-section-header">
+            <h2>Installed models ({ollamaModels.length})</h2>
+            <p>These models are downloaded and ready to use. Set the active model in the routing panel above.</p>
+          </div>
+          <div className="installed-grid">
             {ollamaModels.map(m => (
               <div key={m.name} className="installed-item">
-                <div className="inst-dot" style={{ background: '#52b788' }} />
+                <div className="inst-dot" />
                 <div className="inst-info">
                   <span className="inst-name">{m.name}</span>
                   <span className="inst-size">{formatBytes(m.size)}</span>
                 </div>
-                <span className="inst-badge">Active</span>
+                <span className="inst-ready">✓ Ready</span>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Filter */}
-      <div className="mdl-filter">
-        <span className="mdl-filter-label">Filter by size:</span>
-        {['all', 'nano', 'small', 'medium', 'large'].map(tier => (
-          <button
-            key={tier}
-            className={`mdl-filter-btn${filterTier === tier ? ' active' : ''}`}
-            onClick={() => setFilterTier(tier)}
-          >
-            {tier === 'all' ? 'All' : TIER_LABELS[tier]}
-          </button>
-        ))}
-      </div>
+      {/* Model catalogue */}
+      <section className="mdl-section">
+        <div className="mdl-section-header">
+          <h2>Model catalogue</h2>
+          <p>Browse available models. Copy the install command and run it in your terminal after installing Ollama.</p>
+        </div>
 
-      {/* Models grid */}
-      <div className="models-grid">
-        {filteredModels.map(model => {
-          const installed = isInstalled(model);
-          const expanded = activeModel === model.id;
-          return (
-            <div
-              key={model.id}
-              className={`model-card${expanded ? ' expanded' : ''}${installed ? ' installed' : ''}`}
+        <div className="mdl-filter">
+          {[
+            { id: 'all',    label: 'All' },
+            { id: 'nano',   label: '⚡ Nano  ≤4 GB RAM' },
+            { id: 'small',  label: '🔵 Small  6–8 GB RAM' },
+            { id: 'medium', label: '🟣 Medium  12 GB RAM' },
+            { id: 'large',  label: '🔶 Large  24 GB RAM' },
+          ].map(f => (
+            <button
+              key={f.id}
+              className={`mdl-filter-btn${filterTier === f.id ? ' active' : ''}`}
+              onClick={() => setFilterTier(f.id)}
             >
-              <div className="mc-header" onClick={() => setActiveModel(expanded ? null : model.id)}>
-                <div className="mc-left">
-                  <div className="mc-name-row">
-                    <span className="mc-name">{model.name}</span>
-                    <span className="mc-tag">{model.tag}</span>
-                    {model.mathOptimized && <span className="mc-math-badge">∑ Math</span>}
-                    {installed && <span className="mc-installed-badge">✓ Installed</span>}
-                    {defaultModel === model.id && <span className="mc-default-badge">⚡ Active</span>}
-                  </div>
-                  <span className="mc-best">{model.bestFor}</span>
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="models-grid">
+          {filteredModels.map(model => {
+            const installed = isInstalled(model);
+            const isDefault = defaultModel === model.id;
+            const expanded  = expandedModel === model.id;
+            const tc        = TIER_CONFIG[model.tier];
+
+            return (
+              <div
+                key={model.id}
+                className={`model-card${installed ? ' installed' : ''}${isDefault ? ' is-default' : ''}`}
+              >
+                {/* Title row */}
+                <div className="mc-title-row">
+                  <span className="mc-name">{model.name}</span>
+                  <span className="mc-tag">{model.tag}</span>
+                  {model.mathOptimized && <span className="mc-badge math">∑ Math</span>}
+                  {model.recommended   && <span className="mc-badge rec">★ Recommended</span>}
+                  {installed           && <span className="mc-badge inst">✓ Installed</span>}
+                  {isDefault           && <span className="mc-badge act">⚡ Active</span>}
                 </div>
-                <div className="mc-right">
-                  <div className="mc-tier" style={{ color: TIER_COLORS[model.tier], background: TIER_COLORS[model.tier]+'18' }}>
-                    {TIER_LABELS[model.tier]}
+
+                {/* Description */}
+                <p className="mc-desc">{model.description}</p>
+
+                {/* Spec grid — always visible */}
+                <div className="mc-specs">
+                  <div className="mc-spec">
+                    <span className="mc-spec-lbl">Size</span>
+                    <span className="mc-spec-val">{model.size}</span>
                   </div>
-                  <span className="mc-size">{model.size}</span>
-                  <span className="mc-chevron">{expanded ? '▲' : '▼'}</span>
+                  <div className="mc-spec">
+                    <span className="mc-spec-lbl">RAM needed</span>
+                    <span className="mc-spec-val">{model.ramRequired}</span>
+                  </div>
+                  <div className="mc-spec">
+                    <span className="mc-spec-lbl">Tier</span>
+                    <span className="mc-spec-val" style={{ color: tc.color }}>{tc.emoji} {tc.label}</span>
+                  </div>
+                  <div className="mc-spec">
+                    <span className="mc-spec-lbl">Best for</span>
+                    <span className="mc-spec-val">{model.bestFor}</span>
+                  </div>
                 </div>
-              </div>
 
-              {expanded && (
-                <div className="mc-body">
-                  <p className="mc-desc">{model.description}</p>
+                {/* Tags */}
+                <div className="mc-tags">
+                  {model.strengths.map(s => <span key={s} className="mc-chip">{s}</span>)}
+                </div>
 
-                  <div className="mc-strengths">
-                    <span className="mc-section-label">Best for</span>
-                    <div className="mc-tags">
-                      {model.strengths.map(s => (
-                        <span key={s} className="mc-strength-tag">{s}</span>
-                      ))}
-                    </div>
-                  </div>
+                {/* Actions */}
+                <div className="mc-actions">
+                  <button
+                    className={`mc-set-btn${isDefault ? ' active' : ''}`}
+                    onClick={() => setAsDefault(model.id)}
+                  >
+                    {isDefault ? '✓ Active model' : 'Set as active'}
+                  </button>
+                  <button
+                    className="mc-install-btn"
+                    onClick={() => setExpandedModel(expanded ? null : model.id)}
+                  >
+                    {expanded ? 'Hide ▲' : 'Install ▼'}
+                  </button>
+                </div>
 
-                  <div className="mc-specs">
-                    <div className="mc-spec">
-                      <span className="mc-spec-label">RAM Required</span>
-                      <span className="mc-spec-value">{model.ramRequired}</span>
-                    </div>
-                    <div className="mc-spec">
-                      <span className="mc-spec-label">Download Size</span>
-                      <span className="mc-spec-value">{model.size}</span>
-                    </div>
-                    <div className="mc-spec">
-                      <span className="mc-spec-label">Category</span>
-                      <span className="mc-spec-value">{TIER_LABELS[model.tier]}</span>
-                    </div>
-                  </div>
-
+                {/* Install command — collapsible */}
+                {expanded && (
                   <div className="mc-install">
-                    <span className="mc-section-label">Install with Ollama</span>
+                    <span className="mc-install-lbl">Run this in your terminal</span>
                     <div className="mc-cmd-row">
                       <code className="mc-cmd">{model.pullCommand}</code>
                       <button
                         className={`mc-copy-btn${copied === model.id ? ' copied' : ''}`}
                         onClick={() => copyCommand(model.pullCommand, model.id)}
                       >
-                        {copied === model.id ? '✓ Copied' : 'Copy'}
+                        {copied === model.id ? '✓ Copied!' : 'Copy'}
                       </button>
                     </div>
-                    <p className="mc-cmd-note">
-                      Run this in your terminal after installing Ollama.
-                      The model will be available immediately.
-                    </p>
-                  </div>
-
-                  <div className="mc-default-row">
-                    <button
-                      className={`mc-default-btn${defaultModel === model.id ? ' active' : ''}`}
-                      onClick={() => setAsDefault(model.id)}
-                    >
-                      {defaultModel === model.id ? '✓ Active model' : 'Set as default model'}
-                    </button>
-                    {defaultModel === model.id && (
-                      <span className="mc-default-hint">Kivora uses this model for all AI features</span>
+                    {aiStatus === 'ollama-ok' && !installed && (
+                      <div className="mc-note warn">⚠ Not installed yet — run the command, then click Refresh status.</div>
+                    )}
+                    {installed && (
+                      <div className="mc-note ok">✓ Installed and ready to use.</div>
+                    )}
+                    {aiStatus !== 'ollama-ok' && (
+                      <div className="mc-note">
+                        Ollama is not running.{' '}
+                        <a href="https://ollama.com" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>
+                          Install Ollama
+                        </a>{' '}
+                        first, then run the command above.
+                      </div>
                     )}
                   </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
-                  {installed && (
-                    <div className="mc-active-note">
-                      ✓ This model is installed and ready.
-                    </div>
-                  )}
-                  {!installed && aiStatus === 'ollama-ok' && (
-                    <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)', fontSize: 12, color: '#f59e0b' }}>
-                      ⚠ Not installed — run the pull command above, then click Refresh.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Bundled models note */}
-      <div className="bundled-section">
-        <div className="bundled-icon">📦</div>
-        <div>
-          <h3 className="bundled-title">Bundled Offline Models (Desktop App)</h3>
-          <p className="bundled-desc">
-            When running Kivora as a desktop app (Electron), a compact offline model is bundled directly with the installer.
-            No internet or Ollama required — study tools work out of the box.
-          </p>
-          <div className="bundled-tiers">
-            <div className="bundled-tier">
-              <span className="bt-label">Laptop</span>
-              <span className="bt-desc">~1 GB · Qwen2.5-1.5B · 4GB RAM</span>
-            </div>
-            <div className="bundled-tier">
-              <span className="bt-label">Balanced</span>
-              <span className="bt-desc">~2 GB · Phi-4-Mini · 6GB RAM</span>
-            </div>
-            <div className="bundled-tier">
-              <span className="bt-label">PC</span>
-              <span className="bt-desc">~4 GB · Mistral-7B · 8GB RAM</span>
+      {/* Bundled desktop models note */}
+      <section className="mdl-section">
+        <div className="bundled-card">
+          <div className="bundled-icon">📦</div>
+          <div>
+            <h3>Bundled offline models (Desktop App)</h3>
+            <p>The desktop app ships with a compact model built in — no internet or Ollama needed. All study tools work offline from the start.</p>
+            <div className="bundled-tiers">
+              <div className="bundled-tier"><strong>Laptop</strong><span>~1 GB · Qwen2.5-1.5B · 4 GB RAM</span></div>
+              <div className="bundled-tier"><strong>Balanced</strong><span>~2 GB · Phi-4-Mini · 6 GB RAM</span></div>
+              <div className="bundled-tier"><strong>PC</strong><span>~4 GB · Mistral-7B · 8 GB RAM</span></div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
       <style jsx>{`
-        .mdl-shell {
-          display: flex;
-          flex-direction: column;
-          gap: 0;
-          max-width: 900px;
-          margin: 0 auto;
-          padding: 0 0 40px;
-        }
-        .mdl-controls {
+        .mdl-shell { display: flex; flex-direction: column; gap: 0; }
+
+        .mdl-topbar {
           display: flex; align-items: center; gap: 10px;
-          padding: 16px 24px; flex-wrap: wrap;
+          padding: 0 0 16px; flex-wrap: wrap;
         }
         .mdl-refresh-btn {
-          padding: 8px 16px; border-radius: 10px; border: 1.5px solid var(--border-subtle);
-          background: var(--bg-surface); color: var(--text-secondary); cursor: pointer; font-size: 13px; font-weight: 500;
+          padding: 8px 16px; border-radius: 10px;
+          border: 1.5px solid var(--border-subtle);
+          background: var(--bg-surface); color: var(--text-secondary);
+          cursor: pointer; font-size: 13px; font-weight: 500; flex-shrink: 0;
           transition: all 0.12s;
         }
         .mdl-refresh-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .mdl-refresh-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-        .mdl-section { padding: 0 24px; margin-bottom: 16px; }
-        .mdl-section-title { font-size: 14px; font-weight: 700; color: var(--text-secondary); margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+        .conn-badge {
+          flex: 1; display: flex; align-items: center; gap: 8px;
+          padding: 9px 14px; border-radius: 10px;
+          font-size: 13px; font-weight: 500; min-width: 0;
+        }
+        .conn-badge.ok      { background: #52b78818; border: 1px solid #52b78840; color: #52b788; }
+        .conn-badge.warn    { background: #f59e0b18; border: 1px solid #f59e0b40; color: #f59e0b; }
+        .conn-badge.loading { background: var(--bg-surface); border: 1px solid var(--border-subtle); color: var(--text-muted); }
 
-        .installed-list { display: flex; flex-direction: column; gap: 6px; }
-        .installed-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background: var(--bg-elevated); border: 1px solid var(--border-subtle); }
-        .inst-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-        .inst-info { flex: 1; min-width: 0; }
+        .mdl-section { padding: 0 0 24px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 24px; }
+        .mdl-section:last-child { border-bottom: none; margin-bottom: 0; }
+        .mdl-section-header { margin-bottom: 14px; }
+        .mdl-section-header h2 { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+        .mdl-section-header p  { margin: 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+
+        .installed-grid { display: flex; flex-direction: column; gap: 6px; }
+        .installed-item {
+          display: flex; align-items: center; gap: 10px;
+          padding: 10px 14px; border-radius: 10px;
+          background: var(--bg-elevated); border: 1px solid var(--border-subtle);
+        }
+        .inst-dot { width: 9px; height: 9px; border-radius: 50%; background: #52b788; flex-shrink: 0; }
+        .inst-info { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
         .inst-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
-        .inst-size { font-size: 12px; color: var(--text-muted); margin-left: 10px; }
-        .inst-badge { font-size: 11px; padding: 2px 8px; border-radius: 8px; background: #52b78820; color: #52b788; font-weight: 600; }
+        .inst-size { font-size: 12px; color: var(--text-muted); }
+        .inst-ready { font-size: 11px; padding: 2px 8px; border-radius: 8px; background: #52b78820; color: #52b788; font-weight: 600; flex-shrink: 0; }
 
-        .mdl-filter { display: flex; align-items: center; gap: 8px; padding: 16px 24px; flex-wrap: wrap; }
-        .mdl-filter-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+        .mdl-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
         .mdl-filter-btn {
-          padding: 5px 12px; border-radius: 8px; border: 1.5px solid var(--border-subtle);
-          background: var(--bg-surface); color: var(--text-secondary); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.12s;
+          padding: 5px 11px; border-radius: 8px; white-space: nowrap;
+          border: 1.5px solid var(--border-subtle);
+          background: var(--bg-surface); color: var(--text-secondary);
+          font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.12s;
         }
         .mdl-filter-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
         .mdl-filter-btn:hover:not(.active) { border-color: var(--primary); color: var(--primary); }
 
-        .models-grid { display: flex; flex-direction: column; gap: 8px; padding: 0 24px; }
+        .models-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          gap: 10px;
+        }
 
         .model-card {
-          border: 1.5px solid var(--border-subtle); border-radius: 16px;
-          background: var(--bg-elevated); overflow: hidden; transition: border-color 0.15s;
+          display: flex; flex-direction: column; gap: 10px;
+          padding: 14px 16px;
+          border: 1.5px solid var(--border-subtle);
+          border-radius: 14px;
+          background: var(--bg-elevated);
+          transition: border-color 0.15s;
         }
-        .model-card.installed { border-color: #52b78840; }
-        .model-card.expanded { border-color: var(--primary); }
-        .mc-header {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 16px 20px; cursor: pointer; gap: 12px;
-        }
-        .mc-header:hover { background: var(--bg-surface); }
-        .mc-left { flex: 1; min-width: 0; }
-        .mc-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 3px; }
-        .mc-name { font-size: 16px; font-weight: 700; color: var(--text-primary); }
-        .mc-tag { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--bg-surface); color: var(--text-muted); font-weight: 600; border: 1px solid var(--border-subtle); }
-        .mc-math-badge { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #4f86f720; color: #4f86f7; font-weight: 700; }
-        .mc-installed-badge { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: #52b78820; color: #52b788; font-weight: 700; }
-        .mc-best { font-size: 12px; color: var(--text-muted); }
-        .mc-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-        .mc-tier { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 8px; }
-        .mc-size { font-size: 12px; font-weight: 600; color: var(--text-secondary); min-width: 48px; text-align: right; }
-        .mc-chevron { font-size: 11px; color: var(--text-muted); }
+        .model-card.installed  { border-color: rgba(82,183,136,0.35); }
+        .model-card.is-default { border-color: var(--primary); }
 
-        .mc-body { padding: 0 20px 20px; border-top: 1px solid var(--border-subtle); padding-top: 16px; }
-        .mc-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin: 0 0 16px; }
-        .mc-section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); display: block; margin-bottom: 6px; }
-        .mc-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-        .mc-strength-tag { font-size: 12px; padding: 3px 10px; border-radius: 8px; background: var(--bg-surface); color: var(--text-secondary); border: 1px solid var(--border-subtle); }
-        .mc-strengths { margin-bottom: 14px; }
-        .mc-specs { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 16px; }
-        .mc-spec { padding: 8px 12px; border-radius: 8px; background: var(--bg-surface); border: 1px solid var(--border-subtle); }
-        .mc-spec-label { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 3px; }
-        .mc-spec-value { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-        .mc-install { }
-        .mc-cmd-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-        .mc-cmd { flex: 1; padding: 10px 14px; border-radius: 10px; background: #1e1e2e; color: #a6e3a1; font-size: 13px; font-family: monospace; border: 1px solid var(--border-subtle); overflow: auto; white-space: nowrap; }
-        .mc-copy-btn { padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.12s; flex-shrink: 0; }
+        .mc-title-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+        .mc-name { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+        .mc-tag {
+          font-size: 10px; padding: 2px 7px; border-radius: 5px;
+          background: var(--bg-surface); color: var(--text-muted);
+          font-weight: 600; border: 1px solid var(--border-subtle);
+        }
+        .mc-badge { font-size: 10px; padding: 2px 7px; border-radius: 5px; font-weight: 700; }
+        .mc-badge.math { background: #4f86f720; color: #4f86f7; }
+        .mc-badge.rec  { background: #f59e0b20; color: #f59e0b; }
+        .mc-badge.inst { background: #52b78820; color: #52b788; }
+        .mc-badge.act  { background: color-mix(in srgb, var(--primary) 15%, transparent); color: var(--primary); }
+
+        .mc-desc { margin: 0; font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
+
+        .mc-specs { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .mc-spec {
+          padding: 6px 9px; border-radius: 7px;
+          background: var(--bg-surface); border: 1px solid var(--border-subtle);
+        }
+        .mc-spec-lbl { display: block; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 2px; }
+        .mc-spec-val { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+
+        .mc-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+        .mc-chip {
+          font-size: 11px; padding: 2px 8px; border-radius: 6px;
+          background: var(--bg-surface); color: var(--text-secondary);
+          border: 1px solid var(--border-subtle);
+        }
+
+        .mc-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 2px; }
+        .mc-set-btn {
+          flex: 1; padding: 6px 11px; border-radius: 8px;
+          border: 1.5px solid var(--border-subtle);
+          background: var(--bg-surface); color: var(--text-secondary);
+          font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.12s;
+        }
+        .mc-set-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .mc-set-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .mc-install-btn {
+          padding: 6px 11px; border-radius: 8px;
+          border: 1.5px solid var(--border-subtle);
+          background: transparent; color: var(--text-muted);
+          font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.12s;
+          white-space: nowrap;
+        }
+        .mc-install-btn:hover { color: var(--text-secondary); border-color: var(--border-mid, var(--border-subtle)); }
+
+        .mc-install {
+          padding: 11px 12px; border-radius: 9px;
+          background: var(--bg-surface); border: 1px solid var(--border-subtle);
+          display: flex; flex-direction: column; gap: 7px;
+        }
+        .mc-install-lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+        .mc-cmd-row { display: flex; align-items: center; gap: 6px; }
+        .mc-cmd {
+          flex: 1; padding: 7px 10px; border-radius: 7px;
+          background: #1e1e2e; color: #a6e3a1;
+          font-size: 12px; font-family: "JetBrains Mono", "Fira Code", monospace;
+          border: 1px solid var(--border-subtle); overflow: auto; white-space: nowrap;
+        }
+        .mc-copy-btn {
+          padding: 5px 10px; border-radius: 6px;
+          border: 1.5px solid var(--border-subtle);
+          background: var(--bg-elevated); color: var(--text-secondary);
+          font-size: 11px; font-weight: 600; cursor: pointer;
+          transition: all 0.1s; flex-shrink: 0;
+        }
         .mc-copy-btn:hover { border-color: var(--primary); color: var(--primary); }
         .mc-copy-btn.copied { background: #52b788; color: white; border-color: #52b788; }
-        .mc-cmd-note { font-size: 11px; color: var(--text-muted); margin: 0; }
-        .mc-active-note { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: #52b78816; color: #52b788; font-size: 13px; font-weight: 500; border: 1px solid #52b78830; }
-        .mc-default-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
-        .mc-default-btn { padding: 7px 16px; border-radius: 9px; border: 1.5px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.12s; }
-        .mc-default-btn:hover { border-color: var(--primary); color: var(--primary); }
-        .mc-default-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
-        .mc-default-hint { font-size: 12px; color: var(--text-muted); }
-        .mc-default-badge { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--primary, #4f86f7) 15%, transparent); color: var(--primary, #4f86f7); font-weight: 700; }
+        .mc-note {
+          font-size: 11px; padding: 6px 9px; border-radius: 7px;
+          background: var(--bg-elevated); border: 1px solid var(--border-subtle);
+          color: var(--text-muted);
+        }
+        .mc-note.warn { background: #f59e0b10; border-color: #f59e0b30; color: #f59e0b; }
+        .mc-note.ok   { background: #52b78810; border-color: #52b78830; color: #52b788; }
 
-        .bundled-section {
-          margin: 24px; padding: 20px 24px; border-radius: 20px;
+        .bundled-card {
+          display: flex; gap: 16px; align-items: flex-start;
+          padding: 16px 18px; border-radius: 14px;
           background: color-mix(in srgb, #a78bfa 6%, var(--bg-elevated));
           border: 1.5px solid color-mix(in srgb, #a78bfa 20%, var(--border-subtle));
-          display: flex; gap: 20px; align-items: flex-start;
         }
-        .bundled-icon { font-size: 32px; flex-shrink: 0; }
-        .bundled-title { margin: 0 0 6px; font-size: 15px; font-weight: 700; }
-        .bundled-desc { margin: 0 0 14px; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
-        .bundled-tiers { display: flex; gap: 10px; flex-wrap: wrap; }
-        .bundled-tier { padding: 8px 14px; border-radius: 10px; background: var(--bg-surface); border: 1px solid var(--border-subtle); }
-        .bt-label { display: block; font-size: 12px; font-weight: 700; color: var(--text-primary); }
-        .bt-desc { display: block; font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .bundled-icon { font-size: 26px; flex-shrink: 0; }
+        .bundled-card h3 { margin: 0 0 5px; font-size: 14px; font-weight: 700; }
+        .bundled-card p  { margin: 0 0 11px; font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; }
+        .bundled-tiers { display: flex; gap: 7px; flex-wrap: wrap; }
+        .bundled-tier {
+          padding: 6px 11px; border-radius: 8px;
+          background: var(--bg-surface); border: 1px solid var(--border-subtle);
+          display: flex; flex-direction: column; gap: 2px;
+        }
+        .bundled-tier strong { font-size: 12px; color: var(--text-primary); }
+        .bundled-tier span   { font-size: 11px; color: var(--text-muted); }
+
+        @media (max-width: 640px) {
+          .models-grid { grid-template-columns: 1fr; }
+        }
       `}</style>
     </div>
   );
 }
 
-// ─── Status Banner ────────────────────────────────────────────────────────────
+// ─── Connection Badge ──────────────────────────────────────────────────────────
 
-function StatusBanner({ status, ollamaVersion, modelsInstalled, inline }: {
-  status: AIStatus; ollamaVersion: string | null; modelsInstalled: number; inline?: boolean;
+function ConnectionBadge({ status, ollamaVersion, modelCount }: {
+  status: AIStatus; ollamaVersion: string | null; modelCount: number;
 }) {
-  const baseStyle: React.CSSProperties = inline
-    ? { flex: 1, padding: '9px 14px', borderRadius: 10, fontSize: 13, fontWeight: 500 }
-    : { margin: '0 24px 16px', padding: '12px 16px', borderRadius: 12, fontSize: 13, fontWeight: 500 };
-
-  if (status === 'checking') return (
-    <div style={{ ...baseStyle, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
-      ⟳ Detecting AI runtime…
-    </div>
-  );
+  if (status === 'checking') return <div className="conn-badge loading">⟳ Detecting AI runtime…</div>;
   if (status === 'ollama-ok') return (
-    <div style={{ ...baseStyle, background: '#52b78818', border: '1px solid #52b78840', color: '#52b788' }}>
-      ✓ Ollama{ollamaVersion ? ` v${ollamaVersion}` : ''} · {modelsInstalled} model{modelsInstalled !== 1 ? 's' : ''} installed · AI active
+    <div className="conn-badge ok">
+      ● Ollama {ollamaVersion ? `v${ollamaVersion}` : ''} connected · {modelCount} model{modelCount !== 1 ? 's' : ''} installed · AI ready
     </div>
   );
   if (status === 'llama-ok') return (
-    <div style={{ ...baseStyle, background: '#52b78818', border: '1px solid #52b78840', color: '#52b788' }}>
-      ✓ llama.cpp detected · AI features active
-    </div>
+    <div className="conn-badge ok">● llama.cpp detected · AI features active</div>
   );
   return (
-    <div style={{ ...baseStyle, background: '#f59e0b18', border: '1px solid #f59e0b40', color: '#f59e0b' }}>
-      ⚠ No AI runtime detected — install Ollama to enable AI features.
-    </div>
+    <div className="conn-badge warn">⚠ No AI runtime detected — install Ollama to enable AI features</div>
   );
 }
 
@@ -584,101 +636,166 @@ function SetupGuide() {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const steps: { title: string; mac: string; win: string; linux: string; note: string }[] = [
+  const steps: { title: string; desc: string; cmd: Record<string, string>; note: string }[] = [
     {
-      title: 'Install Ollama',
-      mac: 'brew install ollama',
-      win: 'winget install Ollama.Ollama',
-      linux: 'curl -fsSL https://ollama.com/install.sh | sh',
+      title: '1. Install Ollama',
+      desc: 'Download the free open-source runtime that manages your local models.',
+      cmd: { mac: 'brew install ollama', win: 'winget install Ollama.Ollama', linux: 'curl -fsSL https://ollama.com/install.sh | sh' },
       note: 'Or download the GUI installer from ollama.com',
     },
     {
-      title: 'Start Ollama',
-      mac: 'ollama serve',
-      win: 'ollama serve',
-      linux: 'ollama serve',
-      note: 'The Ollama service listens on http://localhost:11434',
+      title: '2. Start Ollama',
+      desc: 'Launch the service. It runs in the background on port 11434.',
+      cmd: { mac: 'ollama serve', win: 'ollama serve', linux: 'ollama serve' },
+      note: 'On macOS, the Ollama app in the menu bar does this automatically.',
     },
     {
-      title: 'Pull a model',
-      mac: 'ollama pull mistral',
-      win: 'ollama pull mistral',
-      linux: 'ollama pull mistral',
-      note: 'Replace "mistral" with any model from the catalogue below',
+      title: '3. Download a model',
+      desc: 'Pull your first model. Mistral 7B is the recommended starting point.',
+      cmd: { mac: 'ollama pull mistral', win: 'ollama pull mistral', linux: 'ollama pull mistral' },
+      note: 'Downloads ~4 GB. Replace "mistral" with any model ID from the catalogue below.',
     },
     {
-      title: 'Refresh status',
-      mac: '↻ Click Refresh above',
-      win: '↻ Click Refresh above',
-      linux: '↻ Click Refresh above',
-      note: 'Kivora will detect Ollama automatically after it starts',
+      title: '4. Refresh Kivora',
+      desc: 'Click Refresh status above. The banner will turn green when Ollama is connected.',
+      cmd: { mac: '# No command needed', win: '# No command needed', linux: '# No command needed' },
+      note: 'Kivora detects Ollama automatically on port 11434.',
     },
   ];
 
   return (
-    <div className="sg">
+    <section className="sg">
       <div className="sg-header">
-        <h2>Setup Guide — Offline AI in 4 Steps</h2>
-        <div className="sg-os-picker">
+        <div>
+          <h2>Set up local AI in 4 steps</h2>
+          <p>Run AI models privately on your device — no internet required after setup.</p>
+        </div>
+        <div className="sg-os-tabs">
           {(['mac','win','linux'] as const).map(o => (
-            <button key={o} className={`sg-os${os === o ? ' active' : ''}`} onClick={() => setOs(o)}>
-              {o === 'mac' ? '🍎 macOS' : o === 'win' ? '🪟 Windows' : '🐧 Linux'}
+            <button key={o} className={`sg-os-btn${os === o ? ' active' : ''}`} onClick={() => setOs(o)}>
+              {o === 'mac' ? '🍎 Mac' : o === 'win' ? '🪟 Windows' : '🐧 Linux'}
             </button>
           ))}
         </div>
       </div>
+
       <div className="sg-steps">
-        {steps.map((s, i) => (
-          <div key={i} className={`sg-step${step === i ? ' active' : ''}`} onClick={() => setStep(i)}>
-            <div className={`sg-step-num${step === i ? ' active' : ''}`}>{i+1}</div>
-            <div className="sg-step-body">
-              <div className="sg-step-title">{s.title}</div>
-              {step === i && (
-                <>
-                  <div className="sg-cmd-row">
-                    <code className="sg-cmd">{os === 'mac' ? s.mac : os === 'win' ? s.win : s.linux}</code>
-                    <button
-                      className={`sg-copy${copied === i ? ' copied' : ''}`}
-                      onClick={e => { e.stopPropagation(); copy(os === 'mac' ? s.mac : os === 'win' ? s.win : s.linux, i); }}
-                    >
-                      {copied === i ? '✓' : 'Copy'}
-                    </button>
-                  </div>
-                  <p className="sg-note">{s.note}</p>
-                </>
-              )}
+        {steps.map((s, i) => {
+          const isActive = step === i;
+          const isDone   = step > i;
+          const cmd = s.cmd[os] ?? s.cmd.mac;
+          return (
+            <div key={i} className={`sg-step${isActive ? ' active' : isDone ? ' done' : ''}`} onClick={() => setStep(i)}>
+              <div className={`sg-num${isActive ? ' active' : isDone ? ' done' : ''}`}>
+                {isDone ? '✓' : i + 1}
+              </div>
+              <div className="sg-body">
+                <div className="sg-title">{s.title}</div>
+                {isActive && (
+                  <>
+                    <p className="sg-desc">{s.desc}</p>
+                    {!cmd.startsWith('#') && (
+                      <div className="sg-cmd-row">
+                        <code className="sg-cmd">{cmd}</code>
+                        <button
+                          className={`sg-copy${copied === i ? ' copied' : ''}`}
+                          onClick={e => { e.stopPropagation(); copy(cmd, i); }}
+                        >
+                          {copied === i ? '✓' : 'Copy'}
+                        </button>
+                      </div>
+                    )}
+                    <p className="sg-note">{s.note}</p>
+                    {i < steps.length - 1 && (
+                      <button className="sg-next" onClick={e => { e.stopPropagation(); setStep(i + 1); }}>
+                        Next step →
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
-      <a className="sg-link" href="https://ollama.com" target="_blank" rel="noreferrer">
-        Download Ollama installer → ollama.com
+
+      <a className="sg-cta" href="https://ollama.com" target="_blank" rel="noreferrer">
+        Visit ollama.com for the installer →
       </a>
+
       <style jsx>{`
-        .sg { margin: 0 24px 16px; padding: 20px 24px; border-radius: 20px; background: var(--bg-elevated); border: 1.5px solid var(--border-subtle); }
-        .sg-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
-        .sg-header h2 { margin: 0; font-size: 16px; font-weight: 700; }
-        .sg-os-picker { display: flex; gap: 4px; }
-        .sg-os { padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all 0.1s; }
-        .sg-os.active { background: var(--primary); color: white; border-color: var(--primary); }
-        .sg-steps { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-        .sg-step { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: background 0.1s; border: 1px solid transparent; }
+        .sg {
+          padding: 18px; border-radius: 14px; margin-bottom: 24px;
+          background: var(--bg-elevated); border: 1.5px solid var(--border-subtle);
+        }
+        .sg-header {
+          display: flex; align-items: flex-start; justify-content: space-between;
+          gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+        }
+        .sg-header h2 { margin: 0 0 4px; font-size: 14px; font-weight: 700; }
+        .sg-header p  { margin: 0; font-size: 12px; color: var(--text-muted); }
+        .sg-os-tabs { display: flex; gap: 4px; flex-shrink: 0; }
+        .sg-os-btn {
+          padding: 5px 10px; border-radius: 7px; font-size: 11px;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface); color: var(--text-secondary); cursor: pointer;
+        }
+        .sg-os-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        .sg-steps { display: flex; flex-direction: column; gap: 3px; margin-bottom: 14px; }
+        .sg-step {
+          display: flex; align-items: flex-start; gap: 10px;
+          padding: 9px 11px; border-radius: 9px; cursor: pointer;
+          border: 1px solid transparent; transition: background 0.1s;
+        }
         .sg-step.active { background: var(--bg-surface); border-color: var(--border-subtle); }
+        .sg-step.done   { opacity: 0.65; }
         .sg-step:not(.active):hover { background: var(--bg-surface); }
-        .sg-step-num { width: 26px; height: 26px; border-radius: 50%; background: var(--bg-surface); border: 2px solid var(--border-subtle); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--text-muted); flex-shrink: 0; }
-        .sg-step-num.active { background: var(--primary); border-color: var(--primary); color: white; }
-        .sg-step-body { flex: 1; min-width: 0; }
-        .sg-step-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-        .sg-cmd-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-        .sg-cmd { flex: 1; padding: 8px 12px; border-radius: 8px; background: #1e1e2e; color: #a6e3a1; font-size: 12px; font-family: monospace; border: 1px solid var(--border-subtle); overflow: auto; white-space: nowrap; }
-        .sg-copy { padding: 6px 12px; border-radius: 7px; border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-secondary); font-size: 11px; font-weight: 600; cursor: pointer; flex-shrink: 0; transition: all 0.1s; }
+
+        .sg-num {
+          width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 11px; font-weight: 700;
+          background: var(--bg-surface); border: 2px solid var(--border-subtle); color: var(--text-muted);
+        }
+        .sg-num.active { background: var(--primary); border-color: var(--primary); color: white; }
+        .sg-num.done   { background: #52b788; border-color: #52b788; color: white; }
+
+        .sg-body { flex: 1; min-width: 0; }
+        .sg-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+        .sg-desc  { margin: 4px 0 8px; font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+        .sg-cmd-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+        .sg-cmd {
+          flex: 1; padding: 6px 9px; border-radius: 7px;
+          background: #1e1e2e; color: #a6e3a1;
+          font-size: 11.5px; font-family: "JetBrains Mono", monospace;
+          border: 1px solid var(--border-subtle); overflow: auto; white-space: nowrap;
+        }
+        .sg-copy {
+          padding: 5px 9px; border-radius: 6px;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-elevated); color: var(--text-secondary);
+          font-size: 11px; font-weight: 600; cursor: pointer; flex-shrink: 0; transition: all 0.1s;
+        }
         .sg-copy:hover { border-color: var(--primary); color: var(--primary); }
         .sg-copy.copied { background: #52b788; color: white; border-color: #52b788; }
-        .sg-note { font-size: 11px; color: var(--text-muted); margin: 4px 0 0; }
-        .sg-link { display: inline-flex; align-items: center; padding: 8px 16px; border-radius: 10px; background: var(--primary); color: white; text-decoration: none; font-size: 13px; font-weight: 600; transition: opacity 0.12s; }
-        .sg-link:hover { opacity: 0.88; }
+        .sg-note { margin: 0 0 8px; font-size: 11px; color: var(--text-muted); }
+        .sg-next {
+          padding: 5px 12px; border-radius: 7px;
+          border: 1.5px solid var(--primary);
+          background: transparent; color: var(--primary);
+          font-size: 11.5px; font-weight: 600; cursor: pointer;
+        }
+        .sg-cta {
+          display: inline-flex; align-items: center;
+          padding: 7px 14px; border-radius: 9px;
+          background: var(--primary); color: white;
+          text-decoration: none; font-size: 12px; font-weight: 600;
+          transition: opacity 0.12s;
+        }
+        .sg-cta:hover { opacity: 0.88; }
       `}</style>
-    </div>
+    </section>
   );
 }
 

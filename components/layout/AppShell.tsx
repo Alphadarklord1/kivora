@@ -5,20 +5,21 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useSettings } from '@/providers/SettingsProvider';
+import { useI18n } from '@/lib/i18n/useI18n';
 import { OnboardingModal } from './OnboardingModal';
 import { getStreak } from '@/lib/srs/sm2';
 
-const NAV = [
-  { href: '/workspace', label: 'Workspace', icon: '📚' },
-  { href: '/planner',   label: 'Planner',   icon: '📅' },
-  { href: '/math',      label: 'Math',      icon: '∑'  },
-  { href: '/library',   label: 'Library',   icon: '🗂️' },
-  { href: '/decks',     label: 'Decks',     icon: '🃏' },
-  { href: '/analytics', label: 'Analytics', icon: '📊' },
-  { href: '/models',    label: 'Models & Downloads', icon: '🤖' },
-  { href: '/sharing',   label: 'Sharing',   icon: '🔗' },
-  { href: '/settings',  label: 'Settings',  icon: '⚙️' },
-  { href: '/report',    label: 'Report',    icon: '🩺' },
+const NAV_ITEMS = [
+  { href: '/workspace', key: 'Workspace',          icon: '📚' },
+  { href: '/planner',   key: 'Planner',             icon: '📅' },
+  { href: '/math',      key: 'Math',                icon: '∑'  },
+  { href: '/library',   key: 'Library',             icon: '🗂️' },
+  { href: '/decks',     key: 'Decks',               icon: '🃏' },
+  { href: '/analytics', key: 'Analytics',           icon: '📊' },
+  { href: '/models',    key: 'Models & Downloads',  icon: '🤖' },
+  { href: '/sharing',   key: 'Sharing',             icon: '🔗' },
+  { href: '/settings',  key: 'Settings',            icon: '⚙️' },
+  { href: '/report',    key: 'Report',              icon: '🩺' },
 ];
 
 // ── Tiny inline avatar ────────────────────────────────────────────────────
@@ -47,6 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { data: session } = useSession();
   const { settings, updateSetting } = useSettings();
+  const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [streak, setStreak] = useState(0);
@@ -110,18 +112,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="sidebar-nav">
           {!collapsed && (
-            <div className="sidebar-section-label">Study</div>
+            <div className="sidebar-section-label">{t('Study')}</div>
           )}
-          {NAV.map(item => (
+          {NAV_ITEMS.map(item => (
             <Link
               key={item.href}
               href={item.href}
               className={`nav-item${pathname?.startsWith(item.href) ? ' active' : ''}`}
-              title={collapsed ? item.label : undefined}
+              title={collapsed ? item.key : undefined}
               onClick={() => setMobileOpen(false)}
             >
               <span className="nav-icon">{item.icon}</span>
-              {!collapsed && <span className="nav-label">{item.label}</span>}
+              {!collapsed && <span className="nav-label">{t(item.key)}</span>}
             </Link>
           ))}
         </div>
@@ -159,7 +161,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             title="Toggle theme"
           >
             <span className="nav-icon">{settings.theme === 'light' ? '🌙' : '☀️'}</span>
-            {!collapsed && <span className="nav-label">Theme</span>}
+            {!collapsed && <span className="nav-label">{t('Theme')}</span>}
           </button>
 
           {session?.user ? (
@@ -168,27 +170,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 href="/account"
                 className={`nav-item${pathname?.startsWith('/account') ? ' active' : ''}`}
-                title="My account"
+                title={t('Account')}
               >
                 <span className="nav-icon">
                   <SidebarAvatar src={session.user.image} name={session.user.name} email={session.user.email} />
                 </span>
                 {!collapsed && (
                   <span className="nav-label" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {session.user.name || session.user.email || 'Account'}
+                    {session.user.name || session.user.email || t('Account')}
                   </span>
                 )}
               </Link>
               {/* Sign out */}
-              <button className="nav-item" onClick={handleSignOut} title="Sign out" style={{ color: 'var(--text-3)' }}>
+              <button className="nav-item" onClick={handleSignOut} title={t('Sign out')} style={{ color: 'var(--text-3)' }}>
                 <span className="nav-icon">🚪</span>
-                {!collapsed && <span className="nav-label">Sign out</span>}
+                {!collapsed && <span className="nav-label">{t('Sign out')}</span>}
               </button>
             </>
           ) : (
-            <Link href="/login" className="nav-item" title="Sign in">
+            <Link href="/login" className="nav-item" title={t('Sign in')}>
               <span className="nav-icon">👤</span>
-              {!collapsed && <span className="nav-label">Sign in</span>}
+              {!collapsed && <span className="nav-label">{t('Sign in')}</span>}
             </Link>
           )}
         </div>

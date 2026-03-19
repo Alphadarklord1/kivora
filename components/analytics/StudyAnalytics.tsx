@@ -10,6 +10,8 @@ import {
   type Activity,
   type UsageStats,
   type WeekOverWeek,
+  type RetentionBucket,
+  type DailyReview,
 } from '@/hooks/useAnalytics';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -35,7 +37,7 @@ const SCORE_COLORS = {
 
 export function StudyAnalytics() {
   const { data, loading, error, refresh, setPeriod, period } = useAnalytics(30);
-  const [activeTab, setActiveTab] = useState<'overview' | 'scores' | 'activity' | 'goals'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'scores' | 'activity' | 'retention' | 'goals'>('overview');
 
   if (loading) return <AnalyticsSkeleton />;
   if (error) return (
@@ -47,7 +49,7 @@ export function StudyAnalytics() {
   );
   if (!data) return null;
 
-  const { quizStats, planStats, weakAreas, activity, insights, usage, deckStats, weekOverWeek } = data;
+  const { quizStats, planStats, weakAreas, activity, insights, usage, deckStats, weekOverWeek, dailyReviews, retentionByInterval } = data;
 
   return (
     <div className="an-shell">
@@ -140,7 +142,7 @@ export function StudyAnalytics() {
 
       {/* Tab navigation */}
       <div className="an-tabs">
-        {(['overview', 'scores', 'activity', 'goals'] as const).map(tab => (
+        {(['overview', 'scores', 'activity', 'retention', 'goals'] as const).map(tab => (
           <button
             key={tab}
             className={`an-tab${activeTab === tab ? ' active' : ''}`}
@@ -167,7 +169,18 @@ export function StudyAnalytics() {
         <ScoresTab quizStats={quizStats} activity={activity} />
       )}
       {activeTab === 'activity' && (
-        <ActivityTab activity={activity} period={period} />
+        <ActivityTab
+          activity={activity}
+          period={period}
+          dailyReviews={dailyReviews ?? []}
+        />
+      )}
+      {activeTab === 'retention' && (
+        <RetentionTab
+          retentionByInterval={retentionByInterval ?? []}
+          deckStats={deckStats}
+          activity={activity}
+        />
       )}
       {activeTab === 'goals' && (
         <GoalsTab planStats={planStats} weakAreas={weakAreas} deckStats={deckStats} />
@@ -233,9 +246,10 @@ export function StudyAnalytics() {
           border-radius: 14px;
           padding: 4px;
           align-self: flex-start;
+          flex-wrap: wrap;
         }
         .an-tab {
-          padding: 8px 20px; border-radius: 10px; border: none;
+          padding: 8px 18px; border-radius: 10px; border: none;
           background: transparent; color: var(--text-secondary);
           font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.12s;
         }
@@ -417,7 +431,6 @@ function OverviewTab({ quizStats, planStats: _planStats, weakAreas, insights, us
                       )}
                     </div>
                   </div>
-                  {/* Accuracy bar */}
                   <div className="dp-acc-row">
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 70 }}>Accuracy</span>
                     <div className="dp-bar-bg">
@@ -425,7 +438,6 @@ function OverviewTab({ quizStats, planStats: _planStats, weakAreas, insights, us
                     </div>
                     <span style={{ fontSize: 13, fontWeight: 700, color: accColor, minWidth: 36, textAlign: 'right' }}>{deck.accuracy}%</span>
                   </div>
-                  {/* Goal progress */}
                   <div className="dp-acc-row">
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 70 }}>Today</span>
                     <div className="dp-bar-bg">
@@ -531,7 +543,6 @@ function ScoresTab({ quizStats, activity: _activity }: {
   const recentScores = useMemo(() => quizStats?.recentScores ?? [], [quizStats?.recentScores]);
   const byMode = (quizStats?.byMode ?? {}) as Record<string, { attempts: number; avgScore: number; totalQuestions: number }>;
 
-  // Build score line chart data from recent scores
   const chartData = useMemo(() => {
     if (recentScores.length === 0) return [];
     return recentScores.slice(-20).map((s: { score: number; date: string; mode: string }, i: number) => ({
@@ -557,19 +568,33 @@ function ScoresTab({ quizStats, activity: _activity }: {
     return i === 0 ? `M${x},${y}` : `L${x},${y}`;
   }).join(' ');
 
+  // Moving average (5-point)
+  const movAvg = chartData.map((_: unknown, i: number) => {
+    const window = chartData.slice(Math.max(0, i-2), i+3);
+    const avg = window.reduce((s: number, d: { y: number }) => s + d.y, 0) / window.length;
+    const x = chartData.length < 2 ? chartW/2 : (i / (chartData.length-1)) * (chartW - 40) + 20;
+    const y = chartH - ((avg / maxScore) * (chartH - 40)) - 20;
+    return `${i === 0 ? 'M' : 'L'}${x},${y}`;
+  }).join(' ');
+
   const modeEntries = Object.entries(byMode).sort((a,b) => b[1].avgScore - a[1].avgScore);
 
   return (
     <div className="sc-grid">
-      {/* Line chart */}
+      {/* Line chart with moving avg */}
       <div className="an-card wide">
-        <h3 className="card-title">Score Trend (Last 20 Quizzes)</h3>
+        <div className="chart-header">
+          <h3 className="card-title" style={{ margin: 0 }}>Score Trend (Last 20 Quizzes)</h3>
+          <div className="chart-legend">
+            <span className="leg-item"><span className="leg-dot" style={{ background: 'var(--primary)' }} />Score</span>
+            <span className="leg-item"><span className="leg-dot" style={{ background: '#f59e0b', opacity: 0.8 }} />Avg trend</span>
+          </div>
+        </div>
         {chartData.length === 0 ? (
-          <p className="card-empty">No quiz scores yet. Complete some quizzes to see your trend.</p>
+          <p className="card-empty" style={{ marginTop: 16 }}>No quiz scores yet. Complete some quizzes to see your trend.</p>
         ) : (
           <div className="chart-wrap">
             <svg viewBox={`0 0 ${chartW} ${chartH}`} className="score-chart" preserveAspectRatio="none">
-              {/* Grid lines */}
               {[0,25,50,75,100].map(pct => {
                 const cy = chartH - ((pct/100) * (chartH-40)) - 20;
                 return (
@@ -579,10 +604,9 @@ function ScoresTab({ quizStats, activity: _activity }: {
                   </g>
                 );
               })}
-              {/* Gradient fill */}
               <defs>
                 <linearGradient id="scoreGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.3} />
+                  <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.25} />
                   <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
@@ -590,14 +614,18 @@ function ScoresTab({ quizStats, activity: _activity }: {
                 <path d={`${pathD} L${(chartW-40)+20},${chartH} L20,${chartH} Z`} fill="url(#scoreGrad)" />
               )}
               {pathD && (
-                <polyline points={points} fill="none" stroke="var(--primary)" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+                <polyline points={points} fill="none" stroke="var(--primary)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
               )}
-              {/* Dots */}
+              {/* Moving average line */}
+              {chartData.length >= 3 && (
+                <path d={movAvg} fill="none" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 3" strokeLinejoin="round" opacity={0.7} />
+              )}
               {chartData.map((d: { x: number; y: number; date: string; mode: string }, i: number) => {
                 const x = chartData.length < 2 ? chartW/2 : (i / (chartData.length-1)) * (chartW-40) + 20;
                 const y = chartH - ((d.y / maxScore) * (chartH-40)) - 20;
+                const dotColor = d.y >= 80 ? '#52b788' : d.y >= 60 ? '#4f86f7' : '#e05252';
                 return (
-                  <circle key={i} cx={x} cy={y} r={4} fill="var(--primary)" stroke="var(--bg-elevated)" strokeWidth={2}>
+                  <circle key={i} cx={x} cy={y} r={4} fill={dotColor} stroke="var(--bg-elevated)" strokeWidth={2}>
                     <title>{d.date}: {d.y}% ({d.mode})</title>
                   </circle>
                 );
@@ -645,7 +673,7 @@ function ScoresTab({ quizStats, activity: _activity }: {
           <p className="card-empty">No recent attempts.</p>
         ) : (
           <div className="recent-list">
-            {recentScores.slice(-8).reverse().map((s: { score: number; date: string; mode: string }, i: number) => (
+            {recentScores.slice(-10).reverse().map((s: { score: number; date: string; mode: string }, i: number) => (
               <div key={i} className="recent-item">
                 <div className="recent-dot" style={{
                   background: s.score >= 80 ? '#52b788' : s.score >= 60 ? '#4f86f7' : '#e05252'
@@ -667,6 +695,10 @@ function ScoresTab({ quizStats, activity: _activity }: {
         .sc-grid { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-3); }
         .an-card { background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:20px; padding:20px; box-shadow:var(--shadow-sm); }
         .an-card.wide { grid-column:1/-1; }
+        .chart-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px; }
+        .chart-legend { display:flex; gap:12px; }
+        .leg-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-muted); }
+        .leg-dot { width:10px; height:3px; border-radius:2px; display:inline-block; }
         .card-title { margin:0 0 16px; font-size:15px; font-weight:600; }
         .card-empty { font-size:13px; color:var(--text-muted); }
         .chart-wrap { width:100%; overflow:hidden; }
@@ -679,7 +711,7 @@ function ScoresTab({ quizStats, activity: _activity }: {
         .mode-bar-bg { height:8px; background:var(--bg-surface); border-radius:4px; overflow:hidden; margin-bottom:3px; }
         .mode-bar-fill { height:100%; border-radius:4px; transition:width 0.5s; }
         .mode-meta { font-size:11px; color:var(--text-muted); }
-        .recent-list { display:flex; flex-direction:column; gap:8px; }
+        .recent-list { display:flex; flex-direction:column; gap:6px; }
         .recent-item { display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--border-subtle); }
         .recent-item:last-child { border-bottom:none; }
         .recent-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
@@ -695,66 +727,153 @@ function ScoresTab({ quizStats, activity: _activity }: {
 
 // ─── Activity Tab ─────────────────────────────────────────────────────────────
 
-function ActivityTab({ activity, period: _period }: {
+function ActivityTab({ activity, period: _period, dailyReviews }: {
   activity: Activity | null;
   period: number;
+  dailyReviews: DailyReview[];
 }) {
   const daily = activity?.dailyActivity ?? [];
   const weekly = activity?.weeklyActivity ?? [];
 
-  // Build a 12-week heatmap
+  // Build proper aligned heatmap (Mon–Sun rows, weeks as columns)
   const today = new Date();
-  const heatmapDays = useMemo(() => {
-    const days: { date: string; quizzes: number }[] = [];
-    for (let i = 83; i >= 0; i--) {
-      const d = new Date(today); d.setDate(d.getDate()-i);
-      const ds = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-      const found = (daily as { date: string; quizzes: number }[]).find((x: { date: string }) => x.date === ds);
-      days.push({ date: ds, quizzes: found?.quizzes ?? 0 });
+  const heatmapData = useMemo(() => {
+    // Go back 15 weeks (105 days), then pad start to Monday
+    const endDate = new Date(today);
+    const startDate = new Date(today);
+    startDate.setDate(startDate.getDate() - 14 * 7);
+    // Align to Monday
+    const dayOfWeek = (startDate.getDay() + 6) % 7; // 0=Mon
+    startDate.setDate(startDate.getDate() - dayOfWeek);
+
+    const result: { date: string; quizzes: number; reviews: number; active: boolean }[] = [];
+    const cur = new Date(startDate);
+    while (cur <= endDate) {
+      const ds = toDateStr(cur);
+      const quizDay = (daily as { date: string; quizzes: number }[]).find(x => x.date === ds);
+      const reviewDay = dailyReviews.find(r => r.date === ds);
+      const quizzes = quizDay?.quizzes ?? 0;
+      const reviews = reviewDay?.reviews ?? 0;
+      result.push({ date: ds, quizzes, reviews, active: quizzes > 0 || reviews > 0 });
+      cur.setDate(cur.getDate() + 1);
     }
-    return days;
+    return result;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [daily]);
+  }, [daily, dailyReviews]);
 
-  const maxQ = Math.max(...heatmapDays.map((d: { quizzes: number }) => d.quizzes), 1);
+  const maxActivity = Math.max(...heatmapData.map(d => d.quizzes + d.reviews), 1);
 
-  // Weekly bar chart
+  // Combined daily chart (last 30 days)
+  const combinedDaily = useMemo(() => {
+    const last30 = daily.slice(-30) as { date: string; quizzes: number; avgScore: number }[];
+    return last30.map(d => {
+      const revDay = dailyReviews.find(r => r.date === d.date);
+      return {
+        date: d.date,
+        quizzes: d.quizzes,
+        reviews: revDay?.reviews ?? 0,
+        score: d.avgScore,
+      };
+    });
+  }, [daily, dailyReviews]);
+
+  const maxCombined = Math.max(...combinedDaily.map(d => d.quizzes + d.reviews), 1);
   const maxW = Math.max(...(weekly as { quizzes: number }[]).map((w: { quizzes: number }) => w.quizzes), 1);
+
+  // Group heatmap into weeks (columns)
+  const weeks: typeof heatmapData[] = [];
+  for (let i = 0; i < heatmapData.length; i += 7) {
+    weeks.push(heatmapData.slice(i, i + 7));
+  }
 
   return (
     <div className="act-grid">
-      {/* Activity heatmap */}
+      {/* Contribution heatmap — GitHub style */}
       <div className="an-card wide">
-        <h3 className="card-title">Activity Heatmap (Last 12 Weeks)</h3>
-        <div className="heatmap-wrap">
-          <div className="heatmap">
-            {heatmapDays.map((day, i) => {
-              const intensity = day.quizzes === 0 ? 0 : Math.max(0.15, day.quizzes / maxQ);
-              const isToday = day.date === toDateStr(today);
-              return (
-                <div
-                  key={i}
-                  className={`hmap-cell${isToday ? ' today' : ''}`}
-                  style={{
-                    background: day.quizzes === 0
-                      ? 'var(--bg-surface)'
-                      : `color-mix(in srgb, var(--primary) ${Math.round(intensity*100)}%, var(--bg-surface))`,
-                  }}
-                  title={`${day.date}: ${day.quizzes} quiz${day.quizzes!==1?'zes':''}`}
-                />
-              );
-            })}
-          </div>
+        <div className="chart-header">
+          <h3 className="card-title" style={{ margin: 0 }}>Activity Heatmap (Last 15 Weeks)</h3>
           <div className="hmap-legend">
             <span className="hmap-leg-txt">Less</span>
-            {[0,0.25,0.5,0.75,1].map(v => (
+            {[0, 0.25, 0.5, 0.75, 1].map(v => (
               <div key={v} className="hmap-leg-cell" style={{
-                background: v === 0 ? 'var(--bg-surface)' : `color-mix(in srgb, var(--primary) ${Math.round(v*100)}%, var(--bg-surface))`
+                background: v === 0 ? 'var(--bg-surface)' : `color-mix(in srgb, var(--primary) ${Math.round(v * 100)}%, var(--bg-surface))`
               }} />
             ))}
             <span className="hmap-leg-txt">More</span>
           </div>
         </div>
+        <div className="heatmap-container">
+          <div className="hmap-day-labels">
+            {['Mon','','Wed','','Fri','','Sun'].map((d, i) => (
+              <span key={i} className="hmap-day-label">{d}</span>
+            ))}
+          </div>
+          <div className="hmap-weeks">
+            {weeks.map((week, wi) => (
+              <div key={wi} className="hmap-week-col">
+                {week.map((day, di) => {
+                  const total = day.quizzes + day.reviews;
+                  const intensity = total === 0 ? 0 : Math.max(0.2, total / maxActivity);
+                  const isToday = day.date === toDateStr(today);
+                  return (
+                    <div
+                      key={di}
+                      className={`hmap-cell${isToday ? ' today' : ''}${day.active ? ' active' : ''}`}
+                      style={{
+                        background: total === 0
+                          ? 'var(--bg-surface)'
+                          : `color-mix(in srgb, var(--primary) ${Math.round(intensity * 100)}%, var(--bg-surface))`,
+                      }}
+                      title={`${day.date}: ${day.quizzes} quiz${day.quizzes !== 1 ? 'zes' : ''}, ${day.reviews} reviews`}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Combined daily activity chart */}
+      <div className="an-card wide">
+        <h3 className="card-title">Daily Study Activity (Last 30 Days)</h3>
+        {combinedDaily.length === 0 ? (
+          <p className="card-empty">No activity data yet.</p>
+        ) : (
+          <div className="combined-chart">
+            <div className="combined-bars">
+              {combinedDaily.map((d, i) => (
+                <div key={i} className="cb-col" title={`${d.date}\n${d.quizzes} quizzes, ${d.reviews} reviews`}>
+                  <div className="cb-stack">
+                    {d.reviews > 0 && (
+                      <div
+                        className="cb-reviews"
+                        style={{ height: `${(d.reviews / maxCombined) * 100}%` }}
+                      />
+                    )}
+                    {d.quizzes > 0 && (
+                      <div
+                        className="cb-quizzes"
+                        style={{ height: `${(d.quizzes / maxCombined) * 100}%` }}
+                      />
+                    )}
+                    {d.quizzes === 0 && d.reviews === 0 && (
+                      <div className="cb-empty" />
+                    )}
+                  </div>
+                  {/* Show date label every 5 days */}
+                  {i % 5 === 0 && (
+                    <span className="cb-label">{d.date.slice(5)}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="combined-legend">
+              <span className="cleg-item"><span className="cleg-dot quizzes" />Quizzes</span>
+              <span className="cleg-item"><span className="cleg-dot reviews" />Deck Reviews</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Weekly bar chart */}
@@ -764,13 +883,13 @@ function ActivityTab({ activity, period: _period }: {
           <p className="card-empty">No weekly data yet.</p>
         ) : (
           <div className="weekly-bars">
-            {(weekly as { week: string; quizzes: number; avgScore: number }[]).slice(-8).map((w: { week: string; quizzes: number }, i: number) => (
+            {(weekly as { week: string; quizzes: number; avgScore: number }[]).slice(-8).map((w: { week: string; quizzes: number; avgScore: number }, i: number) => (
               <div key={i} className="wb-col">
                 <div className="wb-bar-wrap">
                   <div
                     className="wb-bar"
                     style={{ height: `${(w.quizzes/maxW)*120}px` }}
-                    title={`${w.week}: ${w.quizzes} quizzes`}
+                    title={`${w.week}: ${w.quizzes} quizzes · avg ${w.avgScore}%`}
                   />
                 </div>
                 <span className="wb-label">{w.week?.slice(5) ?? ''}</span>
@@ -793,6 +912,22 @@ function ActivityTab({ activity, period: _period }: {
             <span className="streak-lbl">Total Active Days</span>
           </div>
         </div>
+        {/* Streak bar (last 14 days) */}
+        <div className="streak-dots">
+          {Array.from({ length: 14 }).map((_, i) => {
+            const d = new Date(); d.setDate(d.getDate() - (13 - i));
+            const ds = toDateStr(d);
+            const active = daily.some((x: { date: string }) => x.date === ds && (x as { date: string; quizzes: number }).quizzes > 0)
+              || dailyReviews.some(r => r.date === ds && r.reviews > 0);
+            return (
+              <div
+                key={i}
+                className={`streak-dot${active ? ' active' : ''}`}
+                title={ds}
+              />
+            );
+          })}
+        </div>
         <p className="streak-tip">
           {(activity?.currentStreak ?? 0) === 0
             ? "Start studying today to begin your streak!"
@@ -806,28 +941,298 @@ function ActivityTab({ activity, period: _period }: {
         .act-grid { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-3); }
         .an-card { background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:20px; padding:20px; box-shadow:var(--shadow-sm); }
         .an-card.wide { grid-column:1/-1; }
+        .chart-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px; }
         .card-title { margin:0 0 16px; font-size:15px; font-weight:600; }
         .card-empty { font-size:13px; color:var(--text-muted); }
-        .heatmap-wrap { display:flex; flex-direction:column; gap:8px; }
-        .heatmap { display:grid; grid-template-columns:repeat(12,1fr); grid-template-rows:repeat(7,1fr); gap:3px; }
-        .hmap-cell { aspect-ratio:1; border-radius:3px; cursor:default; transition:transform 0.1s; }
-        .hmap-cell:hover { transform:scale(1.3); z-index:1; }
+
+        /* Heatmap */
+        .heatmap-container { display:flex; gap:6px; align-items:flex-start; overflow-x:auto; }
+        .hmap-day-labels { display:flex; flex-direction:column; gap:2px; padding-top:2px; }
+        .hmap-day-label { font-size:10px; color:var(--text-muted); height:14px; line-height:14px; width:24px; }
+        .hmap-weeks { display:flex; gap:2px; }
+        .hmap-week-col { display:flex; flex-direction:column; gap:2px; }
+        .hmap-cell {
+          width: 13px; height: 13px; border-radius: 3px; cursor: default;
+          transition: transform 0.1s, outline 0.1s;
+        }
+        .hmap-cell:hover { transform:scale(1.3); z-index:1; position:relative; }
         .hmap-cell.today { outline:2px solid var(--primary); outline-offset:1px; }
         .hmap-legend { display:flex; align-items:center; gap:4px; }
         .hmap-leg-txt { font-size:10px; color:var(--text-muted); }
-        .hmap-leg-cell { width:12px; height:12px; border-radius:2px; }
+        .hmap-leg-cell { width:13px; height:13px; border-radius:2px; }
+
+        /* Combined daily chart */
+        .combined-chart { display:flex; flex-direction:column; gap:8px; }
+        .combined-bars { display:flex; align-items:flex-end; gap:1.5px; height:120px; padding-bottom:4px; }
+        .cb-col { display:flex; flex-direction:column; align-items:center; flex:1; height:100%; justify-content:flex-end; position:relative; }
+        .cb-stack { display:flex; flex-direction:column; justify-content:flex-end; width:100%; height:100%; gap:0; }
+        .cb-reviews { width:100%; background:#7c3aed; border-radius:2px 2px 0 0; min-height:2px; transition:height 0.4s; }
+        .cb-quizzes { width:100%; background:var(--primary); min-height:2px; transition:height 0.4s; }
+        .cb-empty { width:100%; height:2px; background:var(--bg-surface); border-radius:2px; }
+        .cb-label { font-size:9px; color:var(--text-muted); position:absolute; bottom:-16px; white-space:nowrap; }
+        .combined-legend { display:flex; gap:16px; padding-top:12px; }
+        .cleg-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-muted); }
+        .cleg-dot { width:10px; height:10px; border-radius:2px; display:inline-block; }
+        .cleg-dot.quizzes { background:var(--primary); }
+        .cleg-dot.reviews { background:#7c3aed; }
+
+        /* Weekly bars */
         .weekly-bars { display:flex; align-items:flex-end; gap:8px; padding-top:8px; height:160px; }
         .wb-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; height:100%; justify-content:flex-end; }
         .wb-bar-wrap { display:flex; align-items:flex-end; height:120px; width:100%; }
         .wb-bar { width:100%; background:var(--primary); border-radius:4px 4px 0 0; min-height:3px; transition:height 0.5s; }
         .wb-label { font-size:10px; color:var(--text-muted); text-align:center; }
-        .streak-card { }
+
+        /* Streak */
         .streak-nums { display:flex; gap:24px; margin-bottom:12px; }
         .streak-block { display:flex; flex-direction:column; gap:4px; }
         .streak-val { font-size:28px; font-weight:700; }
         .streak-lbl { font-size:12px; color:var(--text-secondary); }
+        .streak-dots { display:flex; gap:5px; margin-bottom:12px; }
+        .streak-dot { width:20px; height:20px; border-radius:5px; background:var(--bg-surface); border:1.5px solid var(--border-subtle); transition:background 0.2s; }
+        .streak-dot.active { background:var(--primary); border-color:var(--primary); }
         .streak-tip { font-size:13px; color:var(--text-muted); margin:0; line-height:1.6; }
         @media (max-width:768px) { .act-grid { grid-template-columns:1fr; } }
+      `}</style>
+    </div>
+  );
+}
+
+// ─── Retention Tab ────────────────────────────────────────────────────────────
+
+function RetentionTab({ retentionByInterval, deckStats, activity }: {
+  retentionByInterval: RetentionBucket[];
+  deckStats: DeckStats;
+  activity: Activity | null;
+}) {
+  const hasData = retentionByInterval.some(b => b.cardCount > 0);
+  const maxCards = Math.max(...retentionByInterval.map(b => b.cardCount), 1);
+
+  return (
+    <div className="ret-grid">
+      {/* Retention curve */}
+      <div className="an-card wide">
+        <div className="chart-header">
+          <div>
+            <h3 className="card-title" style={{ margin: 0 }}>SRS Retention Curve</h3>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+              How well you recall cards at different spaced repetition stages
+            </p>
+          </div>
+          <div className="ret-legend">
+            <span className="ret-leg">
+              <span style={{ display:'inline-block', width:12, height:12, borderRadius:3, background:'var(--primary)', marginRight:5 }} />
+              Retention %
+            </span>
+            <span className="ret-leg">
+              <span style={{ display:'inline-block', width:12, height:12, borderRadius:3, background:'var(--border-subtle)', marginRight:5 }} />
+              Card count
+            </span>
+          </div>
+        </div>
+        {!hasData ? (
+          <div className="ret-empty">
+            <p>📚 No SRS review data yet.</p>
+            <p>Create or import a deck and start reviewing cards to see your retention curve.</p>
+          </div>
+        ) : (
+          <div className="ret-chart">
+            {/* SVG retention curve */}
+            <div className="ret-bars">
+              {retentionByInterval.map((bucket, i) => {
+                const retention = bucket.retention ?? 0;
+                const retColor = retention >= 90 ? '#52b788'
+                  : retention >= 75 ? '#4f86f7'
+                  : retention >= 60 ? '#f59e0b'
+                  : '#e05252';
+                const cardBarH = Math.round((bucket.cardCount / maxCards) * 60);
+                return (
+                  <div key={i} className="ret-col">
+                    <div className="ret-val-label" style={{ color: bucket.retention === null ? 'var(--text-muted)' : retColor }}>
+                      {bucket.retention === null ? '—' : `${bucket.retention}%`}
+                    </div>
+                    <div className="ret-bar-area">
+                      {bucket.retention !== null && (
+                        <div
+                          className="ret-bar"
+                          style={{
+                            height: `${Math.max(4, (retention / 100) * 120)}px`,
+                            background: `linear-gradient(180deg, ${retColor}cc, ${retColor}66)`,
+                            borderColor: retColor,
+                          }}
+                        />
+                      )}
+                    </div>
+                    {/* Card count bar (behind, grey) */}
+                    <div className="ret-count-bar" style={{ height: `${cardBarH}px` }} />
+                    <div className="ret-bucket-label">{bucket.label}</div>
+                    <div className="ret-card-count">{bucket.cardCount} cards</div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Horizontal guide at 80% (ideal retention) */}
+            <div className="ret-ideal-line">
+              <span>80% ideal</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* SRS summary cards */}
+      <div className="an-card">
+        <h3 className="card-title">Retention Summary</h3>
+        <div className="ret-summary">
+          <div className="rsum-row">
+            <span className="rsum-label">Overall Retention</span>
+            <span className="rsum-val" style={{
+              color: (deckStats.overallRetention ?? 0) >= 80 ? '#52b788'
+                : (deckStats.overallRetention ?? 0) >= 60 ? '#4f86f7' : '#e05252'
+            }}>
+              {deckStats.overallRetention ?? 0}%
+            </span>
+          </div>
+          <div className="rsum-bar-bg">
+            <div className="rsum-bar-fill" style={{
+              width: `${deckStats.overallRetention ?? 0}%`,
+              background: (deckStats.overallRetention ?? 0) >= 80 ? '#52b788'
+                : (deckStats.overallRetention ?? 0) >= 60 ? '#4f86f7' : '#e05252'
+            }} />
+          </div>
+          <p className="rsum-note">
+            {(deckStats.overallRetention ?? 0) >= 85
+              ? 'Excellent! Your recall is above the 85% ideal threshold.'
+              : (deckStats.overallRetention ?? 0) >= 70
+                ? 'Good retention. Review cards more frequently to reach 85%.'
+                : 'Focus on daily reviews to improve retention.'}
+          </p>
+
+          <div className="rsum-stats">
+            <div className="rsum-stat">
+              <span className="rstat-num">{deckStats.cardsMastered}</span>
+              <span className="rstat-desc">Cards mastered (21d+ interval)</span>
+            </div>
+            <div className="rsum-stat">
+              <span className="rstat-num">{deckStats.totalCards - deckStats.cardsMastered}</span>
+              <span className="rstat-desc">Still learning</span>
+            </div>
+            <div className="rsum-stat">
+              <span className="rstat-num">{deckStats.dueCardsTotal}</span>
+              <span className="rstat-desc">Due for review today</span>
+            </div>
+            <div className="rsum-stat">
+              <span className="rstat-num">{deckStats.reviewedToday}</span>
+              <span className="rstat-desc">Reviewed today</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mastery breakdown donut */}
+      <div className="an-card">
+        <h3 className="card-title">Card Mastery Breakdown</h3>
+        {deckStats.totalCards === 0 ? (
+          <p className="card-empty">No cards yet.</p>
+        ) : (() => {
+          const mastered = deckStats.cardsMastered;
+          const total = deckStats.totalCards;
+          const learning = Math.max(0, total - mastered);
+          const masteredPct = Math.round((mastered / total) * 100);
+          const r = 60; const circ = 2 * Math.PI * r;
+          const masteredOffset = circ - (masteredPct / 100) * circ;
+          return (
+            <div className="mastery-wrap">
+              <svg width={160} height={160} viewBox="0 0 160 160">
+                <circle cx={80} cy={80} r={r} fill="none" stroke="var(--bg-surface)" strokeWidth={18} />
+                <circle
+                  cx={80} cy={80} r={r} fill="none"
+                  stroke="#52b788" strokeWidth={18}
+                  strokeLinecap="round"
+                  strokeDasharray={circ}
+                  strokeDashoffset={masteredOffset}
+                  transform="rotate(-90 80 80)"
+                  style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+                />
+                <text x={80} y={76} textAnchor="middle" fontSize={22} fontWeight={700} fill="#52b788">{masteredPct}%</text>
+                <text x={80} y={94} textAnchor="middle" fontSize={11} fill="var(--text-muted)">mastered</text>
+              </svg>
+              <div className="mastery-legend">
+                <div className="mleg-item">
+                  <span className="mleg-dot" style={{ background: '#52b788' }} />
+                  <span>{mastered} Mastered</span>
+                </div>
+                <div className="mleg-item">
+                  <span className="mleg-dot" style={{ background: 'var(--border-subtle)' }} />
+                  <span>{learning} Learning</span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+        <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--primary) 6%, var(--bg-surface))' }}>
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            Daily streak: <strong style={{ color: 'var(--text-primary)' }}>{activity?.currentStreak ?? 0} days</strong>
+            {' '}· Reviewed today: <strong style={{ color: 'var(--text-primary)' }}>{deckStats.reviewedToday}/{deckStats.dailyGoal}</strong> cards
+          </p>
+        </div>
+      </div>
+
+      <style jsx>{`
+        .ret-grid { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-3); }
+        .an-card { background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:20px; padding:20px; box-shadow:var(--shadow-sm); }
+        .an-card.wide { grid-column:1/-1; }
+        .chart-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:8px; }
+        .card-title { margin:0 0 16px; font-size:15px; font-weight:600; }
+        .card-empty { font-size:13px; color:var(--text-muted); }
+        .ret-legend { display:flex; gap:12px; font-size:11px; color:var(--text-muted); align-items:center; flex-wrap:wrap; }
+        .ret-leg { display:flex; align-items:center; }
+        .ret-empty { text-align:center; padding:40px 20px; }
+        .ret-empty p { margin:4px 0; font-size:13px; color:var(--text-muted); }
+        .ret-chart { position:relative; }
+        .ret-bars { display:flex; gap:8px; align-items:flex-end; height:200px; padding-bottom:48px; position:relative; }
+        .ret-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; height:100%; justify-content:flex-end; position:relative; }
+        .ret-val-label { font-size:13px; font-weight:700; position:absolute; top:0; }
+        .ret-bar-area { width:100%; display:flex; align-items:flex-end; justify-content:center; height:130px; }
+        .ret-bar {
+          width:70%; border-radius:6px 6px 0 0;
+          border:1px solid transparent;
+          transition:height 0.6s ease;
+        }
+        .ret-count-bar {
+          width:100%; background:var(--border-subtle); border-radius:2px;
+          position:absolute; bottom:40px; left:0; transition:height 0.4s;
+          opacity:0.4;
+        }
+        .ret-bucket-label { position:absolute; bottom:22px; font-size:11px; font-weight:600; color:var(--text-secondary); text-align:center; width:100%; }
+        .ret-card-count { position:absolute; bottom:6px; font-size:10px; color:var(--text-muted); text-align:center; width:100%; }
+        .ret-ideal-line {
+          position:absolute; top:calc(20% + 30px); left:0; right:0;
+          border-top:1.5px dashed #52b78860;
+          display:flex; align-items:center; justify-content:flex-end;
+          padding-right:8px;
+        }
+        .ret-ideal-line span { font-size:10px; color:#52b788; background:var(--bg-elevated); padding:0 4px; }
+
+        /* Summary */
+        .ret-summary { display:flex; flex-direction:column; gap:12px; }
+        .rsum-row { display:flex; justify-content:space-between; align-items:baseline; }
+        .rsum-label { font-size:13px; color:var(--text-secondary); }
+        .rsum-val { font-size:22px; font-weight:700; }
+        .rsum-bar-bg { height:8px; background:var(--bg-surface); border-radius:4px; overflow:hidden; }
+        .rsum-bar-fill { height:100%; border-radius:4px; transition:width 0.5s; }
+        .rsum-note { font-size:12px; color:var(--text-muted); margin:0; line-height:1.6; }
+        .rsum-stats { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:4px; }
+        .rsum-stat { }
+        .rstat-num { display:block; font-size:22px; font-weight:700; color:var(--text-primary); }
+        .rstat-desc { font-size:11px; color:var(--text-muted); }
+
+        /* Donut */
+        .mastery-wrap { display:flex; align-items:center; gap:20px; }
+        .mastery-legend { display:flex; flex-direction:column; gap:8px; }
+        .mleg-item { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-secondary); }
+        .mleg-dot { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
+
+        @media (max-width:768px) { .ret-grid { grid-template-columns:1fr; } }
       `}</style>
     </div>
   );
@@ -847,10 +1252,8 @@ function GoalsTab({ planStats, weakAreas, deckStats }: {
   const completedPlans = planStats?.completedPlans ?? 0;
   const totalPlans = planStats?.totalPlans ?? 0;
 
-  // Circumference for SVG ring
   const r = 72; const circ = 2 * Math.PI * r;
   const offset = circ - (progress / 100) * circ;
-
   const progressColor = progress >= 80 ? '#52b788' : progress >= 50 ? '#4f86f7' : '#f59e0b';
 
   return (
@@ -929,10 +1332,10 @@ function GoalsTab({ planStats, weakAreas, deckStats }: {
           <p className="card-empty">No deck goal data yet. Review a deck to start building daily progress.</p>
         ) : (
           <div className="goal-list">
-            {deckStats.topDecks.slice(0, 4).map((deck) => (
+            {deckStats.topDecks.slice(0, 5).map((deck) => (
               <div key={deck.deckId} className="goal-row">
                 <div className="goal-header">
-                  <span>{deck.name}</span>
+                  <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{deck.name}</span>
                   <strong>{deck.reviewedToday}/{deckStats.dailyGoal}</strong>
                 </div>
                 <div className="goal-bar-bg">
@@ -969,7 +1372,8 @@ function GoalsTab({ planStats, weakAreas, deckStats }: {
         .goal-header strong { color:var(--text-primary); }
         .goal-bar-bg { height:8px; background:var(--bg-surface); border-radius:999px; overflow:hidden; }
         .goal-bar-fill { height:100%; border-radius:999px; background:#7c3aed; transition:width 0.4s ease; }
-        @media (max-width:768px) { .goals-grid { grid-template-columns:1fr; } }
+        @media (max-width:900px) { .goals-grid { grid-template-columns:1fr 1fr; } }
+        @media (max-width:600px) { .goals-grid { grid-template-columns:1fr; } }
       `}</style>
     </div>
   );
@@ -991,7 +1395,7 @@ function AnalyticsSkeleton() {
         .skel-hero { height:120px; border-radius:28px; background:var(--bg-elevated); animation:shimmer 1.5s infinite; }
         .skel-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:var(--space-3); }
         .skel-card { height:90px; border-radius:16px; background:var(--bg-elevated); animation:shimmer 1.5s infinite; }
-        .skel-tabs { height:48px; width:300px; border-radius:14px; background:var(--bg-elevated); animation:shimmer 1.5s infinite; }
+        .skel-tabs { height:48px; width:400px; border-radius:14px; background:var(--bg-elevated); animation:shimmer 1.5s infinite; }
         .skel-main { height:300px; border-radius:20px; background:var(--bg-elevated); animation:shimmer 1.5s infinite; }
         @keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:0.5} }
       `}</style>

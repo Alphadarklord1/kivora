@@ -1,7 +1,10 @@
 import { callOpenAIChat, type OpenAIMessage } from '@/lib/ai/openai';
-import { resolveAiRuntimeRequest, type AiMode } from '@/lib/ai/runtime';
+import { callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
+import { resolveAiRuntimeRequest, cloudProviderForModel, type AiMode } from '@/lib/ai/runtime';
 
 export { resolveAiRuntimeRequest };
+
+// ── Local (Ollama) ────────────────────────────────────────────────────────────
 
 export async function tryLocalGeneration(args: {
   baseUrl: string;
@@ -10,6 +13,7 @@ export async function tryLocalGeneration(args: {
   prompt: string;
   maxTokens?: number;
 }) {
+  // 1. OpenAI-compatible endpoint (Ollama >= 0.1.24 exposes this)
   try {
     const chatResponse = await fetch(`${args.baseUrl}/v1/chat/completions`, {
       method: 'POST',
@@ -38,6 +42,7 @@ export async function tryLocalGeneration(args: {
     // Try native Ollama generate below.
   }
 
+  // 2. Native Ollama /api/generate endpoint
   try {
     const nativeResponse = await fetch(`${args.baseUrl}/api/generate`, {
       method: 'POST',
@@ -65,21 +70,49 @@ export async function tryLocalGeneration(args: {
   return { ok: false as const };
 }
 
+// ── Cloud: Grok (primary) → OpenAI (secondary) ───────────────────────────────
+
+/**
+ * Try Grok first; if not configured or fails, fall back to OpenAI.
+ * Source tag lets the UI show users which provider was actually used.
+ */
 export async function tryCloudGeneration(args: {
   model: string;
   messages: OpenAIMessage[];
   maxTokens?: number;
 }) {
-  const result = await callOpenAIChat({
-    model: args.model,
+  const provider = cloudProviderForModel(args.model);
+
+  // ── 1. Grok (primary) ────────────────────────────────────────────────────
+  if (provider === 'grok' || isGrokConfigured()) {
+    const grokModel = provider === 'grok' ? args.model : 'grok-3-fast';
+    const grokResult = await callGrokChat({
+      model: grokModel,
+      messages: args.messages,
+      maxTokens: args.maxTokens ?? 1600,
+      temperature: 0.7,
+    });
+    if (grokResult.ok) {
+      return { ok: true as const, content: grokResult.content, source: 'grok' as const };
+    }
+  }
+
+  // ── 2. OpenAI (secondary / fallback) ─────────────────────────────────────
+  const openaiModel = provider === 'openai' ? args.model : 'gpt-4o-mini';
+  const openaiResult = await callOpenAIChat({
+    model: openaiModel,
     messages: args.messages,
     maxTokens: args.maxTokens ?? 1600,
     temperature: 0.7,
   });
+  if (openaiResult.ok) {
+    return { ok: true as const, content: openaiResult.content, source: 'openai' as const };
+  }
 
-  if (!result.ok) return { ok: false as const, message: result.message };
-  return { ok: true as const, content: result.content, source: 'openai' as const };
+  return { ok: false as const, message: openaiResult.message };
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 export function shouldTryLocal(mode: AiMode) {
   return mode === 'auto' || mode === 'local';

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { offlineGenerate, type ToolMode } from '@/lib/offline/generate';
+import { callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
 import { callOpenAIChat } from '@/lib/ai/openai';
 import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/ai/server-routing';
+import { cloudProviderForModel } from '@/lib/ai/runtime';
 import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
 
@@ -15,14 +17,17 @@ const OFFLINE_MODES: ToolMode[] = [
 const VALID_MODES = [...OFFLINE_MODES, 'outline', 'exam'] as const;
 type AllModes = typeof VALID_MODES[number];
 
+const SYSTEM_PROMPT = 'You are a study assistant. Be concise, accurate, and helpful.';
+
 /**
  * POST /api/generate
  * Body: { mode: AllModes, text: string, options?: Record<string, unknown> }
  *
  * AI Provider Priority:
- *  1. Ollama  (OLLAMA_URL — open-source local LLM, e.g. http://localhost:11434)
- *  2. llama.cpp proxy  (LLAMA_PROXY_URL)
- *  3. Deterministic offline fallback
+ *  1. Grok (xAI)   — primary cloud  (GROK_API_KEY / XAI_API_KEY)
+ *  2. Ollama local — offline feature (OLLAMA_URL, default localhost:11434)
+ *  3. OpenAI       — secondary cloud fallback (OPENAI_API_KEY)
+ *  4. Deterministic offline generation — always available, no API needed
  */
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
@@ -65,113 +70,86 @@ export async function POST(req: NextRequest) {
     ? retrievalContext.trim()
     : buildGenerationContext(currentMode, baseSourceText, options, persistedIndex);
   const { mode: aiMode, localModel, cloudModel } = resolveAiRuntimeRequest(body);
+  const userPrompt = buildUserPrompt(currentMode, preparedText, options);
+  const messages = [
+    { role: 'system' as const, content: SYSTEM_PROMPT },
+    { role: 'user'   as const, content: userPrompt },
+  ];
 
+  // ── 1. Grok (primary cloud) ────────────────────────────────────────────────
+  if (shouldTryCloud(aiMode) && isGrokConfigured()) {
+    const grokModel = cloudProviderForModel(cloudModel) === 'grok' ? cloudModel : 'grok-3-fast';
+    const grokResult = await callGrokChat({ model: grokModel, messages, maxTokens: 1600, temperature: 0.7 });
+    if (grokResult.ok) {
+      return NextResponse.json({ mode, content: grokResult.content, source: 'grok' });
+    }
+  }
+
+  // ── 2. Ollama local (offline feature) ─────────────────────────────────────
   const ollamaBase = process.env.OLLAMA_URL ?? 'http://localhost:11434';
   if (shouldTryLocal(aiMode)) {
     try {
-      const userPrompt = buildUserPrompt(currentMode, preparedText, options);
-      const prompt = buildPrompt(currentMode, preparedText, options);
-
       const res = await fetch(`${ollamaBase}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: localModel,
-          messages: [
-            { role: 'system', content: 'You are a study assistant. Be concise, accurate, and helpful.' },
-            { role: 'user', content: userPrompt },
-          ],
-          max_tokens: 1600,
-          temperature: 0.7,
-          stream: false,
-        }),
+        body: JSON.stringify({ model: localModel, messages, max_tokens: 1600, temperature: 0.7, stream: false }),
         signal: AbortSignal.timeout(45_000),
       });
-
       if (res.ok) {
         const data = await res.json();
         const content = data?.choices?.[0]?.message?.content ?? '';
-        if (content.trim()) {
-          return NextResponse.json({ mode, content: content.trim(), source: 'local' });
-        }
+        if (content.trim()) return NextResponse.json({ mode, content: content.trim(), source: 'local' });
       }
 
       const res2 = await fetch(`${ollamaBase}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: localModel,
-          prompt,
-          stream: false,
-          options: { num_predict: 1600, temperature: 0.7 },
-        }),
+        body: JSON.stringify({ model: localModel, prompt: buildPrompt(currentMode, preparedText, options), stream: false, options: { num_predict: 1600, temperature: 0.7 } }),
         signal: AbortSignal.timeout(45_000),
       });
-
       if (res2.ok) {
         const data2 = await res2.json();
         const content2 = data2?.response ?? '';
-        if (content2.trim()) {
-          return NextResponse.json({ mode, content: content2.trim(), source: 'local' });
-        }
+        if (content2.trim()) return NextResponse.json({ mode, content: content2.trim(), source: 'local' });
       }
     } catch {
       // Local runtime unavailable — fall through.
     }
-  }
 
-  // ── 2. llama.cpp proxy (alternative local runner) ─────────────────────────
-  const llamaUrl = shouldTryLocal(aiMode) ? process.env.LLAMA_PROXY_URL : null;
-  if (llamaUrl) {
-    try {
-      const prompt = buildPrompt(currentMode, preparedText, options);
-      const res = await fetch(`${llamaUrl}/completion`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt,
-          max_tokens: 1600,
-          temperature: 0.7,
-          stop: ['<|im_end|>', '</s>'],
-        }),
-        signal: AbortSignal.timeout(30_000),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const content = data?.content ?? data?.choices?.[0]?.text ?? '';
-        if (content.trim()) {
-          return NextResponse.json({ mode, content: content.trim(), source: 'local' });
+    // llama.cpp proxy (alternative local runner)
+    const llamaUrl = process.env.LLAMA_PROXY_URL;
+    if (llamaUrl) {
+      try {
+        const res = await fetch(`${llamaUrl}/completion`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: buildPrompt(currentMode, preparedText, options), max_tokens: 1600, temperature: 0.7, stop: ['<|im_end|>', '</s>'] }),
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const content = data?.content ?? data?.choices?.[0]?.text ?? '';
+          if (content.trim()) return NextResponse.json({ mode, content: content.trim(), source: 'local' });
         }
-      }
-    } catch {
-      // llama.cpp unavailable — fall through
+      } catch { /* fall through */ }
     }
   }
 
+  // ── 3. OpenAI (secondary cloud fallback) ──────────────────────────────────
   if (shouldTryCloud(aiMode)) {
-    const cloudResult = await callOpenAIChat({
-      model: cloudModel,
-      messages: [
-        { role: 'system', content: 'You are a study assistant. Be concise, accurate, and helpful.' },
-        { role: 'user', content: buildUserPrompt(currentMode, preparedText, options) },
-      ],
-      maxTokens: 1600,
-      temperature: 0.7,
-    });
-
-    if (cloudResult.ok) {
-      return NextResponse.json({ mode, content: cloudResult.content, source: 'openai' });
+    const openaiModel = cloudProviderForModel(cloudModel) === 'openai' ? cloudModel : 'gpt-4o-mini';
+    const openaiResult = await callOpenAIChat({ model: openaiModel, messages, maxTokens: 1600, temperature: 0.7 });
+    if (openaiResult.ok) {
+      return NextResponse.json({ mode, content: openaiResult.content, source: 'openai' });
     }
   }
 
-  // ── 3. Deterministic offline fallback ─────────────────────────────────────
+  // ── 4. Deterministic offline fallback — always works, no API needed ───────
   if (OFFLINE_MODES.includes(currentMode as ToolMode)) {
     const content = offlineGenerate(currentMode as ToolMode, baseSourceText, options);
     return NextResponse.json({ mode, content, source: 'offline' });
   }
 
-  // AI-only modes (outline, exam) with no offline fallback — generate basic structure
   const fallback = buildOfflineFallback(currentMode, preparedText, options);
   return NextResponse.json({ mode, content: fallback, source: 'offline' });
 }
