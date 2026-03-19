@@ -7,7 +7,10 @@ export type MathCategoryId =
   | 'linear-algebra'
   | 'statistics'
   | 'vectors'
-  | 'matrices';
+  | 'matrices'
+  | 'differential-equations'
+  | 'discrete'
+  | 'physics';
 
 export interface MathStep {
   step: number;

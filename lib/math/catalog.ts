@@ -18,6 +18,9 @@ export const MATH_CATEGORY_ORDER: MathCategoryId[] = [
   'statistics',
   'vectors',
   'matrices',
+  'differential-equations',
+  'discrete',
+  'physics',
 ];
 
 export const MATH_CATEGORIES: Record<MathCategoryId, MathCategoryConfig> = {
@@ -130,6 +133,47 @@ export const MATH_CATEGORIES: Record<MathCategoryId, MathCategoryConfig> = {
       { expr: '[[1,2],[3,4]] * [[5,6],[7,8]]', desc: 'Matrix multiplication' },
       { expr: 'det([[1,2],[3,4]])', desc: '2x2 determinant' },
       { expr: 'inv([[2,1],[1,1]])', desc: 'Matrix inverse' },
+    ],
+  },
+  'differential-equations': {
+    id: 'differential-equations',
+    label: 'Differential Equations',
+    supportedActions: ['2nd-order homogeneous', 'Exponential ODE', 'First-order linear', 'Direct integration'],
+    practicePrompt: 'Create differential equations practice with characteristic equation method and first-order ODEs, including worked solutions.',
+    examples: [
+      { expr: "y'' + 3y' + 2y = 0", desc: '2nd-order homogeneous ODE' },
+      { expr: "y'' + y = 0", desc: 'Pure oscillator ODE' },
+      { expr: "y' = -2y", desc: 'Exponential decay' },
+      { expr: 'dy/dx = 3x^2', desc: 'Direct integration' },
+      { expr: "y' + 2y = 4", desc: 'First-order linear ODE' },
+    ],
+  },
+  discrete: {
+    id: 'discrete',
+    label: 'Discrete Math',
+    supportedActions: ['GCD / LCM', 'Combinations', 'Permutations', 'Fibonacci', 'Modular arithmetic'],
+    practicePrompt: 'Create discrete mathematics practice covering combinatorics, number theory, and sequences with full worked solutions.',
+    examples: [
+      { expr: 'gcd(48, 36)', desc: 'Greatest common divisor' },
+      { expr: 'lcm(12, 18)', desc: 'Least common multiple' },
+      { expr: 'C(10, 3)', desc: 'Combinations' },
+      { expr: 'P(5, 2)', desc: 'Permutations' },
+      { expr: 'fibonacci(10)', desc: 'Fibonacci number' },
+      { expr: '2^10 mod 7', desc: 'Modular exponentiation' },
+    ],
+  },
+  physics: {
+    id: 'physics',
+    label: 'Physics',
+    supportedActions: ["Ohm's Law", 'Kinetic Energy', 'Projectile Range', 'Wave Speed', "Newton's 2nd Law", 'Potential Energy'],
+    practicePrompt: 'Create physics formula practice covering mechanics and electricity with substitution steps and unit tracking.',
+    examples: [
+      { expr: 'ohm V=12 I=3', desc: "Ohm's Law — find R" },
+      { expr: 'KE m=10 v=5', desc: 'Kinetic energy' },
+      { expr: 'projectile v=50 theta=45', desc: 'Projectile range' },
+      { expr: 'wave f=440 lambda=0.78', desc: 'Wave speed' },
+      { expr: 'force m=5 a=3', desc: "Newton's 2nd Law" },
+      { expr: 'PE m=10 h=5', desc: 'Gravitational PE' },
     ],
   },
 };

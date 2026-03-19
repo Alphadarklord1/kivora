@@ -180,9 +180,15 @@ function deriveGraphExpression(normalizedInput: string, category: MathCategoryId
 
 function categoryFromProblem(normalizedInput: string): MathCategoryId {
   const lower = normalizedInput.toLowerCase();
+  // Differential equations
+  if (/y''|y'|dy\/dx|d\^2y|ode|differential/.test(lower)) return 'differential-equations';
+  // Discrete math
+  if (/\bgcd\(|\blcm\(|\bfibonacci\(|\bfib\(|combinations?\(|permutations?\(|ncr\(|npr\(|\bmod\b/.test(lower)) return 'discrete';
+  // Physics
+  if (/\bohm\b|kinetic.energy|\bke\b|projectile|\bwave\b|wave\s*speed|wavelength|\bf\s*=\s*m\s*a\b|\bforce\b|potential.energy|\bpe\b|newton/.test(lower)) return 'physics';
   if (/dot product|magnitude|angle between|\[[^\]]+\]\s*\[[^\]]+\]/i.test(normalizedInput)) return 'vectors';
   if (/\[\[[^\]]+\]\]/.test(normalizedInput) || /\bdet\(|\binv\(/.test(lower)) return 'matrices';
-  if (/mean\(|median\(|variance\(|std\(|combinations\(|permutations\(/.test(lower)) return 'statistics';
+  if (/mean\(|median\(|variance\(|std\(/.test(lower)) return 'statistics';
   if (/hypotenuse|distance\s*\(|distance between|area circle|circumference circle|area triangle|area rectangle|pythagorean/.test(lower)) return 'geometry';
   if (/derivative|integral|limit|d\/dx|\bint\b|\blim\b/.test(lower)) return 'calculus';
   if (/\bsin\(|\bcos\(|\btan\(|\bcot\(|\bsec\(|\bcsc\(/.test(lower)) return 'trigonometry';
@@ -202,7 +208,10 @@ export function detectMathCategory(problem: string, requested?: string | null): 
     candidate === 'linear-algebra' ||
     candidate === 'statistics' ||
     candidate === 'vectors' ||
-    candidate === 'matrices'
+    candidate === 'matrices' ||
+    candidate === 'differential-equations' ||
+    candidate === 'discrete' ||
+    candidate === 'physics'
   ) {
     return candidate;
   }
@@ -852,11 +861,7 @@ function solveLimit(normalizedInput: string): SolverResult {
   const approach = match[1].trim();
   const expression = match[2].trim();
   const [, variable, rawValue] = approach.match(/^([a-zA-Z]+)\s*->\s*(.+)$/) || ['', 'x', '0'];
-  const point = Number(rawValue);
   const epsilon = 1e-6;
-  const left = Number(math.evaluate(expression, { [variable]: point - epsilon }));
-  const right = Number(math.evaluate(expression, { [variable]: point + epsilon }));
-  const estimate = (left + right) / 2;
 
   result.steps.push({
     step: 1,
@@ -864,12 +869,90 @@ function solveLimit(normalizedInput: string): SolverResult {
     expression: `\\lim_{${variable}\\to ${expressionToLatex(rawValue)}} ${expressionToLatex(expression)}`,
     explanation: 'Read the approaching value and the function carefully before substituting.',
   });
+
+  // Handle symbolic approach values: infinity, -infinity
+  const lowerRaw = rawValue.toLowerCase().trim();
+  if (lowerRaw === 'inf' || lowerRaw === 'infinity' || lowerRaw === '+inf') {
+    try {
+      const atLarge = Number(math.evaluate(expression, { [variable]: 1e12 }));
+      const atLarger = Number(math.evaluate(expression, { [variable]: 1e15 }));
+      const estimate = Number.isFinite(atLarger) ? atLarger : atLarge;
+      result.steps.push({
+        step: 2,
+        description: 'Evaluate at very large values',
+        expression: `${variable}=10^{12} \\Rightarrow ${formatNumber(atLarge)}, \\quad ${variable}=10^{15} \\Rightarrow ${formatNumber(atLarger)}`,
+        explanation: 'Substitute very large numbers to estimate the limit as the variable grows without bound.',
+      });
+      result.answer = formatNumber(estimate);
+      result.answerLatex = expressionToLatex(formatNumber(estimate));
+      result.explanation = 'Estimated the limit at infinity numerically.';
+    } catch {
+      result.verified = false;
+      result.answer = 'Unable to evaluate limit at infinity';
+      result.answerLatex = '\\text{Unable to evaluate limit at infinity}';
+      result.explanation = 'Could not evaluate the expression at large values.';
+    }
+    result.graphExpr = expression;
+    return result;
+  }
+
+  if (lowerRaw === '-inf' || lowerRaw === '-infinity') {
+    try {
+      const atSmall = Number(math.evaluate(expression, { [variable]: -1e12 }));
+      result.steps.push({
+        step: 2,
+        description: 'Evaluate at very large negative values',
+        expression: `${variable}=-10^{12} \\Rightarrow ${formatNumber(atSmall)}`,
+        explanation: 'Substitute very large negative numbers to estimate the limit.',
+      });
+      result.answer = formatNumber(atSmall);
+      result.answerLatex = expressionToLatex(formatNumber(atSmall));
+      result.explanation = 'Estimated the limit at negative infinity numerically.';
+    } catch {
+      result.verified = false;
+      result.answer = 'Unable to evaluate limit at -infinity';
+      result.answerLatex = '\\text{Unable to evaluate}';
+      result.explanation = 'Could not evaluate the expression at large negative values.';
+    }
+    result.graphExpr = expression;
+    return result;
+  }
+
+  const point = Number(math.evaluate(rawValue));
+  if (!Number.isFinite(point)) {
+    return {
+      ...result,
+      verified: false,
+      answer: 'Could not parse the approach value',
+      answerLatex: '\\text{Could not parse the approach value}',
+      explanation: `Use a numeric value or "inf" for infinity. Example: limit x->0 of sin(x)/x`,
+    };
+  }
+
+  const left = Number(math.evaluate(expression, { [variable]: point - epsilon }));
+  const right = Number(math.evaluate(expression, { [variable]: point + epsilon }));
+  const estimate = (left + right) / 2;
+
   result.steps.push({
     step: 2,
     description: 'Check both sides near the target value',
-    expression: `${variable}=${formatNumber(point - epsilon)} \Rightarrow ${formatNumber(left)}, \quad ${variable}=${formatNumber(point + epsilon)} \Rightarrow ${formatNumber(right)}`,
+    expression: `${variable}=${formatNumber(point - epsilon)} \\Rightarrow ${formatNumber(left)}, \\quad ${variable}=${formatNumber(point + epsilon)} \\Rightarrow ${formatNumber(right)}`,
     explanation: 'Evaluate values just to the left and right to estimate the common trend.',
   });
+
+  if (!Number.isFinite(estimate)) {
+    result.steps.push({
+      step: 3,
+      description: 'Limit does not exist or is infinite',
+      expression: `\\lim_{${variable}\\to ${expressionToLatex(rawValue)}} ${expressionToLatex(expression)} = \\text{DNE or } \\pm\\infty`,
+      explanation: 'The function is undefined or diverges at this point. Check for a vertical asymptote.',
+    });
+    result.answer = 'Does not exist (or ±∞)';
+    result.answerLatex = '\\pm\\infty \\text{ or DNE}';
+    result.explanation = 'The function diverges or is undefined at the given point.';
+    result.graphExpr = expression;
+    return result;
+  }
 
   result.answer = formatNumber(estimate);
   result.answerLatex = expressionToLatex(formatNumber(estimate));
@@ -897,14 +980,14 @@ function solveVectorProblem(normalizedInput: string): SolverResult {
     result.steps.push({
       step: 1,
       description: 'Write both vectors',
-      expression: `${vectorToLatex(left)} \cdot ${vectorToLatex(right)}`,
+      expression: `${vectorToLatex(left)} \\cdot ${vectorToLatex(right)}`,
       explanation: 'A dot product multiplies matching components and then adds them.',
     });
     result.steps.push({
       step: 2,
       description: 'Multiply matching entries',
       expression: pieces.join(' + '),
-      explanation: 'Take each component pair and multiply them in order.',
+      explanation: `Multiply each pair: ${pieces.join(' + ')}.`,
     });
     result.steps.push({
       step: 3,
@@ -1024,7 +1107,7 @@ function solveMatrixProblem(normalizedInput: string, category: MathCategoryId): 
       expression: `A^{-1} = ${matrixToLatex(inverseArray)}`,
       explanation: 'The inverse matrix reverses the original linear transformation.',
     });
-    result.answer = JSON.stringify(inverseArray);
+    result.answer = inverseArray.map((row) => '[' + row.map((v) => formatNumber(v)).join(', ') + ']').join(' | ');
     result.answerLatex = matrixToLatex(inverseArray);
     result.explanation = 'Computed the matrix inverse exactly with mathjs.';
     return result;
@@ -1042,7 +1125,7 @@ function solveMatrixProblem(normalizedInput: string, category: MathCategoryId): 
     result.steps.push({
       step: 1,
       description: 'Align both matrices',
-      expression: `${matrixToLatex(left)} \cdot ${matrixToLatex(right)}`,
+      expression: `${matrixToLatex(left)} \\cdot ${matrixToLatex(right)}`,
       explanation: 'Matrix multiplication combines rows from the first matrix with columns from the second.',
     });
     result.steps.push({
@@ -1051,7 +1134,7 @@ function solveMatrixProblem(normalizedInput: string, category: MathCategoryId): 
       expression: matrixToLatex(productArray),
       explanation: 'Each output entry is a row-column dot product.',
     });
-    result.answer = JSON.stringify(productArray);
+    result.answer = productArray.map((row) => '[' + row.map((v) => formatNumber(v)).join(', ') + ']').join(' | ');
     result.answerLatex = matrixToLatex(productArray);
     result.explanation = 'Computed the matrix product using mathjs matrix multiplication.';
     return result;
@@ -1127,36 +1210,51 @@ function solveTrigonometry(normalizedInput: string): SolverResult {
 
 function solveStatisticsProblem(normalizedInput: string): SolverResult {
   const result = baseResult('statistics', normalizedInput, 'mathjs');
-  const evaluated = math.evaluate(normalizedInput) as number;
   const lower = normalizedInput.toLowerCase();
+
+  const formulaHint = lower.includes('mean')
+    ? { formula: '\\bar{x} = \\frac{\\sum x_i}{n}', explanation: 'The mean is the sum of all values divided by the count.' }
+    : lower.includes('median')
+      ? { formula: '\\text{median} = \\text{middle value after sorting}', explanation: 'Sort the values; the median is the middle one (or average of two middle values).' }
+      : lower.includes('variance')
+        ? { formula: '\\sigma^2 = \\frac{\\sum (x_i - \\bar{x})^2}{n}', explanation: 'Variance is the average of the squared deviations from the mean.' }
+        : lower.includes('std')
+          ? { formula: '\\sigma = \\sqrt{\\frac{\\sum (x_i - \\bar{x})^2}{n}}', explanation: 'Standard deviation is the square root of the variance.' }
+          : { formula: expressionToLatex(normalizedInput), explanation: 'Apply the statistical formula to the dataset.' };
 
   result.steps.push({
     step: 1,
-    description: 'Identify the statistic',
-    expression: expressionToLatex(normalizedInput),
-    explanation: 'Read the dataset and the requested statistical operation.',
-  });
-  result.steps.push({
-    step: 2,
-    description: 'Evaluate the dataset',
-    expression: `${expressionToLatex(normalizedInput)} = ${expressionToLatex(formatNumber(Number(evaluated)))}`,
-    explanation: lower.includes('mean')
-      ? 'The mean averages all values in the dataset.'
-      : lower.includes('median')
-        ? 'The median is the middle value after sorting.'
-        : lower.includes('combinations')
-          ? 'Combinations count selections where order does not matter.'
-          : lower.includes('permutations')
-            ? 'Permutations count ordered arrangements.'
-        : lower.includes('variance')
-          ? 'Variance measures spread around the mean.'
-          : 'Standard deviation is the square root of the variance.',
+    description: 'Identify the statistical measure',
+    expression: formulaHint.formula,
+    explanation: formulaHint.explanation,
   });
 
-  result.answer = formatNumber(Number(evaluated));
-  result.answerLatex = expressionToLatex(result.answer);
-  result.explanation = 'Computed the requested statistic directly from the dataset.';
-  return result;
+  try {
+    const evaluated = math.evaluate(normalizedInput) as number;
+    const numericResult = Number(evaluated);
+    if (!Number.isFinite(numericResult)) {
+      throw new Error('Result is not a finite number');
+    }
+    result.steps.push({
+      step: 2,
+      description: 'Apply to the dataset',
+      expression: `${expressionToLatex(normalizedInput)} = ${expressionToLatex(formatNumber(numericResult))}`,
+      explanation: 'Substitute the dataset values into the formula and compute.',
+    });
+    result.answer = formatNumber(numericResult);
+    result.answerLatex = expressionToLatex(result.answer);
+    result.explanation = 'Computed the requested statistic directly from the dataset.';
+    return result;
+  } catch (error) {
+    return {
+      ...result,
+      verified: false,
+      error: error instanceof Error ? error.message : 'Could not evaluate statistics expression',
+      answer: 'Unable to evaluate',
+      answerLatex: '\\text{Unable to evaluate}',
+      explanation: 'Try: mean([4,7,13,2,8]), median([1,2,3,4,5]), std([4,7,13,2,8]), variance([4,7,13,2,8])',
+    };
+  }
 }
 
 function solveTransform(normalizedInput: string): SolverResult {
@@ -1187,6 +1285,682 @@ function solveTransform(normalizedInput: string): SolverResult {
   result.answerLatex = expressionToLatex(transformed);
   result.explanation = `Applied ${transform} to the expression.`;
   result.graphExpr = deriveGraphExpression(transformed, 'algebra');
+  return result;
+}
+
+function solveDifferentialEquation(normalizedInput: string): SolverResult {
+  const result = baseResult('differential-equations', normalizedInput, 'hybrid');
+  // Strip common leading keywords
+  const rawInput = normalizedInput.replace(/^(solve|find|calculate|compute)\s+/i, '').trim();
+
+  // Helper: parse a coefficient string like '', '+', '-', '3', '-2', '+2*'
+  const parseCoeff = (s: string): number => {
+    const t = s.replace(/\s|\*/g, '');
+    if (!t || t === '+') return 1;
+    if (t === '-') return -1;
+    const n = parseFloat(t);
+    return Number.isFinite(n) ? n : 1;
+  };
+
+  // 2nd order homogeneous: ay'' + by' + cy = 0
+  // After normalisation, coefficients get * inserted: "3*y''" etc.
+  const ho2 = rawInput.match(
+    /^([-\d.]*)\s*\*?\s*y''\s*(?:([+-]\s*[\d.]*)\s*\*?\s*y'\s*)?([+-]\s*[\d.]*)\s*\*?\s*y\s*=\s*0\s*$/i,
+  );
+  if (ho2) {
+    const a = parseCoeff(ho2[1]);
+    const b = ho2[2] !== undefined ? parseCoeff(ho2[2]) : 0;
+    const c = parseCoeff(ho2[3]);
+    const disc = b * b - 4 * a * c;
+
+    const charEq = `${a === 1 ? '' : formatNumber(a)}r^{2}${b >= 0 ? ' + ' : ' - '}${Math.abs(b) === 1 ? '' : formatNumber(Math.abs(b))}r${c >= 0 ? ' + ' : ' - '}${formatNumber(Math.abs(c))} = 0`;
+    result.steps.push({
+      step: 1,
+      description: 'Assume solution y = e^{rx} and write the characteristic equation',
+      expression: charEq,
+      explanation: 'Substituting y = e^{rx} converts the ODE into an algebraic characteristic equation.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Apply the quadratic formula',
+      expression: `r = \\frac{${formatNumber(-b)} \\pm \\sqrt{${formatNumber(disc)}}}{${formatNumber(2 * a)}}`,
+      explanation: `Discriminant Δ = b² − 4ac = ${formatNumber(b)}² − 4(${formatNumber(a)})(${formatNumber(c)}) = ${formatNumber(disc)}.`,
+    });
+
+    let answer = '';
+    let answerLatex = '';
+    if (disc > 1e-9) {
+      const r1 = (-b + Math.sqrt(disc)) / (2 * a);
+      const r2 = (-b - Math.sqrt(disc)) / (2 * a);
+      result.steps.push({
+        step: 3,
+        description: 'Two distinct real roots',
+        expression: `r_1 = ${formatNumber(r1)}, \\quad r_2 = ${formatNumber(r2)}`,
+        explanation: 'Δ > 0 gives two distinct real roots, producing two independent exponential solutions.',
+      });
+      result.steps.push({
+        step: 4,
+        description: 'Write the general solution',
+        expression: `y = C_1 e^{${formatNumber(r1)}x} + C_2 e^{${formatNumber(r2)}x}`,
+        explanation: 'The general solution is a linear combination of the two independent solutions.',
+      });
+      answer = `y = C1·e^(${formatNumber(r1)}x) + C2·e^(${formatNumber(r2)}x)`;
+      answerLatex = `y = C_1 e^{${formatNumber(r1)}x} + C_2 e^{${formatNumber(r2)}x}`;
+    } else if (Math.abs(disc) <= 1e-9) {
+      const r = -b / (2 * a);
+      result.steps.push({
+        step: 3,
+        description: 'Repeated root (Δ = 0)',
+        expression: `r = ${formatNumber(r)}`,
+        explanation: 'One repeated root. The second independent solution is x·e^{rx}.',
+      });
+      result.steps.push({
+        step: 4,
+        description: 'Write the general solution',
+        expression: `y = (C_1 + C_2 x)e^{${formatNumber(r)}x}`,
+        explanation: 'With a double root the solution uses (C₁ + C₂x)e^{rx}.',
+      });
+      answer = `y = (C1 + C2·x)·e^(${formatNumber(r)}x)`;
+      answerLatex = `y = (C_1 + C_2 x)e^{${formatNumber(r)}x}`;
+    } else {
+      const alpha = -b / (2 * a);
+      const beta = Math.sqrt(-disc) / (2 * a);
+      result.steps.push({
+        step: 3,
+        description: 'Complex conjugate roots (Δ < 0)',
+        expression: `r = ${formatNumber(alpha)} \\pm ${formatNumber(beta)}i`,
+        explanation: `α = -b/(2a) = ${formatNumber(alpha)}, β = √|Δ|/(2a) = ${formatNumber(beta)}.`,
+      });
+      result.steps.push({
+        step: 4,
+        description: "Apply Euler's formula",
+        expression: `y = e^{${formatNumber(alpha)}x}\\!\\left(C_1 \\cos(${formatNumber(beta)}x) + C_2 \\sin(${formatNumber(beta)}x)\\right)`,
+        explanation: "Euler's formula e^{(α+βi)x} = e^{αx}(cos βx + i sin βx) gives the real-valued general solution.",
+      });
+      answer = `y = e^(${formatNumber(alpha)}x)·[C1·cos(${formatNumber(beta)}x) + C2·sin(${formatNumber(beta)}x)]`;
+      answerLatex = `y = e^{${formatNumber(alpha)}x}\\!\\left(C_1\\cos(${formatNumber(beta)}x)+C_2\\sin(${formatNumber(beta)}x)\\right)`;
+    }
+    result.answer = answer;
+    result.answerLatex = answerLatex;
+    result.explanation = 'Solved the 2nd-order homogeneous ODE using the characteristic equation method.';
+    return result;
+  }
+
+  // 1st order exponential: y' = k*y
+  const expMatch = rawInput.match(/^(?:y'|dy\/dx)\s*=\s*([-\d.]*)\s*\*?\s*y\s*$/i);
+  if (expMatch) {
+    const kStr = expMatch[1].replace(/\s/g, '');
+    const k = !kStr || kStr === '+' ? 1 : kStr === '-' ? -1 : parseFloat(kStr);
+    if (Number.isFinite(k)) {
+      result.steps.push({
+        step: 1,
+        description: 'Identify the exponential ODE',
+        expression: `\\frac{dy}{dx} = ${formatNumber(k)}y`,
+        explanation: `dy/dx = ky is the standard growth/decay ODE. k = ${formatNumber(k)}.`,
+      });
+      result.steps.push({
+        step: 2,
+        description: 'Separate variables',
+        expression: `\\frac{dy}{y} = ${formatNumber(k)}\\,dx`,
+        explanation: 'Divide both sides by y and write dx on the right.',
+      });
+      result.steps.push({
+        step: 3,
+        description: 'Integrate both sides',
+        expression: `\\ln|y| = ${formatNumber(k)}x + C_0`,
+        explanation: '∫ dy/y = ln|y|, ∫ k dx = kx.',
+      });
+      result.steps.push({
+        step: 4,
+        description: 'Exponentiate and absorb the constant',
+        expression: `y = Ce^{${formatNumber(k)}x}`,
+        explanation: 'e^{ln|y|} = |y|, so y = ±e^{C₀}·e^{kx} = Ce^{kx} where C absorbs the ± and e^{C₀}.',
+      });
+      result.answer = `y = C·e^(${formatNumber(k)}x)`;
+      result.answerLatex = `y = Ce^{${formatNumber(k)}x}`;
+      result.explanation = 'Solved y\' = ky by separating variables; the solution is exponential.';
+      return result;
+    }
+  }
+
+  // 1st order: dy/dx = f(x) — direct integration (no y on RHS)
+  const directMatch = rawInput.match(/^(?:y'|dy\/dx)\s*=\s*(.+)$/i);
+  if (directMatch) {
+    const rhs = directMatch[1].trim();
+    if (!/\by\b/i.test(rhs)) {
+      result.steps.push({
+        step: 1,
+        description: 'Identify as a directly integrable ODE',
+        expression: `\\frac{dy}{dx} = ${expressionToLatex(rhs)}`,
+        explanation: 'The RHS depends only on x, so integrate both sides directly.',
+      });
+      try {
+        const integral = nerdamer(`integrate(${rhs}, x)`).toString();
+        result.steps.push({
+          step: 2,
+          description: 'Integrate the right-hand side',
+          expression: `y = \\int ${expressionToLatex(rhs)}\\,dx = ${expressionToLatex(integral)} + C`,
+          explanation: 'Add the constant of integration C for the general solution.',
+        });
+        result.answer = `y = ${integral} + C`;
+        result.answerLatex = `y = ${expressionToLatex(integral)} + C`;
+      } catch {
+        result.steps.push({
+          step: 2,
+          description: 'Write the integral form',
+          expression: `y = \\int ${expressionToLatex(rhs)}\\,dx + C`,
+          explanation: 'Integrate the RHS to get y.',
+        });
+        result.answer = `y = ∫(${rhs}) dx + C`;
+        result.answerLatex = `y = \\int ${expressionToLatex(rhs)}\\,dx + C`;
+      }
+      result.explanation = 'Solved the first-order ODE by direct integration.';
+      return result;
+    }
+  }
+
+  // 1st order linear: y' + P*y = Q (constant coefficients)
+  const folMatch = rawInput.match(/^y'\s*([+-]\s*[\d.]+\s*\*?)\s*y\s*=\s*([-\d.]+)\s*$/i);
+  if (folMatch) {
+    const P = parseFloat(folMatch[1].replace(/\s|\*/g, ''));
+    const Q = parseFloat(folMatch[2]);
+    if (Number.isFinite(P) && Number.isFinite(Q)) {
+      result.steps.push({
+        step: 1,
+        description: 'Write in standard linear form y\' + P·y = Q',
+        expression: `y' + ${formatNumber(P)}y = ${formatNumber(Q)}`,
+        explanation: 'P = ' + formatNumber(P) + ' and Q = ' + formatNumber(Q) + ' are constants.',
+      });
+      result.steps.push({
+        step: 2,
+        description: 'Compute the integrating factor μ = e^{∫P dx}',
+        expression: `\\mu(x) = e^{${formatNumber(P)}x}`,
+        explanation: 'Multiplying by μ turns the left side into d/dx[μy].',
+      });
+      result.steps.push({
+        step: 3,
+        description: 'Multiply both sides by μ and integrate',
+        expression: `\\frac{d}{dx}\\!\\left[e^{${formatNumber(P)}x}y\\right] = ${formatNumber(Q)}e^{${formatNumber(P)}x} \\implies e^{${formatNumber(P)}x}y = \\frac{${formatNumber(Q)}}{${formatNumber(P)}}e^{${formatNumber(P)}x} + C`,
+        explanation: 'Integrate both sides with respect to x.',
+      });
+      const particular = Q / P;
+      result.steps.push({
+        step: 4,
+        description: 'Divide by μ to isolate y',
+        expression: `y = ${formatNumber(particular)} + Ce^{-${formatNumber(P)}x}`,
+        explanation: `Particular solution is Q/P = ${formatNumber(particular)}; homogeneous part is Ce^{-Px}.`,
+      });
+      result.answer = `y = ${formatNumber(particular)} + C·e^(-${formatNumber(P)}x)`;
+      result.answerLatex = `y = ${formatNumber(particular)} + Ce^{-${formatNumber(P)}x}`;
+      result.explanation = 'Solved the first-order linear ODE using the integrating factor method.';
+      return result;
+    }
+  }
+
+  // Fallback — show supported forms
+  result.verified = false;
+  result.steps.push({
+    step: 1,
+    description: 'Supported differential equation forms',
+    expression: `y'' + py' + qy = 0 \\qquad y' = ky \\qquad y' + py = q \\qquad \\tfrac{dy}{dx} = f(x)`,
+    explanation: 'Enter a 2nd-order homogeneous ODE, an exponential ODE, or a 1st-order linear ODE.',
+  });
+  result.answer = "Try: y'' + 3y' + 2y = 0  |  y' = -2y  |  dy/dx = 3x^2";
+  result.answerLatex = "\\text{Try: } y'' + 3y' + 2y = 0 \\text{ or } y' = -2y";
+  result.explanation = 'Input a recognized ODE format to get a step-by-step solution.';
+  return result;
+}
+
+function solveDiscreteMath(normalizedInput: string): SolverResult {
+  const result = baseResult('discrete', normalizedInput, 'mathjs');
+  const rawInput = normalizedInput.replace(/^(solve|find|calculate|compute)\s+/i, '').trim();
+  const lower = rawInput.toLowerCase();
+
+  // GCD: gcd(a, b) — Euclidean algorithm
+  const gcdMatch = lower.match(/^gcd\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)$/);
+  if (gcdMatch) {
+    let a = Math.abs(parseInt(gcdMatch[1]));
+    let b = Math.abs(parseInt(gcdMatch[2]));
+    const origA = a, origB = b;
+    result.steps.push({
+      step: 1,
+      description: 'Set up the Euclidean algorithm',
+      expression: `\\gcd(${origA},\\,${origB})`,
+      explanation: 'GCD(a, b): repeatedly replace (a, b) with (b, a mod b) until b = 0.',
+    });
+    let stepNum = 2;
+    const maxSteps = 20;
+    while (b !== 0 && stepNum <= maxSteps) {
+      const q = Math.floor(a / b);
+      const r = a % b;
+      result.steps.push({
+        step: stepNum++,
+        description: `Apply division: ${a} = ${b} × ${q} + ${r}`,
+        expression: `${a} = ${b} \\times ${q} + ${r} \\implies \\gcd(${a},${b}) = \\gcd(${b},${r})`,
+        explanation: `Replace (${a}, ${b}) with (${b}, ${r}).`,
+      });
+      a = b;
+      b = r;
+    }
+    result.steps.push({
+      step: stepNum,
+      description: 'Remainder is 0 — algorithm terminates',
+      expression: `\\gcd(${origA},\\,${origB}) = ${a}`,
+      explanation: `When the remainder reaches 0, the last non-zero remainder is the GCD.`,
+    });
+    result.answer = String(a);
+    result.answerLatex = `\\gcd(${origA},\\,${origB}) = ${a}`;
+    result.explanation = `GCD of ${origA} and ${origB} found by the Euclidean algorithm.`;
+    return result;
+  }
+
+  // LCM: lcm(a, b)
+  const lcmMatch = lower.match(/^lcm\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)$/);
+  if (lcmMatch) {
+    const a = Math.abs(parseInt(lcmMatch[1]));
+    const b = Math.abs(parseInt(lcmMatch[2]));
+    const gcdFn = (x: number, y: number): number => (y === 0 ? x : gcdFn(y, x % y));
+    const g = gcdFn(a, b);
+    const lcmVal = (a / g) * b;
+    result.steps.push({
+      step: 1,
+      description: 'Use the relationship LCM × GCD = a × b',
+      expression: `\\text{lcm}(a,b) = \\frac{a \\times b}{\\gcd(a,b)}`,
+      explanation: 'This avoids computing prime factorisations.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Find GCD first',
+      expression: `\\gcd(${a}, ${b}) = ${g}`,
+      explanation: 'Apply the Euclidean algorithm.',
+    });
+    result.steps.push({
+      step: 3,
+      description: 'Compute LCM',
+      expression: `\\text{lcm}(${a},${b}) = \\frac{${a} \\times ${b}}{${g}} = ${lcmVal}`,
+      explanation: `LCM = (${a} × ${b}) / ${g} = ${lcmVal}.`,
+    });
+    result.answer = String(lcmVal);
+    result.answerLatex = `\\text{lcm}(${a},${b}) = ${lcmVal}`;
+    result.explanation = `LCM of ${a} and ${b} is ${lcmVal}.`;
+    return result;
+  }
+
+  // Combinations: C(n, k) or nCr(n,k) or combinations(n,k)
+  const combMatch = lower.match(/^(?:c\(|ncr\(|combinations?\()(-?\d+)\s*,\s*(-?\d+)\)$/);
+  if (combMatch) {
+    const n = parseInt(combMatch[1]);
+    const k = parseInt(combMatch[2]);
+    if (n < 0 || k < 0 || k > n) {
+      return { ...result, verified: false, answer: 'Invalid: need 0 ≤ k ≤ n', answerLatex: '\\text{Invalid: need } 0 \\le k \\le n', explanation: 'Combinations require 0 ≤ k ≤ n.' };
+    }
+    const factFn = (x: number): number => (x <= 1 ? 1 : x * factFn(x - 1));
+    const nFact = factFn(n), kFact = factFn(k), nkFact = factFn(n - k);
+    const val = nFact / (kFact * nkFact);
+    result.steps.push({
+      step: 1,
+      description: 'Write the combination formula',
+      expression: `\\binom{n}{k} = \\frac{n!}{k!\\,(n-k)!}`,
+      explanation: `C(n, k) counts the ways to choose k items from n items where order does not matter.`,
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Substitute n = ' + n + ', k = ' + k,
+      expression: `\\binom{${n}}{${k}} = \\frac{${n}!}{${k}!\\cdot${n - k}!}`,
+      explanation: `n = ${n}, k = ${k}, n − k = ${n - k}.`,
+    });
+    result.steps.push({
+      step: 3,
+      description: 'Evaluate the factorials',
+      expression: `= \\frac{${nFact}}{${kFact} \\times ${nkFact}} = ${val}`,
+      explanation: `${n}! = ${nFact}, ${k}! = ${kFact}, ${n - k}! = ${nkFact}.`,
+    });
+    result.answer = String(val);
+    result.answerLatex = `\\binom{${n}}{${k}} = ${val}`;
+    result.explanation = `C(${n}, ${k}) = ${val} ways to choose ${k} from ${n}.`;
+    return result;
+  }
+
+  // Permutations: P(n, k) or nPr(n,k) or permutations(n,k)
+  const permMatch = lower.match(/^(?:p\(|npr\(|permutations?\()(-?\d+)\s*,\s*(-?\d+)\)$/);
+  if (permMatch) {
+    const n = parseInt(permMatch[1]);
+    const k = parseInt(permMatch[2]);
+    if (n < 0 || k < 0 || k > n) {
+      return { ...result, verified: false, answer: 'Invalid: need 0 ≤ k ≤ n', answerLatex: '\\text{Invalid: need } 0 \\le k \\le n', explanation: 'Permutations require 0 ≤ k ≤ n.' };
+    }
+    const factFn = (x: number): number => (x <= 1 ? 1 : x * factFn(x - 1));
+    const nFact = factFn(n), nkFact = factFn(n - k);
+    const val = nFact / nkFact;
+    result.steps.push({
+      step: 1,
+      description: 'Write the permutation formula',
+      expression: `P(n,k) = \\frac{n!}{(n-k)!}`,
+      explanation: 'P(n, k) counts ordered arrangements of k items chosen from n.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Substitute n = ' + n + ', k = ' + k,
+      expression: `P(${n},${k}) = \\frac{${n}!}{(${n}-${k})!} = \\frac{${nFact}}{${nkFact}}`,
+      explanation: `${n}! = ${nFact}, (${n} − ${k})! = ${nkFact}.`,
+    });
+    result.steps.push({
+      step: 3,
+      description: 'Evaluate',
+      expression: `P(${n},${k}) = ${val}`,
+      explanation: `${nFact} / ${nkFact} = ${val} ordered arrangements.`,
+    });
+    result.answer = String(val);
+    result.answerLatex = `P(${n},${k}) = ${val}`;
+    result.explanation = `P(${n}, ${k}) = ${val} ordered arrangements.`;
+    return result;
+  }
+
+  // Fibonacci: fibonacci(n) or F(n) or fib(n)
+  const fibMatch = lower.match(/^(?:fibonacci|fib|f)\s*\(\s*(\d+)\s*\)$/);
+  if (fibMatch) {
+    const n = parseInt(fibMatch[1]);
+    if (n < 0 || n > 50) {
+      return { ...result, verified: false, answer: 'n must be between 0 and 50', answerLatex: '\\text{n must be between 0 and 50}', explanation: 'Input n in range 0–50.' };
+    }
+    let a = 0, b = 1;
+    const seq: number[] = [0, 1];
+    for (let i = 2; i <= n; i++) { [a, b] = [b, a + b]; seq.push(b); }
+    const val = n === 0 ? 0 : n === 1 ? 1 : b;
+    result.steps.push({
+      step: 1,
+      description: 'Fibonacci recurrence: F(n) = F(n−1) + F(n−2)',
+      expression: 'F(0)=0,\\quad F(1)=1,\\quad F(n)=F(n-1)+F(n-2)',
+      explanation: 'Each term is the sum of the two preceding terms.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Compute iteratively',
+      expression: seq.slice(0, Math.min(seq.length, 12)).map((v, i) => `F(${i})=${v}`).join(',\\;') + (seq.length > 12 ? ',\\;\\ldots' : ''),
+      explanation: `Computing term by term up to n = ${n}.`,
+    });
+    result.steps.push({
+      step: 3,
+      description: 'Read off the result',
+      expression: `F(${n}) = ${val}`,
+      explanation: `The ${n}th Fibonacci number is ${val}.`,
+    });
+    result.answer = String(val);
+    result.answerLatex = `F(${n}) = ${val}`;
+    result.explanation = `The ${n}th Fibonacci number is ${val}.`;
+    return result;
+  }
+
+  // Modular arithmetic: a mod m or a^b mod m
+  const modExpMatch = lower.match(/^(\d+)\s*\^\s*(\d+)\s*mod\s*(\d+)$/);
+  if (modExpMatch) {
+    const base = parseInt(modExpMatch[1]);
+    const exp = parseInt(modExpMatch[2]);
+    const mod = parseInt(modExpMatch[3]);
+    // Fast exponentiation
+    let res = 1, b2 = base % mod, e = exp;
+    const steps2: string[] = [];
+    while (e > 0) {
+      if (e % 2 === 1) { res = (res * b2) % mod; steps2.push(`result × ${b2} mod ${mod} = ${res}`); }
+      b2 = (b2 * b2) % mod;
+      e = Math.floor(e / 2);
+    }
+    result.steps.push({
+      step: 1,
+      description: 'Use fast modular exponentiation',
+      expression: `${base}^{${exp}} \\bmod ${mod}`,
+      explanation: 'Repeated squaring computes modular powers efficiently without evaluating large numbers.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Squaring and reducing steps',
+      expression: steps2.slice(0, 6).map((s) => `\\text{${s}}`).join(',\\;'),
+      explanation: 'At each step, square the current base mod m; multiply into result when bit is 1.',
+    });
+    result.steps.push({
+      step: 3,
+      description: 'Final result',
+      expression: `${base}^{${exp}} \\equiv ${res} \\pmod{${mod}}`,
+      explanation: `${base}^${exp} mod ${mod} = ${res}.`,
+    });
+    result.answer = String(res);
+    result.answerLatex = `${base}^{${exp}} \\equiv ${res} \\pmod{${mod}}`;
+    result.explanation = `${base}^${exp} mod ${mod} = ${res}.`;
+    return result;
+  }
+
+  const modMatch = lower.match(/^(\d+)\s*mod\s*(\d+)$/);
+  if (modMatch) {
+    const a2 = parseInt(modMatch[1]);
+    const m2 = parseInt(modMatch[2]);
+    const q = Math.floor(a2 / m2);
+    const r2 = a2 % m2;
+    result.steps.push({
+      step: 1,
+      description: 'Write the division algorithm: a = q·m + r',
+      expression: `${a2} = ${q} \\times ${m2} + ${r2}`,
+      explanation: `Divide ${a2} by ${m2}: quotient q = ${q}, remainder r = ${r2}.`,
+    });
+    result.steps.push({
+      step: 2,
+      description: 'The remainder is the modulo result',
+      expression: `${a2} \\bmod ${m2} = ${r2}`,
+      explanation: `a mod m = a − m·⌊a/m⌋ = ${a2} − ${m2}·${q} = ${r2}.`,
+    });
+    result.answer = String(r2);
+    result.answerLatex = `${a2} \\bmod ${m2} = ${r2}`;
+    result.explanation = `${a2} mod ${m2} = ${r2}.`;
+    return result;
+  }
+
+  // Fallback
+  result.verified = false;
+  result.steps.push({
+    step: 1,
+    description: 'Supported discrete math inputs',
+    expression: `\\gcd(48,18) \\quad \\text{lcm}(12,18) \\quad C(10,3) \\quad P(5,2) \\quad F(10) \\quad 2^{10} \\bmod 7`,
+    explanation: 'Try GCD, LCM, combinations, permutations, Fibonacci, or modular arithmetic.',
+  });
+  result.answer = 'Try: gcd(48,18)  C(10,3)  fibonacci(10)  2^10 mod 7';
+  result.answerLatex = '\\text{Try: gcd(48,18) or C(10,3) or fibonacci(10)}';
+  result.explanation = 'Enter a recognised discrete math expression.';
+  return result;
+}
+
+function solvePhysics(normalizedInput: string): SolverResult {
+  const result = baseResult('physics', normalizedInput, 'mathjs');
+  const rawInput = normalizedInput.replace(/^(solve|find|calculate|compute)\s+/i, '').trim();
+  const lower = rawInput.toLowerCase();
+
+  // Helper: extract named param from input, e.g. "v=50" or "v = 50"
+  const getParam = (name: string): number | null => {
+    const m = lower.match(new RegExp(`${name}\\s*=\\s*(-?[\\d.]+)`));
+    return m ? parseFloat(m[1]) : null;
+  };
+
+  // Ohm's Law: V = I*R — solve for missing variable
+  if (/\bohm\b|v\s*=\s*i\s*\*?\s*r|voltage|resistance|current/i.test(lower)) {
+    const V = getParam('v');
+    const I = getParam('i');
+    const R = getParam('r');
+    result.steps.push({
+      step: 1,
+      description: "Ohm's Law formula",
+      expression: 'V = I \\times R',
+      explanation: "Ohm's Law relates voltage (V), current (I), and resistance (R).",
+    });
+    if (V !== null && I !== null && R === null) {
+      const Rc = V / I;
+      result.steps.push({ step: 2, description: 'Solve for R', expression: `R = \\frac{V}{I} = \\frac{${V}}{${I}} = ${formatNumber(Rc)}\\,\\Omega`, explanation: 'Divide voltage by current.' });
+      result.answer = `R = ${formatNumber(Rc)} Ω`; result.answerLatex = `R = ${formatNumber(Rc)}\\,\\Omega`; result.explanation = `Resistance R = ${formatNumber(Rc)} Ω.`;
+    } else if (V !== null && R !== null && I === null) {
+      const Ic = V / R;
+      result.steps.push({ step: 2, description: 'Solve for I', expression: `I = \\frac{V}{R} = \\frac{${V}}{${R}} = ${formatNumber(Ic)}\\,\\text{A}`, explanation: 'Divide voltage by resistance.' });
+      result.answer = `I = ${formatNumber(Ic)} A`; result.answerLatex = `I = ${formatNumber(Ic)}\\,\\text{A}`; result.explanation = `Current I = ${formatNumber(Ic)} A.`;
+    } else if (I !== null && R !== null && V === null) {
+      const Vc = I * R;
+      result.steps.push({ step: 2, description: 'Solve for V', expression: `V = I \\times R = ${I} \\times ${R} = ${formatNumber(Vc)}\\,\\text{V}`, explanation: 'Multiply current by resistance.' });
+      result.answer = `V = ${formatNumber(Vc)} V`; result.answerLatex = `V = ${formatNumber(Vc)}\\,\\text{V}`; result.explanation = `Voltage V = ${formatNumber(Vc)} V.`;
+    } else {
+      result.steps.push({ step: 2, description: 'Enter two known values', expression: 'V=12\\,I=3 \\;\\text{ or }\\; V=12\\,R=4 \\;\\text{ or }\\; I=3\\,R=4', explanation: 'Provide any two of V, I, R to solve for the third.' });
+      result.verified = false; result.answer = 'Provide two of: V=..., I=..., R=...'; result.answerLatex = "\\text{Provide two of V, I, R}";
+    }
+    result.explanation = result.explanation || "Ohm's Law V = IR.";
+    return result;
+  }
+
+  // Kinetic Energy: KE = ½mv²
+  if (/\bke\b|kinetic\s*energy|½\s*m|0\.5\s*m/i.test(lower)) {
+    const m = getParam('m');
+    const v = getParam('v');
+    const ke = getParam('ke');
+    result.steps.push({
+      step: 1,
+      description: 'Kinetic energy formula',
+      expression: 'KE = \\frac{1}{2}mv^2',
+      explanation: 'Kinetic energy depends on mass m (kg) and speed v (m/s).',
+    });
+    if (m !== null && v !== null) {
+      const keVal = 0.5 * m * v * v;
+      result.steps.push({ step: 2, description: 'Substitute values', expression: `KE = \\frac{1}{2} \\times ${m} \\times ${v}^2 = \\frac{1}{2} \\times ${m} \\times ${v * v} = ${formatNumber(keVal)}\\,\\text{J}`, explanation: `m = ${m} kg, v = ${v} m/s.` });
+      result.answer = `KE = ${formatNumber(keVal)} J`; result.answerLatex = `KE = ${formatNumber(keVal)}\\,\\text{J}`; result.explanation = `KE = ${formatNumber(keVal)} J.`;
+    } else if (ke !== null && m !== null) {
+      const vVal = Math.sqrt((2 * ke) / m);
+      result.steps.push({ step: 2, description: 'Solve for v', expression: `v = \\sqrt{\\frac{2\\cdot KE}{m}} = \\sqrt{\\frac{2 \\times ${ke}}{${m}}} = ${formatNumber(vVal)}\\,\\text{m/s}`, explanation: 'Rearrange KE = ½mv².' });
+      result.answer = `v = ${formatNumber(vVal)} m/s`; result.answerLatex = `v = ${formatNumber(vVal)}\\,\\text{m/s}`; result.explanation = `Speed v = ${formatNumber(vVal)} m/s.`;
+    } else if (ke !== null && v !== null) {
+      const mVal = (2 * ke) / (v * v);
+      result.steps.push({ step: 2, description: 'Solve for m', expression: `m = \\frac{2\\cdot KE}{v^2} = \\frac{2 \\times ${ke}}{${v}^2} = ${formatNumber(mVal)}\\,\\text{kg}`, explanation: 'Rearrange KE = ½mv².' });
+      result.answer = `m = ${formatNumber(mVal)} kg`; result.answerLatex = `m = ${formatNumber(mVal)}\\,\\text{kg}`; result.explanation = `Mass m = ${formatNumber(mVal)} kg.`;
+    } else {
+      result.verified = false; result.answer = 'Provide two of: m=..., v=..., KE=...'; result.answerLatex = '\\text{Provide two of m, v, KE}'; result.explanation = 'KE = ½mv².';
+      result.steps.push({ step: 2, description: 'Example', expression: 'KE\\;m=10\\;v=5 \\implies KE = 250\\,\\text{J}', explanation: 'Provide m and v to compute KE.' });
+    }
+    return result;
+  }
+
+  // Projectile Range: R = v₀²sin(2θ)/g
+  if (/projectile|range.*theta|range.*angle|v.*theta/i.test(lower)) {
+    const v0 = getParam('v') ?? getParam('v0');
+    const theta = getParam('theta') ?? getParam('angle');
+    const g = getParam('g') ?? 9.81;
+    result.steps.push({
+      step: 1,
+      description: 'Projectile range formula',
+      expression: 'R = \\frac{v_0^2 \\sin(2\\theta)}{g}',
+      explanation: 'R is the horizontal range for a projectile launched at angle θ with speed v₀ (g ≈ 9.81 m/s²).',
+    });
+    if (v0 !== null && theta !== null) {
+      const thetaRad = theta * Math.PI / 180;
+      const R = (v0 * v0 * Math.sin(2 * thetaRad)) / g;
+      result.steps.push({ step: 2, description: 'Substitute values', expression: `R = \\frac{${v0}^2 \\times \\sin(2 \\times ${theta}^\\circ)}{${formatNumber(g)}} = \\frac{${formatNumber(v0 * v0)} \\times ${formatNumber(Math.sin(2 * thetaRad))}}{${formatNumber(g)}}`, explanation: `θ = ${theta}° = ${formatNumber(thetaRad)} rad.` });
+      result.steps.push({ step: 3, description: 'Compute range', expression: `R = ${formatNumber(R)}\\,\\text{m}`, explanation: `At ${theta}°, range = ${formatNumber(R)} m.` });
+      result.answer = `R = ${formatNumber(R)} m`; result.answerLatex = `R = ${formatNumber(R)}\\,\\text{m}`; result.explanation = `Projectile range = ${formatNumber(R)} m.`;
+    } else {
+      result.verified = false; result.answer = 'Provide v=... theta=... (and optionally g=...)'; result.answerLatex = '\\text{Provide v and theta}'; result.explanation = 'Example: projectile v=50 theta=45';
+      result.steps.push({ step: 2, description: 'Example', expression: 'v_0=50\\,\\text{m/s},\\;\\theta=45^\\circ \\implies R \\approx 255\\,\\text{m}', explanation: '45° gives maximum range.' });
+    }
+    return result;
+  }
+
+  // Wave Speed: v = f·λ
+  if (/wave|freq|wavelength|lambda/i.test(lower)) {
+    const f = getParam('f');
+    const lambda = getParam('lambda') ?? getParam('wavelength') ?? getParam('l');
+    const wv = getParam('v') ?? getParam('wave');
+    result.steps.push({
+      step: 1,
+      description: 'Wave speed formula',
+      expression: 'v = f \\times \\lambda',
+      explanation: 'Wave speed v (m/s) equals frequency f (Hz) times wavelength λ (m).',
+    });
+    if (f !== null && lambda !== null) {
+      const speed = f * lambda;
+      result.steps.push({ step: 2, description: 'Substitute', expression: `v = ${f} \\times ${lambda} = ${formatNumber(speed)}\\,\\text{m/s}`, explanation: '' });
+      result.answer = `v = ${formatNumber(speed)} m/s`; result.answerLatex = `v = ${formatNumber(speed)}\\,\\text{m/s}`; result.explanation = `Wave speed = ${formatNumber(speed)} m/s.`;
+    } else if (wv !== null && f !== null) {
+      const lVal = wv / f;
+      result.steps.push({ step: 2, description: 'Solve for λ', expression: `\\lambda = \\frac{v}{f} = \\frac{${wv}}{${f}} = ${formatNumber(lVal)}\\,\\text{m}`, explanation: '' });
+      result.answer = `λ = ${formatNumber(lVal)} m`; result.answerLatex = `\\lambda = ${formatNumber(lVal)}\\,\\text{m}`; result.explanation = `Wavelength = ${formatNumber(lVal)} m.`;
+    } else if (wv !== null && lambda !== null) {
+      const fVal = wv / lambda;
+      result.steps.push({ step: 2, description: 'Solve for f', expression: `f = \\frac{v}{\\lambda} = \\frac{${wv}}{${lambda}} = ${formatNumber(fVal)}\\,\\text{Hz}`, explanation: '' });
+      result.answer = `f = ${formatNumber(fVal)} Hz`; result.answerLatex = `f = ${formatNumber(fVal)}\\,\\text{Hz}`; result.explanation = `Frequency = ${formatNumber(fVal)} Hz.`;
+    } else {
+      result.verified = false; result.answer = 'Provide two of: f=..., lambda=..., v=...'; result.answerLatex = '\\text{Provide two of f, lambda, v}'; result.explanation = 'v = fλ.';
+      result.steps.push({ step: 2, description: 'Example', expression: 'f=440\\;\\lambda=0.78 \\implies v \\approx 343\\,\\text{m/s}', explanation: 'Standard A440 Hz tone in air.' });
+    }
+    return result;
+  }
+
+  // Newton's Second Law: F = ma
+  if (/\bf\s*=\s*m\s*a\b|force|newton|acceleration|\bma\b/i.test(lower)) {
+    const F = getParam('f');
+    const m2 = getParam('m');
+    const a2 = getParam('a');
+    result.steps.push({
+      step: 1,
+      description: "Newton's Second Law",
+      expression: 'F = m \\times a',
+      explanation: 'Force (N) = mass (kg) × acceleration (m/s²).',
+    });
+    if (m2 !== null && a2 !== null) {
+      const Fv = m2 * a2;
+      result.steps.push({ step: 2, description: 'Compute F', expression: `F = ${m2} \\times ${a2} = ${formatNumber(Fv)}\\,\\text{N}`, explanation: '' });
+      result.answer = `F = ${formatNumber(Fv)} N`; result.answerLatex = `F = ${formatNumber(Fv)}\\,\\text{N}`; result.explanation = `Force = ${formatNumber(Fv)} N.`;
+    } else if (F !== null && m2 !== null) {
+      const av = F / m2;
+      result.steps.push({ step: 2, description: 'Solve for a', expression: `a = \\frac{F}{m} = \\frac{${F}}{${m2}} = ${formatNumber(av)}\\,\\text{m/s}^2`, explanation: '' });
+      result.answer = `a = ${formatNumber(av)} m/s²`; result.answerLatex = `a = ${formatNumber(av)}\\,\\text{m/s}^2`; result.explanation = `Acceleration = ${formatNumber(av)} m/s².`;
+    } else if (F !== null && a2 !== null) {
+      const mv = F / a2;
+      result.steps.push({ step: 2, description: 'Solve for m', expression: `m = \\frac{F}{a} = \\frac{${F}}{${a2}} = ${formatNumber(mv)}\\,\\text{kg}`, explanation: '' });
+      result.answer = `m = ${formatNumber(mv)} kg`; result.answerLatex = `m = ${formatNumber(mv)}\\,\\text{kg}`; result.explanation = `Mass = ${formatNumber(mv)} kg.`;
+    } else {
+      result.verified = false; result.answer = 'Provide two of: F=..., m=..., a=...'; result.answerLatex = '\\text{Provide two of F, m, a}'; result.explanation = 'F = ma.';
+      result.steps.push({ step: 2, description: 'Example', expression: 'm=10\\;a=2 \\implies F=20\\,\\text{N}', explanation: '' });
+    }
+    return result;
+  }
+
+  // Gravitational PE: PE = mgh
+  if (/\bpe\b|potential\s*energy|mgh/i.test(lower)) {
+    const m3 = getParam('m');
+    const g2 = getParam('g') ?? 9.81;
+    const h = getParam('h');
+    const pe = getParam('pe');
+    result.steps.push({
+      step: 1,
+      description: 'Gravitational potential energy',
+      expression: 'PE = mgh',
+      explanation: 'PE (J) = mass (kg) × g (m/s²) × height h (m).',
+    });
+    if (m3 !== null && h !== null) {
+      const peVal = m3 * g2 * h;
+      result.steps.push({ step: 2, description: 'Substitute', expression: `PE = ${m3} \\times ${formatNumber(g2)} \\times ${h} = ${formatNumber(peVal)}\\,\\text{J}`, explanation: '' });
+      result.answer = `PE = ${formatNumber(peVal)} J`; result.answerLatex = `PE = ${formatNumber(peVal)}\\,\\text{J}`; result.explanation = `PE = ${formatNumber(peVal)} J.`;
+    } else if (pe !== null && m3 !== null) {
+      const hv = pe / (m3 * g2);
+      result.steps.push({ step: 2, description: 'Solve for h', expression: `h = \\frac{PE}{mg} = \\frac{${pe}}{${m3}\\times${formatNumber(g2)}} = ${formatNumber(hv)}\\,\\text{m}`, explanation: '' });
+      result.answer = `h = ${formatNumber(hv)} m`; result.answerLatex = `h = ${formatNumber(hv)}\\,\\text{m}`; result.explanation = `Height h = ${formatNumber(hv)} m.`;
+    } else {
+      result.verified = false; result.answer = 'Provide m=... h=... (g defaults to 9.81)'; result.answerLatex = '\\text{Provide m and h}'; result.explanation = 'PE = mgh.';
+      result.steps.push({ step: 2, description: 'Example', expression: 'm=5\\;h=10 \\implies PE = 490.5\\,\\text{J}', explanation: '' });
+    }
+    return result;
+  }
+
+  // Fallback — list supported physics formulas
+  result.verified = false;
+  result.steps.push({
+    step: 1,
+    description: 'Supported physics formulas',
+    expression: `V{=}IR \\quad KE{=}\\tfrac{1}{2}mv^2 \\quad F{=}ma \\quad PE{=}mgh \\quad R{=}\\tfrac{v_0^2\\sin2\\theta}{g} \\quad v{=}f\\lambda`,
+    explanation: "Ohm's Law, kinetic energy, Newton's 2nd Law, potential energy, projectile range, wave speed.",
+  });
+  result.answer = "Try: ohm V=12 I=3  |  KE m=10 v=5  |  projectile v=50 theta=45  |  wave f=440 lambda=0.78";
+  result.answerLatex = "\\text{Try: ohm V=12 I=3 or KE m=10 v=5}";
+  result.explanation = 'Enter a physics formula keyword and known variable values.';
   return result;
 }
 
@@ -1249,6 +2023,12 @@ export function solveMathProblem(problem: string, requestedCategory?: string | n
   const lower = normalizedInput.toLowerCase();
 
   try {
+    // Differential equations — check early before general equation matching
+    if (category === 'differential-equations' || /y''|dy\/dx/i.test(normalizedInput) || (/y'/.test(normalizedInput) && normalizedInput.includes('='))) return solveDifferentialEquation(normalizedInput);
+    // Discrete math
+    if (category === 'discrete' || /^gcd\(|^lcm\(|^fibonacci\(|^fib\(|^f\(\d|^c\(\d|^p\(\d|^ncr\(|^npr\(|combinations?\(|permutations?\(|\d+\s*mod\s*\d|^\d+\^[\d]+\s*mod/.test(lower)) return solveDiscreteMath(normalizedInput);
+    // Physics
+    if (category === 'physics' || /\bohm\b|kinetic.energy|\bke\b|projectile|\bwave\b|wave\s*speed|wavelength|\bforce\b|\bf\s*=\s*m\s*a\b|potential.energy|\bpe\b|newton/.test(lower)) return solvePhysics(normalizedInput);
     if (lower.startsWith('derivative of') || lower.startsWith('d/dx')) return solveDerivative(normalizedInput);
     if (lower.startsWith('integral from') || lower.startsWith('integral of') || lower.startsWith('integrate')) return solveIntegral(normalizedInput);
     if (lower.startsWith('limit ')) return solveLimit(normalizedInput);
