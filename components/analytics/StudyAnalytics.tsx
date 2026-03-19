@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import {
   useAnalytics,
+  type CoachAction,
   type DeckStats,
   type QuizStats,
   type PlanStats,
@@ -49,7 +51,7 @@ export function StudyAnalytics() {
   );
   if (!data) return null;
 
-  const { quizStats, planStats, weakAreas, activity, insights, usage, deckStats, weekOverWeek, dailyReviews, retentionByInterval } = data;
+  const { quizStats, planStats, weakAreas, coachActions, activity, insights, usage, deckStats, weekOverWeek, dailyReviews, retentionByInterval } = data;
 
   return (
     <div className="an-shell">
@@ -159,6 +161,7 @@ export function StudyAnalytics() {
           quizStats={quizStats}
           planStats={planStats}
           weakAreas={weakAreas}
+          coachActions={coachActions}
           insights={insights}
           usage={usage}
           deckStats={deckStats}
@@ -309,10 +312,11 @@ function StatCard({ icon, label, value, unit, accent, detail }: {
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ quizStats, planStats: _planStats, weakAreas, insights, usage, deckStats, weekOverWeek: _weekOverWeek }: {
+function OverviewTab({ quizStats, planStats: _planStats, weakAreas, coachActions, insights, usage, deckStats, weekOverWeek: _weekOverWeek }: {
   quizStats: QuizStats | null;
   planStats: PlanStats | null;
   weakAreas: WeakArea[];
+  coachActions: CoachAction[];
   insights: string[];
   usage: UsageStats | null;
   deckStats: DeckStats;
@@ -384,6 +388,30 @@ function OverviewTab({ quizStats, planStats: _planStats, weakAreas, insights, us
                   />
                 </div>
                 <p className="weak-suggestion">{area.suggestion}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="an-card">
+        <h3 className="card-title">Next Actions</h3>
+        {coachActions.length === 0 ? (
+          <p className="card-empty">Study a deck, take a quiz, or build a plan to unlock guided next steps here.</p>
+        ) : (
+          <div className="action-list">
+            {coachActions.map((action) => (
+              <div key={action.id} className={`action-card ${action.type}`}>
+                <div className="action-copy">
+                  <span className="action-type">
+                    {action.type === 'review' ? 'Review' : action.type === 'practice' ? 'Practice' : 'Plan'}
+                  </span>
+                  <strong>{action.label}</strong>
+                  {action.payload.detail ? <p>{action.payload.detail}</p> : null}
+                </div>
+                <Link href={action.payload.href || '/analytics'} className="action-link">
+                  {action.payload.cta || 'Open'}
+                </Link>
               </div>
             ))}
           </div>
@@ -500,6 +528,57 @@ function OverviewTab({ quizStats, planStats: _planStats, weakAreas, insights, us
         .weak-bar-bg { height:6px; background:var(--bg-surface); border-radius:3px; overflow:hidden; margin-bottom:4px; }
         .weak-bar { height:100%; border-radius:3px; transition:width 0.5s; }
         .weak-suggestion { font-size:11px; color:var(--text-muted); margin:0; }
+        .action-list { display:flex; flex-direction:column; gap:10px; }
+        .action-card {
+          display:grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 12px;
+          align-items: center;
+          padding: 12px 14px;
+          border-radius: 14px;
+          border: 1px solid var(--border-subtle);
+          background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+        }
+        .action-card.review { border-color: color-mix(in srgb, #f59e0b 26%, var(--border-subtle)); }
+        .action-card.practice { border-color: color-mix(in srgb, #4f86f7 26%, var(--border-subtle)); }
+        .action-card.plan { border-color: color-mix(in srgb, #7c3aed 26%, var(--border-subtle)); }
+        .action-copy { min-width: 0; }
+        .action-type {
+          display:inline-flex;
+          margin-bottom: 6px;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+        }
+        .action-copy strong {
+          display:block;
+          font-size: 13px;
+          line-height: 1.45;
+          color: var(--text-primary);
+        }
+        .action-copy p {
+          margin: 6px 0 0;
+          font-size: 11px;
+          line-height: 1.55;
+          color: var(--text-muted);
+        }
+        .action-link {
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          padding: 9px 12px;
+          border-radius: 10px;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-elevated);
+          color: var(--text-primary);
+          font-size: 12px;
+          font-weight: 600;
+          text-decoration: none;
+          white-space: nowrap;
+        }
+        .action-link:hover { border-color: var(--primary); color: var(--primary); }
         .tool-bars { display:flex; flex-direction:column; gap:8px; }
         .tool-row { display:flex; align-items:center; gap:10px; }
         .tool-name { font-size:12px; color:var(--text-secondary); min-width:80px; text-transform:capitalize; }
@@ -528,7 +607,11 @@ function OverviewTab({ quizStats, planStats: _planStats, weakAreas, insights, us
         .insights-card { background:color-mix(in srgb, var(--primary) 5%, var(--bg-elevated)); }
         .insights-list { margin:0; padding:0 0 0 16px; display:flex; flex-direction:column; gap:6px; }
         .insight-item { font-size:14px; color:var(--text-secondary); line-height:1.6; }
-        @media (max-width: 768px) { .ov-grid { grid-template-columns:1fr; } }
+        @media (max-width: 768px) {
+          .ov-grid { grid-template-columns:1fr; }
+          .action-card { grid-template-columns: 1fr; }
+          .action-link { width: 100%; }
+        }
       `}</style>
     </div>
   );
@@ -732,8 +815,8 @@ function ActivityTab({ activity, period: _period, dailyReviews }: {
   period: number;
   dailyReviews: DailyReview[];
 }) {
-  const daily = activity?.dailyActivity ?? [];
-  const weekly = activity?.weeklyActivity ?? [];
+  const daily = useMemo(() => activity?.dailyActivity ?? [], [activity?.dailyActivity]);
+  const weekly = useMemo(() => activity?.weeklyActivity ?? [], [activity?.weeklyActivity]);
 
   // Build proper aligned heatmap (Mon–Sun rows, weeks as columns)
   const today = new Date();
