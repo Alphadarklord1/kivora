@@ -47,6 +47,12 @@ const STARTER_QUESTIONS = [
   "What is the author's conclusion?",
 ];
 
+const CHAT_TIPS = [
+  'Ask for a summary, definitions, or a section-by-section explanation.',
+  'You can load a different file at any time from this folder.',
+  'Use Shift+Enter for a new line and Enter to send.',
+] as const;
+
 export function ChatPanel({
   extractedText,
   fileName,
@@ -66,6 +72,11 @@ export function ChatPanel({
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastContextRef = useRef<string | null>(null);
+  const hasContext = Boolean(extractedText);
+  const canPickFile = files.length > 0 && onSelectFile && onLoadSelectedFile;
+  const estimatedWords = hasContext
+    ? (Math.round(extractedText.split(/\s+/).length / 100) * 100).toLocaleString()
+    : null;
 
   function updateLastAssistant(content: string, sources?: MessageSource[]) {
     setMessages(prev => {
@@ -184,13 +195,13 @@ export function ChatPanel({
 
       {/* Context bar */}
       <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        {extractedText ? (
+        {hasContext ? (
           <>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80', flexShrink: 0, boxShadow: '0 0 6px #4ade8080' }} />
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               <strong>{fileName ?? 'Document'}</strong> in context
               <span style={{ color: 'var(--text-3)', marginLeft: 6 }}>
-                ≈{(Math.round(extractedText.split(/\s+/).length / 100) * 100).toLocaleString()} words
+                ≈{estimatedWords} words
               </span>
             </span>
           </>
@@ -198,7 +209,7 @@ export function ChatPanel({
           <>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warning)', flexShrink: 0 }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-              {files.length > 0 && onSelectFile && onLoadSelectedFile ? (
+              {canPickFile ? (
                 <>
                   <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
                     No document loaded —
@@ -256,6 +267,28 @@ export function ChatPanel({
             </div>
             <div style={{ fontSize: 'var(--text-sm)', marginBottom: 20 }}>
               Ask anything — explanations, definitions, summaries, key arguments
+            </div>
+            <div
+              style={{
+                maxWidth: 480,
+                margin: '0 auto 18px',
+                padding: '12px 14px',
+                borderRadius: 14,
+                border: '1px solid var(--border)',
+                background: 'var(--surface)',
+                textAlign: 'left',
+              }}
+            >
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 8 }}>
+                Best results
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {CHAT_TIPS.map((tip) => (
+                  <div key={tip} style={{ fontSize: 'var(--text-xs)', lineHeight: 1.6 }}>
+                    {tip}
+                  </div>
+                ))}
+              </div>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
               {STARTER_QUESTIONS.map(q => (
@@ -348,7 +381,7 @@ export function ChatPanel({
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKey}
-            placeholder={extractedText ? 'Ask a question about your document… (Enter to send)' : 'Load a file first to start chatting…'}
+            placeholder={hasContext ? 'Ask a question about your document… (Enter to send)' : 'Load a file first to start chatting…'}
             rows={2}
             style={{
               flex: 1,
@@ -385,7 +418,7 @@ export function ChatPanel({
           </div>
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4 }}>
-          Shift+Enter for new line · powered by Ollama
+          Shift+Enter for new line · uses your current AI runtime setting
         </div>
       </div>
     </div>

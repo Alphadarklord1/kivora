@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n/useI18n';
 
@@ -34,6 +34,9 @@ interface ApiErrorLike {
   reason?: string;
 }
 
+type ShareTab = 'received' | 'sent';
+type ShareFilter = 'all' | 'file' | 'folder' | 'topic' | 'library';
+
 // Strings not covered by GLOBAL_TRANSLATIONS — component-specific
 const LOCAL_AR: Record<string, string> = {
   'Manage content shared with you and by you': 'إدارة المحتوى الذي تمت مشاركته معك ومن طرفك',
@@ -59,19 +62,28 @@ const LOCAL_AR: Record<string, string> = {
   'Filtered by': 'تمت التصفية حسب',
 };
 
+const SHARE_FILTERS: ShareFilter[] = ['all', 'file', 'folder', 'topic', 'library'];
+
+const RESOURCE_ICON: Record<Exclude<ShareFilter, 'all'>, string> = {
+  file: '📄',
+  folder: '📁',
+  topic: '📂',
+  library: '📚',
+};
+
 export default function SharedWithMePage() {
   const { t, formatDate, locale } = useI18n(LOCAL_AR);
 
   const [shares, setShares]       = useState<Share[]>([]);
   const [owners, setOwners]       = useState<Record<string, Owner>>({});
   const [loading, setLoading]     = useState(true);
-  const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
+  const [activeTab, setActiveTab] = useState<ShareTab>('received');
   const [search, setSearch]       = useState('');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'file' | 'folder' | 'topic' | 'library'>('all');
+  const [typeFilter, setTypeFilter] = useState<ShareFilter>('all');
   const [errorMsg, setErrorMsg]   = useState('');
   const [copyMsg, setCopyMsg]     = useState('');
 
-  const fetchShares = async () => {
+  const fetchShares = useCallback(async () => {
     setLoading(true);
     try {
       const type = activeTab === 'received' ? 'shared' : 'owned';
@@ -102,10 +114,9 @@ export default function SharedWithMePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab, t]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void fetchShares(); }, [activeTab]);
+  useEffect(() => { void fetchShares(); }, [fetchShares]);
 
   async function handleRevoke(id: string) {
     if (!confirm(t('Revoke this share?'))) return;
@@ -133,9 +144,7 @@ export default function SharedWithMePage() {
     return !!expiresAt && new Date(expiresAt) < new Date();
   }
 
-  const resourceIcon: Record<string, string> = { file: '📄', folder: '📁', topic: '📂', library: '📚' };
-
-  const filtered = shares.filter(s => {
+  const filtered = useMemo(() => shares.filter(s => {
     if (typeFilter !== 'all' && s.resourceType !== typeFilter) return false;
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
@@ -145,21 +154,50 @@ export default function SharedWithMePage() {
       (owners[s.ownerId]?.email ?? '').toLowerCase().includes(q) ||
       (owners[s.ownerId]?.name ?? '').toLowerCase().includes(q)
     );
-  });
+  }), [owners, search, shares, typeFilter]);
 
-  const typeLabels: Record<string, string> = {
+  const typeLabels: Record<ShareFilter, string> = {
     all: t('All'), file: t('File'), folder: t('Folder'), topic: t('Topic'), library: t('Library'),
   };
 
-  const activeShares = shares.filter((share) => !isExpired(share.expiresAt));
-  const expiringSoon = activeShares.filter((share) => {
-    if (!share.expiresAt) return false;
-    const expiry = new Date(share.expiresAt).getTime();
-    const threeDays = 3 * 24 * 60 * 60 * 1000;
-    return expiry - Date.now() <= threeDays;
-  });
-  const linkShares = shares.filter((share) => share.shareType === 'link');
-  const directShares = shares.filter((share) => share.shareType === 'user');
+  const shareStats = useMemo(() => {
+    const activeShares = shares.filter((share) => !isExpired(share.expiresAt));
+    const expiringSoon = activeShares.filter((share) => {
+      if (!share.expiresAt) return false;
+      const expiry = new Date(share.expiresAt).getTime();
+      const threeDays = 3 * 24 * 60 * 60 * 1000;
+      return expiry - Date.now() <= threeDays;
+    });
+    return {
+      total: shares.length,
+      linkShares: shares.filter((share) => share.shareType === 'link').length,
+      directShares: shares.filter((share) => share.shareType === 'user').length,
+      expiringSoon: expiringSoon.length,
+    };
+  }, [shares]);
+
+  const statCards = [
+    {
+      icon: activeTab === 'received' ? '📥' : '📤',
+      value: shareStats.total,
+      label: activeTab === 'received' ? t('Items shared with you') : t('Items you shared'),
+    },
+    { icon: '🔗', value: shareStats.linkShares, label: t('Link shares') },
+    { icon: '👥', value: shareStats.directShares, label: t('Direct shares') },
+    { icon: '⏳', value: shareStats.expiringSoon, label: t('Expiring soon') },
+  ];
+
+  const emptyState = activeTab === 'received'
+    ? {
+        icon: '📥',
+        title: t('Nothing shared with you yet'),
+        body: t('When someone shares content with you, it will appear here.'),
+      }
+    : {
+        icon: '📤',
+        title: t("You haven't shared anything yet"),
+        body: t('Start sharing from the Workspace, Library, or Folders panel.'),
+      };
 
   return (
     <div className="sp-page" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
@@ -176,34 +214,15 @@ export default function SharedWithMePage() {
       </div>
 
       <div className="sp-stats">
-        <div className="sp-stat-card">
-          <span className="sp-stat-icon">{activeTab === 'received' ? '📥' : '📤'}</span>
-          <div>
-            <strong>{shares.length}</strong>
-            <span>{activeTab === 'received' ? t('Items shared with you') : t('Items you shared')}</span>
+        {statCards.map((card) => (
+          <div key={card.label} className="sp-stat-card">
+            <span className="sp-stat-icon">{card.icon}</span>
+            <div>
+              <strong>{card.value}</strong>
+              <span>{card.label}</span>
+            </div>
           </div>
-        </div>
-        <div className="sp-stat-card">
-          <span className="sp-stat-icon">🔗</span>
-          <div>
-            <strong>{linkShares.length}</strong>
-            <span>{t('Link shares')}</span>
-          </div>
-        </div>
-        <div className="sp-stat-card">
-          <span className="sp-stat-icon">👥</span>
-          <div>
-            <strong>{directShares.length}</strong>
-            <span>{t('Direct shares')}</span>
-          </div>
-        </div>
-        <div className="sp-stat-card">
-          <span className="sp-stat-icon">⏳</span>
-          <div>
-            <strong>{expiringSoon.length}</strong>
-            <span>{t('Expiring soon')}</span>
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* ── Error banner ── */}
@@ -230,13 +249,13 @@ export default function SharedWithMePage() {
           onChange={e => setSearch(e.target.value)}
         />
         <div className="sp-filter-pills">
-          {(['all', 'file', 'folder', 'topic', 'library'] as const).map(type => (
+          {SHARE_FILTERS.map(type => (
             <button
               key={type}
               className={`sp-pill${typeFilter === type ? ' active' : ''}`}
               onClick={() => setTypeFilter(type)}
             >
-              {type !== 'all' && <span>{resourceIcon[type]}</span>}
+              {type !== 'all' && <span>{RESOURCE_ICON[type]}</span>}
               {typeLabels[type]}
             </button>
           ))}
@@ -271,15 +290,9 @@ export default function SharedWithMePage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="sp-empty">
-          <div className="sp-empty-icon">{activeTab === 'received' ? '📥' : '📤'}</div>
-          <h3 className="sp-empty-title">
-            {activeTab === 'received' ? t('Nothing shared with you yet') : t("You haven't shared anything yet")}
-          </h3>
-          <p className="sp-empty-body">
-            {activeTab === 'received'
-              ? t('When someone shares content with you, it will appear here.')
-              : t('Start sharing from the Workspace, Library, or Folders panel.')}
-          </p>
+          <div className="sp-empty-icon">{emptyState.icon}</div>
+          <h3 className="sp-empty-title">{emptyState.title}</h3>
+          <p className="sp-empty-body">{emptyState.body}</p>
           {activeTab === 'sent' && (
             <Link href="/workspace" className="sp-btn sp-btn-primary" style={{ display: 'inline-block', marginTop: 12 }}>
               {t('Workspace')} →
@@ -295,7 +308,7 @@ export default function SharedWithMePage() {
             return (
               <div key={share.id} className={`sp-card${expired ? ' expired' : ''}`}>
                 <div className="sp-card-icon" data-type={share.resourceType}>
-                  {resourceIcon[share.resourceType] ?? '📄'}
+                  {RESOURCE_ICON[share.resourceType as keyof typeof RESOURCE_ICON] ?? '📄'}
                 </div>
                 <div className="sp-card-body">
                   <div className="sp-card-name">{share.resourceName}</div>

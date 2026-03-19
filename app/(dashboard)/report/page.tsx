@@ -35,6 +35,12 @@ const ISSUE_TYPE_META: Record<ReportType, { icon: string; title: string; desc: s
   },
 };
 
+const REPORT_TIPS = [
+  'Include the exact page or tool where the issue happened.',
+  'List one action per line in steps to reproduce.',
+  'Mention whether this blocks studying completely or is only cosmetic.',
+] as const;
+
 export default function ReportPage() {
   const pathname = usePathname();
   const { settings } = useSettings();
@@ -146,6 +152,15 @@ export default function ReportPage() {
 
   const issuePreview = ISSUE_TYPE_META[type];
   const canSubmit = title.trim().length > 0 && (summary.trim().length > 0 || steps.trim().length > 0);
+  const submitTitle = canSubmit ? t('Ready to submit') : t('Add a little more detail');
+  const submitBody = canSubmit
+    ? t('The report has enough context to open a useful issue.')
+    : t('A title plus either a summary or steps will make this much easier to act on.');
+  const diagnosticsMeta = [
+    { label: t('Current route'), value: pathname || '/report' },
+    { label: t('Language'), value: settings.language || 'en' },
+    { label: t('Theme'), value: settings.theme || 'system' },
+  ];
 
   return (
     <section className={styles.page} dir={isRTL ? 'rtl' : 'ltr'}>
@@ -217,8 +232,8 @@ export default function ReportPage() {
 
           <div className={styles.submitRow}>
             <div className={styles.submitHint}>
-              <strong>{canSubmit ? 'Ready to submit' : 'Add a little more detail'}</strong>
-              <span>{canSubmit ? 'The report has enough context to open a useful issue.' : 'A title plus either a summary or steps will make this much easier to act on.'}</span>
+              <strong>{submitTitle}</strong>
+              <span>{submitBody}</span>
             </div>
             <button type="button" className="sp-button-primary" onClick={openIssue} disabled={!canSubmit}>
               {t('Open GitHub issue')}
@@ -229,18 +244,12 @@ export default function ReportPage() {
         <aside className={`sp-panel ${styles.sideCard}`}>
           <span className="sp-eyebrow">{t('Diagnostics preview')}</span>
           <div className={styles.metaGrid}>
-            <div className={styles.metaCard}>
-              <strong>{t('Current route')}</strong>
-              <span>{pathname || '/report'}</span>
-            </div>
-            <div className={styles.metaCard}>
-              <strong>{t('Language')}</strong>
-              <span>{settings.language || 'en'}</span>
-            </div>
-            <div className={styles.metaCard}>
-              <strong>{t('Theme')}</strong>
-              <span>{settings.theme || 'system'}</span>
-            </div>
+            {diagnosticsMeta.map((entry) => (
+              <div key={entry.label} className={styles.metaCard}>
+                <strong>{entry.label}</strong>
+                <span>{entry.value}</span>
+              </div>
+            ))}
           </div>
           <pre className={styles.diagnostics}>{diagnostics}</pre>
           <div className={styles.sideActions}>
@@ -252,9 +261,9 @@ export default function ReportPage() {
           <div className={styles.tipCard}>
             <span className="sp-eyebrow">{t('Need a quick path?')}</span>
             <ul>
-              <li>Include the exact page or tool where the issue happened.</li>
-              <li>List one action per line in steps to reproduce.</li>
-              <li>Mention whether this blocks studying completely or is only cosmetic.</li>
+              {REPORT_TIPS.map((tip) => (
+                <li key={tip}>{t(tip)}</li>
+              ))}
             </ul>
           </div>
         </aside>
