@@ -68,6 +68,23 @@ const GENERATE_TAB_GROUPS = [
   { label: 'Exam',     ids: ['exam'] },
 ] as const;
 
+const WORKSPACE_TABS: Array<{ id: MainTab; icon: string; label: string; getMeta?: (ctx: { filesCount: number; libraryCount: number }) => string }> = [
+  { id: 'files', icon: '📁', label: 'Files', getMeta: ({ filesCount }) => (filesCount ? `(${filesCount})` : '') },
+  { id: 'generate', icon: '⚡', label: 'Tools' },
+  { id: 'chat', icon: '💬', label: 'Chat' },
+  { id: 'notes', icon: '📓', label: 'Notes' },
+  { id: 'focus', icon: '🍅', label: 'Focus' },
+  { id: 'planner', icon: '📅', label: 'Planner' },
+  { id: 'library', icon: '🗂', label: 'Library', getMeta: ({ libraryCount }) => (libraryCount ? `(${libraryCount})` : '') },
+];
+
+const GENERATE_SHORTCUTS = [
+  { key: 'Ctrl+G', label: 'Generate' },
+  { key: 'Ctrl+S', label: 'Save to library' },
+  { key: 'Ctrl+E', label: 'Export .md' },
+  { key: 'Esc', label: 'Clear output' },
+] as const;
+
 type GenMode    = (typeof GENERATE_TABS)[number]['id'];
 type MainTab    = 'files' | 'generate' | 'chat' | 'notes' | 'focus' | 'library' | 'planner';
 
@@ -631,6 +648,8 @@ export function WorkspacePanel({
 
   const breadcrumb = [selectedFolderName, selectedTopicName].filter(Boolean).join(' › ');
   const currentGen = GENERATE_TABS.find(t => t.id === genMode)!;
+  const currentSourceLabel = pasteMode ? 'Pasted text' : selFile?.name ?? null;
+  const workspaceTabMeta = { filesCount: files.length, libraryCount: libItems.length };
 
   // ── Render ────────────────────────────────────────────────────────────
 
@@ -646,6 +665,26 @@ export function WorkspacePanel({
         </span>
         {!selectedFolder && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', fontWeight: 400 }}>← Select a folder to get started</span>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+          {currentSourceLabel && (
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: 'var(--text-xs)',
+                color: 'var(--text-2)',
+                background: 'var(--surface)',
+                border: '1px solid var(--border-2)',
+                borderRadius: 20,
+                padding: '2px 8px',
+                maxWidth: 220,
+              }}
+              title={currentSourceLabel}
+            >
+              {pasteMode ? '✍️' : '📄'}
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentSourceLabel}</span>
+            </span>
+          )}
           {streak > 0 && (
             <span title={`${streak}-day study streak`} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--text-xs)', color: 'var(--text-2)', background: 'color-mix(in srgb, #f59e0b 15%, var(--surface))', border: '1px solid color-mix(in srgb, #f59e0b 30%, transparent)', borderRadius: 20, padding: '2px 8px', cursor: 'default' }}>
               🔥 {streak}d
@@ -666,15 +705,9 @@ export function WorkspacePanel({
 
       {/* Tab bar */}
       <div className="tab-bar" style={{ flexShrink: 0, overflowX: 'auto', flexWrap: 'nowrap' }}>
-        {([
-          ['files',    '📁', 'Files', files.length ? `(${files.length})` : ''],
-          ['generate', '⚡', 'Tools', ''],
-          ['chat',     '💬', 'Chat', ''],
-          ['notes',    '📓', 'Notes', ''],
-          ['focus',    '🍅', 'Focus', ''],
-          ['planner',  '📅', 'Planner', ''],
-          ['library',  '🗂', 'Library', libItems.length ? `(${libItems.length})` : ''],
-        ] as [MainTab, string, string, string][]).map(([id, icon, label, meta]) => (
+        {WORKSPACE_TABS.map(({ id, icon, label, getMeta }) => {
+          const meta = getMeta?.(workspaceTabMeta) ?? '';
+          return (
           <button key={id} className={`tab-btn${mainTab === id ? ' active' : ''}`}
             onClick={() => setMainTab(id)}>
             <span className="tab-btn-content">
@@ -683,7 +716,8 @@ export function WorkspacePanel({
               {meta && <span className="tab-btn-meta">{meta}</span>}
             </span>
           </button>
-        ))}
+          );
+        })}
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -1115,6 +1149,10 @@ export function WorkspacePanel({
                   <p style={{ marginBottom: 18 }}>
                     Open a file in <strong>Files</strong> and click <strong>⚡ Use</strong>, or switch to <strong>Paste text</strong> above.
                   </p>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+                    <button className="btn btn-primary btn-sm" onClick={() => setMainTab('files')}>Open files</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setPasteMode(true)}>Paste text</button>
+                  </div>
                   {/* Quick-start tool buttons */}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 20 }}>
                     {GENERATE_TABS.slice(0, 6).map(t => (
@@ -1127,10 +1165,11 @@ export function WorkspacePanel({
                     ))}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', fontSize: 'var(--text-xs)', color: 'var(--text-3)', textAlign: 'left', maxWidth: 280, margin: '0 auto' }}>
-                    <span><kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Ctrl+G</kbd> Generate</span>
-                    <span><kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Ctrl+S</kbd> Save to library</span>
-                    <span><kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Ctrl+E</kbd> Export .md</span>
-                    <span><kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Esc</kbd> Clear output</span>
+                    {GENERATE_SHORTCUTS.map((shortcut) => (
+                      <span key={shortcut.key}>
+                        <kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>{shortcut.key}</kbd> {shortcut.label}
+                      </span>
+                    ))}
                   </div>
                 </div>
               )}
