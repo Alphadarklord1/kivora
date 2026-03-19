@@ -1,9 +1,57 @@
 /**
- * Client-side text extraction for PDFs, Word docs, and plain text files.
- * Runs in the browser — uses pdf.js and mammoth.js.
+ * Client-side text extraction for PDFs, Word docs, plain text, and images.
+ * Runs in the browser — uses pdf.js, mammoth.js, and tesseract.js (OCR).
  */
 
-// ── PDF (pdf.js) ──────────────────────────────────────────────────────────
+// ── PDF (pdf.js) with table-aware extraction ──────────────────────────────
+
+/**
+ * Reconstruct table-like rows from PDF text items by grouping items with
+ * similar vertical positions and sorting them left-to-right.
+ */
+function reconstructTablesFromItems(
+  items: { str: string; transform: number[] }[],
+): string {
+  if (!items.length) return '';
+
+  // Group items by rounded Y coordinate (PDF Y is from bottom)
+  const rows = new Map<number, { x: number; str: string }[]>();
+  const Y_TOLERANCE = 3; // pts — items within 3pt are on the same line
+
+  for (const item of items) {
+    if (!item.str.trim()) continue;
+    const rawY = item.transform[5]; // y coordinate
+    // Find an existing row bucket within tolerance
+    let bucketY: number | undefined;
+    for (const key of rows.keys()) {
+      if (Math.abs(key - rawY) <= Y_TOLERANCE) { bucketY = key; break; }
+    }
+    if (bucketY === undefined) { rows.set(rawY, []); bucketY = rawY; }
+    rows.get(bucketY)!.push({ x: item.transform[4], str: item.str });
+  }
+
+  // Sort rows by descending Y (top of page first in PDF coords)
+  const sortedRows = Array.from(rows.entries())
+    .sort(([ya], [yb]) => yb - ya)
+    .map(([, cells]) => cells.sort((a, b) => a.x - b.x));
+
+  // Detect if this looks like a table block: multiple rows each with ≥2 cells
+  const multiCellRows = sortedRows.filter(r => r.length >= 2);
+  const looksLikeTable = multiCellRows.length >= 3 &&
+    multiCellRows.length / sortedRows.length > 0.5;
+
+  if (looksLikeTable) {
+    // Format as tab-separated to preserve column alignment
+    return sortedRows
+      .map(row => row.map(c => c.str).join('\t'))
+      .join('\n');
+  }
+
+  // Normal prose: join items with a space, insert line breaks between rows
+  return sortedRows
+    .map(row => row.map(c => c.str).join(' '))
+    .join(' ');
+}
 
 async function extractPdf(blob: Blob): Promise<string> {
   const pdfjs = await import('pdfjs-dist');
@@ -19,11 +67,12 @@ async function extractPdf(blob: Blob): Promise<string> {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    const text = content.items
-      .filter((item) => 'str' in item && typeof (item as { str?: unknown }).str === 'string')
-      .map(item => (item as { str: string }).str)
-      .join(' ');
-    pages.push(text);
+    // Use position-aware reconstruction to preserve table structure
+    const itemsWithPos = content.items
+      .filter((item) => 'str' in item && typeof (item as { str?: unknown; transform?: unknown }).str === 'string')
+      .map(item => item as { str: string; transform: number[] });
+    const text = reconstructTablesFromItems(itemsWithPos);
+    if (text.trim()) pages.push(text.trim());
   }
 
   return pages.join('\n\n').trim();
@@ -72,6 +121,29 @@ async function extractPptx(blob: Blob): Promise<string> {
   return texts.join('\n\n');
 }
 
+// ── Image OCR (tesseract.js) ───────────────────────────────────────────────
+
+async function extractImage(blob: Blob): Promise<string> {
+  try {
+    const { createWorker } = await import('tesseract.js');
+    const worker = await createWorker('eng', 1, {
+      // Suppress Tesseract's own console spam
+      logger: () => {},
+      errorHandler: () => {},
+    });
+    const url = URL.createObjectURL(blob);
+    try {
+      const { data } = await worker.recognize(url);
+      return data.text.trim();
+    } finally {
+      URL.revokeObjectURL(url);
+      await worker.terminate();
+    }
+  } catch (err) {
+    throw new Error(`OCR failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 // ── Plain text ────────────────────────────────────────────────────────────
 
 async function extractText(blob: Blob): Promise<string> {
@@ -111,6 +183,13 @@ export async function extractTextFromBlob(
       ext === 'pptx'
     ) {
       text = await extractPptx(blob);
+    } else if (
+      mime.startsWith('image/') ||
+      ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(ext)
+    ) {
+      // OCR: extract text from images using Tesseract.js
+      text = await extractImage(blob);
+      if (!text) return { text: '', wordCount: 0, error: 'No text detected in image. The image may not contain readable text.' };
     } else if (
       mime.startsWith('text/') ||
       ['txt', 'md', 'csv', 'json', 'xml', 'html'].includes(ext)

@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { FolderPanel } from '@/components/folders/FolderPanel';
 import { WorkspacePanel } from '@/components/workspace/WorkspacePanel';
+import { ReportsSidebar } from '@/components/workspace/ReportsSidebar';
 
 export default function WorkspacePage() {
   const [selectedFolder,     setSelectedFolder]     = useState<string | null>(null);
@@ -12,6 +13,7 @@ export default function WorkspacePage() {
   const [folderCollapsed,    setFolderCollapsed]    = useState(false);
   const [refreshKey,         setRefreshKey]         = useState(0);
   const [filesRefreshKey,    setFilesRefreshKey]    = useState(0);
+  const [reportsOpen,        setReportsOpen]        = useState(false);
 
   const handleSelect = useCallback((
     folderId: string | null,
@@ -33,7 +35,7 @@ export default function WorkspacePage() {
   const handleRefresh = useCallback(() => setRefreshKey(k => k + 1), []);
 
   return (
-    <div className="workspace-root" style={{ height: 'calc(100dvh - 40px)' }}>
+    <div className="workspace-root" style={{ height: 'calc(100dvh - 40px)', position: 'relative' }}>
       <FolderPanel
         onSelect={handleSelect}
         selectedFolder={selectedFolder}
@@ -50,7 +52,10 @@ export default function WorkspacePage() {
         selectedTopicName={selectedTopicName}
         onRefresh={handleRefresh}
         filesRefreshKey={filesRefreshKey}
+        onToggleReports={() => setReportsOpen(o => !o)}
+        reportsOpen={reportsOpen}
       />
+      <ReportsSidebar open={reportsOpen} onClose={() => setReportsOpen(false)} />
     </div>
   );
 }

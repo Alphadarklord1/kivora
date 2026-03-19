@@ -760,6 +760,301 @@ export default function SettingsPage() {
           </p>
         </div>
       </Section>
+
+      {/* ── Privacy & Data Control ─────────────────────────────────────── */}
+      <PrivacySection />
     </div>
+  );
+}
+
+// ── Privacy & Data Control panel ────────────────────────────────────────────
+
+function PrivacySection() {
+  const { toast } = useToast();
+  const [exportLoading, setExportLoading] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [aiMode, setAiMode] = useState<'full' | 'metadata-only' | 'offline'>(() => {
+    if (typeof window === 'undefined') return 'full';
+    return (localStorage.getItem('kivora_ai_mode') as 'full' | 'metadata-only' | 'offline') ?? 'full';
+  });
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('kivora_analytics_opt_out') !== '1';
+  });
+  const [crashReports, setCrashReports] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('kivora_crash_opt_out') !== '1';
+  });
+
+  function saveAiMode(mode: 'full' | 'metadata-only' | 'offline') {
+    setAiMode(mode);
+    localStorage.setItem('kivora_ai_mode', mode);
+    toast('AI data mode updated', 'success');
+  }
+
+  function toggleAnalytics(enabled: boolean) {
+    setAnalyticsEnabled(enabled);
+    if (enabled) {
+      localStorage.removeItem('kivora_analytics_opt_out');
+    } else {
+      localStorage.setItem('kivora_analytics_opt_out', '1');
+    }
+  }
+
+  function toggleCrash(enabled: boolean) {
+    setCrashReports(enabled);
+    if (enabled) {
+      localStorage.removeItem('kivora_crash_opt_out');
+    } else {
+      localStorage.setItem('kivora_crash_opt_out', '1');
+    }
+  }
+
+  async function exportData() {
+    setExportLoading(true);
+    try {
+      const res = await fetch('/api/export', { method: 'GET', credentials: 'include' });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kivora-data-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('Data exported — check your downloads', 'success');
+    } catch {
+      toast('Export failed. Please try again.', 'error');
+    } finally {
+      setExportLoading(false);
+    }
+  }
+
+  async function deleteAllData() {
+    if (deleteConfirm.trim().toLowerCase() !== 'delete my data') {
+      toast('Type "delete my data" to confirm', 'error');
+      return;
+    }
+    setDeleteLoading(true);
+    try {
+      const res = await fetch('/api/user/delete-data', { method: 'DELETE', credentials: 'include' });
+      if (!res.ok) throw new Error('Delete failed');
+      toast('All data deleted. Signing you out…', 'success');
+      setTimeout(() => window.location.href = '/api/auth/signout', 1500);
+    } catch {
+      toast('Data deletion failed. Contact support.', 'error');
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
+  const AI_MODES: { id: 'full' | 'metadata-only' | 'offline'; label: string; hint: string; icon: string }[] = [
+    {
+      id: 'full',
+      label: 'Full context',
+      hint: 'Your file text is sent to cloud AI for generation. Best results.',
+      icon: '🌐',
+    },
+    {
+      id: 'metadata-only',
+      label: 'Metadata only',
+      hint: 'Only file names and word counts are sent — content stays local.',
+      icon: '🔒',
+    },
+    {
+      id: 'offline',
+      label: 'Offline only',
+      hint: 'No data leaves your device. Uses built-in generation (no cloud AI).',
+      icon: '✈️',
+    },
+  ];
+
+  const dataItems = [
+    { icon: '📁', label: 'Folders & files', where: 'Cloud (PostgreSQL)', note: 'File metadata — names, sizes, dates' },
+    { icon: '📄', label: 'File content', where: 'Local only (IndexedDB)', note: 'Blobs never leave your browser' },
+    { icon: '📇', label: 'Flashcard decks', where: 'Local + Cloud sync', note: 'SRS schedule stored on device' },
+    { icon: '🗂', label: 'Library items', where: 'Cloud (PostgreSQL)', note: 'Saved generated outputs' },
+    { icon: '📊', label: 'Study analytics', where: 'Cloud (PostgreSQL)', note: 'Quiz scores and review history' },
+    { icon: '⚙️', label: 'Settings', where: 'Cloud (PostgreSQL)', note: 'Theme, font, density preferences' },
+  ];
+
+  const aiCantItems = [
+    'Access your raw file blobs stored in IndexedDB',
+    'Retain or train on your content between sessions',
+    'Share your data with third parties',
+    'Access data from other users',
+    'Store credentials, passwords, or payment information',
+  ];
+
+  const aiCanItems = [
+    'Receive extracted text from files you choose to send',
+    'Generate study material from that text',
+    'Use anonymised usage metadata for quality monitoring',
+  ];
+
+  return (
+    <>
+      <Section
+        title="🔒 Privacy & Data control"
+        subtitle="Understand exactly what is stored, where, and what you can do with it."
+      >
+        {/* Data map */}
+        <div>
+          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 10 }}>Where your data lives</div>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {dataItems.map(item => (
+              <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: 'var(--surface-2)' }}>
+                <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{item.label}</div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{item.note}</div>
+                </div>
+                <span className="badge" style={{ flexShrink: 0, fontSize: 10 }}>{item.where}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        title="🤖 AI API data controls"
+        subtitle="Control what your content is used for and what can be sent to AI APIs."
+      >
+        {/* What AI can/cannot do */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ padding: 14, borderRadius: 10, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)' }}>
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 8, color: '#4ade80' }}>✓ What AI can do</div>
+            <ul style={{ margin: 0, padding: '0 0 0 16px', fontSize: 'var(--text-xs)', color: 'var(--text-2)', lineHeight: 1.8 }}>
+              {aiCanItems.map(item => <li key={item}>{item}</li>)}
+            </ul>
+          </div>
+          <div style={{ padding: 14, borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 8, color: '#ef4444' }}>✗ What AI cannot do</div>
+            <ul style={{ margin: 0, padding: '0 0 0 16px', fontSize: 'var(--text-xs)', color: 'var(--text-2)', lineHeight: 1.8 }}>
+              {aiCantItems.map(item => <li key={item}>{item}</li>)}
+            </ul>
+          </div>
+        </div>
+
+        {/* AI data mode */}
+        <div>
+          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 10 }}>Content sent to AI</div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {AI_MODES.map(mode => (
+              <button
+                key={mode.id}
+                onClick={() => saveAiMode(mode.id)}
+                style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px',
+                  borderRadius: 10, cursor: 'pointer', textAlign: 'left', width: '100%',
+                  border: aiMode === mode.id ? '2px solid var(--accent)' : '1.5px solid var(--border-2)',
+                  background: aiMode === mode.id ? 'var(--accent-subtle, color-mix(in srgb, var(--accent) 10%, var(--surface)))' : 'var(--surface-2)',
+                  transition: 'all 0.14s',
+                }}>
+                <span style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>{mode.icon}</span>
+                <div>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 2 }}>
+                    {mode.label}
+                    {aiMode === mode.id && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', marginLeft: 6 }}>● Active</span>}
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{mode.hint}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        title="📈 Telemetry & tracking"
+        subtitle="All telemetry is anonymous and opt-out. No personal data is ever in telemetry payloads."
+      >
+        <div style={{ display: 'grid', gap: 12 }}>
+          {[
+            {
+              label: 'Usage analytics',
+              hint: 'Aggregate counts of which tools are used. Helps us improve the product.',
+              value: analyticsEnabled,
+              onChange: toggleAnalytics,
+            },
+            {
+              label: 'Crash reports',
+              hint: 'Anonymous error details when something breaks. No file content is included.',
+              value: crashReports,
+              onChange: toggleCrash,
+            },
+          ].map(item => (
+            <div key={item.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{item.label}</div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{item.hint}</div>
+              </div>
+              <button
+                onClick={() => item.onChange(!item.value)}
+                style={{
+                  width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+                  background: item.value ? 'var(--accent)' : 'var(--border-2)',
+                  position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+                }}
+                aria-label={`${item.value ? 'Disable' : 'Enable'} ${item.label}`}
+              >
+                <span style={{
+                  position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%',
+                  background: '#fff', transition: 'left 0.2s',
+                  left: item.value ? 22 : 2,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section
+        title="📦 Data portability"
+        subtitle="Export or delete all your Kivora data at any time. No lock-in."
+      >
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Export everything</div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>
+              Download a JSON file of all your folders, files metadata, library items, flashcard decks, quiz history, and study plans.
+            </div>
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={exportData} disabled={exportLoading} style={{ flexShrink: 0 }}>
+            {exportLoading ? '⏳ Exporting…' : '⬇ Export my data'}
+          </button>
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, marginBottom: 6 }}>Delete all data</div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 10 }}>
+            Permanently removes all your folders, files metadata, library items, and account. This cannot be undone.
+            File content stored locally in your browser (IndexedDB) is also cleared.
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              value={deleteConfirm}
+              onChange={e => setDeleteConfirm(e.target.value)}
+              placeholder='Type "delete my data" to unlock'
+              style={{
+                flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 'var(--text-sm)',
+                border: `1.5px solid ${deleteConfirm.trim().toLowerCase() === 'delete my data' ? 'var(--danger)' : 'var(--border-2)'}`,
+                background: 'var(--surface)', color: 'var(--text)',
+              }}
+            />
+            <button
+              className="btn btn-sm"
+              style={{ background: 'var(--danger)', color: '#fff', border: 'none', flexShrink: 0 }}
+              disabled={deleteConfirm.trim().toLowerCase() !== 'delete my data' || deleteLoading}
+              onClick={deleteAllData}
+            >
+              {deleteLoading ? '⏳ Deleting…' : '🗑 Delete all'}
+            </button>
+          </div>
+        </div>
+      </Section>
+    </>
   );
 }
