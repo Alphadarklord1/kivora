@@ -424,24 +424,108 @@ function buildGraphSvg(
     return typeof result === 'number' ? result : Number(result);
   };
 
-  const TICK_COUNT = 10;
-  const gridLines = Array.from({ length: TICK_COUNT + 1 }, (_, index) => {
-    const x = padding + (innerWidth * index) / TICK_COUNT;
-    const y = padding + (innerHeight * index) / TICK_COUNT;
-    const xVal = (xDomain[0] + (xRange * index) / TICK_COUNT).toFixed(1).replace(/\.0$/, '');
-    const yVal = (yDomain[1] - (yRange * index) / TICK_COUNT).toFixed(1).replace(/\.0$/, '');
-    return `
-      <line x1="${x}" y1="${padding}" x2="${x}" y2="${height - padding}" stroke="${theme.grid}" stroke-width="1" opacity="0.6" />
-      <line x1="${padding}" y1="${y}" x2="${width - padding}" y2="${y}" stroke="${theme.grid}" stroke-width="1" opacity="0.6" />
-      ${index % 2 === 0 ? `<text x="${x}" y="${height - padding + 14}" text-anchor="middle" fill="${theme.labels}" font-size="9" opacity="0.7">${xVal}</text>` : ''}
-      ${index % 2 === 0 ? `<text x="${padding - 4}" y="${y + 3}" text-anchor="end" fill="${theme.labels}" font-size="9" opacity="0.7">${yVal}</text>` : ''}
-    `;
-  }).join('');
+  // Desmos-like grid: compute a "nice" step so grid lines fall on whole numbers
+  const niceStep = (range: number) => {
+    const raw = range / 14;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const frac = raw / mag;
+    if (frac < 1.5) return mag;
+    if (frac < 3.5) return 2 * mag;
+    if (frac < 7.5) return 5 * mag;
+    return 10 * mag;
+  };
+  const xStep = niceStep(xRange);
+  const yStep = niceStep(yRange);
 
-  const axisLines = `
-    ${xDomain[0] <= 0 && xDomain[1] >= 0 ? `<line x1="${toSvgX(0)}" y1="${padding}" x2="${toSvgX(0)}" y2="${height - padding}" stroke="${theme.axis}" stroke-width="1.5" />` : ''}
-    ${yDomain[0] <= 0 && yDomain[1] >= 0 ? `<line x1="${padding}" y1="${toSvgY(0)}" x2="${width - padding}" y2="${toSvgY(0)}" stroke="${theme.axis}" stroke-width="1.5" />` : ''}
-  `;
+  const xAxisVisible = yDomain[0] <= 0 && yDomain[1] >= 0;
+  const yAxisVisible = xDomain[0] <= 0 && xDomain[1] >= 0;
+  const axisX = yAxisVisible ? toSvgX(0) : padding;
+  const axisY = xAxisVisible ? toSvgY(0) : height - padding;
+
+  // Build grid lines snapped to step multiples
+  let gridLines = '';
+  const xGridStart = Math.ceil(xDomain[0] / xStep) * xStep;
+  const yGridStart = Math.ceil(yDomain[0] / yStep) * yStep;
+  const snap = (v: number, s: number) => Math.round(v / s) * s;
+
+  // Vertical grid lines + x-axis labels
+  for (let raw = xGridStart; raw <= xDomain[1] + xStep * 0.01; raw += xStep) {
+    const xv = snap(raw, xStep);
+    const svgX = toSvgX(xv);
+    const isOrigin = Math.abs(xv) < xStep * 0.001;
+    const label = Number(xv.toFixed(6));
+    const labelStr = Number.isInteger(label) ? String(label) : label.toFixed(1);
+    // Grid line
+    if (!isOrigin) {
+      gridLines += `<line x1="${svgX.toFixed(1)}" y1="${padding}" x2="${svgX.toFixed(1)}" y2="${(height - padding).toFixed(1)}" stroke="${theme.grid}" stroke-width="0.8" opacity="0.55" />`;
+    }
+    // Tick on x-axis
+    gridLines += `<line x1="${svgX.toFixed(1)}" y1="${(axisY - 3.5).toFixed(1)}" x2="${svgX.toFixed(1)}" y2="${(axisY + 3.5).toFixed(1)}" stroke="${theme.axis}" stroke-width="1" opacity="0.7" />`;
+    // Label (near x-axis, skip origin)
+    if (!isOrigin) {
+      const labelY = Math.min(axisY + 16, height - padding + 14);
+      gridLines += `<text x="${svgX.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" fill="${theme.labels}" font-size="10" font-family="system-ui,sans-serif" opacity="0.85">${labelStr}</text>`;
+    }
+  }
+
+  // Horizontal grid lines + y-axis labels
+  for (let raw = yGridStart; raw <= yDomain[1] + yStep * 0.01; raw += yStep) {
+    const yv = snap(raw, yStep);
+    const svgY = toSvgY(yv);
+    const isOrigin = Math.abs(yv) < yStep * 0.001;
+    const label = Number(yv.toFixed(6));
+    const labelStr = Number.isInteger(label) ? String(label) : label.toFixed(1);
+    // Grid line
+    if (!isOrigin) {
+      gridLines += `<line x1="${padding}" y1="${svgY.toFixed(1)}" x2="${(width - padding).toFixed(1)}" y2="${svgY.toFixed(1)}" stroke="${theme.grid}" stroke-width="0.8" opacity="0.55" />`;
+    }
+    // Tick on y-axis
+    gridLines += `<line x1="${(axisX - 3.5).toFixed(1)}" y1="${svgY.toFixed(1)}" x2="${(axisX + 3.5).toFixed(1)}" y2="${svgY.toFixed(1)}" stroke="${theme.axis}" stroke-width="1" opacity="0.7" />`;
+    // Label (near y-axis, skip origin)
+    if (!isOrigin) {
+      const labelX = Math.max(axisX - 8, padding + 2);
+      gridLines += `<text x="${labelX.toFixed(1)}" y="${(svgY + 4).toFixed(1)}" text-anchor="end" fill="${theme.labels}" font-size="10" font-family="system-ui,sans-serif" opacity="0.85">${labelStr}</text>`;
+    }
+  }
+
+  // Grid intersection dots — small dots at every grid crossing (Desmos-style)
+  const maxDots = 30 * 30;
+  let dotCount = 0;
+  let intersectionDots = '';
+  for (let rx = xGridStart; rx <= xDomain[1] + xStep * 0.01 && dotCount < maxDots; rx += xStep) {
+    for (let ry = yGridStart; ry <= yDomain[1] + yStep * 0.01 && dotCount < maxDots; ry += yStep) {
+      const xv = snap(rx, xStep), yv = snap(ry, yStep);
+      intersectionDots += `<circle cx="${toSvgX(xv).toFixed(1)}" cy="${toSvgY(yv).toFixed(1)}" r="1.3" fill="${theme.grid}" opacity="0.5" />`;
+      dotCount++;
+    }
+  }
+
+  // Axes with arrowheads — Desmos style
+  const arr = 6;
+  const markerDefs = `<defs>
+    <marker id="gax" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,7 L7,3.5 z" fill="${theme.axis}" opacity="0.85" />
+    </marker>
+    <marker id="gay" markerWidth="7" markerHeight="7" refX="3.5" refY="7" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,7 L7,7 L3.5,0 z" fill="${theme.axis}" opacity="0.85" />
+    </marker>
+  </defs>`;
+
+  let axisLines = '';
+  // x-axis (→)
+  if (xAxisVisible) {
+    axisLines += `<line x1="${padding}" y1="${axisY.toFixed(1)}" x2="${(width - padding - arr).toFixed(1)}" y2="${axisY.toFixed(1)}" stroke="${theme.axis}" stroke-width="1.6" marker-end="url(#gax)" opacity="0.9" />`;
+    axisLines += `<text x="${(width - padding + 4).toFixed(1)}" y="${(axisY + 4).toFixed(1)}" fill="${theme.labels}" font-size="12" font-family="system-ui,sans-serif" font-style="italic" opacity="0.85">x</text>`;
+  }
+  // y-axis (↑)
+  if (yAxisVisible) {
+    axisLines += `<line x1="${axisX.toFixed(1)}" y1="${(height - padding).toFixed(1)}" x2="${axisX.toFixed(1)}" y2="${(padding + arr).toFixed(1)}" stroke="${theme.axis}" stroke-width="1.6" marker-end="url(#gay)" opacity="0.9" />`;
+    axisLines += `<text x="${(axisX + 6).toFixed(1)}" y="${(padding - 2).toFixed(1)}" fill="${theme.labels}" font-size="12" font-family="system-ui,sans-serif" font-style="italic" opacity="0.85">y</text>`;
+  }
+  // Origin "0" label
+  if (xAxisVisible && yAxisVisible) {
+    axisLines += `<text x="${(axisX - 6).toFixed(1)}" y="${(axisY + 14).toFixed(1)}" text-anchor="end" fill="${theme.labels}" font-size="10" font-family="system-ui,sans-serif" opacity="0.75">0</text>`;
+  }
 
   const layers = expressions
     .filter(expr => expr.enabled && expr.expr.trim())
@@ -487,7 +571,22 @@ function buildGraphSvg(
         }
 
         if (current) segments.push(current);
-        return segments.map(segment => `<path d="${segment}" fill="none" stroke="${expr.color}" stroke-width="2.4" stroke-linecap="round" />`).join('');
+        const pathStr = segments.map(segment => `<path d="${segment}" fill="none" stroke="${expr.color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />`).join('');
+
+        // Dots on the curve at every integer x — Desmos-style snap points
+        const intXStart = Math.ceil(xDomain[0]);
+        const intXEnd = Math.floor(xDomain[1]);
+        const dotStep = Math.max(1, Math.round((intXEnd - intXStart) / 30)); // cap at ~30 dots
+        let curveDots = '';
+        for (let ix = intXStart; ix <= intXEnd; ix += dotStep) {
+          try {
+            const y = evaluate(normalized.value, { x: ix });
+            if (Number.isFinite(y) && y >= yDomain[0] - (yRange * 0.01) && y <= yDomain[1] + (yRange * 0.01)) {
+              curveDots += `<circle cx="${toSvgX(ix).toFixed(2)}" cy="${toSvgY(y).toFixed(2)}" r="3.5" fill="${expr.color}" stroke="white" stroke-width="1.5" opacity="0.95" />`;
+            }
+          } catch { /* skip */ }
+        }
+        return pathStr + curveDots;
       }
 
       const threshold = Math.max((xRange + yRange) / 220, 0.08);
@@ -556,13 +655,13 @@ function buildGraphSvg(
 
   return `
     <svg viewBox="0 0 ${width} ${height}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Math graph">
+      ${markerDefs}
       <rect width="${width}" height="${height}" fill="${theme.background}" rx="14" ry="14" />
       ${gridLines}
+      ${intersectionDots}
       ${axisLines}
       ${integShading}
       ${layers}
-      <text x="${padding}" y="${height - 8}" fill="${theme.labels}" font-size="11">x: [${xDomain[0]}, ${xDomain[1]}]</text>
-      <text x="${width - padding}" y="${height - 8}" text-anchor="end" fill="${theme.labels}" font-size="11">y: [${yDomain[0]}, ${yDomain[1]}]</text>
     </svg>
   `;
 }
@@ -676,6 +775,72 @@ function saveHistory(h: HistoryItem[]) {
   try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(0, 50))); } catch { /* noop */ }
 }
 
+// ── Physics form config ───────────────────────────────────────────────────────
+
+const PHYSICS_FORMULAS = [
+  {
+    id: 'ohm',
+    label: "Ohm's Law  (V = IR)",
+    latexFormula: 'V = I \\cdot R',
+    params: [
+      { key: 'V', label: 'Voltage V', unit: 'volts' },
+      { key: 'I', label: 'Current I', unit: 'amps' },
+      { key: 'R', label: 'Resistance R', unit: 'ohms (Ω)' },
+    ] as const,
+    note: 'Enter any 2 values — the solver finds the missing one.',
+  },
+  {
+    id: 'KE',
+    label: 'Kinetic Energy  (KE = ½mv²)',
+    latexFormula: 'KE = \\tfrac{1}{2}mv^2',
+    params: [
+      { key: 'm', label: 'Mass m', unit: 'kg' },
+      { key: 'v', label: 'Velocity v', unit: 'm/s' },
+    ] as const,
+    note: 'Enter both values to compute kinetic energy.',
+  },
+  {
+    id: 'projectile',
+    label: 'Projectile Range  (R = v²sin2θ / g)',
+    latexFormula: 'R = \\dfrac{v^2 \\sin 2\\theta}{g}',
+    params: [
+      { key: 'v', label: 'Launch speed v', unit: 'm/s' },
+      { key: 'theta', label: 'Launch angle θ', unit: 'degrees' },
+    ] as const,
+    note: 'Enter both values to compute horizontal range (g = 9.81 m/s²).',
+  },
+  {
+    id: 'wave',
+    label: 'Wave Speed  (v = fλ)',
+    latexFormula: 'v = f \\lambda',
+    params: [
+      { key: 'f', label: 'Frequency f', unit: 'Hz' },
+      { key: 'lambda', label: 'Wavelength λ', unit: 'm' },
+    ] as const,
+    note: 'Enter both values to compute wave speed.',
+  },
+  {
+    id: 'force',
+    label: "Newton's 2nd Law  (F = ma)",
+    latexFormula: 'F = m \\cdot a',
+    params: [
+      { key: 'm', label: 'Mass m', unit: 'kg' },
+      { key: 'a', label: 'Acceleration a', unit: 'm/s²' },
+    ] as const,
+    note: 'Enter both values to compute force.',
+  },
+  {
+    id: 'PE',
+    label: 'Gravitational PE  (PE = mgh)',
+    latexFormula: 'PE = mgh',
+    params: [
+      { key: 'm', label: 'Mass m', unit: 'kg' },
+      { key: 'h', label: 'Height h', unit: 'm' },
+    ] as const,
+    note: 'Enter both values (g = 9.81 m/s²).',
+  },
+] as const;
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 const MATH_SIDEBAR_KEY = 'kivora-math-sidebar';
@@ -739,6 +904,10 @@ export function MathSolverPage() {
   const [fromUnit, setFromUnit] = useState(0);
   const [toUnit, setToUnit] = useState(1);
   const [unitValue, setUnitValue] = useState('1');
+
+  // Physics form state
+  const [physicsType, setPhysicsType] = useState('ohm');
+  const [physicsParams, setPhysicsParams] = useState<Record<string, string>>({});
 
   useEffect(() => { setHistory(loadHistory()); }, []);
 
@@ -1029,7 +1198,10 @@ export function MathSolverPage() {
     const isActive = active === id;
     return (
       <button
-        onClick={() => setActive(id)}
+        onClick={() => {
+          if (id !== active) { setInput(''); setResult(null); }
+          setActive(id);
+        }}
         title={!sidebarOpen ? label : undefined}
         style={{
           display: 'flex', alignItems: 'center', gap: 10,
@@ -1147,8 +1319,8 @@ export function MathSolverPage() {
               steps={SOLVER_WORKFLOW}
             />
 
-            {/* Quick examples */}
-            {currentTopic && (
+            {/* Quick examples — hidden for physics (uses its own structured form) */}
+            {currentTopic && active !== 'physics' && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {currentTopic.examples.map(ex => (
                   <button key={ex} onClick={() => { setInput(ex); void solve(ex, currentTopic.id); }}
@@ -1162,14 +1334,16 @@ export function MathSolverPage() {
               </div>
             )}
 
-            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                Best for: one problem, one result, and clear working steps.
-              </span>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                Press <strong style={{ color: 'var(--text-primary)' }}>Enter</strong> to solve, <strong style={{ color: 'var(--text-primary)' }}>Shift + Enter</strong> for a new line.
-              </span>
-            </div>
+            {active !== 'physics' && (
+              <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  Best for: one problem, one result, and clear working steps.
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  Press <strong style={{ color: 'var(--text-primary)' }}>Enter</strong> to solve, <strong style={{ color: 'var(--text-primary)' }}>Shift + Enter</strong> for a new line.
+                </span>
+              </div>
+            )}
 
             {contextName && (
               <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -1177,85 +1351,172 @@ export function MathSolverPage() {
               </div>
             )}
 
-            {/* Input box */}
-            <div style={{ position: 'relative' }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <div style={{ flex: 1, position: 'relative' }}>
-                  <textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void solve(); } }}
-                    placeholder="Enter a math problem, equation, or expression… (Enter to solve)"
-                    rows={2}
-                    style={{
-                      width: '100%', padding: '12px 16px', borderRadius: 12, resize: 'none',
-                      border: `1.5px solid ${loading ? 'var(--primary)' : 'var(--border-subtle)'}`,
-                      background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 15,
-                      fontFamily: '"JetBrains Mono", monospace', boxSizing: 'border-box', outline: 'none',
-                      transition: 'border-color 0.15s',
-                    }}
-                  />
-                </div>
-                <button onClick={() => void solve()} disabled={loading || !input.trim()}
-                  style={{
-                    padding: '12px 20px', borderRadius: 12, border: 'none', cursor: loading ? 'default' : 'pointer',
-                    background: loading ? 'var(--primary-muted, #6366f133)' : 'var(--primary)',
-                    color: loading ? 'var(--primary)' : '#fff', fontWeight: 700, fontSize: 14,
-                    transition: 'all 0.15s', flexShrink: 0, minWidth: 90, height: 52,
-                  }}>
-                  {loading ? '⏳' : '▶ Solve'}
-                </button>
-              </div>
-              {/* Live LaTeX preview of the typed input */}
-              {(() => {
-                if (!input.trim()) return null;
-                try {
-                  const node = math.parse(input.trim());
-                  const tex = node.toTex({ parenthesis: 'keep' });
-                  return (
-                    <div style={{ marginTop: 4, padding: '6px 12px', borderRadius: 8, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 14, overflowX: 'auto' }}>
-                      <Latex latex={tex} display={false} />
-                    </div>
-                  );
-                } catch { return null; }
-              })()}
-              <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
-                <button onClick={() => setShowSymbols(s => !s)}
-                  style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>
-                  {showSymbols ? '▲ Hide symbols' : '▼ Symbols'}
-                </button>
-                {input && <button onClick={() => { setInput(''); setResult(null); inputRef.current?.focus(); }}
-                  style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>✕ Clear</button>}
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>Shift+Enter for new line</span>
-              </div>
-            </div>
+            {/* ── Physics structured input ── */}
+            {active === 'physics' ? (() => {
+              const pf = PHYSICS_FORMULAS.find(f => f.id === physicsType) ?? PHYSICS_FORMULAS[0];
+              const handlePhysicsSolve = () => {
+                const parts = Object.entries(physicsParams)
+                  .filter(([, v]) => v.trim() !== '')
+                  .map(([k, v]) => `${k}=${v.trim()}`);
+                const cmd = `${pf.id} ${parts.join(' ')}`.trim();
+                setInput(cmd);
+                void solve(cmd, 'physics');
+              };
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Formula selector */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>Formula</label>
+                    <select
+                      value={physicsType}
+                      onChange={e => { setPhysicsType(e.target.value); setPhysicsParams({}); setResult(null); }}
+                      style={{ padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', outline: 'none' }}
+                    >
+                      {PHYSICS_FORMULAS.map(f => (
+                        <option key={f.id} value={f.id}>{f.label}</option>
+                      ))}
+                    </select>
+                  </div>
 
-            {/* Symbol pad */}
-            {showSymbols && (
-              <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '10px 12px' }}>
-                <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-                  {SYMBOL_GROUPS.map((g, i) => (
-                    <button key={i} onClick={() => setSymbolTab(i)}
-                      style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', background: symbolTab === i ? 'var(--primary)' : 'var(--bg-elevated)', color: symbolTab === i ? '#fff' : 'var(--text-secondary)', fontWeight: symbolTab === i ? 600 : 400 }}>
-                      {g.label}
+                  {/* Formula preview */}
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: `${currentAccent}0d`, border: `1px solid ${currentAccent}25`, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 18 }}>⚛</span>
+                    <div>
+                      <div style={{ fontSize: 11, color: currentAccent, fontWeight: 700, marginBottom: 2 }}>{pf.label}</div>
+                      <Latex latex={pf.latexFormula} display={false} />
+                    </div>
+                  </div>
+
+                  {/* Parameter inputs */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                    {pf.params.map(param => (
+                      <div key={param.key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          {param.label}
+                          <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>({param.unit})</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="Enter value…"
+                          value={physicsParams[param.key] ?? ''}
+                          onChange={e => setPhysicsParams(prev => ({ ...prev, [param.key]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') handlePhysicsSolve(); }}
+                          style={{
+                            padding: '10px 12px', borderRadius: 10, border: '1.5px solid var(--border-subtle)',
+                            background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14,
+                            outline: 'none', fontFamily: '"JetBrains Mono", monospace', transition: 'border-color 0.15s',
+                          }}
+                          onFocus={e => { e.currentTarget.style.borderColor = currentAccent; }}
+                          onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Note + Solve button */}
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>💡 {pf.note}</span>
+                    <button
+                      onClick={handlePhysicsSolve}
+                      disabled={loading}
+                      style={{
+                        padding: '11px 24px', borderRadius: 12, border: 'none', cursor: loading ? 'default' : 'pointer',
+                        background: loading ? 'var(--primary-muted, #6366f133)' : currentAccent,
+                        color: loading ? currentAccent : '#fff', fontWeight: 700, fontSize: 14, flexShrink: 0,
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {loading ? '⏳ Calculating…' : '⚡ Calculate'}
                     </button>
-                  ))}
+                    {result && <button onClick={() => { setPhysicsParams({}); setResult(null); }}
+                      style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>✕ Clear</button>}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                  {SYMBOL_GROUPS[symbolTab].symbols.map(s => (
-                    <button key={s} onClick={() => insertSymbol(s)}
-                      style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', minWidth: 38, transition: 'all 0.1s' }}
-                      onMouseEnter={e => { (e.currentTarget).style.borderColor = 'var(--primary)'; (e.currentTarget).style.color = 'var(--primary)'; }}
-                      onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; (e.currentTarget).style.color = 'var(--text-primary)'; }}
-                    >{s}</button>
-                  ))}
+              );
+            })() : (
+              <>
+                {/* Input box (all non-physics categories) */}
+                <div style={{ position: 'relative' }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, position: 'relative' }}>
+                      <textarea
+                        ref={inputRef}
+                        value={input}
+                        onChange={e => setInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void solve(); } }}
+                        placeholder="Enter a math problem, equation, or expression… (Enter to solve)"
+                        rows={2}
+                        style={{
+                          width: '100%', padding: '12px 16px', borderRadius: 12, resize: 'none',
+                          border: `1.5px solid ${loading ? 'var(--primary)' : 'var(--border-subtle)'}`,
+                          background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 15,
+                          fontFamily: '"JetBrains Mono", monospace', boxSizing: 'border-box', outline: 'none',
+                          transition: 'border-color 0.15s',
+                        }}
+                      />
+                    </div>
+                    <button onClick={() => void solve()} disabled={loading || !input.trim()}
+                      style={{
+                        padding: '12px 20px', borderRadius: 12, border: 'none', cursor: loading ? 'default' : 'pointer',
+                        background: loading ? 'var(--primary-muted, #6366f133)' : 'var(--primary)',
+                        color: loading ? 'var(--primary)' : '#fff', fontWeight: 700, fontSize: 14,
+                        transition: 'all 0.15s', flexShrink: 0, minWidth: 90, height: 52,
+                      }}>
+                      {loading ? '⏳' : '▶ Solve'}
+                    </button>
+                  </div>
+                  {/* Live LaTeX preview of the typed input */}
+                  {(() => {
+                    if (!input.trim()) return null;
+                    try {
+                      const node = math.parse(input.trim());
+                      const tex = node.toTex({ parenthesis: 'keep' });
+                      return (
+                        <div style={{ marginTop: 4, padding: '6px 12px', borderRadius: 8, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 14, overflowX: 'auto' }}>
+                          <Latex latex={tex} display={false} />
+                        </div>
+                      );
+                    } catch { return null; }
+                  })()}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
+                    <button onClick={() => setShowSymbols(s => !s)}
+                      style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>
+                      {showSymbols ? '▲ Hide symbols' : '▼ Symbols'}
+                    </button>
+                    {input && <button onClick={() => { setInput(''); setResult(null); inputRef.current?.focus(); }}
+                      style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>✕ Clear</button>}
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>Shift+Enter for new line</span>
+                  </div>
                 </div>
-              </div>
+
+                {/* Symbol pad */}
+                {showSymbols && (
+                  <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                      {SYMBOL_GROUPS.map((g, i) => (
+                        <button key={i} onClick={() => setSymbolTab(i)}
+                          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', background: symbolTab === i ? 'var(--primary)' : 'var(--bg-elevated)', color: symbolTab === i ? '#fff' : 'var(--text-secondary)', fontWeight: symbolTab === i ? 600 : 400 }}>
+                          {g.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {SYMBOL_GROUPS[symbolTab].symbols.map(s => (
+                        <button key={s} onClick={() => insertSymbol(s)}
+                          style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', minWidth: 38, transition: 'all 0.1s' }}
+                          onMouseEnter={e => { (e.currentTarget).style.borderColor = 'var(--primary)'; (e.currentTarget).style.color = 'var(--primary)'; }}
+                          onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; (e.currentTarget).style.color = 'var(--text-primary)'; }}
+                        >{s}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
-            {/* Recent history chips */}
-            {history.length > 0 && !loading && !result && (
+            {/* Recent history chips — only for non-physics categories */}
+            {active !== 'physics' && history.length > 0 && !loading && !result && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>Recent:</span>
                 {history.slice(0, 3).map(h => (
@@ -1297,39 +1558,52 @@ export function MathSolverPage() {
                 ) : (
                   <>
                     {/* Answer card */}
-                      <div style={{ padding: '18px 20px', borderRadius: 14, background: `${currentAccent}0d`, border: `1.5px solid ${currentAccent}30` }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: currentAccent, marginBottom: 8 }}>Answer</div>
-                      <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', overflowX: 'auto' }}>
-                        {result.answerLatex ? <Latex latex={result.answerLatex} display /> : result.answer}
+                    <div style={{ borderRadius: 14, background: `${currentAccent}0d`, border: `1.5px solid ${currentAccent}30`, overflow: 'hidden' }}>
+                      <div style={{ padding: '12px 20px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: currentAccent }}>Result</div>
+                        <div style={{ height: 1, flex: 1, background: `${currentAccent}25` }} />
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{result.engine === 'ai' ? '✨ AI' : '🔢 symbolic'}</div>
                       </div>
-                      {result.engine === 'ai' && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>✨ AI-powered · {result.category}</div>}
-                      {result.engine !== 'ai' && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>🔢 Symbolic solver · {result.engine}</div>}
+                      <div style={{ padding: '10px 20px 16px', fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', overflowX: 'auto' }}>
+                        {result.answerLatex ? <Latex latex={result.answerLatex} display /> : <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{result.answer}</span>}
+                      </div>
+                      {input && (
+                        <div style={{ padding: '8px 20px 12px', borderTop: `1px solid ${currentAccent}20`, fontSize: 11, color: 'var(--text-muted)', fontFamily: '"JetBrains Mono", monospace', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+                          Input: <span style={{ color: 'var(--text-secondary)' }}>{input.length > 80 ? input.slice(0, 80) + '…' : input}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Steps */}
                     {result.steps.length > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Step-by-step solution</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 2 }}>Step-by-step solution</div>
                         {result.steps.map((step, i) => {
-                          // Detect whether expression is already LaTeX (contains backslash or ^{}) or plain math
                           const expr = step.expression ?? '';
                           let exprLatex = expr;
                           if (expr && !expr.includes('\\') && !expr.includes('{')) {
-                            // Try to parse as mathjs and convert to LaTeX
                             try { exprLatex = math.parse(expr).toTex({ parenthesis: 'keep' }); } catch { /* keep raw */ }
                           }
                           return (
-                            <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 16px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', alignItems: 'flex-start' }}>
-                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: currentAccent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{step.step ?? i + 1}</div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>{step.description}</div>
-                                {exprLatex && (
-                                  <div style={{ overflowX: 'auto', padding: '8px 12px', marginBottom: 4, background: `${currentAccent}08`, borderRadius: 8, border: `1px solid ${currentAccent}20` }}>
-                                    <Latex latex={exprLatex} display />
-                                  </div>
-                                )}
-                                {step.explanation && <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{step.explanation}</div>}
+                            <div key={i} style={{ borderRadius: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
+                              {/* Step header */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: (exprLatex || step.explanation) ? '1px solid var(--border-subtle)' : 'none', background: `${currentAccent}06` }}>
+                                <div style={{ width: 22, height: 22, borderRadius: '50%', background: currentAccent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, flexShrink: 0 }}>{step.step ?? i + 1}</div>
+                                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{step.description}</div>
                               </div>
+                              {/* Expression block */}
+                              {exprLatex && (
+                                <div style={{ overflowX: 'auto', padding: '10px 18px', borderBottom: step.explanation ? '1px solid var(--border-subtle)' : 'none', background: `${currentAccent}04` }}>
+                                  <Latex latex={exprLatex} display />
+                                </div>
+                              )}
+                              {/* Explanation */}
+                              {step.explanation && (
+                                <div style={{ padding: '8px 14px 10px', fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.65, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                  <span style={{ color: currentAccent, flexShrink: 0, fontSize: 13, marginTop: 1 }}>ℹ</span>
+                                  <span>{step.explanation}</span>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -1338,9 +1612,15 @@ export function MathSolverPage() {
 
                     {/* Graph CTA */}
                     {result.graphExpr && (
-                      <button onClick={() => { setGraphExprs([{ id: '1', expr: result.graphExpr!, color: GRAPH_COLORS[0], enabled: true }]); setActive('graph'); }}
-                        style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
-                        📈 View graph of {result.graphExpr}
+                      <button onClick={() => {
+                        // Normalize graphExpr: prefix "y = " if it's a bare function with no "=" sign
+                        const rawExpr = result.graphExpr!;
+                        const normalizedExpr = /[=]/.test(rawExpr) ? rawExpr : `y = ${rawExpr}`;
+                        setGraphExprs([{ id: crypto.randomUUID(), expr: normalizedExpr, color: GRAPH_COLORS[0], enabled: true }]);
+                        setActive('graph');
+                      }}
+                        style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 8, border: `1px solid ${currentAccent}40`, background: `${currentAccent}10`, color: currentAccent, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                        📈 Plot this in Graph Plotter
                       </button>
                     )}
                   </>
