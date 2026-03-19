@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { loadDecks, type SRSDeck } from '@/lib/srs/sm2';
 import { buildImportedDeck, persistDeckLocally, syncDeckToCloud } from '@/lib/srs/deck-utils';
+import { extractQuizletCards, extractQuizletTitle } from '@/lib/srs/quizlet-import';
 import { useToast } from '@/providers/ToastProvider';
 import styles from './page.module.css';
 
@@ -20,7 +21,7 @@ interface PublicDeck {
 }
 
 type DeckTab = 'mine' | 'import' | 'public';
-type ImportMode = 'url' | 'csv' | 'paste' | 'anki';
+type ImportMode = 'url' | 'csv' | 'paste' | 'anki' | 'quizlet';
 type ImportPayload = {
   title?: string;
   description?: string;
@@ -39,6 +40,7 @@ const IMPORT_SOURCE_META = {
 } satisfies Partial<Record<NonNullable<ImportPayload['source']>, { type: SRSDeck['sourceType']; label: string }>>;
 
 const IMPORT_MODE_OPTIONS: Array<{ id: ImportMode; label: string }> = [
+  { id: 'quizlet', label: '🔵 Quizlet' },
   { id: 'url', label: 'URL' },
   { id: 'csv', label: 'CSV' },
   { id: 'paste', label: 'Paste' },
@@ -84,12 +86,14 @@ export default function DeckLibraryPage() {
   const [myDecks, setMyDecks] = useState<SRSDeck[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMine, setLoadingMine] = useState(true);
-  const [importMode, setImportMode] = useState<ImportMode>('url');
+  const [importMode, setImportMode] = useState<ImportMode>('quizlet');
   const [importUrl, setImportUrl] = useState('');
   const [importTitle, setImportTitle] = useState('');
   const [csvText, setCsvText] = useState('');
   const [pasteText, setPasteText] = useState('');
   const [ankiFile, setAnkiFile] = useState<File | null>(null);
+  const [quizletHtml, setQuizletHtml] = useState('');
+  const [quizletStep, setQuizletStep] = useState<1 | 2>(1);
   const [importingMode, setImportingMode] = useState<ImportMode | null>(null);
   const [lastImported, setLastImported] = useState<{ deck: SRSDeck; cardCount: number } | null>(null);
   const [deckSort, setDeckSort] = useState<'recent' | 'name' | 'due' | 'accuracy'>('recent');
@@ -170,6 +174,8 @@ export default function DeckLibraryPage() {
   function resetImportInputs() {
     setImportUrl('');
     setImportTitle('');
+    setQuizletHtml('');
+    setQuizletStep(1);
     setCsvText('');
     setPasteText('');
     setAnkiFile(null);
@@ -226,6 +232,34 @@ export default function DeckLibraryPage() {
       await finalizeImport(payload as ImportPayload, fallbackSource);
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Import failed', 'error');
+    }
+  }
+
+  async function importDeckFromQuizletHtml() {
+    const html = quizletHtml.trim();
+    if (!html) { toast('Paste the page source first.', 'warning'); return; }
+    setImportingMode('quizlet');
+    try {
+      const cards = extractQuizletCards(html);
+      if (!cards.length) {
+        toast('No flashcards found in the pasted source. Make sure you copied the full page source (Ctrl+U → Ctrl+A → Ctrl+C).', 'error');
+        return;
+      }
+      const title = extractQuizletTitle(html);
+      await finalizeImport(
+        {
+          source: 'quizlet',
+          title: importTitle.trim() || title,
+          description: `Imported from Quizlet (${cards.length} cards)`,
+          cards,
+          cardCount: cards.length,
+        },
+        IMPORT_SOURCE_META.quizlet,
+      );
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Import failed', 'error');
+    } finally {
+      setImportingMode(null);
     }
   }
 
@@ -522,6 +556,88 @@ export default function DeckLibraryPage() {
           </div>
 
           <div className={styles.formStack}>
+            {importMode === 'quizlet' && (
+              <>
+                {/* Step indicator */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                  {[
+                    { n: 1, label: 'Open set' },
+                    { n: 2, label: 'Paste source' },
+                  ].map(s => (
+                    <button key={s.n} onClick={() => setQuizletStep(s.n as 1 | 2)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px',
+                        borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 13,
+                        fontWeight: quizletStep === s.n ? 700 : 400,
+                        background: quizletStep === s.n ? 'var(--accent)' : 'var(--bg-elevated)',
+                        color: quizletStep === s.n ? '#fff' : 'var(--text-secondary)',
+                      }}>
+                      <span style={{ width: 20, height: 20, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700,
+                        background: quizletStep === s.n ? 'rgba(255,255,255,0.25)' : 'var(--bg-surface)', color: 'inherit' }}>
+                        {s.n}
+                      </span>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+
+                {quizletStep === 1 && (
+                  <div style={{ padding: '16px 18px', borderRadius: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ fontWeight: 600, fontSize: 15 }}>Open your Quizlet set</div>
+                    <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 8, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                      <li>Go to your Quizlet set in a browser tab.<br/>
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>e.g. quizlet.com/1154092943/flashcards</span>
+                      </li>
+                      <li>Press <kbd style={{ padding: '1px 6px', borderRadius: 4, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', fontFamily: 'monospace', fontSize: 12 }}>Ctrl+U</kbd> (Windows/Linux) or <kbd style={{ padding: '1px 6px', borderRadius: 4, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', fontFamily: 'monospace', fontSize: 12 }}>⌘+Option+U</kbd> (Mac) to open the page source.</li>
+                      <li>Press <kbd style={{ padding: '1px 6px', borderRadius: 4, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', fontFamily: 'monospace', fontSize: 12 }}>Ctrl+A</kbd> to select all, then <kbd style={{ padding: '1px 6px', borderRadius: 4, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', fontFamily: 'monospace', fontSize: 12 }}>Ctrl+C</kbd> to copy.</li>
+                      <li>Click <strong>Next →</strong> below and paste.</li>
+                    </ol>
+                    <button className={styles.primaryButton} style={{ alignSelf: 'flex-start' }}
+                      onClick={() => setQuizletStep(2)}>
+                      Next → Paste source
+                    </button>
+                  </div>
+                )}
+
+                {quizletStep === 2 && (
+                  <>
+                    <div className={styles.importRow}>
+                      <input
+                        value={importTitle}
+                        onChange={(event) => setImportTitle(event.target.value)}
+                        placeholder="Optional deck title override"
+                        className={styles.searchInput}
+                      />
+                      <button
+                        className={styles.primaryButton}
+                        onClick={importDeckFromQuizletHtml}
+                        disabled={importingMode === 'quizlet' || !quizletHtml.trim()}
+                      >
+                        {importingMode === 'quizlet' ? 'Importing…' : 'Import cards'}
+                      </button>
+                    </div>
+                    <textarea
+                      value={quizletHtml}
+                      onChange={(event) => setQuizletHtml(event.target.value)}
+                      className={styles.textArea}
+                      placeholder={'Paste the full Quizlet page source here (Ctrl+U → Ctrl+A → Ctrl+C)…\n\nThe importer looks for flashcard data inside the page — it works even on large sets.'}
+                      style={{ minHeight: 160, fontFamily: 'monospace', fontSize: 12 }}
+                    />
+                    {quizletHtml.trim() && (
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: -8 }}>
+                        {quizletHtml.length.toLocaleString()} characters pasted
+                        {quizletHtml.includes('__NEXT_DATA__') ? ' · ✓ Quizlet page detected' : ' · ⚠ No __NEXT_DATA__ found — make sure you copied the full source'}
+                      </div>
+                    )}
+                    <button type="button" style={{ alignSelf: 'flex-start', fontSize: 12, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      onClick={() => setQuizletStep(1)}>
+                      ← Back to instructions
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+
             {importMode === 'url' && (
               <>
                 <div className={styles.importRow}>
