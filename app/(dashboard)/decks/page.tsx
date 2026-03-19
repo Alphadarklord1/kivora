@@ -40,11 +40,11 @@ const IMPORT_SOURCE_META = {
 } satisfies Partial<Record<NonNullable<ImportPayload['source']>, { type: SRSDeck['sourceType']; label: string }>>;
 
 const IMPORT_MODE_OPTIONS: Array<{ id: ImportMode; label: string }> = [
-  { id: 'quizlet', label: '🔵 Quizlet' },
-  { id: 'url', label: 'URL' },
+  { id: 'paste', label: 'Recommended: Paste' },
   { id: 'csv', label: 'CSV' },
-  { id: 'paste', label: 'Paste' },
   { id: 'anki', label: 'Anki' },
+  { id: 'url', label: 'Kivora link' },
+  { id: 'quizlet', label: 'Quizlet source (advanced)' },
 ];
 
 const TAB_COPY: Record<DeckTab, { title: string; description: string }> = {
@@ -86,7 +86,7 @@ export default function DeckLibraryPage() {
   const [myDecks, setMyDecks] = useState<SRSDeck[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMine, setLoadingMine] = useState(true);
-  const [importMode, setImportMode] = useState<ImportMode>('quizlet');
+  const [importMode, setImportMode] = useState<ImportMode>('paste');
   const [importUrl, setImportUrl] = useState('');
   const [importTitle, setImportTitle] = useState('');
   const [csvText, setCsvText] = useState('');
@@ -547,13 +547,28 @@ export default function DeckLibraryPage() {
           <div className={styles.sectionHeader}>
             <div>
               <h2>Import a deck</h2>
-              <p>Bring in flashcards from Quizlet, Kivora links, CSV, pasted notes, or Anki packages, then route straight into your deck viewer.</p>
+              <p>Bring in flashcards from pasted Quizlet exports, Kivora links, CSV, pasted notes, or Anki packages, then route straight into your deck viewer.</p>
             </div>
             {lastImported && (
               <button className={styles.inlineAction} onClick={() => router.push(`/decks/${lastImported.deck.id}?imported=1`)}>
                 Open “{lastImported.deck.name}”
               </button>
             )}
+          </div>
+
+          <div style={{
+            marginBottom: 16,
+            padding: '14px 16px',
+            borderRadius: 14,
+            background: 'color-mix(in srgb, #4f86f7 8%, var(--bg-elevated))',
+            border: '1px solid color-mix(in srgb, #4f86f7 22%, transparent)',
+            display: 'grid',
+            gap: 6,
+          }}>
+            <strong style={{ color: 'var(--text-primary)' }}>Best path for Quizlet: export and paste</strong>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.6 }}>
+              Direct Quizlet URL import is unreliable because Quizlet often serves captcha or JS-protected pages. The paste flow is the most dependable option and is now the default.
+            </p>
           </div>
 
           <div className={styles.modeBar}>
@@ -571,6 +586,31 @@ export default function DeckLibraryPage() {
           <div className={styles.formStack}>
             {importMode === 'quizlet' && (
               <>
+                <div style={{
+                  padding: '14px 16px', borderRadius: 12,
+                  background: 'color-mix(in srgb, #f59e0b 8%, var(--bg-elevated))',
+                  border: '1px solid color-mix(in srgb, #f59e0b 25%, transparent)',
+                  fontSize: 13, lineHeight: 1.65, color: 'var(--text-secondary)',
+                  display: 'flex', flexDirection: 'column', gap: 8,
+                }}>
+                  <strong style={{ color: 'var(--text-primary)' }}>Advanced fallback only</strong>
+                  <span>
+                    Use this only if you already copied the full Quizlet page source. For most users, the <strong>Paste</strong> tab is faster and more reliable.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setImportMode('paste')}
+                    style={{
+                      alignSelf: 'flex-start', padding: '6px 14px', borderRadius: 8,
+                      background: 'color-mix(in srgb, #f59e0b 18%, var(--bg-surface))',
+                      border: '1px solid color-mix(in srgb, #f59e0b 35%, transparent)',
+                      color: '#b45309', fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                    }}
+                  >
+                    Go to recommended Paste flow
+                  </button>
+                </div>
+
                 {/* Step indicator */}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
                   {[
@@ -672,15 +712,15 @@ export default function DeckLibraryPage() {
                   display: 'flex', flexDirection: 'column', gap: 8,
                 }}>
                   <strong style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span>💡</span> Importing from Quizlet?
+                    <span>💡</span> This URL tab is for Kivora deck links
                   </strong>
                   <span>
-                    Quizlet loads cards via JavaScript and blocks automated import. The most reliable method is to <strong>export and paste</strong>:
+                    Only use this tab for Kivora share links like <strong>/share/...</strong>. Quizlet URLs often fail because Quizlet blocks automated fetches.
                   </span>
                   <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <li>Open the Quizlet set in your browser.</li>
-                    <li>Click <strong>•••</strong> → <strong>Export</strong> and copy the exported text.</li>
-                    <li>Switch to the <strong>Paste</strong> tab and paste — Kivora will parse the terms and definitions automatically.</li>
+                    <li>For Kivora decks, paste the share link here and import it directly.</li>
+                    <li>For Quizlet, open the set in your browser.</li>
+                    <li>Click <strong>•••</strong> → <strong>Export</strong>, copy the exported text, then switch to <strong>Paste</strong>.</li>
                   </ol>
                   <button
                     type="button"
@@ -722,6 +762,18 @@ export default function DeckLibraryPage() {
 
             {importMode === 'paste' && (
               <>
+                <div style={{
+                  padding: '14px 16px', borderRadius: 12,
+                  background: 'color-mix(in srgb, #52b788 10%, var(--bg-elevated))',
+                  border: '1px solid color-mix(in srgb, #52b788 25%, transparent)',
+                  fontSize: 13, lineHeight: 1.65, color: 'var(--text-secondary)',
+                  display: 'grid', gap: 6,
+                }}>
+                  <strong style={{ color: '#2f855a' }}>Recommended for Quizlet exports</strong>
+                  <p style={{ margin: 0 }}>
+                    If you exported terms from Quizlet, paste them here. Kivora can parse tab-separated export text directly and this works much more consistently than importing a Quizlet URL.
+                  </p>
+                </div>
                 <div className={styles.importRow}>
                   <input
                     value={importTitle}
@@ -771,8 +823,8 @@ export default function DeckLibraryPage() {
 
           <div className={styles.helperGrid}>
             <article className={styles.helperCard}>
-              <strong>Quizlet import</strong>
-              <p>Fetch the set, convert terms + definitions into Kivora cards, then open the deck editor immediately.</p>
+              <strong>Paste Quizlet export</strong>
+              <p>The most reliable Quizlet workflow: export terms from Quizlet, paste them here, and open the deck editor immediately.</p>
             </article>
             <article className={styles.helperCard}>
               <strong>Kivora shared deck</strong>
@@ -783,8 +835,8 @@ export default function DeckLibraryPage() {
               <p>Bring in simple term/definition lists without depending on a third-party site staying scrape-friendly.</p>
             </article>
             <article className={styles.helperCard}>
-              <strong>Anki packages</strong>
-              <p>Import existing `.apkg` decks so Kivora becomes your universal flashcard workspace, not just a one-source importer.</p>
+              <strong>Advanced Quizlet source</strong>
+              <p>The full page-source importer is still available, but only as a fallback when you already have the raw Quizlet source copied.</p>
             </article>
           </div>
         </section>
