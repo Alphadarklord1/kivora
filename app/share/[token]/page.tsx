@@ -47,7 +47,7 @@ export default function ShareViewerPage() {
     summarize: '📝', quiz: '❓', mcq: '✅', flashcards: '🃏',
     notes: '📓', assignment: '📋', rephrase: '✍️',
   };
-  const importDeckHref = token ? `/decks?importUrl=${encodeURIComponent(`/share/${token}`)}` : '/decks';
+  const importDeckHref = token ? `/study?importUrl=${encodeURIComponent(`/share/${token}`)}` : '/study';
 
   if (!hasToken) {
     return (
@@ -118,7 +118,7 @@ export default function ShareViewerPage() {
               </div>
               {data.resourceType === 'flashcards' && (
                 <div className="sv-import-bar">
-                  <span>This link opens as a deck preview. To study it in Kivora, import it into your deck library.</span>
+                  <span>This link opens as a deck preview. To study it in Kivora, import it into your Study Hub.</span>
                   <Link href={importDeckHref} className="sv-import-btn">Import into Kivora</Link>
                 </div>
               )}

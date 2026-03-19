@@ -442,8 +442,8 @@ export async function GET(req: NextRequest) {
           : `Review ${dueCardsTotal} due card${dueCardsTotal === 1 ? '' : 's'} today`,
         type: 'review',
         payload: {
-          href: '/decks',
-          cta: 'Open decks',
+          href: '/study',
+          cta: 'Open Study Hub',
           detail: reviewDeck
             ? `${reviewDeck.accuracy}% retention in your most active deck`
             : 'Keep today’s review queue under control to protect retention.',
@@ -495,9 +495,9 @@ export async function GET(req: NextRequest) {
         label: 'Create or import your first deck',
         type: 'review',
         payload: {
-          href: '/decks',
-          cta: 'Open decks',
-          detail: 'Decks unlock review history, daily goals, and stronger spaced repetition analytics.',
+          href: '/study',
+          cta: 'Open Study Hub',
+          detail: 'Study Hub unlocks review history, daily goals, and stronger spaced repetition analytics.',
         },
       });
     }

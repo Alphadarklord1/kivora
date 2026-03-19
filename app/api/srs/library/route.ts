@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
         cardCount: body.cardCount ?? 0,
         sourceDeckId: body.sourceDeckId ?? null,
         sourceDeckName: body.title,
-        savedFrom: body.sourceDeckId ? `/decks/${body.sourceDeckId}` : '/decks',
+        savedFrom: body.sourceDeckId ? `/study/${body.sourceDeckId}` : '/study',
       },
     }).returning();
 
