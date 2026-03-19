@@ -54,6 +54,43 @@
   line-height: 1.75;
 }
 
+.heroStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.15rem;
+}
+
+.statCard {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.95rem 1rem;
+  border-radius: 1.15rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 62%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 86%, transparent) 0%, color-mix(in srgb, var(--bg-inset) 84%, transparent) 100%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 30%, transparent);
+}
+
+.statCard strong {
+  font-size: 1.35rem;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.statCard small {
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.statLabel {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 .metaList {
   display: flex;
   flex-wrap: wrap;
@@ -87,6 +124,14 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.groupHint {
+  margin: -0.1rem 0 0;
+  max-width: 44ch;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
 }
 
 .actions,
@@ -149,6 +194,42 @@
 
 .previewCard {
   padding: 1rem;
+}
+
+.previewHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.previewHeader h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.previewHeader p {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  line-height: 1.55;
+  font-size: 0.92rem;
+}
+
+.previewBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-muted) 84%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
+  color: var(--primary-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .previewCard h2 {
@@ -315,6 +396,7 @@
 
 @media (max-width: 960px) {
   .hero,
+  .heroStats,
   .editorFields,
   .cardEditorRow {
     grid-template-columns: 1fr;
@@ -324,5 +406,20 @@
 @media (max-width: 640px) {
   .page {
     padding: 0.5rem;
+  }
+
+  .hero {
+    padding: 1rem;
+  }
+
+  .previewHeader,
+  .sectionHeader,
+  .successBanner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .previewBadge {
+    width: fit-content;
   }
 }

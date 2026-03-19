@@ -30,6 +30,11 @@ function formatDate(iso?: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function formatPercent(value: number | null) {
+  if (value === null) return '—';
+  return `${Math.round(value)}%`;
+}
+
 export default function DeckDetailPage() {
   const params = useParams<{ deckId: string }>();
   const searchParams = useSearchParams();
@@ -58,6 +63,25 @@ export default function DeckDetailPage() {
   const [cardDrafts, setCardDrafts] = useState<EditableCard[]>([]);
 
   const deckContent = useMemo(() => (deck ? deckToContent(deck) : ''), [deck]);
+  const deckSummary = useMemo(() => {
+    if (!deck) {
+      return {
+        dueToday: 0,
+        mastered: 0,
+        totalReviews: 0,
+        accuracy: null as number | null,
+      };
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const totalReviews = deck.cards.reduce((sum, card) => sum + card.totalReviews, 0);
+    const totalCorrect = deck.cards.reduce((sum, card) => sum + card.correctReviews, 0);
+    return {
+      dueToday: deck.cards.filter((card) => card.nextReview && card.nextReview <= today).length,
+      mastered: deck.cards.filter((card) => (card.interval ?? 0) >= 21).length,
+      totalReviews,
+      accuracy: totalReviews > 0 ? (totalCorrect / totalReviews) * 100 : null,
+    };
+  }, [deck]);
 
   const hydrateDrafts = useCallback((nextDeck: SRSDeck | null) => {
     setNameDraft(nextDeck?.name ?? '');
@@ -342,6 +366,29 @@ export default function DeckDetailPage() {
             </>
           )}
 
+          <div className={styles.heroStats}>
+            <div className={styles.statCard}>
+              <span className={styles.statLabel}>Cards</span>
+              <strong>{deck.cards.length}</strong>
+              <small>Total prompts in this deck</small>
+            </div>
+            <div className={styles.statCard}>
+              <span className={styles.statLabel}>Due today</span>
+              <strong>{deckSummary.dueToday}</strong>
+              <small>{deckSummary.dueToday > 0 ? 'Ready to review now' : 'No cards waiting right now'}</small>
+            </div>
+            <div className={styles.statCard}>
+              <span className={styles.statLabel}>Mastered</span>
+              <strong>{deckSummary.mastered}</strong>
+              <small>Cards with long intervals</small>
+            </div>
+            <div className={styles.statCard}>
+              <span className={styles.statLabel}>Accuracy</span>
+              <strong>{formatPercent(deckSummary.accuracy)}</strong>
+              <small>{deckSummary.totalReviews > 0 ? `${deckSummary.totalReviews} total reviews logged` : 'No study data yet'}</small>
+            </div>
+          </div>
+
           <div className={styles.metaList}>
             <span>{deck.cards.length} cards</span>
             <span>{deck.creatorName ?? 'You'}</span>
@@ -353,6 +400,7 @@ export default function DeckDetailPage() {
           <div className={styles.actionGroups}>
             <div className={styles.actionGroup}>
               <span className={styles.groupLabel}>Study</span>
+              <p className={styles.groupHint}>Jump directly into the review mode you need right now.</p>
               <div className={styles.actions}>
                 <button className={styles.primaryButton} onClick={() => openStudy('review')}>Study deck</button>
                 <button className={styles.secondaryButton} onClick={() => openStudy('learn')}>Learn</button>
@@ -361,6 +409,7 @@ export default function DeckDetailPage() {
             </div>
             <div className={styles.actionGroup}>
               <span className={styles.groupLabel}>Tools</span>
+              <p className={styles.groupHint}>Turn the same deck into quizzes, summaries, and explanations.</p>
               <div className={styles.actions}>
                 <button className={styles.secondaryButton} disabled={!!generating} onClick={() => void handleGenerateQuiz()}>{generating === 'quiz' ? 'Generating…' : 'Quiz'}</button>
                 <button className={styles.secondaryButton} disabled={!!generating} onClick={() => void handleGenerate('summarize')}>{generating === 'summarize' ? 'Generating…' : 'Summary'}</button>
@@ -370,6 +419,7 @@ export default function DeckDetailPage() {
             </div>
             <div className={styles.actionGroup}>
               <span className={styles.groupLabel}>Publish & Export</span>
+              <p className={styles.groupHint}>Share a snapshot publicly or keep an export outside Kivora.</p>
               <div className={styles.actions}>
                 <button className={styles.secondaryButton} disabled={publishing} onClick={() => void handlePublish()}>{publishing ? 'Publishing…' : 'Publish'}</button>
                 <button className={styles.secondaryButton} onClick={() => exportDeckCsv(deck)}>Export CSV</button>
@@ -391,7 +441,13 @@ export default function DeckDetailPage() {
         </div>
 
         <div className={styles.previewCard}>
-          <h2>Quick preview</h2>
+          <div className={styles.previewHeader}>
+            <div>
+              <h2>Quick preview</h2>
+              <p>Check the first few cards before you study, publish, or edit.</p>
+            </div>
+            <span className={styles.previewBadge}>{deck.cards.length} total</span>
+          </div>
           <div className={styles.previewList}>
             {deck.cards.slice(0, 5).map((card) => (
               <div key={card.id} className={styles.previewRow}>
