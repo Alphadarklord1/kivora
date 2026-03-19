@@ -6,6 +6,8 @@ import 'katex/dist/katex.min.css';
 import * as math from 'mathjs';
 import { extractTextFromBlob } from '@/lib/pdf/extract';
 import { readMathContext } from '@/lib/math/context';
+import { MATH_CATEGORIES, MATH_CATEGORY_ORDER } from '@/lib/math/catalog';
+import type { MathCategoryId } from '@/lib/math/types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -52,129 +54,31 @@ type NormalizedGraphExpression =
 
 // ── Topic catalogue ───────────────────────────────────────────────────────────
 
-const TOPICS = [
-  {
-    id: 'algebra',
-    label: 'Algebra',
-    icon: '𝑥',
-    color: '#6366f1',
-    examples: [
-      'Solve x² + 5x + 6 = 0',
-      'Factor 4x² - 9',
-      'Simplify (2x + 3)² - (x - 1)²',
-      'Solve |3x - 2| = 7',
-      'Solve system: x + y = 5, 2x - y = 4',
-    ],
-  },
-  {
-    id: 'calculus',
-    label: 'Calculus',
-    icon: '∂',
-    color: '#8b5cf6',
-    examples: [
-      'Differentiate x³ sin(x)',
-      'Integrate x² ln(x) dx',
-      'Limit of (sin x)/x as x → 0',
-      'Find critical points of f(x) = x³ - 3x',
-      'Taylor series of e^x at x = 0',
-    ],
-  },
-  {
-    id: 'statistics',
-    label: 'Statistics',
-    icon: 'σ',
-    color: '#06b6d4',
-    examples: [
-      'Mean and SD of [4, 8, 15, 16, 23, 42]',
-      'P(A∩B) given P(A)=0.4, P(B)=0.5, P(A∪B)=0.7',
-      'Binomial P(X=3) with n=10, p=0.4',
-      'Confidence interval for mean, n=25, x̄=50, s=8',
-      'Chi-square test for independence',
-    ],
-  },
-  {
-    id: 'trigonometry',
-    label: 'Trigonometry',
-    icon: '∠',
-    color: '#f59e0b',
-    examples: [
-      'Solve 2 sin(x) = 1 for x in [0, 2π]',
-      'Simplify sin²(x) + cos²(x)',
-      'Find cos(75°) exactly',
-      'Solve triangle: a=5, b=7, C=60°',
-      'Verify sin(2x) = 2 sin(x) cos(x)',
-    ],
-  },
-  {
-    id: 'geometry',
-    label: 'Geometry',
-    icon: '△',
-    color: '#10b981',
-    examples: [
-      'Line through (1,2) and (4,6)',
-      'Equation of circle: center (2,-3), radius 5',
-      'Midpoint of (1,2) and (4,6)',
-      'Area of triangle with sides 3, 4, 5',
-      'Volume of sphere with radius 7',
-    ],
-  },
-  {
-    id: 'linear-algebra',
-    label: 'Linear Algebra',
-    icon: '⊞',
-    color: '#ec4899',
-    examples: [
-      'Eigenvalues of [[2,1],[1,2]]',
-      'Determinant of [[1,2,3],[4,5,6],[7,8,9]]',
-      'Solve Ax=b: A=[[2,1],[1,3]], b=[5,10]',
-      'Dot product of [1,2,3] and [4,5,6]',
-      'Row reduce [[1,2,3],[4,5,6],[7,8,9]]',
-    ],
-  },
-  {
-    id: 'differential-equations',
-    label: 'Diff. Equations',
-    icon: "y'",
-    color: '#f97316',
-    examples: [
-      "y'' + 3y' + 2y = 0",
-      "y'' - y = 0",
-      "y' = -2y",
-      "dy/dx = 3x^2",
-      "y' + 2y = 4",
-    ],
-  },
-  {
-    id: 'discrete',
-    label: 'Discrete Math',
-    icon: '∈',
-    color: '#14b8a6',
-    examples: [
-      'gcd(48, 36)',
-      'lcm(12, 18)',
-      'C(10, 3)',
-      'P(5, 2)',
-      'fibonacci(10)',
-      '2^10 mod 7',
-    ],
-  },
-  {
-    id: 'physics',
-    label: 'Physics',
-    icon: '⚛',
-    color: '#ef4444',
-    examples: [
-      'ohm V=12 I=3',
-      'KE m=10 v=5',
-      'projectile v=50 theta=45',
-      'wave f=440 lambda=0.78',
-      'force m=5 a=3',
-      'PE m=10 h=5',
-    ],
-  },
-] as const;
+const TOPIC_META: Record<MathCategoryId, { icon: string; color: string }> = {
+  algebra: { icon: '𝑥', color: '#6366f1' },
+  geometry: { icon: '△', color: '#10b981' },
+  calculus: { icon: '∂', color: '#8b5cf6' },
+  trigonometry: { icon: '∠', color: '#f59e0b' },
+  'sequences-series': { icon: 'Σ', color: '#0ea5e9' },
+  'linear-algebra': { icon: '⊞', color: '#ec4899' },
+  statistics: { icon: 'σ', color: '#06b6d4' },
+  vectors: { icon: '→', color: '#84cc16' },
+  matrices: { icon: '▦', color: '#a855f7' },
+  'differential-equations': { icon: "y'", color: '#f97316' },
+  discrete: { icon: '∈', color: '#14b8a6' },
+  physics: { icon: '⚛', color: '#ef4444' },
+};
 
-type TopicId = typeof TOPICS[number]['id'];
+const TOPICS: Array<{ id: MathCategoryId; label: string; icon: string; color: string; examples: string[] }> =
+  MATH_CATEGORY_ORDER.map((id) => ({
+    id,
+    label: MATH_CATEGORIES[id].label,
+    icon: TOPIC_META[id].icon,
+    color: TOPIC_META[id].color,
+    examples: MATH_CATEGORIES[id].examples.map((example) => example.expr),
+  }));
+
+type TopicId = MathCategoryId;
 type SpecialView = 'formulas' | 'graph' | 'units' | 'scan';
 type ActiveView = TopicId | SpecialView;
 
@@ -977,6 +881,69 @@ const CATEGORY_FORMS: Record<string, StructForm[]> = {
       ],
       buildCommand: (p) => `Confidence interval for mean, n=${p.n}, x̄=${p.xbar}, s=${p.s}`,
     },
+    {
+      id: 'variance',
+      label: 'Variance / Standard Deviation',
+      latexFormula: '\\sigma^2 = \\dfrac{\\sum (x_i-\\bar{x})^2}{n},\\quad \\sigma = \\sqrt{\\sigma^2}',
+      note: 'Enter a comma-separated list to compute variance or standard deviation from the same dataset.',
+      params: [
+        { key: 'data', label: 'Data values  (comma-separated)', inputType: 'text', placeholder: 'e.g. 4, 7, 13, 2, 8' },
+        { key: 'mode', label: 'Measure', inputType: 'text', placeholder: 'variance or std' },
+      ],
+      buildCommand: (p) => `${(p.mode || 'variance').trim()}([${p.data || ''}])`,
+    },
+  ],
+
+  /* ── Sequences & Series ─────────────────────────────────────────────── */
+  'sequences-series': [
+    {
+      id: 'arithmetic-nth',
+      label: 'Arithmetic nth Term',
+      latexFormula: 'a_n = a_1 + (n-1)d',
+      note: 'Enter the first term, common difference, and the term number n.',
+      params: [
+        { key: 'a1', label: 'First term a₁', inputType: 'number', placeholder: 'e.g. 3' },
+        { key: 'd', label: 'Common difference d', inputType: 'number', placeholder: 'e.g. 2' },
+        { key: 'n', label: 'Term number n', inputType: 'number', placeholder: 'e.g. 10' },
+      ],
+      buildCommand: (p) => `arithmetic nth ${p.a1 || ''} ${p.d || ''} ${p.n || ''}`,
+    },
+    {
+      id: 'arithmetic-sum',
+      label: 'Arithmetic Series Sum',
+      latexFormula: 'S_n = \\dfrac{n}{2}(a_1+a_n)',
+      note: 'Enter the first term, common difference, and number of terms.',
+      params: [
+        { key: 'a1', label: 'First term a₁', inputType: 'number', placeholder: 'e.g. 3' },
+        { key: 'd', label: 'Common difference d', inputType: 'number', placeholder: 'e.g. 2' },
+        { key: 'n', label: 'Number of terms n', inputType: 'number', placeholder: 'e.g. 10' },
+      ],
+      buildCommand: (p) => `arithmetic sum ${p.a1 || ''} ${p.d || ''} ${p.n || ''}`,
+    },
+    {
+      id: 'geometric-nth',
+      label: 'Geometric nth Term',
+      latexFormula: 'a_n = a_1 r^{n-1}',
+      note: 'Enter the first term, common ratio, and the term number n.',
+      params: [
+        { key: 'a1', label: 'First term a₁', inputType: 'number', placeholder: 'e.g. 2' },
+        { key: 'r', label: 'Common ratio r', inputType: 'number', placeholder: 'e.g. 3' },
+        { key: 'n', label: 'Term number n', inputType: 'number', placeholder: 'e.g. 5' },
+      ],
+      buildCommand: (p) => `geometric nth ${p.a1 || ''} ${p.r || ''} ${p.n || ''}`,
+    },
+    {
+      id: 'geometric-sum',
+      label: 'Geometric Series Sum',
+      latexFormula: 'S_n = a_1\\dfrac{1-r^n}{1-r}',
+      note: 'Enter the first term, common ratio, and number of terms.',
+      params: [
+        { key: 'a1', label: 'First term a₁', inputType: 'number', placeholder: 'e.g. 2' },
+        { key: 'r', label: 'Common ratio r', inputType: 'number', placeholder: 'e.g. 3' },
+        { key: 'n', label: 'Number of terms n', inputType: 'number', placeholder: 'e.g. 5' },
+      ],
+      buildCommand: (p) => `geometric sum ${p.a1 || ''} ${p.r || ''} ${p.n || ''}`,
+    },
   ],
 
   /* ── Linear Algebra ─────────────────────────────────────────────────── */
@@ -1037,6 +1004,89 @@ const CATEGORY_FORMS: Record<string, StructForm[]> = {
         { key: 'v', label: 'Vector v', inputType: 'text', placeholder: 'e.g. 4, 5, 6' },
       ],
       buildCommand: (p) => `Dot product of [${p.u || ''}] and [${p.v || ''}]`,
+    },
+  ],
+
+  /* ── Vectors ────────────────────────────────────────────────────────── */
+  vectors: [
+    {
+      id: 'vector-dot',
+      label: 'Dot Product',
+      latexFormula: '\\mathbf{u}\\cdot\\mathbf{v} = \\sum u_i v_i',
+      note: 'Enter two vectors of the same length, separated by commas.',
+      params: [
+        { key: 'u', label: 'Vector u', inputType: 'text', placeholder: 'e.g. 3, 2' },
+        { key: 'v', label: 'Vector v', inputType: 'text', placeholder: 'e.g. 1, 4' },
+      ],
+      buildCommand: (p) => `dot product [${p.u || ''}] [${p.v || ''}]`,
+    },
+    {
+      id: 'vector-magnitude',
+      label: 'Vector Magnitude',
+      latexFormula: '|\\mathbf{v}| = \\sqrt{v_1^2 + v_2^2 + \\cdots + v_n^2}',
+      note: 'Enter one vector to compute its Euclidean length.',
+      params: [
+        { key: 'v', label: 'Vector v', inputType: 'text', placeholder: 'e.g. 3, 4' },
+      ],
+      buildCommand: (p) => `magnitude [${p.v || ''}]`,
+    },
+    {
+      id: 'vector-angle',
+      label: 'Angle Between Two Vectors',
+      latexFormula: '\\cos\\theta = \\dfrac{\\mathbf{u}\\cdot\\mathbf{v}}{|u||v|}',
+      note: 'Enter two vectors to compute the angle between them in degrees.',
+      params: [
+        { key: 'u', label: 'Vector u', inputType: 'text', placeholder: 'e.g. 1, 2' },
+        { key: 'v', label: 'Vector v', inputType: 'text', placeholder: 'e.g. 3, 5' },
+      ],
+      buildCommand: (p) => `angle between [${p.u || ''}] [${p.v || ''}]`,
+    },
+  ],
+
+  /* ── Matrices ───────────────────────────────────────────────────────── */
+  matrices: [
+    {
+      id: 'matrix-multiply',
+      label: 'Multiply Two 2×2 Matrices',
+      latexFormula: 'AB = \\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}\\begin{bmatrix}e&f\\\\g&h\\end{bmatrix}',
+      note: 'Enter both 2×2 matrices row by row.',
+      params: [
+        { key: 'a11', label: 'A row 1 col 1', inputType: 'number', placeholder: '1' },
+        { key: 'a12', label: 'A row 1 col 2', inputType: 'number', placeholder: '2' },
+        { key: 'a21', label: 'A row 2 col 1', inputType: 'number', placeholder: '3' },
+        { key: 'a22', label: 'A row 2 col 2', inputType: 'number', placeholder: '4' },
+        { key: 'b11', label: 'B row 1 col 1', inputType: 'number', placeholder: '5' },
+        { key: 'b12', label: 'B row 1 col 2', inputType: 'number', placeholder: '6' },
+        { key: 'b21', label: 'B row 2 col 1', inputType: 'number', placeholder: '7' },
+        { key: 'b22', label: 'B row 2 col 2', inputType: 'number', placeholder: '8' },
+      ],
+      buildCommand: (p) => `[[${p.a11},${p.a12}],[${p.a21},${p.a22}]] * [[${p.b11},${p.b12}],[${p.b21},${p.b22}]]`,
+    },
+    {
+      id: 'matrix-det',
+      label: 'Determinant of a 2×2 Matrix',
+      latexFormula: '\\det\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix} = ad-bc',
+      note: 'Enter a 2×2 matrix to compute its determinant.',
+      params: [
+        { key: 'a11', label: 'Row 1 col 1', inputType: 'number', placeholder: '1' },
+        { key: 'a12', label: 'Row 1 col 2', inputType: 'number', placeholder: '2' },
+        { key: 'a21', label: 'Row 2 col 1', inputType: 'number', placeholder: '3' },
+        { key: 'a22', label: 'Row 2 col 2', inputType: 'number', placeholder: '4' },
+      ],
+      buildCommand: (p) => `det([[${p.a11},${p.a12}],[${p.a21},${p.a22}]])`,
+    },
+    {
+      id: 'matrix-inverse',
+      label: 'Inverse of a 2×2 Matrix',
+      latexFormula: 'A^{-1} = \\dfrac{1}{ad-bc}\\begin{pmatrix}d&-b\\\\-c&a\\end{pmatrix}',
+      note: 'Enter a 2×2 matrix with non-zero determinant.',
+      params: [
+        { key: 'a11', label: 'Row 1 col 1', inputType: 'number', placeholder: '2' },
+        { key: 'a12', label: 'Row 1 col 2', inputType: 'number', placeholder: '1' },
+        { key: 'a21', label: 'Row 2 col 1', inputType: 'number', placeholder: '1' },
+        { key: 'a22', label: 'Row 2 col 2', inputType: 'number', placeholder: '1' },
+      ],
+      buildCommand: (p) => `inv([[${p.a11},${p.a12}],[${p.a21},${p.a22}]])`,
     },
   ],
 
@@ -1420,11 +1470,12 @@ export function MathSolverPage() {
   // ── Computed ────────────────────────────────────────────────────────────────
 
   const currentTopic = TOPICS.find(t => t.id === active);
+  const currentCategoryConfig = currentTopic ? MATH_CATEGORIES[currentTopic.id] : null;
   const specialMeta = !currentTopic ? SPECIAL_VIEW_META[active as SpecialView] : null;
   const currentAccent = currentTopic?.color ?? specialMeta?.accent ?? DEFAULT_ACCENT;
   const activeTitle = currentTopic?.label ?? specialMeta?.title ?? 'Math';
   const activeSubtitle = currentTopic
-    ? 'Solve one problem at a time with examples, symbols, and step-by-step output.'
+    ? `Focus on ${currentCategoryConfig?.supportedActions.slice(0, 4).join(' · ') ?? 'step-by-step problem solving'}.`
     : specialMeta?.subtitle ?? '';
 
   const unitCat = UNIT_CATS[unitCatIdx];
@@ -1644,6 +1695,27 @@ export function MathSolverPage() {
             {contextName && (
               <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 12, color: 'var(--text-secondary)' }}>
                 Linked workspace file: <strong style={{ color: 'var(--text-primary)' }}>{contextName}</strong>
+              </div>
+            )}
+
+            {currentCategoryConfig && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {currentCategoryConfig.supportedActions.map((action) => (
+                  <span
+                    key={action}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 999,
+                      border: `1px solid ${currentAccent}26`,
+                      background: `${currentAccent}10`,
+                      color: currentAccent,
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {action}
+                  </span>
+                ))}
               </div>
             )}
 
