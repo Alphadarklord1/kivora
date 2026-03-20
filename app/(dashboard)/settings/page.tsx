@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
 import { useSettings, type Density, type Theme } from '@/providers/SettingsProvider';
 import { AiRuntimeControls } from '@/components/models/AiRuntimeControls';
+import { ReportIssuePanel } from '@/components/settings/ReportIssuePanel';
 
 const THEME_OPTIONS: { id: Theme; label: string; hint: string }[] = [
   { id: 'system', label: 'System', hint: 'Follow your device preference' },
@@ -16,10 +17,10 @@ const THEME_OPTIONS: { id: Theme; label: string; hint: string }[] = [
 ];
 
 const FONT_OPTIONS = [
-  { value: '0.9', label: 'Small' },
-  { value: '1', label: 'Normal' },
-  { value: '1.1', label: 'Large' },
-  { value: '1.2', label: 'Extra large' },
+  { value: '0.95', label: 'Small text' },
+  { value: '1', label: 'Normal text size' },
+  { value: '1.05', label: 'Large text' },
+  { value: '1.1', label: 'Extra large text' },
 ] as const;
 
 const LINE_HEIGHT_OPTIONS = [
@@ -57,6 +58,17 @@ interface TwoFactorSetupState {
   secret: string;
   manualEntryKey: string;
   otpAuthUri: string;
+}
+
+interface DownloadsState {
+  releaseTag: string;
+  releaseUrl: string;
+  macAsset: { browser_download_url: string; name: string } | null;
+  windowsInstaller: { browser_download_url: string; name: string } | null;
+  windowsPortable: { browser_download_url: string; name: string } | null;
+  manifestAsset: { browser_download_url: string; name: string } | null;
+  checksumsAsset: { browser_download_url: string; name: string } | null;
+  hasPublishedModelAssets: boolean;
 }
 
 const fieldStyle: CSSProperties = {
@@ -207,6 +219,62 @@ function ChoiceButtons<T extends string>({
   );
 }
 
+function JumpLinks() {
+  const links = [
+    { href: '#account', label: 'Account' },
+    { href: '#security', label: 'Security' },
+    { href: '#appearance', label: 'Appearance' },
+    { href: '#ai-models', label: 'AI & downloads' },
+    { href: '#reporting', label: 'Report issue' },
+    { href: '#privacy', label: 'Privacy' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
+      {links.map((link) => (
+        <a key={link.href} href={link.href} className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
+          {link.label}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function DownloadCard({
+  title,
+  hint,
+  primary,
+  secondary,
+}: {
+  title: string;
+  hint: string;
+  primary?: { label: string; href: string } | null;
+  secondary?: { label: string; href: string } | null;
+}) {
+  return (
+    <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)', display: 'grid', gap: 10 }}>
+      <div>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>{title}</div>
+        <div style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>{hint}</div>
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {primary ? (
+          <a href={primary.href} className="btn btn-primary btn-sm" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+            {primary.label}
+          </a>
+        ) : (
+          <span className="badge">Not attached yet</span>
+        )}
+        {secondary ? (
+          <a href={secondary.href} className="btn btn-ghost btn-sm" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+            {secondary.label}
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { settings, updateSetting } = useSettings();
   const { data: session, update: updateSession } = useSession();
@@ -225,9 +293,12 @@ export default function SettingsPage() {
   const [name, setName] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [bio, setBio] = useState('');
+  const [downloads, setDownloads] = useState<DownloadsState | null>(null);
+  const [downloadsLoading, setDownloadsLoading] = useState(true);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
   useEffect(() => {
     if (!session?.user) {
       setAccountLoading(false);
@@ -259,6 +330,33 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [session?.user, toast]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDownloadsLoading(true);
+    fetch('/api/models/downloads')
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((data) => {
+        if (!cancelled) {
+          setDownloads(data);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDownloads(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDownloadsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const accountCreatedLabel = useMemo(() => {
     if (!account?.createdAt) return null;
@@ -415,17 +513,20 @@ export default function SettingsPage() {
   const showGuestState = !session?.user || Boolean(account?.isGuest);
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div style={{ maxWidth: 1080 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, marginBottom: 4 }}>Settings</h1>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
-            Keep your account, appearance, security, and local AI setup in one place.
+            Keep your account, appearance, AI setup, downloads, and support tools in one place.
           </p>
         </div>
         {saved ? <span className="badge badge-success">Saved ✓</span> : null}
       </div>
 
+      <JumpLinks />
+
+      <div id="account">
       <Section title="Account" subtitle="Profile, connected sign-in methods, and basic account details.">
         {showGuestState ? (
           <div style={{ display: 'grid', gap: 16 }}>
@@ -530,7 +631,9 @@ export default function SettingsPage() {
           <p style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>We could not load your account right now.</p>
         )}
       </Section>
+      </div>
 
+      <div id="security">
       <Section title="Security" subtitle="Password changes and two-step verification for your account.">
         {showGuestState ? (
           <div style={{ display: 'grid', gap: 16 }}>
@@ -684,8 +787,10 @@ export default function SettingsPage() {
           <p style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>We could not load your security settings right now.</p>
         )}
       </Section>
+      </div>
 
-      <Section title="Appearance" subtitle="Make the app readable and comfortable for your workflow.">
+      <div id="appearance">
+      <Section title="Appearance" subtitle="Make the app readable and comfortable without oversized defaults or confusing labels.">
         <div>
           <div style={labelStyle}>Theme</div>
           <ChoiceButtons options={THEME_OPTIONS} value={settings.theme} onChange={value => set('theme', value)} />
@@ -710,15 +815,16 @@ export default function SettingsPage() {
         <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Preview</div>
           <p style={{ marginBottom: 10 }}>
-            This preview uses your live font size, line spacing, and density settings so you can immediately feel whether the UI is too tight or too loose.
+            This preview uses your live font size, line spacing, and density settings so you can feel whether the interface reads as normal, too tight, or too large.
           </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <span className="badge">Readable cards</span>
+            <span className="badge">Normal text size</span>
             <span className="badge">Cleaner spacing</span>
             <span className="badge">Better contrast</span>
           </div>
         </div>
       </Section>
+      </div>
 
       <Section title="Language" subtitle="Switch the interface language and text direction.">
         <ChoiceButtons
@@ -735,34 +841,77 @@ export default function SettingsPage() {
         />
       </Section>
 
-      <Section title="AI routing" subtitle="Choose whether Kivora should prefer local privacy, cloud convenience, or automatic fallback.">
-        <AiRuntimeControls compact />
-      </Section>
-
-      <Section title="Support" subtitle="Quick access to reporting and system status when something feels off.">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', flex: 1 }}>
-            Share crashes, UI issues, auth problems, or workflow bugs with guided diagnostics.
-          </span>
-          <a href="/report" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>Report an issue</a>
-          <a href="/status" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>Status & support</a>
-        </div>
-      </Section>
-
-      <Section title="AI runtime" subtitle="The app keeps a deterministic offline fallback too, so study tools still work even when neither local nor cloud AI is available.">
-        <div style={{ display: 'grid', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>Deterministic fallback</span>
-            <span className="badge badge-success" style={{ marginLeft: 'auto' }}>Always available</span>
+      <div id="ai-models">
+      <Section title="AI, models & downloads" subtitle="This is now the home for local/cloud mode selection and desktop downloads, instead of separate sidebar entries.">
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>AI routing</div>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginBottom: 14 }}>
+              Choose whether Kivora should prefer local privacy, cloud convenience, or automatic fallback. This replaces the separate models sidebar destination.
+            </p>
+            <AiRuntimeControls compact />
           </div>
-          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-            If local and cloud AI are both unavailable, Kivora still generates basic study output offline so students are not blocked.
-          </p>
+
+          <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+              <div>
+                <div style={{ fontWeight: 700 }}>Downloads & releases</div>
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginTop: 4 }}>
+                  Desktop installers and optional local AI assets live here now too.
+                </div>
+              </div>
+              {downloads?.releaseUrl ? (
+                <a href={downloads.releaseUrl} className="btn btn-ghost btn-sm" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                  Release {downloads.releaseTag}
+                </a>
+              ) : null}
+            </div>
+
+            {downloadsLoading ? (
+              <div className="skeleton" style={{ height: 180, borderRadius: 18 }} />
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
+                <DownloadCard
+                  title="macOS Apple Silicon"
+                  hint="Primary desktop download with offline-first local AI support."
+                  primary={downloads?.macAsset ? { label: 'Download DMG', href: downloads.macAsset.browser_download_url } : null}
+                />
+                <DownloadCard
+                  title="Windows x64"
+                  hint="Installer first, with portable build when attached to the release."
+                  primary={downloads?.windowsInstaller ? { label: 'Download installer', href: downloads.windowsInstaller.browser_download_url } : null}
+                  secondary={downloads?.windowsPortable ? { label: 'Portable EXE', href: downloads.windowsPortable.browser_download_url } : null}
+                />
+                <DownloadCard
+                  title="Integrity files"
+                  hint="Use these to verify model assets and release integrity."
+                  primary={downloads?.manifestAsset ? { label: 'Manifest', href: downloads.manifestAsset.browser_download_url } : null}
+                  secondary={downloads?.checksumsAsset ? { label: 'Checksums', href: downloads.checksumsAsset.browser_download_url } : null}
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+              <span className="badge">Local = private + offline</span>
+              <span className="badge">Cloud = convenience</span>
+              <span className="badge">Offline fallback always available</span>
+              {downloads?.hasPublishedModelAssets ? <span className="badge badge-success">Optional model assets published</span> : null}
+            </div>
+          </div>
         </div>
       </Section>
+      </div>
+
+      <div id="reporting">
+      <Section title="Report & diagnostics" subtitle="File bugs and feature requests directly from settings, with the current route, theme, and language already included.">
+        <ReportIssuePanel embedded />
+      </Section>
+      </div>
 
       {/* ── Privacy & Data Control ─────────────────────────────────────── */}
-      <PrivacySection />
+      <div id="privacy">
+        <PrivacySection />
+      </div>
     </div>
   );
 }

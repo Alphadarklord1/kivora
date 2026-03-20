@@ -16,10 +16,8 @@ const NAV_ITEMS = [
   { href: '/library',   key: 'Library',             icon: '🗂️' },
   { href: '/coach',     key: 'Revision Coach',     icon: '🧭' },
   { href: '/analytics', key: 'Analytics',           icon: '📊' },
-  { href: '/models',    key: 'Models & Downloads',  icon: '🤖' },
   { href: '/sharing',   key: 'Sharing',             icon: '🔗' },
   { href: '/settings',  key: 'Settings',            icon: '⚙️' },
-  { href: '/report',    key: 'Report',              icon: '🩺' },
 ];
 
 // ── Tiny inline avatar ────────────────────────────────────────────────────

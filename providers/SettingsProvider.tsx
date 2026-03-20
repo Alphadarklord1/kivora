@@ -47,7 +47,10 @@ function sanitizeLineHeight(value: string | null): string {
 }
 
 function sanitizeFontSize(value: string | null): string {
-  return value && ['0.9', '1', '1.1', '1.2'].includes(value) ? value : DEFAULTS.fontSize;
+  if (value === '0.9') return '0.95';
+  if (value === '1.1') return '1.05';
+  if (value === '1.2') return '1.1';
+  return value && ['0.95', '1', '1.05', '1.1'].includes(value) ? value : DEFAULTS.fontSize;
 }
 
 function loadFromStorage(): Settings {
