@@ -11,7 +11,7 @@ import { ReportIssuePanel } from '@/components/settings/ReportIssuePanel';
 
 const THEME_OPTIONS: { id: Theme; label: string; hint: string }[] = [
   { id: 'system', label: 'System', hint: 'Follow your device preference' },
-  { id: 'blue', label: 'Blue', hint: 'Default Kivora theme' },
+  { id: 'blue', label: 'Dark', hint: 'Default Kivora dark theme' },
   { id: 'light', label: 'Light', hint: 'Bright workspace' },
   { id: 'black', label: 'Black', hint: 'Highest contrast' },
 ];
