@@ -24,12 +24,12 @@ const STEPS = [
   },
   {
     icon: '🃏',
-    title: 'Study Hub & streaks',
-    desc: 'Study with Flip, Write, Test, Match, or Learn mode. Cards are scheduled by the FSRS-4.5 algorithm. Build a daily 🔥 streak and track your progress with a visual heatmap.',
-    highlight: 'Study Hub → open any deck → choose a study mode',
-    tip: 'Your streak counter and next-review forecast live in the sidebar. Review at least one card a day to keep it alive!',
-    actionLabel: 'Open Study Hub',
-    href: '/study',
+    title: 'Revision Coach & streaks',
+    desc: 'Revision Coach turns your review sets into a daily mission. Start with what is due now, recover weak topics next, and keep your streak moving with one clear action at a time.',
+    highlight: "Revision Coach → start today's mission → review or manage a set",
+    tip: 'Your streak counter and due-review queue work together here. One short review session a day is enough to keep momentum alive.',
+    actionLabel: 'Open Revision Coach',
+    href: '/coach',
   },
   {
     icon: '🧮',

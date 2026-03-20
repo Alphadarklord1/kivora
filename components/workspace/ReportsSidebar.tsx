@@ -172,7 +172,7 @@ export function ReportsSidebar({ open, onClose }: ReportsSidebarProps) {
               {[
                 { label: 'Reviewed', value: stats.reviewedToday, icon: '✅' },
                 { label: 'Due cards', value: stats.dueCards, icon: '📅' },
-                { label: 'Decks', value: stats.totalDecks, icon: '📇' },
+                { label: 'Sets', value: stats.totalDecks, icon: '📇' },
                 { label: 'Files', value: stats.filesCount, icon: '📁' },
                 { label: 'Quizzes', value: stats.weeklyQuizzes, icon: '❓', note: '7 days' },
                 { label: 'Avg score', value: `${stats.avgScore}%`, icon: '🎯' },
@@ -232,7 +232,7 @@ export function ReportsSidebar({ open, onClose }: ReportsSidebarProps) {
             {/* Due cards alert */}
             {stats.dueCards > 0 && (
               <Link
-                href="/study"
+                href="/coach"
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
                   borderRadius: 8, textDecoration: 'none',

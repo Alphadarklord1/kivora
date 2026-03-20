@@ -1,6 +1,6 @@
 // Legacy fallback only:
 // Quizlet frequently serves captcha and JS-protected pages, so this parser is
-// intentionally kept out of the primary Study Hub UI. We keep it around for
+// intentionally kept out of the primary Revision Coach UI. We keep it around for
 // future fallback/import experiments, but paste/CSV/Anki/Kivora-link imports
 // are the supported paths.
 export type ParsedFlashcard = { front: string; back: string };

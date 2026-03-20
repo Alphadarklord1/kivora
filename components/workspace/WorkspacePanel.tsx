@@ -23,6 +23,7 @@ import { ExamView } from '@/components/workspace/views/ExamView';
 import { FocusPanel } from '@/components/workspace/views/FocusPanel';
 import { mdToHtml } from '@/lib/utils/md';
 import { writeMathContext } from '@/lib/math/context';
+import { clearCoachHandoff, readCoachHandoff } from '@/lib/coach/handoff';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -455,8 +456,8 @@ export function WorkspacePanel({
 
   // ── AI generation (streaming) ──────────────────────────────────────────
 
-  async function runGenerate(mode: ToolMode) {
-    let src = extractedText.trim();
+  async function runGenerate(mode: ToolMode, sourceOverride?: string) {
+    let src = sourceOverride?.trim() ?? extractedText.trim();
     if (!src && selFile) src = (await extractFromFile(selFile))?.trim() ?? '';
     if (!src) { toast('Select a file or paste content first.', 'warning'); return; }
 
@@ -556,6 +557,50 @@ export function WorkspacePanel({
       setGenerating(false);
     }
   }
+
+  useEffect(() => {
+    const handoff = readCoachHandoff();
+    if (!handoff) return;
+
+    if ((handoff.type === 'review-set' || handoff.type === 'import-success') && handoff.setId) {
+      clearCoachHandoff();
+      router.push(`/coach?set=${handoff.setId}&panel=manage`);
+      return;
+    }
+
+    if (handoff.type !== 'weak-topic' || !handoff.topic) return;
+
+    const preferred = handoff.preferredTool ?? 'quiz';
+    const nextMode: ToolMode = preferred === 'mcq'
+      ? 'mcq'
+      : preferred === 'flashcards'
+        ? 'flashcards'
+        : preferred === 'summarize' || preferred === 'explain'
+          ? 'summarize'
+          : 'quiz';
+
+    const sourceText = preferred === 'mcq'
+      ? `Topic: ${handoff.topic}\nCreate 6 high-yield multiple-choice questions with answers and short explanations.`
+      : preferred === 'flashcards'
+        ? `Topic: ${handoff.topic}\nCreate a concise flashcard set with front/back cards for rapid revision.`
+        : preferred === 'summarize'
+          ? `Topic: ${handoff.topic}\nCreate a concise revision summary with key ideas, one example, and a checklist.`
+          : preferred === 'explain'
+            ? `Topic: ${handoff.topic}\nExplain this topic simply for a student. Include one worked example and one common mistake to avoid.`
+            : `Topic: ${handoff.topic}\nCreate 5 open-ended quiz questions with answers and brief feedback.`;
+
+    clearCoachHandoff();
+    setMainTab('generate');
+    setPasteMode(true);
+    setViewFile(null);
+    setSelFile(null);
+    setOutput('');
+    setGenMode(nextMode as GenMode);
+    setExtractedText(sourceText);
+    toast(`"${handoff.topic}" is ready in Workspace`, 'success');
+    void runGenerate(nextMode, sourceText);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Export generated content ───────────────────────────────────────────
 
@@ -1230,8 +1275,8 @@ export function WorkspacePanel({
             {srsDecks.length > 0 && (
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>📇 Saved Flashcard Decks</span>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{srsDecks.length} deck{srsDecks.length !== 1 ? 's' : ''}</span>
+                  <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>📇 Saved Review Sets</span>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{srsDecks.length} set{srsDecks.length !== 1 ? 's' : ''}</span>
                 </div>
                 {srsDecks.map(deck => {
                   const st = getDeckStats(deck);
@@ -1252,12 +1297,12 @@ export function WorkspacePanel({
                           </div>
                         </div>
                         <button className="btn btn-primary btn-sm"
-                          onClick={() => router.push(`/study/${deck.id}`)}>
-                          {st.due > 0 ? `▶ Review ${st.due}` : 'Open deck'}
+                          onClick={() => router.push(`/coach?set=${deck.id}&panel=${st.due > 0 ? 'review' : 'manage'}`)}>
+                          {st.due > 0 ? `▶ Review ${st.due}` : 'Manage set'}
                         </button>
                         <button className="btn-icon" style={{ color: 'var(--text-3)', width: 24, height: 24, fontSize: 12 }}
                           onClick={() => {
-                            if (!confirm(`Delete deck "${deck.name}"?`)) return;
+                            if (!confirm(`Delete review set "${deck.name}"?`)) return;
                             deleteDeck(deck.id);
                             setSrsDecks(d => d.filter(x => x.id !== deck.id));
                             void fetch(`/api/srs/${deck.id}`, { method: 'DELETE' }).catch(() => {});
