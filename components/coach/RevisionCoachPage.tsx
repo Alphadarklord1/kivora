@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
 import { useAnalytics, type WeakArea } from '@/hooks/useAnalytics';
 import { createCard, deleteDeck, loadDecks, saveDeck, type SRSDeck } from '@/lib/srs/sm2';
+import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
 import {
   buildDeckQuizContent,
   buildImportedDeck,
@@ -19,6 +20,7 @@ import { InteractiveQuiz } from '@/components/workspace/InteractiveQuiz';
 import { writeCoachHandoff } from '@/lib/coach/handoff';
 import { buildCoachUrl } from '@/lib/coach/routes';
 import type { GeneratedContent } from '@/lib/offline/generate';
+import type { SourceBrief } from '@/lib/coach/source-brief';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 
 type CoachPanel = 'review' | 'manage';
@@ -35,7 +37,8 @@ type ImportPayload = {
 
 type CoachOutput =
   | { kind: 'quiz'; title: string; content: string; quiz: GeneratedContent; setId: string }
-  | { kind: 'explanation'; title: string; content: string; setId: string };
+  | { kind: 'explanation'; title: string; content: string; setId: string }
+  | { kind: 'generated'; title: string; content: string };
 
 const IMPORT_SOURCE_META = {
   quizlet: { type: 'quizlet', label: 'Quizlet import' },
@@ -93,6 +96,10 @@ export function RevisionCoachPage() {
   const [quizletHtml, setQuizletHtml] = useState('');
   const [importingMode, setImportingMode] = useState<ImportMode | null>(null);
   const [lastImported, setLastImported] = useState<{ set: SRSDeck; cardCount: number } | null>(null);
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [sourceBrief, setSourceBrief] = useState<SourceBrief | null>(null);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceActionLoading, setSourceActionLoading] = useState<'notes' | 'quiz' | 'flashcards' | null>(null);
   const [nameDraft, setNameDraft] = useState('');
   const [descriptionDraft, setDescriptionDraft] = useState('');
   const [cardDrafts, setCardDrafts] = useState<EditableCard[]>([]);
@@ -272,6 +279,85 @@ export function RevisionCoachPage() {
     setImportUrl('');
     setAnkiFile(null);
     setQuizletHtml('');
+  }
+
+  async function handleAnalyzeSource() {
+    if (!sourceUrl.trim() || sourceLoading) return;
+    setSourceLoading(true);
+    try {
+      const response = await fetch('/api/coach/source', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: sourceUrl.trim(),
+          ai: loadAiRuntimePreferences(),
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(typeof payload?.error === 'string' ? payload.error : 'Could not analyze this source');
+      }
+      setSourceBrief(payload as SourceBrief);
+      toast('Source brief ready', 'success');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not analyze this source', 'error');
+    } finally {
+      setSourceLoading(false);
+    }
+  }
+
+  async function handleSourceAction(mode: 'notes' | 'quiz' | 'flashcards') {
+    if (!sourceBrief || sourceActionLoading) return;
+    setSourceActionLoading(mode);
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode,
+          text: sourceBrief.extractedText,
+          options: { count: mode === 'quiz' ? 8 : 10 },
+          ai: loadAiRuntimePreferences(),
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || typeof payload?.content !== 'string') {
+        throw new Error(typeof payload?.error === 'string' ? payload.error : `Could not create ${mode}`);
+      }
+
+      if (mode === 'flashcards') {
+        const set = buildImportedDeck({
+          title: sourceBrief.title,
+          description: sourceBrief.summary,
+          content: payload.content,
+          sourceType: 'manual',
+          sourceLabel: 'Source Brief import',
+          creatorName: 'You',
+        });
+        if (!set) {
+          throw new Error('Could not turn this source into review cards.');
+        }
+        persistDeckLocally(set);
+        const synced = await syncDeckToCloud(set);
+        setLastImported({ set, cardCount: set.cards.length });
+        await refreshReviewSets();
+        void refreshAnalytics();
+        toast(synced ? `Created review set "${set.name}"` : `Created "${set.name}" locally`, synced ? 'success' : 'warning');
+        openPanel(set.id, 'manage', true);
+        return;
+      }
+
+      setOutput({
+        kind: 'generated',
+        title: mode === 'quiz' ? `Quiz — ${sourceBrief.title}` : `Notes — ${sourceBrief.title}`,
+        content: payload.content,
+      });
+      outputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+      toast(error instanceof Error ? error.message : `Could not create ${mode}`, 'error');
+    } finally {
+      setSourceActionLoading(null);
+    }
   }
 
   async function finalizeImport(payload: ImportPayload, fallbackSource: { type: SRSDeck['sourceType']; label: string }) {
@@ -776,7 +862,13 @@ export function RevisionCoachPage() {
           <div className={styles.sectionHeader}>
             <div>
               <h3>{output.title}</h3>
-              <p>{output.kind === 'quiz' ? 'A quick retrieval check generated from your selected review set.' : 'A focused explanation generated from your selected review set.'}</p>
+              <p>
+                {output.kind === 'quiz'
+                  ? 'A quick retrieval check generated from your selected review set.'
+                  : output.kind === 'explanation'
+                    ? 'A focused explanation generated from your selected review set.'
+                    : 'Generated from the source you analyzed in Revision Coach.'}
+              </p>
             </div>
             <button className={styles.inlineAction} onClick={() => setOutput(null)}>Close</button>
           </div>
@@ -874,6 +966,81 @@ export function RevisionCoachPage() {
         </div>
 
         <div className={styles.rightColumn}>
+          <section className={styles.sectionCard}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <span className={styles.eyebrow}>Source Brief</span>
+                <h3>Understand a source before you study it</h3>
+                <p>Paste a web link and Coach will explain what the source is about, summarize it, and help turn it into study material.</p>
+              </div>
+            </div>
+
+            <div className={styles.importBlock}>
+              <div className={styles.actions}>
+                <input
+                  className={styles.textInput}
+                  value={sourceUrl}
+                  onChange={(event) => setSourceUrl(event.target.value)}
+                  placeholder="Paste a source URL to analyze"
+                />
+                <button className={styles.primaryButton} onClick={() => void handleAnalyzeSource()} disabled={sourceLoading || !sourceUrl.trim()}>
+                  {sourceLoading ? 'Analyzing…' : 'Analyze source'}
+                </button>
+              </div>
+
+              <div className={styles.noticeBox}>
+                <strong>Manual, source-first workflow</strong>
+                <p>This is designed for article or study links you want to understand first, then convert into notes, quizzes, or review sets.</p>
+              </div>
+
+              {sourceBrief && (
+                <article className={styles.sourceBriefCard}>
+                  <div className={styles.listTop}>
+                    <div>
+                      <h4>{sourceBrief.title}</h4>
+                      <p>{sourceBrief.summary}</p>
+                    </div>
+                    <span className={styles.countPill}>{Math.max(1, Math.ceil(sourceBrief.wordCount / 220))} min read</span>
+                  </div>
+
+                  <div className={styles.metaRow}>
+                    <span>{sourceBrief.siteName ?? 'Web source'}</span>
+                    <span>{sourceBrief.wordCount} words</span>
+                    <span>{new URL(sourceBrief.url).hostname.replace(/^www\./, '')}</span>
+                  </div>
+
+                  {sourceBrief.description && (
+                    <div className={styles.noticeBox}>
+                      <strong>Source description</strong>
+                      <p>{sourceBrief.description}</p>
+                    </div>
+                  )}
+
+                  <div className={styles.sourcePoints}>
+                    {sourceBrief.keyPoints.map((point) => (
+                      <article key={point} className={styles.helperCard}>
+                        <strong>Key idea</strong>
+                        <p>{point}</p>
+                      </article>
+                    ))}
+                  </div>
+
+                  <div className={styles.actions}>
+                    <button className={styles.primaryButton} onClick={() => void handleSourceAction('notes')} disabled={sourceActionLoading !== null}>
+                      {sourceActionLoading === 'notes' ? 'Creating notes…' : 'Create notes'}
+                    </button>
+                    <button className={styles.secondaryButton} onClick={() => void handleSourceAction('quiz')} disabled={sourceActionLoading !== null}>
+                      {sourceActionLoading === 'quiz' ? 'Creating quiz…' : 'Create quiz'}
+                    </button>
+                    <button className={styles.secondaryButton} onClick={() => void handleSourceAction('flashcards')} disabled={sourceActionLoading !== null}>
+                      {sourceActionLoading === 'flashcards' ? 'Creating set…' : 'Create review set'}
+                    </button>
+                  </div>
+                </article>
+              )}
+            </div>
+          </section>
+
           <section ref={importRef} className={styles.sectionCard}>
             <div className={styles.sectionHeader}>
               <div>

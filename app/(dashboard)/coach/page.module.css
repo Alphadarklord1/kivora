@@ -98,6 +98,7 @@
 .uploadCard,
 .compactSetCard,
 .listCard,
+.sourceBriefCard,
 .cardEditorRow,
 .generatedText {
   border: 1px solid color-mix(in srgb, var(--border-subtle) 65%, transparent);
@@ -111,6 +112,7 @@
 .uploadCard,
 .compactSetCard,
 .listCard,
+.sourceBriefCard,
 .generatedText {
   padding: 1rem;
 }
@@ -215,7 +217,13 @@
 .rightColumn,
 .listStack,
 .cardEditorList,
-.importBlock {
+.importBlock,
+.sourcePoints {
+  display: grid;
+  gap: 1rem;
+}
+
+.sourceBriefCard {
   display: grid;
   gap: 1rem;
 }

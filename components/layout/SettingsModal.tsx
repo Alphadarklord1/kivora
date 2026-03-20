@@ -17,16 +17,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     Appearance: 'المظهر',
     Theme: 'السمة',
     Light: 'فاتح',
-    'Blue Mode': 'الوضع الأزرق',
-    'Black Mode': 'الوضع الأسود',
     System: 'النظام',
+    Dark: 'داكن',
+    Black: 'أسود',
     Language: 'اللغة',
     English: 'الإنجليزية',
     'Font Size': 'حجم الخط',
-    Small: 'صغير',
-    Normal: 'عادي',
-    Large: 'كبير',
-    'Extra Large': 'كبير جدًا',
+    'Small Text': 'نص صغير',
+    'Normal Text Size': 'حجم نص عادي',
+    'Large Text': 'نص كبير',
+    'Extra Large Text': 'نص كبير جدًا',
     Density: 'الكثافة',
     Compact: 'مضغوط',
     Comfortable: 'مريح',
@@ -49,10 +49,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           <div style={{ marginBottom: '12px' }}>
             <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px' }}>{t('Theme')}</label>
             <select value={settings.theme} onChange={(e) => updateSettings({ theme: e.target.value as 'light' | 'blue' | 'black' | 'system' })}>
-              <option value="light">{t('Light')}</option>
-              <option value="blue">{t('Blue Mode')}</option>
-              <option value="black">{t('Black Mode')}</option>
               <option value="system">{t('System')}</option>
+              <option value="blue">{t('Dark')}</option>
+              <option value="light">{t('Light')}</option>
+              <option value="black">{t('Black')}</option>
             </select>
           </div>
 
@@ -67,10 +67,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           <div style={{ marginBottom: '12px' }}>
             <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px' }}>{t('Font Size')}</label>
             <select value={settings.fontSize} onChange={(e) => updateSettings({ fontSize: e.target.value })}>
-              <option value="0.875">{t('Small')}</option>
-              <option value="1">{t('Normal')}</option>
-              <option value="1.125">{t('Large')}</option>
-              <option value="1.25">{t('Extra Large')}</option>
+              <option value="0.95">{t('Small Text')}</option>
+              <option value="1">{t('Normal Text Size')}</option>
+              <option value="1.05">{t('Large Text')}</option>
+              <option value="1.1">{t('Extra Large Text')}</option>
             </select>
           </div>
 
