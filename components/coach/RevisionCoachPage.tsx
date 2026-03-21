@@ -23,24 +23,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
 import { useAnalytics, type WeakArea } from '@/hooks/useAnalytics';
-import { FlashcardView } from '@/components/workspace/views/FlashcardView';
 import { InteractiveQuiz } from '@/components/workspace/InteractiveQuiz';
 import { writeCoachHandoff } from '@/lib/coach/handoff';
 import { buildCoachUrl } from '@/lib/coach/routes';
 import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
 import { loadClientAiDataMode } from '@/lib/privacy/ai-data';
 import {
-  createCard,
-  deleteDeck,
   loadDecks,
-  saveDeck,
   type SRSDeck,
 } from '@/lib/srs/sm2';
 import {
   buildDeckQuizContent,
   buildImportedDeck,
-  exportDeckApkg,
-  exportDeckCsv,
   persistDeckLocally,
   syncDeckToCloud,
 } from '@/lib/srs/deck-utils';
@@ -56,8 +50,6 @@ type AssignMode   = 'rephrase' | 'explain' | 'summarize' | 'assignment';
 type ReportType   = 'essay' | 'report' | 'literature_review';
 type SourceAction = 'notes' | 'quiz' | 'flashcards';
 type SourceInputMode = 'url' | 'text';
-
-type EditableCard = { id: string; front: string; back: string };
 type LibraryItem = {
   id: string;
   mode: string;
@@ -121,7 +113,6 @@ export function RevisionCoachPage() {
   const { data: analytics, loading: analyticsLoading, refresh: refreshAnalytics } = useAnalytics(30);
 
   const outputRef = useRef<HTMLDivElement | null>(null);
-  const reviewRef = useRef<HTMLDivElement | null>(null);
   const sourceRef = useRef<HTMLElement | null>(null);
   const convertRef = useRef<HTMLElement | null>(null);
   const relatedReadingRef = useRef<HTMLElement | null>(null);
@@ -142,14 +133,8 @@ export function RevisionCoachPage() {
   const today = new Date().toISOString().slice(0, 10);
 
   const [reviewSets,       setReviewSets]       = useState<SRSDeck[]>([]);
-  const [loadingSets,      setLoadingSets]       = useState(true);
-  const [savingSetState,   setSavingSetState]    = useState(false);
-  const [explaining,       setExplaining]        = useState(false);
-  const [generatingQuiz,   setGeneratingQuiz]    = useState(false);
-  const [requestedPhase,   setRequestedPhase]    = useState<'review' | null>(null);
-  const [nameDraft,        setNameDraft]         = useState('');
-  const [descriptionDraft, setDescriptionDraft]  = useState('');
-  const [cardDrafts,       setCardDrafts]        = useState<EditableCard[]>([]);
+  const [loadingSets,      setLoadingSets]      = useState(true);
+  const [generatingQuiz,   setGeneratingQuiz]   = useState(false);
 
   const getSetDue = useCallback(
     (s: SRSDeck) => s.cards.filter(c => c.nextReview && c.nextReview <= today).length,
@@ -161,11 +146,6 @@ export function RevisionCoachPage() {
     const correct = s.cards.reduce((n, c) => n + c.correctReviews, 0);
     return total > 0 ? Math.round((correct / total) * 100) : -1;
   }, []);
-
-  const getSetMastered = useCallback(
-    (s: SRSDeck) => s.cards.filter(c => (c.interval ?? 0) >= 21).length,
-    [],
-  );
 
   const sortedReviewSets = useMemo(
     () => [...reviewSets].sort((a, b) => {
@@ -186,34 +166,29 @@ export function RevisionCoachPage() {
     () => sortedReviewSets.find(s => s.id === selectedSetId) ?? null,
     [sortedReviewSets, selectedSetId],
   );
-  const selectedPreviewCards = useMemo(
-    () => selectedSet?.cards.slice(0, 3) ?? [],
-    [selectedSet],
-  );
-
-  // Sync selected set -> editor drafts
-  useEffect(() => {
-    if (!selectedSet) {
-      setNameDraft(''); setDescriptionDraft(''); setCardDrafts([]);
-      return;
-    }
-    setNameDraft(selectedSet.name);
-    setDescriptionDraft(selectedSet.description ?? '');
-    setCardDrafts(selectedSet.cards.map(c => ({ id: c.id, front: c.front, back: c.back })));
-  }, [selectedSet]);
-
-  useEffect(() => {
-    if (panel !== 'review' || !selectedSet) return;
-    setRequestedPhase('review');
-  }, [panel, selectedSet]);
 
   const openPanel = useCallback((setId: string, nextPanel: CoachPanel, importedFlag: boolean | null = null) => {
-    router.push(buildCoachUrl({ setId, panel: nextPanel, imported: importedFlag, importUrl: null }), { scroll: false });
+    writeCoachHandoff({
+      type: importedFlag ? 'import-success' : 'review-set',
+      setId,
+      panel: nextPanel,
+    });
+    router.push('/workspace');
   }, [router]);
 
   const closePanel = useCallback(() => {
     router.push(buildCoachUrl({ setId: null, panel: null, imported: null, importUrl: null }), { scroll: false });
   }, [router]);
+
+  useEffect(() => {
+    if (!selectedSetId || !panel) return;
+    writeCoachHandoff({
+      type: imported ? 'import-success' : 'review-set',
+      setId: selectedSetId,
+      panel,
+    });
+    router.replace('/workspace');
+  }, [imported, panel, router, selectedSetId]);
 
   const refreshReviewSets = useCallback(async () => {
     setLoadingSets(true);
@@ -231,62 +206,6 @@ export function RevisionCoachPage() {
   }, []);
 
   useEffect(() => { void refreshReviewSets(); }, [refreshReviewSets]);
-
-  async function applySetUpdate(next: SRSDeck, msg: string) {
-    setSavingSetState(true);
-    saveDeck(next);
-    persistDeckLocally(next);
-    setReviewSets(cur => {
-      const exists  = cur.some(s => s.id === next.id);
-      const updated = exists ? cur.map(s => s.id === next.id ? next : s) : [next, ...cur];
-      return mergeSets(updated, []);
-    });
-    const synced = await syncDeckToCloud(next);
-    refreshAnalytics();
-    toast(synced ? msg : `${msg} (saved locally)`, synced ? 'success' : 'warning');
-    setSavingSetState(false);
-  }
-
-  const addDraftCard = useCallback(() => {
-    setCardDrafts(cur => [...cur, { id: `draft-${crypto.randomUUID().slice(0, 8)}`, front: '', back: '' }]);
-  }, []);
-
-  async function handleSaveSetEdits() {
-    if (!selectedSet) return;
-    const trimmedName  = nameDraft.trim();
-    const trimmedCards = cardDrafts
-      .map(c => ({ ...c, front: c.front.trim(), back: c.back.trim() }))
-      .filter(c => c.front && c.back);
-
-    if (!trimmedName)          { toast('Review set name cannot be empty', 'error'); return; }
-    if (!trimmedCards.length)  { toast('Add at least one valid card', 'error'); return; }
-
-    const nextSet: SRSDeck = {
-      ...selectedSet,
-      name:        trimmedName,
-      description: descriptionDraft.trim(),
-      cards: selectedSet.cards
-        .map(existing => {
-          const draft = trimmedCards.find(c => c.id === existing.id);
-          return draft ? { ...existing, front: draft.front, back: draft.back } : null;
-        })
-        .filter(Boolean) as SRSDeck['cards'],
-    };
-    const newCards = trimmedCards.filter(c => !selectedSet.cards.some(e => e.id === c.id));
-    nextSet.cards  = [...nextSet.cards, ...newCards.map(c => createCard(c.id, c.front, c.back))];
-    await applySetUpdate(nextSet, 'Review set updated');
-  }
-
-  async function handleDeleteSet() {
-    if (!selectedSet) return;
-    if (!confirm(`Delete "${selectedSet.name}"?`)) return;
-    deleteDeck(selectedSet.id);
-    setReviewSets(cur => cur.filter(s => s.id !== selectedSet.id));
-    try { await fetch(`/api/srs/${selectedSet.id}`, { method: 'DELETE' }); } catch { /* offline ok */ }
-    refreshAnalytics();
-    toast('Review set deleted', 'info');
-    closePanel();
-  }
 
   async function handleGenerateQuiz(targetSet?: SRSDeck): Promise<GeneratedContent | null> {
     const set = targetSet ?? selectedSet;
@@ -309,44 +228,10 @@ export function RevisionCoachPage() {
     } finally { setGeneratingQuiz(false); }
   }
 
-  async function handleExplain(targetSet?: SRSDeck): Promise<string | null> {
-    const set = targetSet ?? selectedSet;
-    if (!set || explaining) return null;
-    setExplaining(true);
-    try {
-      const res = await fetch('/api/explain', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          concept: set.name,
-          context: set.cards.slice(0, 24).map(c => `${c.front}: ${c.back}`).join('\n'),
-          ai: loadAiRuntimePreferences(),
-          privacyMode: loadClientAiDataMode(),
-        }),
-      });
-      const payload = await res.json().catch(() => null);
-      const text    = typeof payload?.explanation === 'string' ? payload.explanation.trim() : '';
-      if (!text) throw new Error('No explanation returned');
-      if (!selectedSet || selectedSet.id !== set.id) openPanel(set.id, 'manage');
-      return text;
-    } catch (err) {
-      toast(err instanceof Error ? err.message : 'Explain failed', 'error');
-      return null;
-    } finally { setExplaining(false); }
-  }
-
   async function quizSet(targetSet?: SRSDeck) {
     const quiz = await handleGenerateQuiz(targetSet);
     if (!quiz) return;
     setOutput({ kind: 'quiz', title: `Quiz \u2014 ${(targetSet ?? selectedSet)?.name ?? ''}`, content: quiz.displayText, quiz, setId: (targetSet ?? selectedSet)?.id ?? '' });
-    outputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  async function explainSet(targetSet?: SRSDeck) {
-    const text = await handleExplain(targetSet);
-    if (!text) return;
-    const set  = targetSet ?? selectedSet;
-    setOutput({ kind: 'explanation', title: `Explain \u2014 ${set?.name ?? ''}`, content: text, setId: set?.id ?? '' });
     outputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -718,8 +603,8 @@ export function RevisionCoachPage() {
         <div className={styles.heroCopy}>
           <span className={styles.eyebrow}>Scholar Hub</span>
           <h1>Understand a source, then turn it into study material.</h1>
-          <h2>Analyze a URL or pasted text first. Then convert it into notes, quizzes, review sets, and a cleaner writing workflow.</h2>
-          <p>Scholar Hub is now source-first: bring in a source, understand it, keep reading if needed, then use recovery work and review sets as support instead of the main event.</p>
+          <h2>Analyze a URL or pasted text first. Then convert it into notes, quick quizzes, and Workspace-ready study material.</h2>
+          <p>Scholar Hub is now source-first: bring in a source, understand it, keep reading if needed, then hand off longer-term review-set work to Workspace.</p>
           <div className={styles.heroNav}>
             <button className={styles.navChip} onClick={() => sourceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Source Brief</button>
             <button className={styles.navChip} onClick={() => convertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Convert</button>
@@ -742,7 +627,7 @@ export function RevisionCoachPage() {
               <li>Understand a source</li>
               <li>Convert it into study material</li>
               <li>Read deeper only if needed</li>
-              <li>Use recovery + review sets as support</li>
+              <li>Hand off review-set work to Workspace</li>
             </ol>
           </div>
           <div className={styles.summaryGrid}>
@@ -774,141 +659,38 @@ export function RevisionCoachPage() {
         <section className={styles.panelCard}>
           <div className={styles.panelHeader}>
             <div>
-              <span className={styles.eyebrow}>{panel === 'review' ? 'Live Review' : 'Review Set Manager'}</span>
+              <span className={styles.eyebrow}>{panel === 'review' ? 'Workspace Review' : 'Workspace Review Set Manager'}</span>
               <h3>{selectedSet ? selectedSet.name : 'Review set not found'}</h3>
               <p>
                 {selectedSet
-                  ? panel === 'review'
-                    ? 'Review active cards here, then come back to manage, quiz, or export the set when you need to.'
-                    : 'Quick editing, review launch, quiz generation, and exports stay here as a side panel instead of taking over Scholar Hub.'
+                  ? 'Full flashcard review, editing, and review-set management now happen in Workspace so Scholar Hub can stay source-first.'
                   : 'This review set is missing from local storage and synced records.'}
               </p>
             </div>
             <div className={styles.actions}>
-              {selectedSet && panel === 'manage' && (
-                <button className={styles.primaryButton} onClick={() => openPanel(selectedSet.id, 'review')}>Review</button>
+              {selectedSet && (
+                <button className={styles.primaryButton} onClick={() => openPanel(selectedSet.id, panel === 'review' ? 'review' : 'manage')}>
+                  Open in Workspace
+                </button>
               )}
-              <button className={styles.secondaryButton} onClick={closePanel}>Close panel</button>
+              <button className={styles.secondaryButton} onClick={closePanel}>Stay in Scholar Hub</button>
             </div>
           </div>
 
           {!selectedSet ? (
             <div className={styles.emptyState}>Select a review set below, or create one from a source first.</div>
-          ) : panel === 'review' ? (
-            <div ref={reviewRef} className={styles.reviewWorkspace}>
-              <div className={styles.reviewIntro}>
-                <div>
-                  <strong>{selectedSet.name}</strong>
-                  <p>{getSetDue(selectedSet)} due now · {selectedSet.cards.length} cards · {getSetAccuracy(selectedSet) >= 0 ? `${getSetAccuracy(selectedSet)}% accuracy` : 'No accuracy yet'}</p>
-                </div>
-                <div className={styles.helperSteps}>
-                  <span className={styles.countPill}>Review first</span>
-                  <span className={styles.countPill}>Manage after</span>
-                  <span className={styles.countPill}>Export stays secondary</span>
-                </div>
-              </div>
-              <FlashcardView
-                initialDeck={selectedSet}
-                title={selectedSet.name}
-                requestedPhase={requestedPhase}
-                onRequestedPhaseHandled={() => setRequestedPhase(null)}
-                onDeckChange={(next) => setReviewSets(cur => cur.map(s => s.id === next.id ? next : s))}
-                showBrowseButton={false}
-                showPublicActions={false}
-              />
-            </div>
           ) : (
-            <>
-              {imported && (
-                <div className={styles.importedBanner}>
-                  <div>
-                    <strong>Review set imported &#x2713;</strong>
-                    <p>{selectedSet.name} &mdash; {selectedSet.cards.length} cards added and ready to review.</p>
-                  </div>
-                  <button className={styles.secondaryButton} onClick={() => openPanel(selectedSet.id, 'review', null)}>Start review</button>
-                </div>
-              )}
-
-              <div className={styles.panelStats}>
-                <article className={styles.infoChip}><strong>{selectedSet.cards.length}</strong><span>cards</span></article>
-                <article className={styles.infoChip}><strong>{getSetDue(selectedSet)}</strong><span>due now</span></article>
-                <article className={styles.infoChip}><strong>{getSetAccuracy(selectedSet) >= 0 ? `${getSetAccuracy(selectedSet)}%` : '\u2014'}</strong><span>accuracy</span></article>
-                <article className={styles.infoChip}><strong>{getSetMastered(selectedSet)}</strong><span>mastered</span></article>
+            <div className={styles.importedBanner}>
+              <div>
+                <strong>{imported ? 'Review set imported ✓' : 'Review set ready'}</strong>
+                <p>
+                  {selectedSet.name} &mdash; {selectedSet.cards.length} cards, {getSetDue(selectedSet)} due now, {getSetAccuracy(selectedSet) >= 0 ? `${getSetAccuracy(selectedSet)}% accuracy` : 'no accuracy yet'}.
+                </p>
               </div>
-
-              <div className={styles.quickLaunchGrid}>
-                <article className={styles.quickLaunchCard}>
-                  <span className={styles.metricLabel}>Study</span>
-                  <h4>Open live review</h4>
-                  <p>Jump back into the flashcard session with today&apos;s due cards first.</p>
-                  <button className={styles.primaryButton} onClick={() => openPanel(selectedSet.id, 'review')}>Review</button>
-                </article>
-                <article className={styles.quickLaunchCard}>
-                  <span className={styles.metricLabel}>Practice</span>
-                  <h4>Quiz or explain this set</h4>
-                  <p>Use retrieval or explanation without leaving the manager.</p>
-                  <div className={styles.actions}>
-                    <button className={styles.secondaryButton} disabled={generatingQuiz} onClick={() => void quizSet(selectedSet)}>{generatingQuiz ? 'Generating\u2026' : 'Quiz'}</button>
-                    <button className={styles.secondaryButton} disabled={explaining} onClick={() => void explainSet(selectedSet)}>{explaining ? 'Explaining\u2026' : 'Explain'}</button>
-                  </div>
-                </article>
-                <article className={styles.quickLaunchCard}>
-                  <span className={styles.metricLabel}>Utility</span>
-                  <h4>Keep exports secondary</h4>
-                  <p>Export only when needed. The main job here is still to review and refine cards.</p>
-                  <div className={styles.actions}>
-                    <button className={styles.secondaryButton} onClick={() => exportDeckCsv(selectedSet)}>Export CSV</button>
-                    <button className={styles.secondaryButton} onClick={() => void exportDeckApkg(selectedSet).catch(() => toast('Anki export failed', 'error'))}>Export Anki</button>
-                    <button className={styles.dangerButton} onClick={() => void handleDeleteSet()}>Delete</button>
-                  </div>
-                </article>
-              </div>
-
-              {selectedPreviewCards.length > 0 && (
-                <div className={styles.previewStrip}>
-                  {selectedPreviewCards.map((card, index) => (
-                    <article key={card.id} className={styles.previewCard}>
-                      <span className={styles.metricLabel}>Card {index + 1}</span>
-                      <strong>{card.front}</strong>
-                      <p>{card.back}</p>
-                    </article>
-                  ))}
-                </div>
-              )}
-
-              <div className={styles.editorGrid}>
-                <label className={styles.fieldBlock}>
-                  <span>Review set name</span>
-                  <input className={styles.textInput} value={nameDraft} onChange={e => setNameDraft(e.target.value)} />
-                </label>
-                <label className={styles.fieldBlock}>
-                  <span>Description</span>
-                  <textarea className={styles.textArea} rows={3} value={descriptionDraft} onChange={e => setDescriptionDraft(e.target.value)} />
-                </label>
-              </div>
-
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h3>Card editor</h3>
-                  <p>Keep this set tight, readable, and ready for the next review block.</p>
-                </div>
-                <div className={styles.actions}>
-                  <button className={styles.secondaryButton} onClick={addDraftCard}>Add card</button>
-                  <button className={styles.primaryButton} disabled={savingSetState} onClick={() => void handleSaveSetEdits()}>{savingSetState ? 'Saving\u2026' : 'Save changes'}</button>
-                </div>
-              </div>
-
-              <div className={styles.cardEditorList}>
-                {cardDrafts.map((card, i) => (
-                  <div key={card.id} className={styles.cardEditorRow}>
-                    <div className={styles.cardOrdinal}>#{i + 1}</div>
-                    <input className={styles.textInput} value={card.front} placeholder="Front" onChange={e => setCardDrafts(cur => cur.map(d => d.id === card.id ? { ...d, front: e.target.value } : d))} />
-                    <textarea className={styles.textArea} rows={2} value={card.back} placeholder="Back" onChange={e => setCardDrafts(cur => cur.map(d => d.id === card.id ? { ...d, back: e.target.value } : d))} />
-                    <button className={styles.inlineAction} onClick={() => setCardDrafts(cur => cur.filter(d => d.id !== card.id))}>Delete</button>
-                  </div>
-                ))}
-              </div>
-            </>
+              <button className={styles.secondaryButton} onClick={() => openPanel(selectedSet.id, panel === 'review' ? 'review' : 'manage', imported ? true : null)}>
+                Open in Workspace
+              </button>
+            </div>
           )}
         </section>
       )}
@@ -995,7 +777,7 @@ export function RevisionCoachPage() {
                     <div className={styles.helperSteps}>
                       <span className={styles.countPill}>No fetch needed</span>
                       <span className={styles.countPill}>Works in offline mode</span>
-                      <span className={styles.countPill}>Ready for notes, quiz, or review set</span>
+                      <span className={styles.countPill}>Ready for notes, quiz, or Workspace handoff</span>
                     </div>
                     <div className={styles.actions}>
                       <button className={styles.primaryButton} disabled={sourceLoading || !sourceText.trim()} onClick={() => void handleAnalyzeSource()}>
@@ -1054,12 +836,12 @@ export function RevisionCoachPage() {
           <div className={styles.sectionHeader}>
             <div>
               <span className={styles.eyebrow}>Convert to Study Material</span>
-              <h3>Turn the source into notes, a quiz, or a review set</h3>
+              <h3>Turn the source into notes, a quiz, or a Workspace review set</h3>
               <p>Create outputs from the current source and keep the next action clear instead of bouncing between separate tools.</p>
             </div>
           </div>
           {!sourceBrief ? (
-            <div className={styles.emptyState}>Analyze a source first. Then Scholar Hub can create notes, a quiz, or a review set with source metadata attached.</div>
+            <div className={styles.emptyState}>Analyze a source first. Then Scholar Hub can create notes, a quiz, or send it into Workspace as a review set with source metadata attached.</div>
           ) : (
             <div className={styles.importBlock}>
               <div className={styles.noticeBox}>
@@ -1085,10 +867,10 @@ export function RevisionCoachPage() {
                 </article>
                 <article className={styles.conversionCard}>
                   <span className={styles.metricLabel}>Review Set</span>
-                  <h4>Turn it into spaced repetition</h4>
-                  <p>Create a reusable review set that flows straight into manage/review mode.</p>
+                  <h4>Send it to Workspace as a review set</h4>
+                  <p>Create a reusable review set and continue the full flashcard workflow in Workspace.</p>
                   <button className={styles.secondaryButton} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('flashcards')}>
-                    {sourceActionLoading === 'flashcards' ? 'Creating set\u2026' : 'Create review set'}
+                    {sourceActionLoading === 'flashcards' ? 'Creating set\u2026' : 'Create Workspace review set'}
                   </button>
                 </article>
               </div>
@@ -1105,7 +887,7 @@ export function RevisionCoachPage() {
                   </div>
                   <div className={styles.actions}>
                     <button className={styles.primaryButton} disabled={!sourceOutputSummary.setId} onClick={() => sourceOutputSummary.setId && openPanel(sourceOutputSummary.setId, 'review')}>
-                      Review now
+                      Review in Workspace
                     </button>
                     <button className={styles.secondaryButton} onClick={() => openSourceInWorkspace(sourceOutputSummary.mode === 'quiz' ? 'quiz' : 'summarize')}>
                       Open in Workspace
@@ -1378,7 +1160,7 @@ export function RevisionCoachPage() {
                         </div>
                         <div className={styles.actions}>
                           <button className={styles.primaryButton} onClick={() => openPanel(set.id, 'review')}>Review</button>
-                          <button className={styles.secondaryButton} onClick={() => openPanel(set.id, 'manage')}>Quick manage</button>
+                          <button className={styles.secondaryButton} onClick={() => openPanel(set.id, 'manage')}>Open in Workspace</button>
                         </div>
                       </article>
                     );
@@ -1452,11 +1234,11 @@ export function RevisionCoachPage() {
                       <span>{due} due</span>
                       <span>{accuracy >= 0 ? `${accuracy}% accuracy` : 'No accuracy yet'}</span>
                     </div>
-                    <div className={styles.actions}>
-                      <button className={styles.primaryButton} onClick={() => openPanel(set.id, 'review')}>Review</button>
-                      <button className={styles.secondaryButton} onClick={() => void quizSet(set)}>Quiz</button>
-                      <button className={styles.secondaryButton} onClick={() => openPanel(set.id, 'manage')}>Manage</button>
-                    </div>
+                      <div className={styles.actions}>
+                        <button className={styles.primaryButton} onClick={() => openPanel(set.id, 'review')}>Review in Workspace</button>
+                        <button className={styles.secondaryButton} onClick={() => void quizSet(set)}>Quiz</button>
+                        <button className={styles.secondaryButton} onClick={() => openPanel(set.id, 'manage')}>Open in Workspace</button>
+                      </div>
                   </article>
                 );
               })}

@@ -1,6 +1,7 @@
 export type CoachHandoff = {
   type: 'weak-topic' | 'review-set' | 'import-success' | 'source-output';
   setId?: string;
+  panel?: 'review' | 'manage';
   topic?: string;
   preferredTool?: 'quiz' | 'mcq' | 'flashcards' | 'summarize' | 'explain';
   sourceText?: string;
