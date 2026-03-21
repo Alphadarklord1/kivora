@@ -15,45 +15,32 @@ import {
   usageAnalyticsEnabledClient,
 } from '@/lib/privacy/preferences';
 
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const THEME_OPTIONS: { id: Theme; label: string; hint: string; icon: string }[] = [
-  { id: 'system', label: 'System',  hint: 'Follow your device', icon: '💻' },
-  { id: 'blue',   label: 'Dark',    hint: 'Kivora default',     icon: '🌙' },
-  { id: 'light',  label: 'Light',   hint: 'Bright workspace',   icon: '☀️' },
-  { id: 'black',  label: 'Black',   hint: 'High contrast',      icon: '⬛' },
+const THEME_OPTIONS: { id: Theme; label: string; hint: string }[] = [
+  { id: 'system', label: 'System', hint: 'Follow your device preference' },
+  { id: 'blue', label: 'Dark', hint: 'Default Kivora dark theme' },
+  { id: 'light', label: 'Light', hint: 'Bright workspace' },
+  { id: 'black', label: 'Black', hint: 'Highest contrast' },
 ];
 
 const FONT_OPTIONS = [
   { value: '0.95', label: 'Small text' },
-  { value: '1',    label: 'Normal text size' },
+  { value: '1', label: 'Normal text size' },
   { value: '1.05', label: 'Large text' },
-  { value: '1.1',  label: 'Extra large text' },
+  { value: '1.1', label: 'Extra large text' },
 ] as const;
 
 const LINE_HEIGHT_OPTIONS = [
-  { value: '1.4',  label: 'Tight' },
-  { value: '1.5',  label: 'Balanced' },
+  { value: '1.4', label: 'Tight' },
+  { value: '1.5', label: 'Balanced' },
   { value: '1.65', label: 'Relaxed' },
-  { value: '1.8',  label: 'Very relaxed' },
+  { value: '1.8', label: 'Very relaxed' },
 ] as const;
 
 const DENSITY_OPTIONS: { id: Density; label: string; hint: string }[] = [
-  { id: 'compact',     label: 'Compact',     hint: 'More on screen' },
-  { id: 'normal',      label: 'Normal',      hint: 'Balanced spacing' },
-  { id: 'comfortable', label: 'Comfortable', hint: 'Easier to scan' },
+  { id: 'compact', label: 'Compact', hint: 'More on screen' },
+  { id: 'normal', label: 'Normal', hint: 'Balanced spacing' },
+  { id: 'comfortable', label: 'Comfortable', hint: 'Easier scanning and taps' },
 ];
-
-const NAV_SECTIONS = [
-  { id: 'account',    label: 'Account',         icon: '👤' },
-  { id: 'security',   label: 'Security',         icon: '🔐' },
-  { id: 'appearance', label: 'Appearance',       icon: '🎨' },
-  { id: 'ai-models',  label: 'AI & Downloads',   icon: '🤖' },
-  { id: 'reporting',  label: 'Report Issue',     icon: '🐛' },
-  { id: 'privacy',    label: 'Privacy & Data',   icon: '🔒' },
-];
-
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface AccountState {
   id: string;
@@ -66,7 +53,11 @@ interface AccountState {
   twoFactorEnabled: boolean;
   isGuest: boolean;
   connectedAccounts: string[];
-  stats: { folders: number; files: number; libraryItems: number };
+  stats: {
+    folders: number;
+    files: number;
+    libraryItems: number;
+  };
 }
 
 interface TwoFactorSetupState {
@@ -86,236 +77,209 @@ interface DownloadsState {
   hasPublishedModelAssets: boolean;
 }
 
-// ── Shared sub-components ─────────────────────────────────────────────────────
+const fieldStyle: CSSProperties = {
+  width: '100%',
+  padding: '12px 14px',
+  borderRadius: 12,
+  border: '1px solid var(--border-2)',
+  background: 'var(--surface)',
+  color: 'var(--text)',
+  fontSize: 'var(--text-sm)',
+};
 
-/** Section wrapper with a left accent rail and consistent card box */
+const labelStyle: CSSProperties = {
+  display: 'block',
+  marginBottom: 8,
+  fontSize: 'var(--text-sm)',
+  fontWeight: 600,
+};
+
+function initials(name: string | null | undefined, email: string | null | undefined) {
+  if (name?.trim()) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  return (email || 'KV').slice(0, 2).toUpperCase();
+}
+
+function AvatarPreview({ image, name, email }: { image?: string | null; name?: string | null; email?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  const text = initials(name, email);
+  const hue = Array.from(email || text).reduce((acc, char) => acc + char.charCodeAt(0), 0) % 360;
+  const bg = `hsl(${hue}, 60%, 55%)`;
+
+  if (image && !failed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={image}
+        alt={text}
+        onError={() => setFailed(true)}
+        style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border-2)' }}
+      />
+    );
+  }
+
+  return (
+    <div
+      style={{
+        width: 72,
+        height: 72,
+        borderRadius: '50%',
+        display: 'grid',
+        placeItems: 'center',
+        fontWeight: 700,
+        fontSize: '1.2rem',
+        color: '#fff',
+        background: bg,
+        border: '2px solid var(--border-2)',
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
 function Section({
-  id,
   title,
   subtitle,
-  icon,
-  accent = 'var(--primary, #6366f1)',
   children,
 }: {
-  id?: string;
   title: string;
   subtitle?: string;
-  icon?: string;
-  accent?: string;
   children: ReactNode;
 }) {
   return (
-    <section
-      id={id}
-      style={{
-        scrollMarginTop: 72,
-        marginBottom: 32,
-        borderRadius: 16,
-        border: '1px solid var(--border-2, var(--border-subtle))',
-        background: 'var(--surface, var(--bg-elevated))',
-        overflow: 'hidden',
-        boxSizing: 'border-box',
-        width: '100%',
-      }}
-    >
-      {/* Section header */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '16px 20px 14px',
-        borderBottom: '1px solid var(--border-2, var(--border-subtle))',
-        background: `${accent}08`,
-        boxSizing: 'border-box',
-      }}>
-        {icon && (
-          <div style={{
-            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-            background: `${accent}15`,
-            border: `1.5px solid ${accent}30`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 17,
-          }}>
-            {icon}
-          </div>
-        )}
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text, var(--text-primary))' }}>{title}</div>
-          {subtitle && (
-            <div style={{ fontSize: 12, color: 'var(--text-3, var(--text-muted))', marginTop: 2, lineHeight: 1.4 }}>{subtitle}</div>
-          )}
-        </div>
+    <section style={{ marginBottom: 28 }}>
+      <div style={{ marginBottom: 12 }}>
+        <h2 style={{ fontSize: 'var(--text-xl)', marginBottom: 4 }}>{title}</h2>
+        {subtitle ? <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>{subtitle}</p> : null}
       </div>
-      {/* Body */}
-      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 18, boxSizing: 'border-box' }}>
+      <div className="card card-sm" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {children}
       </div>
     </section>
   );
 }
 
-/** Row within a section — label + content side by side on wide, stacked on narrow */
-function SettingRow({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+function GuestUpgradeNotice({ compact = false }: { compact?: boolean }) {
   return (
-    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', boxSizing: 'border-box' }}>
-      <div style={{ minWidth: 140, flex: '0 0 140px' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text, var(--text-primary))' }}>{label}</div>
-        {hint && <div style={{ fontSize: 11, color: 'var(--text-3, var(--text-muted))', marginTop: 2, lineHeight: 1.4 }}>{hint}</div>}
-      </div>
-      <div style={{ flex: 1, minWidth: 180, boxSizing: 'border-box' }}>{children}</div>
-    </div>
-  );
-}
-
-/** Divider line */
-function Divider() {
-  return <div style={{ height: 1, background: 'var(--border-2, var(--border-subtle))', margin: '2px 0' }} />;
-}
-
-/** Pill-style choice buttons — flex-wrap so they never overflow */
-function ChoiceButtons<T extends string>({
-  options,
-  value,
-  onChange,
-  accent = 'var(--primary, #6366f1)',
-}: {
-  options: { id: T; label: string; hint?: string; icon?: string }[];
-  value: T;
-  onChange: (v: T) => void;
-  accent?: string;
-}) {
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, boxSizing: 'border-box' }}>
-      {options.map(opt => {
-        const isActive = value === opt.id;
-        return (
-          <button
-            key={opt.id}
-            type="button"
-            onClick={() => onChange(opt.id)}
-            style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
-              padding: '10px 14px', borderRadius: 12, cursor: 'pointer', textAlign: 'left',
-              border: `1.5px solid ${isActive ? accent : 'var(--border-2, var(--border-subtle))'}`,
-              background: isActive ? `${accent}15` : 'var(--surface-2, var(--bg-2))',
-              color: isActive ? accent : 'var(--text, var(--text-primary))',
-              fontSize: 13, fontWeight: isActive ? 700 : 400,
-              minWidth: 100, flex: '0 0 auto',
-              transition: 'all 0.12s', boxSizing: 'border-box',
-            }}
-          >
-            {opt.icon && <span style={{ fontSize: 16, marginBottom: 2 }}>{opt.icon}</span>}
-            <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{opt.label}</span>
-            {opt.hint && <span style={{ fontSize: 11, color: isActive ? `${accent}cc` : 'var(--text-3, var(--text-muted))', whiteSpace: 'nowrap' }}>{opt.hint}</span>}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Form field input */
-const inputStyle: CSSProperties = {
-  width: '100%', padding: '11px 14px', borderRadius: 10,
-  border: '1.5px solid var(--border-2, var(--border-subtle))',
-  background: 'var(--surface, var(--bg-elevated))', color: 'var(--text, var(--text-primary))',
-  fontSize: 13, outline: 'none', boxSizing: 'border-box',
-};
-const labelStyle: CSSProperties = {
-  display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 600,
-  color: 'var(--text-2, var(--text-secondary))',
-};
-
-/** Avatar circle */
-function AvatarPreview({ image, name, email }: { image?: string | null; name?: string | null; email?: string | null }) {
-  const [failed, setFailed] = useState(false);
-  const text = (() => {
-    if (name?.trim()) {
-      const parts = name.trim().split(/\s+/);
-      return parts.length >= 2 ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase() : parts[0].slice(0, 2).toUpperCase();
-    }
-    return (email || 'KV').slice(0, 2).toUpperCase();
-  })();
-  const hue = Array.from(email || text).reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 360;
-
-  if (image && !failed) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={image} alt={text} onError={() => setFailed(true)}
-        style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border-2, var(--border-subtle))', flexShrink: 0 }}
-      />
-    );
-  }
-  return (
-    <div style={{
-      width: 72, height: 72, borderRadius: '50%', flexShrink: 0,
-      display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: '1.2rem',
-      color: '#fff', background: `hsl(${hue}, 60%, 55%)`,
-      border: '2px solid var(--border-2, var(--border-subtle))',
-    }}>
-      {text}
-    </div>
-  );
-}
-
-/** Guest upgrade notice */
-function GuestUpgradeNotice() {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-      gap: 12, flexWrap: 'wrap', padding: '14px 16px', borderRadius: 12,
-      border: '1px solid var(--border-2, var(--border-subtle))',
-      background: 'var(--surface-2, var(--bg-2))', boxSizing: 'border-box',
-    }}>
-      <div style={{ fontSize: 13, color: 'var(--text-3, var(--text-muted))', flex: 1, minWidth: 0, lineHeight: 1.5 }}>
-        You are in guest mode. Sign in with a real account to save your profile, password, and two-step verification.
-      </div>
-      <a href="/login" style={{
-        padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-        background: 'var(--primary, #6366f1)', color: '#fff', textDecoration: 'none', flexShrink: 0,
-      }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: compact ? 'center' : 'flex-start',
+        justifyContent: 'space-between',
+        gap: 12,
+        flexWrap: 'wrap',
+        padding: compact ? 0 : 14,
+        borderRadius: compact ? 0 : 16,
+        border: compact ? 'none' : '1px solid var(--border-2)',
+        background: compact ? 'transparent' : 'var(--surface-2)',
+      }}
+    >
+      <span style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', flex: 1, minWidth: 240 }}>
+        You are in guest mode. Sign in with a real account to save a profile picture, short description, password, and 2-step verification.
+      </span>
+      <a href="/login" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>
         Sign in / Register
       </a>
     </div>
   );
 }
 
-/** Download card */
-function DownloadCard({ title, hint, primary, secondary }: {
-  title: string; hint: string;
-  primary?: { label: string; href: string } | null;
-  secondary?: { label: string; href: string } | null;
+function ChoiceButtons<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { id: T; label: string; hint?: string }[];
+  value: T;
+  onChange: (value: T) => void;
 }) {
   return (
-    <div style={{
-      padding: 16, borderRadius: 12, border: '1px solid var(--border-2, var(--border-subtle))',
-      background: 'var(--surface-2, var(--bg-2))', display: 'flex', flexDirection: 'column',
-      gap: 12, boxSizing: 'border-box', minWidth: 0,
-    }}>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4, wordBreak: 'break-word' }}>{title}</div>
-        <div style={{ color: 'var(--text-3, var(--text-muted))', fontSize: 12, lineHeight: 1.4 }}>{hint}</div>
-      </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {primary ? (
-          <a href={primary.href} target="_blank" rel="noopener noreferrer" style={{
-            padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-            background: 'var(--primary, #6366f1)', color: '#fff', textDecoration: 'none', flexShrink: 0,
-          }}>{primary.label}</a>
-        ) : (
-          <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, background: 'var(--surface-2, var(--bg-2))', border: '1px solid var(--border-2, var(--border-subtle))', color: 'var(--text-3, var(--text-muted))' }}>Not attached yet</span>
-        )}
-        {secondary && (
-          <a href={secondary.href} target="_blank" rel="noopener noreferrer" style={{
-            padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-            border: '1px solid var(--border-2, var(--border-subtle))', textDecoration: 'none',
-            color: 'var(--text, var(--text-primary))', background: 'transparent', flexShrink: 0,
-          }}>{secondary.label}</a>
-        )}
-      </div>
+    <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+      {options.map(option => (
+        <button
+          key={option.id}
+          type="button"
+          className={`btn ${value === option.id ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => onChange(option.id)}
+          style={{
+            justifyContent: 'flex-start',
+            textAlign: 'left',
+            padding: '12px 14px',
+            minHeight: 0,
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            gap: 4,
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>{option.label}</span>
+          {option.hint ? <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{option.hint}</span> : null}
+        </button>
+      ))}
     </div>
   );
 }
 
-// ── Main settings page ────────────────────────────────────────────────────────
+function JumpLinks() {
+  const links = [
+    { href: '#account', label: 'Account' },
+    { href: '#security', label: 'Security' },
+    { href: '#appearance', label: 'Appearance' },
+    { href: '#ai-models', label: 'AI & downloads' },
+    { href: '#reporting', label: 'Report issue' },
+    { href: '#privacy', label: 'Privacy' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
+      {links.map((link) => (
+        <a key={link.href} href={link.href} className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
+          {link.label}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function DownloadCard({
+  title,
+  hint,
+  primary,
+  secondary,
+}: {
+  title: string;
+  hint: string;
+  primary?: { label: string; href: string } | null;
+  secondary?: { label: string; href: string } | null;
+}) {
+  return (
+    <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)', display: 'grid', gap: 10 }}>
+      <div>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>{title}</div>
+        <div style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>{hint}</div>
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {primary ? (
+          <a href={primary.href} className="btn btn-primary btn-sm" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+            {primary.label}
+          </a>
+        ) : (
+          <span className="badge">Not attached yet</span>
+        )}
+        {secondary ? (
+          <a href={secondary.href} className="btn btn-ghost btn-sm" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+            {secondary.label}
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { settings, updateSetting } = useSettings();
@@ -340,49 +304,64 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [activeSection, setActiveSection] = useState('account');
 
   useEffect(() => {
-    if (!session?.user) { setAccountLoading(false); return; }
+    if (!session?.user) {
+      setAccountLoading(false);
+      return;
+    }
+
     let cancelled = false;
     setAccountLoading(true);
     fetch('/api/account')
-      .then(async r => r.ok ? r.json() : null)
+      .then(async response => {
+        if (!response.ok) return null;
+        return response.json();
+      })
       .then(data => {
         if (!data || cancelled) return;
-        setAccount(data); setName(data.name ?? ''); setImageUrl(data.image ?? ''); setBio(data.bio ?? '');
+        setAccount(data);
+        setName(data.name ?? '');
+        setImageUrl(data.image ?? '');
+        setBio(data.bio ?? '');
       })
-      .catch(() => { if (!cancelled) toast('Could not load your account settings', 'error'); })
-      .finally(() => { if (!cancelled) setAccountLoading(false); });
-    return () => { cancelled = true; };
+      .catch(() => {
+        if (!cancelled) toast('Could not load your account settings', 'error');
+      })
+      .finally(() => {
+        if (!cancelled) setAccountLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [session?.user, toast]);
 
   useEffect(() => {
     let cancelled = false;
     setDownloadsLoading(true);
     fetch('/api/models/downloads')
-      .then(async r => r.ok ? r.json() : null)
-      .then(data => { if (!cancelled) setDownloads(data); })
-      .catch(() => { if (!cancelled) setDownloads(null); })
-      .finally(() => { if (!cancelled) setDownloadsLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
-
-  // Scroll-spy to keep nav active section in sync
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      entries => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) setActiveSection(entry.target.id);
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((data) => {
+        if (!cancelled) {
+          setDownloads(data);
         }
-      },
-      { rootMargin: '-30% 0px -60% 0px', threshold: 0 },
-    );
-    for (const sec of NAV_SECTIONS) {
-      const el = document.getElementById(sec.id);
-      if (el) observer.observe(el);
-    }
-    return () => observer.disconnect();
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDownloads(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDownloadsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const accountCreatedLabel = useMemo(() => {
@@ -397,7 +376,8 @@ export default function SettingsPage() {
   }
 
   function set<K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) {
-    updateSetting(key, value); markSaved();
+    updateSetting(key, value);
+    markSaved();
   }
 
   async function handleSignOut() {
@@ -409,503 +389,540 @@ export default function SettingsPage() {
     if (!account) return;
     setSavingProfile(true);
     try {
-      const r = await fetch('/api/account', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), image: imageUrl.trim() || null, bio: bio.trim() || null }) });
-      const data = await r.json();
-      if (!r.ok) { toast(data.reason || 'Could not update your profile', 'error'); return; }
+      const response = await fetch('/api/account', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          image: imageUrl.trim() || null,
+          bio: bio.trim() || null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        toast(data.reason || 'Could not update your profile', 'error');
+        return;
+      }
       setAccount(prev => prev ? { ...prev, ...data } : prev);
       await updateSession({ user: { name: data.name, image: data.image } });
       markSaved('Profile updated');
-    } catch { toast('Could not update your profile', 'error'); }
-    finally { setSavingProfile(false); }
+    } catch {
+      toast('Could not update your profile', 'error');
+    } finally {
+      setSavingProfile(false);
+    }
   }
 
   async function changePassword(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (newPassword !== confirmPassword) { toast('The new passwords do not match', 'error'); return; }
+    if (newPassword !== confirmPassword) {
+      toast('The new passwords do not match', 'error');
+      return;
+    }
     setSavingPassword(true);
     try {
-      const r = await fetch('/api/account/password', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword: currentPassword || undefined, newPassword }) });
-      const data = await r.json();
-      if (!r.ok) { toast(data.reason || 'Could not update password', 'error'); return; }
-      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
+      const response = await fetch('/api/account/password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: currentPassword || undefined,
+          newPassword,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        toast(data.reason || 'Could not update password', 'error');
+        return;
+      }
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
       setAccount(prev => prev ? { ...prev, hasPassword: true } : prev);
       toast('Password updated', 'success');
-    } catch { toast('Could not update password', 'error'); }
-    finally { setSavingPassword(false); }
+    } catch {
+      toast('Could not update password', 'error');
+    } finally {
+      setSavingPassword(false);
+    }
   }
 
   async function beginTwoFactorSetup() {
     setTwoFactorBusy(true);
     try {
-      const r = await fetch('/api/auth/2fa/setup', { method: 'POST' });
-      const data = await r.json();
-      if (!r.ok) { toast(data.reason || 'Could not start two-step verification', 'error'); return; }
-      setTwoFactorSetup({ secret: data.secret, manualEntryKey: data.manualEntryKey, otpAuthUri: data.otpAuthUri });
+      const response = await fetch('/api/auth/2fa/setup', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) {
+        toast(data.reason || 'Could not start two-step verification', 'error');
+        return;
+      }
+      setTwoFactorSetup({
+        secret: data.secret,
+        manualEntryKey: data.manualEntryKey,
+        otpAuthUri: data.otpAuthUri,
+      });
       toast('Authenticator key ready', 'success');
-    } catch { toast('Could not start two-step verification', 'error'); }
-    finally { setTwoFactorBusy(false); }
+    } catch {
+      toast('Could not start two-step verification', 'error');
+    } finally {
+      setTwoFactorBusy(false);
+    }
   }
 
   async function confirmTwoFactor() {
     if (!twoFactorSetup) return;
     setTwoFactorBusy(true);
     try {
-      const r = await fetch('/api/auth/2fa/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: twoFactorSetup.secret, code: twoFactorCode }) });
-      const data = await r.json();
-      if (!r.ok) { toast(data.reason || 'That code did not work', 'error'); return; }
-      setTwoFactorCode(''); setTwoFactorSetup(null);
+      const response = await fetch('/api/auth/2fa/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret: twoFactorSetup.secret, code: twoFactorCode }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        toast(data.reason || 'That code did not work', 'error');
+        return;
+      }
+      setTwoFactorCode('');
+      setTwoFactorSetup(null);
       setAccount(prev => prev ? { ...prev, twoFactorEnabled: true } : prev);
       toast('Two-step verification enabled', 'success');
-    } catch { toast('Could not confirm two-step verification', 'error'); }
-    finally { setTwoFactorBusy(false); }
+    } catch {
+      toast('Could not confirm two-step verification', 'error');
+    } finally {
+      setTwoFactorBusy(false);
+    }
   }
 
   async function disableTwoFactor() {
     setTwoFactorBusy(true);
     try {
-      const r = await fetch('/api/auth/2fa/disable', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: disableTwoFactorCode }) });
-      const data = await r.json();
-      if (!r.ok) { toast(data.reason || 'Could not disable two-step verification', 'error'); return; }
+      const response = await fetch('/api/auth/2fa/disable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: disableTwoFactorCode }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        toast(data.reason || 'Could not disable two-step verification', 'error');
+        return;
+      }
       setDisableTwoFactorCode('');
       setAccount(prev => prev ? { ...prev, twoFactorEnabled: false } : prev);
       toast('Two-step verification disabled', 'success');
-    } catch { toast('Could not disable two-step verification', 'error'); }
-    finally { setTwoFactorBusy(false); }
+    } catch {
+      toast('Could not disable two-step verification', 'error');
+    } finally {
+      setTwoFactorBusy(false);
+    }
   }
 
   const showGuestState = !session?.user || Boolean(account?.isGuest);
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-
   return (
-    <div style={{ display: 'flex', gap: 0, height: '100%', minHeight: 0, boxSizing: 'border-box', overflow: 'hidden' }}>
-
-      {/* ── Left nav ── */}
-      <aside style={{
-        width: 200, flexShrink: 0, borderRight: '1px solid var(--border-2, var(--border-subtle))',
-        background: 'var(--surface-2, var(--bg-2))', overflowY: 'auto',
-        position: 'sticky', top: 0, alignSelf: 'flex-start', height: '100%',
-        display: 'flex', flexDirection: 'column',
-      }}>
-        {/* Nav header */}
-        <div style={{ padding: '20px 16px 12px', borderBottom: '1px solid var(--border-2, var(--border-subtle))' }}>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>⚙ Settings</div>
-          {saved && (
-            <div style={{ marginTop: 6, fontSize: 11, color: '#22c55e', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-              ✓ Saved
-            </div>
-          )}
-        </div>
-
-        {/* Nav links */}
-        <nav style={{ padding: '8px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {NAV_SECTIONS.map(sec => {
-            const isActive = activeSection === sec.id;
-            return (
-              <a
-                key={sec.id}
-                href={`#${sec.id}`}
-                onClick={() => setActiveSection(sec.id)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 9, padding: '8px 12px',
-                  borderRadius: 9, textDecoration: 'none', fontSize: 13,
-                  fontWeight: isActive ? 700 : 400, transition: 'all 0.1s',
-                  color: isActive ? 'var(--primary, #6366f1)' : 'var(--text-2, var(--text-secondary))',
-                  background: isActive ? 'var(--primary-subtle, color-mix(in srgb, var(--primary, #6366f1) 10%, transparent))' : 'transparent',
-                  borderLeft: `3px solid ${isActive ? 'var(--primary, #6366f1)' : 'transparent'}`,
-                }}
-              >
-                <span style={{ flexShrink: 0, fontSize: 14 }}>{sec.icon}</span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sec.label}</span>
-              </a>
-            );
-          })}
-        </nav>
-      </aside>
-
-      {/* ── Main content ── */}
-      <main style={{
-        flex: 1, minWidth: 0, overflowY: 'auto', padding: '28px 32px',
-        display: 'flex', flexDirection: 'column', boxSizing: 'border-box',
-      }}>
-        {/* Page header */}
-        <div style={{ marginBottom: 28, paddingBottom: 20, borderBottom: '1px solid var(--border-2, var(--border-subtle))' }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4, margin: 0 }}>Settings</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-3, var(--text-muted))', marginTop: 4 }}>
-            Manage your account, appearance, AI setup, and privacy from one place.
+    <div style={{ maxWidth: 1080 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, marginBottom: 4 }}>Settings</h1>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
+            Keep your account, appearance, AI setup, downloads, and support tools in one place.
           </p>
         </div>
+        {saved ? <span className="badge badge-success">Saved ✓</span> : null}
+      </div>
 
-        {/* ══ ACCOUNT ══════════════════════════════════════════════════════════ */}
-        <Section id="account" title="Account" icon="👤" accent="#6366f1"
-          subtitle="Profile picture, display name, and basic account info.">
-          {showGuestState ? (
-            <>
-              <GuestUpgradeNotice />
-              <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-                <AvatarPreview image={null} name="Guest user" email="guest@kivora.local" />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>Guest user</div>
-                  <div style={{ color: 'var(--text-3, var(--text-muted))', fontSize: 12, marginTop: 3 }}>Profile fields save after sign-in.</div>
+      <JumpLinks />
+
+      <div id="account">
+      <Section title="Account" subtitle="Profile, connected sign-in methods, and basic account details.">
+        {showGuestState ? (
+          <div style={{ display: 'grid', gap: 16 }}>
+            <GuestUpgradeNotice />
+
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <AvatarPreview image={imageUrl || null} name={name || 'Guest user'} email={session?.user?.email ?? 'guest@kivora.local'} />
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)' }}>{name || 'Guest user'}</div>
+                <div style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', marginTop: 4 }}>Profile fields will save after sign-in.</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                  <span className="badge">Profile picture</span>
+                  <span className="badge">Short description</span>
+                  <span className="badge">Connected accounts</span>
                 </div>
               </div>
-            </>
-          ) : accountLoading ? (
-            <div style={{ height: 160, borderRadius: 12, background: 'var(--surface-2, var(--bg-2))', animation: 'pulse 1.4s ease-in-out infinite' }} />
-          ) : account ? (
-            <>
-              {/* Profile header */}
-              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                <AvatarPreview image={imageUrl || account.image} name={name || account.name} email={account.email} />
-                <div style={{ flex: 1, minWidth: 180 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>{account.name || account.email}</div>
-                  <div style={{ color: 'var(--text-3, var(--text-muted))', fontSize: 12, marginTop: 3 }}>{account.email}</div>
-                  <div style={{ color: 'var(--text-3, var(--text-muted))', fontSize: 11, marginTop: 4 }}>
-                    Member since {accountCreatedLabel || 'recently'}
-                  </div>
-                  {/* Stats badges */}
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-                    {[
-                      `${account.stats.folders} folders`,
-                      `${account.stats.files} files`,
-                      `${account.stats.libraryItems} library items`,
-                      ...account.connectedAccounts,
-                    ].map(label => (
-                      <span key={label} style={{
-                        fontSize: 11, padding: '3px 9px', borderRadius: 999,
-                        border: '1px solid var(--border-2, var(--border-subtle))',
-                        background: 'var(--surface-2, var(--bg-2))',
-                        color: 'var(--text-2, var(--text-secondary))',
-                        whiteSpace: 'nowrap', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis',
-                      }}>{label}</span>
-                    ))}
-                  </div>
-                </div>
-                <button
-                  onClick={handleSignOut}
-                  style={{ padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: '1.5px solid #ef4444', color: '#ef4444', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}>
-                  Sign out
-                </button>
-              </div>
+            </div>
 
-              <Divider />
-
-              {/* Profile fields */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, boxSizing: 'border-box' }}>
-                <div>
-                  <label style={labelStyle}>Display name</label>
-                  <input style={inputStyle} value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
-                </div>
-                <div>
-                  <label style={labelStyle}>Profile picture URL</label>
-                  <input style={inputStyle} value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." />
-                </div>
-              </div>
-
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
               <div>
-                <label style={labelStyle}>Short description</label>
-                <textarea
-                  style={{ ...inputStyle, minHeight: 88, resize: 'vertical', lineHeight: 1.5 }}
-                  value={bio}
-                  onChange={e => setBio(e.target.value)}
-                  placeholder="A short line about what you study, teach, or focus on."
-                  maxLength={240}
-                />
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 11, color: 'var(--text-3, var(--text-muted))' }}>
-                  <span>Shown as your profile bio across the app.</span>
-                  <span>{bio.trim().length}/240</span>
-                </div>
+                <label style={labelStyle}>Display name</label>
+                <input style={fieldStyle} value={name} onChange={e => setName(e.target.value)} placeholder="Your name" disabled />
               </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                  onClick={saveProfile} disabled={savingProfile}
-                  style={{ padding: '10px 22px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: 'none', background: '#6366f1', color: '#fff', cursor: 'pointer', opacity: savingProfile ? 0.6 : 1 }}>
-                  {savingProfile ? 'Saving…' : 'Save profile'}
-                </button>
+              <div>
+                <label style={labelStyle}>Profile picture URL</label>
+                <input style={fieldStyle} value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." disabled />
               </div>
-            </>
-          ) : (
-            <p style={{ color: 'var(--text-3, var(--text-muted))', fontSize: 13 }}>Could not load your account right now.</p>
-          )}
-        </Section>
+            </div>
 
-        {/* ══ SECURITY ═════════════════════════════════════════════════════════ */}
-        <Section id="security" title="Security" icon="🔐" accent="#f97316"
-          subtitle="Password changes and two-step verification.">
-          {showGuestState ? (
-            <>
-              <GuestUpgradeNotice />
-              <div style={{ padding: 16, borderRadius: 12, border: '1px solid var(--border-2, var(--border-subtle))', background: 'var(--surface-2, var(--bg-2))', opacity: 0.75 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>Two-step verification</div>
-                <div style={{ fontSize: 12, color: 'var(--text-3, var(--text-muted))' }}>Available after you sign in with a real account.</div>
-                <button style={{ marginTop: 12, padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: 'none', background: '#6366f1', color: '#fff', opacity: 0.5, cursor: 'not-allowed' }} disabled>
-                  Set up 2-step verification
-                </button>
-              </div>
-            </>
-          ) : accountLoading ? (
-            <div style={{ height: 180, borderRadius: 12, background: 'var(--surface-2, var(--bg-2))', animation: 'pulse 1.4s ease-in-out infinite' }} />
-          ) : account ? (
-            <>
-              {/* 2FA */}
-              <div style={{ padding: 16, borderRadius: 12, border: '1.5px solid var(--border-2, var(--border-subtle))', background: 'var(--surface-2, var(--bg-2))', boxSizing: 'border-box' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13 }}>Two-step verification</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-3, var(--text-muted))', marginTop: 3 }}>
-                      Protect your account with an authenticator app.
-                    </div>
-                  </div>
-                  <span style={{
-                    fontSize: 11, padding: '4px 10px', borderRadius: 999, fontWeight: 700, flexShrink: 0,
-                    border: `1px solid ${account.twoFactorEnabled ? '#22c55e50' : 'var(--border-2, var(--border-subtle))'}`,
-                    background: account.twoFactorEnabled ? '#22c55e15' : 'transparent',
-                    color: account.twoFactorEnabled ? '#22c55e' : 'var(--text-3, var(--text-muted))',
-                  }}>
-                    {account.twoFactorEnabled ? '✓ Enabled' : 'Not enabled'}
-                  </span>
-                </div>
-
-                {!account.twoFactorEnabled && !twoFactorSetup && (
-                  <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <p style={{ fontSize: 12, color: 'var(--text-3, var(--text-muted))', flex: 1, minWidth: 0, margin: 0 }}>
-                      Works with Google Authenticator, 1Password, and Microsoft Authenticator.
-                    </p>
-                    <button onClick={beginTwoFactorSetup} disabled={twoFactorBusy}
-                      style={{ padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: 'none', background: '#f97316', color: '#fff', cursor: 'pointer', flexShrink: 0, opacity: twoFactorBusy ? 0.6 : 1 }}>
-                      {twoFactorBusy ? 'Preparing…' : 'Set up 2-step verification'}
-                    </button>
-                  </div>
-                )}
-
-                {twoFactorSetup && (
-                  <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ fontSize: 12, color: 'var(--text-3, var(--text-muted))' }}>
-                      Add this key in your authenticator app, then confirm with the current 6-digit code.
-                    </div>
-                    <code style={{
-                      padding: '11px 14px', borderRadius: 10, background: 'var(--surface, var(--bg-elevated))',
-                      border: '1px solid var(--border-2, var(--border-subtle))', fontSize: 13,
-                      overflowWrap: 'anywhere', wordBreak: 'break-all', display: 'block',
-                    }}>
-                      {twoFactorSetup.manualEntryKey}
-                    </code>
-                    <input style={inputStyle} value={twoFactorCode}
-                      onChange={e => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      inputMode="numeric" placeholder="Enter 6-digit code" />
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <button onClick={confirmTwoFactor} disabled={twoFactorBusy || twoFactorCode.length !== 6}
-                        style={{ padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: 'none', background: '#f97316', color: '#fff', cursor: 'pointer', opacity: (twoFactorBusy || twoFactorCode.length !== 6) ? 0.5 : 1 }}>
-                        {twoFactorBusy ? 'Verifying…' : 'Confirm and enable'}
-                      </button>
-                      <button onClick={() => { setTwoFactorSetup(null); setTwoFactorCode(''); }}
-                        style={{ padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: '1px solid var(--border-2, var(--border-subtle))', background: 'transparent', color: 'var(--text, var(--text-primary))', cursor: 'pointer' }}>
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {account.twoFactorEnabled && (
-                  <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ fontSize: 12, color: 'var(--text-3, var(--text-muted))' }}>
-                      Enter the current 6-digit code from your authenticator app to disable it.
-                    </div>
-                    <input style={inputStyle} value={disableTwoFactorCode}
-                      onChange={e => setDisableTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      inputMode="numeric" placeholder="Enter 6-digit code" />
-                    <div>
-                      <button onClick={disableTwoFactor} disabled={twoFactorBusy || disableTwoFactorCode.length !== 6}
-                        style={{ padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: '1.5px solid #ef4444', color: '#ef4444', background: 'transparent', cursor: 'pointer', opacity: (twoFactorBusy || disableTwoFactorCode.length !== 6) ? 0.5 : 1 }}>
-                        {twoFactorBusy ? 'Disabling…' : 'Disable 2-step verification'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <Divider />
-
-              {/* Password */}
-              <form onSubmit={changePassword} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div style={{ fontWeight: 700, fontSize: 13 }}>Password</div>
-                {account.hasPassword ? (
-                  <div>
-                    <label style={labelStyle}>Current password</label>
-                    <input style={inputStyle} type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Current password" />
-                  </div>
-                ) : (
-                  <p style={{ fontSize: 12, color: 'var(--text-3, var(--text-muted))', margin: 0 }}>
-                    You signed up with an external provider. Set a password here to also enable email + password sign-in.
-                  </p>
-                )}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, boxSizing: 'border-box' }}>
-                  <div>
-                    <label style={labelStyle}>New password</label>
-                    <input style={inputStyle} type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="At least 6 characters" />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Confirm new password</label>
-                    <input style={inputStyle} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Repeat new password" />
-                  </div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button type="submit" disabled={savingPassword || !newPassword || newPassword !== confirmPassword}
-                    style={{ padding: '10px 22px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: 'none', background: '#f97316', color: '#fff', cursor: 'pointer', opacity: (savingPassword || !newPassword || newPassword !== confirmPassword) ? 0.5 : 1 }}>
-                    {savingPassword ? 'Saving…' : 'Change password'}
-                  </button>
-                </div>
-              </form>
-            </>
-          ) : (
-            <p style={{ color: 'var(--text-3, var(--text-muted))', fontSize: 13 }}>Could not load your security settings right now.</p>
-          )}
-        </Section>
-
-        {/* ══ APPEARANCE ═══════════════════════════════════════════════════════ */}
-        <Section id="appearance" title="Appearance" icon="🎨" accent="#8b5cf6"
-          subtitle="Theme, text size, line spacing, and density.">
-
-          <SettingRow label="Theme">
-            <ChoiceButtons accent="#8b5cf6" options={THEME_OPTIONS} value={settings.theme} onChange={v => set('theme', v)} />
-          </SettingRow>
-
-          <Divider />
-
-          <SettingRow label="Font size">
-            <ChoiceButtons accent="#8b5cf6" options={FONT_OPTIONS.map(o => ({ id: o.value, label: o.label }))} value={settings.fontSize} onChange={v => set('fontSize', v)} />
-          </SettingRow>
-
-          <Divider />
-
-          <SettingRow label="Line spacing">
-            <ChoiceButtons accent="#8b5cf6" options={LINE_HEIGHT_OPTIONS.map(o => ({ id: o.value, label: o.label }))} value={settings.lineHeight} onChange={v => set('lineHeight', v)} />
-          </SettingRow>
-
-          <Divider />
-
-          <SettingRow label="Density" hint="Controls padding and spacing throughout the UI.">
-            <ChoiceButtons accent="#8b5cf6" options={DENSITY_OPTIONS} value={settings.density} onChange={v => set('density', v)} />
-          </SettingRow>
-
-          <Divider />
-
-          <SettingRow label="Language">
-            <ChoiceButtons accent="#8b5cf6"
-              options={[
-                { id: 'en', label: 'English' },
-                { id: 'ar', label: 'العربية' },
-                { id: 'fr', label: 'Français' },
-                { id: 'es', label: 'Español' },
-                { id: 'de', label: 'Deutsch' },
-                { id: 'zh', label: '中文' },
-              ]}
-              value={settings.language}
-              onChange={v => set('language', v)}
-            />
-          </SettingRow>
-
-          <Divider />
-
-          {/* Live preview box */}
-          <div style={{
-            padding: 16, borderRadius: 12, border: '1.5px solid #8b5cf640',
-            background: '#8b5cf608', boxSizing: 'border-box',
-          }}>
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Live preview</div>
-            <p style={{ margin: 0, marginBottom: 10, fontSize: 'var(--text-base, 1rem)', lineHeight: 'var(--leading, 1.5)' }}>
-              This text uses your current font size and line spacing. Switch any setting above and this updates immediately so you can feel the difference.
-            </p>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {['Normal text', 'Readable spacing', 'Better contrast'].map(label => (
-                <span key={label} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 999, border: '1px solid #8b5cf640', color: '#8b5cf6', background: '#8b5cf610' }}>{label}</span>
-              ))}
+            <div>
+              <label style={labelStyle}>Short description</label>
+              <textarea
+                style={{ ...fieldStyle, minHeight: 96, resize: 'vertical' }}
+                value={bio}
+                onChange={e => setBio(e.target.value)}
+                placeholder="A short line about what you study, teach, or focus on."
+                maxLength={240}
+                disabled
+              />
             </div>
           </div>
-        </Section>
+        ) : accountLoading ? (
+          <div className="skeleton" style={{ height: 180, borderRadius: 18 }} />
+        ) : account ? (
+          <>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <AvatarPreview image={imageUrl || account.image} name={name || account.name} email={account.email} />
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)' }}>{account.name || account.email}</div>
+                <div style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', marginTop: 4 }}>{account.email}</div>
+                <div style={{ color: 'var(--text-3)', fontSize: 'var(--text-xs)', marginTop: 6 }}>
+                  Member since {accountCreatedLabel || 'recently'}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                  <span className="badge">{account.stats.folders} folders</span>
+                  <span className="badge">{account.stats.files} files</span>
+                  <span className="badge">{account.stats.libraryItems} library items</span>
+                  {account.connectedAccounts.map(provider => (
+                    <span key={provider} className="badge badge-accent">{provider}</span>
+                  ))}
+                </div>
+              </div>
+              <button className="btn btn-danger btn-sm" onClick={handleSignOut}>Sign out</button>
+            </div>
 
-        {/* ══ AI & DOWNLOADS ═══════════════════════════════════════════════════ */}
-        <Section id="ai-models" title="AI, Models & Downloads" icon="🤖" accent="#06b6d4"
-          subtitle="Local/cloud routing, desktop installers, and optional local AI assets.">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+              <div>
+                <label style={labelStyle}>Display name</label>
+                <input style={fieldStyle} value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
+              </div>
+              <div>
+                <label style={labelStyle}>Profile picture URL</label>
+                <input style={fieldStyle} value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." />
+              </div>
+            </div>
 
-          <div style={{ padding: 16, borderRadius: 12, border: '1px solid var(--border-2, var(--border-subtle))', background: 'var(--surface-2, var(--bg-2))', boxSizing: 'border-box' }}>
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>AI routing</div>
-            <p style={{ fontSize: 12, color: 'var(--text-3, var(--text-muted))', marginBottom: 14, marginTop: 0 }}>
-              Choose whether Kivora prefers local privacy, cloud convenience, or automatic fallback.
+            <div>
+              <label style={labelStyle}>Short description</label>
+              <textarea
+                style={{ ...fieldStyle, minHeight: 96, resize: 'vertical' }}
+                value={bio}
+                onChange={e => setBio(e.target.value)}
+                placeholder="A short line about what you study, teach, or focus on."
+                maxLength={240}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                <span>This shows up as your short profile description across the app.</span>
+                <span>{bio.trim().length}/240</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
+                Profile picture, display name, and description are saved to your account.
+              </span>
+              <button className="btn btn-primary" onClick={saveProfile} disabled={savingProfile}>
+                {savingProfile ? 'Saving…' : 'Save profile'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <p style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>We could not load your account right now.</p>
+        )}
+      </Section>
+      </div>
+
+      <div id="security">
+      <Section title="Security" subtitle="Password changes and two-step verification for your account.">
+        {showGuestState ? (
+          <div style={{ display: 'grid', gap: 16 }}>
+            <GuestUpgradeNotice compact />
+            <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)', opacity: 0.76 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Two-step verification</div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginTop: 4 }}>
+                    Protect your account with an authenticator app after sign-in.
+                  </div>
+                </div>
+                <span className="badge">Locked in guest mode</span>
+              </div>
+              <div style={{ marginTop: 14 }}>
+                <button className="btn btn-primary btn-sm" disabled>Set up 2-step verification</button>
+              </div>
+            </div>
+
+            <form style={{ display: 'grid', gap: 12, opacity: 0.76 }}>
+              <div style={{ fontWeight: 700 }}>Password</div>
+              <div>
+                <label style={labelStyle}>Current password</label>
+                <input style={fieldStyle} type="password" placeholder="Current password" disabled />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>New password</label>
+                  <input style={fieldStyle} type="password" placeholder="At least 6 characters" disabled />
+                </div>
+                <div>
+                  <label style={labelStyle}>Confirm new password</label>
+                  <input style={fieldStyle} type="password" placeholder="Repeat new password" disabled />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="btn btn-primary" type="button" disabled>
+                  Change password
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : accountLoading ? (
+          <div className="skeleton" style={{ height: 210, borderRadius: 18 }} />
+        ) : account ? (
+          <>
+            <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Two-step verification</div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginTop: 4 }}>
+                    Add an authenticator app code after password sign-in.
+                  </div>
+                </div>
+                <span className={`badge ${account.twoFactorEnabled ? 'badge-success' : ''}`}>
+                  {account.twoFactorEnabled ? 'Enabled' : 'Not enabled'}
+                </span>
+              </div>
+
+              {!account.twoFactorEnabled && !twoFactorSetup ? (
+                <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', flex: 1 }}>
+                    We support authenticator apps like Google Authenticator, 1Password, and Microsoft Authenticator.
+                  </p>
+                  <button className="btn btn-primary btn-sm" onClick={beginTwoFactorSetup} disabled={twoFactorBusy}>
+                    {twoFactorBusy ? 'Preparing…' : 'Set up 2-step verification'}
+                  </button>
+                </div>
+              ) : null}
+
+              {twoFactorSetup ? (
+                <div style={{ marginTop: 14, display: 'grid', gap: 12 }}>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
+                    Add this manual key in your authenticator app, then confirm with the current 6-digit code.
+                  </div>
+                  <code style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--bg-2)', border: '1px solid var(--border-2)', overflowWrap: 'anywhere' }}>
+                    {twoFactorSetup.manualEntryKey}
+                  </code>
+                  <input
+                    style={fieldStyle}
+                    value={twoFactorCode}
+                    onChange={e => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    inputMode="numeric"
+                    placeholder="Enter 6-digit code"
+                  />
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button className="btn btn-primary btn-sm" onClick={confirmTwoFactor} disabled={twoFactorBusy || twoFactorCode.length !== 6}>
+                      {twoFactorBusy ? 'Verifying…' : 'Confirm and enable'}
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => { setTwoFactorSetup(null); setTwoFactorCode(''); }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {account.twoFactorEnabled ? (
+                <div style={{ marginTop: 14, display: 'grid', gap: 12 }}>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
+                    To disable it, enter the current 6-digit code from your authenticator app.
+                  </div>
+                  <input
+                    style={fieldStyle}
+                    value={disableTwoFactorCode}
+                    onChange={e => setDisableTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    inputMode="numeric"
+                    placeholder="Enter 6-digit code"
+                  />
+                  <div>
+                    <button className="btn btn-danger btn-sm" onClick={disableTwoFactor} disabled={twoFactorBusy || disableTwoFactorCode.length !== 6}>
+                      {twoFactorBusy ? 'Disabling…' : 'Disable 2-step verification'}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <form onSubmit={changePassword} style={{ display: 'grid', gap: 12 }}>
+              <div style={{ fontWeight: 700 }}>Password</div>
+              {account.hasPassword ? (
+                <div>
+                  <label style={labelStyle}>Current password</label>
+                  <input style={fieldStyle} type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Current password" />
+                </div>
+              ) : (
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
+                  You signed up with an external provider. Set a password here if you want email + password sign-in as well.
+                </p>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>New password</label>
+                  <input style={fieldStyle} type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="At least 6 characters" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Confirm new password</label>
+                  <input style={fieldStyle} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Repeat new password" />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                  Use at least one long password you are not reusing elsewhere.
+                </span>
+                <button className="btn btn-primary" type="submit" disabled={savingPassword || !newPassword || newPassword !== confirmPassword}>
+                  {savingPassword ? 'Saving…' : 'Change password'}
+                </button>
+              </div>
+            </form>
+          </>
+        ) : (
+          <p style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>We could not load your security settings right now.</p>
+        )}
+      </Section>
+      </div>
+
+      <div id="appearance">
+      <Section title="Appearance" subtitle="Make the app readable and comfortable without oversized defaults or confusing labels.">
+        <div>
+          <div style={labelStyle}>Theme</div>
+          <ChoiceButtons options={THEME_OPTIONS} value={settings.theme} onChange={value => set('theme', value)} />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+          <div>
+            <div style={labelStyle}>Font size</div>
+            <ChoiceButtons options={FONT_OPTIONS.map(option => ({ id: option.value, label: option.label }))} value={settings.fontSize} onChange={value => set('fontSize', value)} />
+          </div>
+          <div>
+            <div style={labelStyle}>Line spacing</div>
+            <ChoiceButtons options={LINE_HEIGHT_OPTIONS.map(option => ({ id: option.value, label: option.label }))} value={settings.lineHeight} onChange={value => set('lineHeight', value)} />
+          </div>
+        </div>
+
+        <div>
+          <div style={labelStyle}>Layout density</div>
+          <ChoiceButtons options={DENSITY_OPTIONS} value={settings.density} onChange={value => set('density', value)} />
+        </div>
+
+        <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Preview</div>
+          <p style={{ marginBottom: 10 }}>
+            This preview uses your live font size, line spacing, and density settings so you can feel whether the interface reads as normal, too tight, or too large.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span className="badge">Normal text size</span>
+            <span className="badge">Cleaner spacing</span>
+            <span className="badge">Better contrast</span>
+          </div>
+        </div>
+      </Section>
+      </div>
+
+      <Section title="Language" subtitle="Switch the interface language and text direction.">
+        <ChoiceButtons
+          options={[
+            { id: 'en', label: 'English', hint: 'Default interface language' },
+            { id: 'ar', label: 'العربية', hint: 'Arabic with RTL layout' },
+            { id: 'fr', label: 'Français' },
+            { id: 'es', label: 'Español' },
+            { id: 'de', label: 'Deutsch' },
+            { id: 'zh', label: '中文' },
+          ]}
+          value={settings.language}
+          onChange={value => set('language', value)}
+        />
+      </Section>
+
+      <div id="ai-models">
+      <Section title="AI, models & downloads" subtitle="This is now the home for local/cloud mode selection and desktop downloads, instead of separate sidebar entries.">
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>AI routing</div>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginBottom: 14 }}>
+              Choose whether Kivora should prefer local privacy, cloud convenience, or automatic fallback. This replaces the separate models sidebar destination.
             </p>
             <AiRuntimeControls compact />
           </div>
 
-          <div style={{ padding: 16, borderRadius: 12, border: '1px solid var(--border-2, var(--border-subtle))', background: 'var(--surface-2, var(--bg-2))', boxSizing: 'border-box' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 13 }}>Downloads & releases</div>
-                <div style={{ fontSize: 12, color: 'var(--text-3, var(--text-muted))', marginTop: 3 }}>
-                  Desktop installers and optional local AI assets.
+          <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+              <div>
+                <div style={{ fontWeight: 700 }}>Downloads & releases</div>
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginTop: 4 }}>
+                  Desktop installers and optional local AI assets live here now too.
                 </div>
               </div>
-              {downloads?.releaseUrl && (
-                <a href={downloads.releaseUrl} target="_blank" rel="noopener noreferrer"
-                  style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: '1px solid var(--border-2, var(--border-subtle))', color: 'var(--text, var(--text-primary))', textDecoration: 'none', flexShrink: 0, background: 'transparent' }}>
+              {downloads?.releaseUrl ? (
+                <a href={downloads.releaseUrl} className="btn btn-ghost btn-sm" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
                   Release {downloads.releaseTag}
                 </a>
-              )}
+              ) : null}
             </div>
 
             {downloadsLoading ? (
-              <div style={{ height: 150, borderRadius: 10, background: 'var(--surface, var(--bg-elevated))', animation: 'pulse 1.4s ease-in-out infinite' }} />
+              <div className="skeleton" style={{ height: 180, borderRadius: 18 }} />
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, boxSizing: 'border-box' }}>
-                <DownloadCard title="macOS Apple Silicon" hint="Desktop download with offline-first local AI support."
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
+                <DownloadCard
+                  title="macOS Apple Silicon"
+                  hint="Primary desktop download with offline-first local AI support."
                   primary={downloads?.macAsset ? { label: 'Download DMG', href: downloads.macAsset.browser_download_url } : null}
                 />
-                <DownloadCard title="Windows x64" hint="Installer with portable build option."
+                <DownloadCard
+                  title="Windows x64"
+                  hint="Installer first, with portable build when attached to the release."
                   primary={downloads?.windowsInstaller ? { label: 'Download installer', href: downloads.windowsInstaller.browser_download_url } : null}
                   secondary={downloads?.windowsPortable ? { label: 'Portable EXE', href: downloads.windowsPortable.browser_download_url } : null}
                 />
-                <DownloadCard title="Integrity files" hint="Verify model assets and release integrity."
+                <DownloadCard
+                  title="Integrity files"
+                  hint="Use these to verify model assets and release integrity."
                   primary={downloads?.manifestAsset ? { label: 'Manifest', href: downloads.manifestAsset.browser_download_url } : null}
                   secondary={downloads?.checksumsAsset ? { label: 'Checksums', href: downloads.checksumsAsset.browser_download_url } : null}
                 />
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
-              {[
-                'Local = private + offline',
-                'Cloud = convenience',
-                'Offline fallback always on',
-                ...(downloads?.hasPublishedModelAssets ? ['Model assets published ✓'] : []),
-              ].map(label => (
-                <span key={label} style={{
-                  fontSize: 11, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap',
-                  border: '1px solid var(--border-2, var(--border-subtle))',
-                  color: 'var(--text-3, var(--text-muted))', background: 'var(--surface, var(--bg-elevated))',
-                }}>{label}</span>
-              ))}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+              <span className="badge">Local = private + offline</span>
+              <span className="badge">Cloud = convenience</span>
+              <span className="badge">Offline fallback always available</span>
+              {downloads?.hasPublishedModelAssets ? <span className="badge badge-success">Optional model assets published</span> : null}
             </div>
           </div>
-        </Section>
-
-        {/* ══ REPORT ISSUE ═════════════════════════════════════════════════════ */}
-        <Section id="reporting" title="Report Issue & Diagnostics" icon="🐛" accent="#f59e0b"
-          subtitle="File bugs and feature requests with current route, theme, and language automatically included.">
-          <ReportIssuePanel embedded />
-        </Section>
-
-        {/* ══ PRIVACY ══════════════════════════════════════════════════════════ */}
-        <div id="privacy">
-          <PrivacySection />
         </div>
+      </Section>
+      </div>
 
-        <style>{`@keyframes pulse { 0%,100%{opacity:0.5} 50%{opacity:1} }`}</style>
-      </main>
+      <div id="reporting">
+      <Section title="Report & diagnostics" subtitle="File bugs and feature requests directly from settings, with the current route, theme, and language already included.">
+        <ReportIssuePanel embedded />
+      </Section>
+      </div>
+
+      {/* ── Privacy & Data Control ─────────────────────────────────────── */}
+      <div id="privacy">
+        <PrivacySection />
+      </div>
     </div>
   );
 }
 
-// ── Privacy & Data Control section ────────────────────────────────────────────
+// ── Privacy & Data Control panel ────────────────────────────────────────────
 
 function PrivacySection() {
   const { toast } = useToast();
@@ -949,151 +966,190 @@ function PrivacySection() {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = `kivora-data-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+      a.href = url;
+      a.download = `kivora-data-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
       URL.revokeObjectURL(url);
       toast('Data exported — check your downloads', 'success');
-    } catch { toast('Export failed. Please try again.', 'error'); }
-    finally { setExportLoading(false); }
+    } catch {
+      toast('Export failed. Please try again.', 'error');
+    } finally {
+      setExportLoading(false);
+    }
   }
 
   async function deleteAllData() {
-    if (deleteConfirm.trim().toLowerCase() !== 'delete my data') { toast('Type "delete my data" to confirm', 'error'); return; }
+    if (deleteConfirm.trim().toLowerCase() !== 'delete my data') {
+      toast('Type "delete my data" to confirm', 'error');
+      return;
+    }
     setDeleteLoading(true);
     try {
       const res = await fetch('/api/user/delete-data', { method: 'DELETE', credentials: 'include' });
       if (!res.ok) throw new Error('Delete failed');
       toast('All data deleted. Signing you out…', 'success');
-      setTimeout(() => { window.location.href = '/api/auth/signout'; }, 1500);
-    } catch { toast('Data deletion failed. Contact support.', 'error'); }
-    finally { setDeleteLoading(false); }
+      setTimeout(() => window.location.href = '/api/auth/signout', 1500);
+    } catch {
+      toast('Data deletion failed. Contact support.', 'error');
+    } finally {
+      setDeleteLoading(false);
+    }
   }
 
-  const dataItems = [
-    { icon: '📁', label: 'Folders & files',  where: 'Cloud (PostgreSQL)',    note: 'File metadata — names, sizes, dates' },
-    { icon: '📄', label: 'File content',      where: 'Local (IndexedDB)',     note: 'Blobs never leave your browser' },
-    { icon: '📇', label: 'Flashcard decks',   where: 'Local + Cloud sync',   note: 'SRS schedule stored on device' },
-    { icon: '🗂',  label: 'Library items',    where: 'Cloud (PostgreSQL)',    note: 'Saved generated outputs' },
-    { icon: '📊', label: 'Study analytics',   where: 'Cloud (PostgreSQL)',    note: 'Quiz scores and review history' },
-    { icon: '⚙️', label: 'Settings',          where: 'Cloud (PostgreSQL)',    note: 'Theme, font, density prefs' },
-  ];
-
-  const aiCanItems    = ['Receive extracted text from files you send', 'Generate study material from that text', 'Use anonymised usage metadata for quality'];
-  const aiCantItems   = ['Access raw file blobs in IndexedDB', 'Retain or train on your content', 'Share data with third parties', 'Access other users\' data', 'Store credentials or payment data'];
-
   const AI_MODES: { id: 'full' | 'metadata-only' | 'offline'; label: string; hint: string; icon: string }[] = [
-    { id: 'full',          label: 'Full context',    hint: 'File text sent to cloud AI. Best results.',          icon: '🌐' },
-    { id: 'metadata-only', label: 'Metadata only',   hint: 'Only filenames/counts sent — content stays local.',  icon: '🔒' },
-    { id: 'offline',       label: 'Offline only',    hint: 'No data leaves your device. Built-in generation.',   icon: '✈️' },
+    {
+      id: 'full',
+      label: 'Full context',
+      hint: 'Your file text is sent to cloud AI for generation. Best results.',
+      icon: '🌐',
+    },
+    {
+      id: 'metadata-only',
+      label: 'Metadata only',
+      hint: 'Only file names and word counts are sent — content stays local.',
+      icon: '🔒',
+    },
+    {
+      id: 'offline',
+      label: 'Offline only',
+      hint: 'No data leaves your device. Uses built-in generation (no cloud AI).',
+      icon: '✈️',
+    },
   ];
 
-  const toggleSwitchStyle = (on: boolean): CSSProperties => ({
-    width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
-    background: on ? '#6366f1' : 'var(--border-2, var(--border-subtle))',
-    position: 'relative', flexShrink: 0, transition: 'background 0.2s',
-  });
+  const dataItems = [
+    { icon: '📁', label: 'Folders & files', where: 'Cloud (PostgreSQL)', note: 'File metadata — names, sizes, dates' },
+    { icon: '📄', label: 'File content', where: 'Local only (IndexedDB)', note: 'Blobs never leave your browser' },
+    { icon: '📇', label: 'Flashcard decks', where: 'Local + Cloud sync', note: 'SRS schedule stored on device' },
+    { icon: '🗂', label: 'Library items', where: 'Cloud (PostgreSQL)', note: 'Saved generated outputs' },
+    { icon: '📊', label: 'Study analytics', where: 'Cloud (PostgreSQL)', note: 'Quiz scores and review history' },
+    { icon: '⚙️', label: 'Settings', where: 'Cloud (PostgreSQL)', note: 'Theme, font, density preferences' },
+  ];
+
+  const aiCantItems = [
+    'Access your raw file blobs stored in IndexedDB',
+    'Retain or train on your content between sessions',
+    'Share your data with third parties',
+    'Access data from other users',
+    'Store credentials, passwords, or payment information',
+  ];
+
+  const aiCanItems = [
+    'Receive extracted text from files you choose to send',
+    'Generate study material from that text',
+    'Use anonymised usage metadata for quality monitoring',
+  ];
 
   return (
     <>
-      {/* Data map */}
-      <Section title="Privacy & Data" icon="🔒" accent="#6366f1"
-        subtitle="Understand exactly what is stored, where, and what you can do with it.">
-
+      <Section
+        title="🔒 Privacy & Data control"
+        subtitle="Understand exactly what is stored, where, and what you can do with it."
+      >
+        {/* Data map */}
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3, var(--text-muted))', marginBottom: 10 }}>Where your data lives</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, boxSizing: 'border-box' }}>
+          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 10 }}>Where your data lives</div>
+          <div style={{ display: 'grid', gap: 6 }}>
             {dataItems.map(item => (
-              <div key={item.label} style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-                borderRadius: 10, background: 'var(--surface-2, var(--bg-2))',
-                border: '1px solid var(--border-2, var(--border-subtle))', boxSizing: 'border-box',
-              }}>
+              <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: 'var(--surface-2)' }}>
                 <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-3, var(--text-muted))' }}>{item.note}</div>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{item.label}</div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{item.note}</div>
                 </div>
-                <span style={{
-                  fontSize: 10, padding: '3px 8px', borderRadius: 999, flexShrink: 0,
-                  border: '1px solid var(--border-2, var(--border-subtle))',
-                  background: 'var(--surface, var(--bg-elevated))',
-                  color: 'var(--text-2, var(--text-secondary))',
-                  whiteSpace: 'nowrap', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>{item.where}</span>
+                <span className="badge" style={{ flexShrink: 0, fontSize: 10 }}>{item.where}</span>
               </div>
             ))}
           </div>
         </div>
+      </Section>
 
-        <Divider />
-
-        {/* AI Can / Cannot */}
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3, var(--text-muted))', marginBottom: 10 }}>AI API data boundaries</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, boxSizing: 'border-box' }}>
-            <div style={{ padding: 14, borderRadius: 10, background: 'rgba(74,222,128,0.07)', border: '1px solid rgba(74,222,128,0.2)', minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#4ade80' }}>✓ What AI can do</div>
-              <ul style={{ margin: 0, padding: '0 0 0 14px', fontSize: 12, color: 'var(--text-2, var(--text-secondary))', lineHeight: 1.8 }}>
-                {aiCanItems.map(item => <li key={item}>{item}</li>)}
-              </ul>
-            </div>
-            <div style={{ padding: 14, borderRadius: 10, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#ef4444' }}>✗ What AI cannot do</div>
-              <ul style={{ margin: 0, padding: '0 0 0 14px', fontSize: 12, color: 'var(--text-2, var(--text-secondary))', lineHeight: 1.8 }}>
-                {aiCantItems.map(item => <li key={item}>{item}</li>)}
-              </ul>
-            </div>
+      <Section
+        title="🤖 AI API data controls"
+        subtitle="Control what your content is used for and what can be sent to AI APIs."
+      >
+        {/* What AI can/cannot do */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ padding: 14, borderRadius: 10, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)' }}>
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 8, color: '#4ade80' }}>✓ What AI can do</div>
+            <ul style={{ margin: 0, padding: '0 0 0 16px', fontSize: 'var(--text-xs)', color: 'var(--text-2)', lineHeight: 1.8 }}>
+              {aiCanItems.map(item => <li key={item}>{item}</li>)}
+            </ul>
+          </div>
+          <div style={{ padding: 14, borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 8, color: '#ef4444' }}>✗ What AI cannot do</div>
+            <ul style={{ margin: 0, padding: '0 0 0 16px', fontSize: 'var(--text-xs)', color: 'var(--text-2)', lineHeight: 1.8 }}>
+              {aiCantItems.map(item => <li key={item}>{item}</li>)}
+            </ul>
           </div>
         </div>
 
-        <Divider />
-
         {/* AI data mode */}
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3, var(--text-muted))', marginBottom: 10 }}>Content sent to AI</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {AI_MODES.map(mode => {
-              const isActive = aiMode === mode.id;
-              return (
-                <button key={mode.id} onClick={() => saveAiMode(mode.id)} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px',
+          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 10 }}>Content sent to AI</div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {AI_MODES.map(mode => (
+              <button
+                key={mode.id}
+                onClick={() => saveAiMode(mode.id)}
+                style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px',
                   borderRadius: 10, cursor: 'pointer', textAlign: 'left', width: '100%',
-                  border: `1.5px solid ${isActive ? '#6366f1' : 'var(--border-2, var(--border-subtle))'}`,
-                  background: isActive ? '#6366f115' : 'var(--surface-2, var(--bg-2))',
-                  transition: 'all 0.12s', boxSizing: 'border-box',
+                  border: aiMode === mode.id ? '2px solid var(--accent)' : '1.5px solid var(--border-2)',
+                  background: aiMode === mode.id ? 'var(--accent-subtle, color-mix(in srgb, var(--accent) 10%, var(--surface)))' : 'var(--surface-2)',
+                  transition: 'all 0.14s',
                 }}>
-                  <span style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>{mode.icon}</span>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
-                      {mode.label}
-                      {isActive && <span style={{ fontSize: 10, fontWeight: 700, color: '#6366f1', marginLeft: 8 }}>● Active</span>}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-3, var(--text-muted))' }}>{mode.hint}</div>
+                <span style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>{mode.icon}</span>
+                <div>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 2 }}>
+                    {mode.label}
+                    {aiMode === mode.id && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', marginLeft: 6 }}>● Active</span>}
                   </div>
-                </button>
-              );
-            })}
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{mode.hint}</div>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       </Section>
 
-      {/* Telemetry */}
-      <Section title="Telemetry & Tracking" icon="📈" accent="#10b981"
-        subtitle="Control whether Kivora keeps local usage diagnostics and recent crash summaries for troubleshooting.">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <Section
+        title="📈 Telemetry & tracking"
+        subtitle="Control whether Kivora keeps local usage diagnostics and recent crash summaries for troubleshooting."
+      >
+        <div style={{ display: 'grid', gap: 12 }}>
           {[
-            { label: 'Usage analytics', hint: 'Store local page and tool counts so reports can include useful diagnostics. Turning this off clears the saved snapshot.', value: analyticsEnabled, onChange: toggleAnalytics },
-            { label: 'Crash reports',   hint: 'Store recent runtime error summaries locally when something breaks. No file content is included.', value: crashReports, onChange: toggleCrash },
+            {
+              label: 'Usage analytics',
+              hint: 'Store local page and tool counts so issue reports can include useful diagnostics. Turning this off clears the saved snapshot.',
+              value: analyticsEnabled,
+              onChange: toggleAnalytics,
+            },
+            {
+              label: 'Crash reports',
+              hint: 'Store recent runtime error summaries locally when something breaks. No file content is included.',
+              value: crashReports,
+              onChange: toggleCrash,
+            },
           ].map(item => (
-            <div key={item.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{item.label}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-3, var(--text-muted))', marginTop: 2 }}>{item.hint}</div>
+            <div key={item.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{item.label}</div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{item.hint}</div>
               </div>
-              <button onClick={() => item.onChange(!item.value)} style={toggleSwitchStyle(item.value)}
-                aria-label={`${item.value ? 'Disable' : 'Enable'} ${item.label}`}>
+              <button
+                onClick={() => item.onChange(!item.value)}
+                style={{
+                  width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+                  background: item.value ? 'var(--accent)' : 'var(--border-2)',
+                  position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+                }}
+                aria-label={`${item.value ? 'Disable' : 'Enable'} ${item.label}`}
+              >
                 <span style={{
                   position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%',
-                  background: '#fff', transition: 'left 0.2s', left: item.value ? 22 : 2,
+                  background: '#fff', transition: 'left 0.2s',
+                  left: item.value ? 22 : 2,
                   boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                 }} />
               </button>
@@ -1102,48 +1158,45 @@ function PrivacySection() {
         </div>
       </Section>
 
-      {/* Data portability */}
-      <Section title="Data Portability" icon="📦" accent="#f59e0b"
-        subtitle="Export or permanently delete all your Kivora data. No lock-in.">
-
-        {/* Export */}
-        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap', boxSizing: 'border-box' }}>
+      <Section
+        title="📦 Data portability"
+        subtitle="Export or delete all your Kivora data at any time. No lock-in."
+      >
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Export everything</div>
-            <div style={{ fontSize: 12, color: 'var(--text-3, var(--text-muted))', lineHeight: 1.5 }}>
-              Download a JSON file of all your folders, files, library items, flashcard decks, quiz history, and study plans.
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Export everything</div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>
+              Download a JSON file of all your folders, files metadata, library items, flashcard decks, quiz history, and study plans.
             </div>
           </div>
-          <button onClick={exportData} disabled={exportLoading}
-            style={{ padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, border: '1.5px solid #f59e0b', color: '#f59e0b', background: 'transparent', cursor: 'pointer', flexShrink: 0, opacity: exportLoading ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+          <button className="btn btn-secondary btn-sm" onClick={exportData} disabled={exportLoading} style={{ flexShrink: 0 }}>
             {exportLoading ? '⏳ Exporting…' : '⬇ Export my data'}
           </button>
         </div>
 
-        <Divider />
-
-        {/* Delete */}
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#ef4444', marginBottom: 6 }}>Delete all data</div>
-          <div style={{ fontSize: 12, color: 'var(--text-3, var(--text-muted))', marginBottom: 12, lineHeight: 1.5 }}>
-            Permanently removes all your folders, files, library items, and account. This cannot be undone.
-            File content stored locally in IndexedDB is also cleared.
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, marginBottom: 6 }}>Delete all data</div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 10 }}>
+            Permanently removes all your folders, files metadata, library items, and account. This cannot be undone.
+            File content stored locally in your browser (IndexedDB) is also cleared.
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input
               value={deleteConfirm}
               onChange={e => setDeleteConfirm(e.target.value)}
               placeholder='Type "delete my data" to unlock'
               style={{
-                flex: 1, minWidth: 200, padding: '10px 14px', borderRadius: 10, fontSize: 13, boxSizing: 'border-box',
-                border: `1.5px solid ${deleteConfirm.trim().toLowerCase() === 'delete my data' ? '#ef4444' : 'var(--border-2, var(--border-subtle))'}`,
-                background: 'var(--surface, var(--bg-elevated))', color: 'var(--text, var(--text-primary))', outline: 'none',
+                flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 'var(--text-sm)',
+                border: `1.5px solid ${deleteConfirm.trim().toLowerCase() === 'delete my data' ? 'var(--danger)' : 'var(--border-2)'}`,
+                background: 'var(--surface)', color: 'var(--text)',
               }}
             />
             <button
+              className="btn btn-sm"
+              style={{ background: 'var(--danger)', color: '#fff', border: 'none', flexShrink: 0 }}
               disabled={deleteConfirm.trim().toLowerCase() !== 'delete my data' || deleteLoading}
               onClick={deleteAllData}
-              style={{ padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer', flexShrink: 0, opacity: (deleteConfirm.trim().toLowerCase() !== 'delete my data' || deleteLoading) ? 0.4 : 1, whiteSpace: 'nowrap' }}>
+            >
               {deleteLoading ? '⏳ Deleting…' : '🗑 Delete all'}
             </button>
           </div>
