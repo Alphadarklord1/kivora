@@ -114,9 +114,9 @@ export function RevisionCoachPage() {
 
   const outputRef = useRef<HTMLDivElement | null>(null);
   const sourceRef = useRef<HTMLElement | null>(null);
-  const convertRef = useRef<HTMLElement | null>(null);
-  const relatedReadingRef = useRef<HTMLElement | null>(null);
-  const studioRef = useRef<HTMLElement | null>(null);
+  const reportRef = useRef<HTMLElement | null>(null);
+  const deepDiveRef = useRef<HTMLElement | null>(null);
+  const workCheckRef = useRef<HTMLElement | null>(null);
   const recoveryRef = useRef<HTMLElement | null>(null);
   const setsRef = useRef<HTMLElement | null>(null);
 
@@ -390,9 +390,14 @@ export function RevisionCoachPage() {
 
   // Assignment helper
   const [assignText,    setAssignText]    = useState('');
-  const [assignMode,    setAssignMode]    = useState<AssignMode>('rephrase');
+  const [assignMode,    setAssignMode]    = useState<AssignMode>('assignment');
   const [assignResult,  setAssignResult]  = useState('');
   const [assignLoading, setAssignLoading] = useState(false);
+
+  // Deep dive
+  const [deepDiveQuestion, setDeepDiveQuestion] = useState('');
+  const [deepDiveResult,   setDeepDiveResult]   = useState('');
+  const [deepDiveLoading,  setDeepDiveLoading]  = useState(false);
 
   // Work checker
   const [checkText,    setCheckText]    = useState('');
@@ -429,7 +434,7 @@ export function RevisionCoachPage() {
     } catch { toast('Could not load reading suggestions', 'error'); }
     finally   {
       setReadingLoading(false);
-      if (shouldScroll) relatedReadingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (shouldScroll) deepDiveRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [currentPrivacyMode, toast]);
 
@@ -458,6 +463,39 @@ export function RevisionCoachPage() {
       setAssignResult(result);
     } catch (err) { toast(err instanceof Error ? err.message : 'Assignment helper failed', 'error'); }
     finally       { setAssignLoading(false); }
+  }
+
+  async function handleDeepDive() {
+    if (!deepDiveQuestion.trim() || deepDiveLoading) return;
+    setDeepDiveLoading(true);
+    setDeepDiveResult('');
+    try {
+      const prompt = sourceBrief
+        ? `Source context:
+${sourceContextText}
+
+Student question:
+${deepDiveQuestion.trim()}`
+        : deepDiveQuestion.trim();
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'explain',
+          text: prompt,
+          ai: loadAiRuntimePreferences(),
+          privacyMode: currentPrivacyMode,
+        }),
+      });
+      const data = await res.json() as { content?: string; result?: string; error?: string };
+      const result = data.content ?? data.result ?? '';
+      if (!result) throw new Error(data.error ?? 'No explanation returned');
+      setDeepDiveResult(result);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Deep dive failed', 'error');
+    } finally {
+      setDeepDiveLoading(false);
+    }
   }
 
   async function handleWorkChecker() {
@@ -602,21 +640,21 @@ export function RevisionCoachPage() {
       <section className={styles.hero}>
         <div className={styles.heroCopy}>
           <span className={styles.eyebrow}>Scholar Hub</span>
-          <h1>Understand a source, then turn it into study material.</h1>
-          <h2>Analyze a URL or pasted text first. Then convert it into notes, quick quizzes, and Workspace-ready study material.</h2>
-          <p>Scholar Hub is now source-first: bring in a source, understand it, keep reading if needed, then hand off longer-term review-set work to Workspace.</p>
+          <h1>Understand a source, model the report, then improve your own writing.</h1>
+          <h2>Scholar Hub now follows one learning flow: break down the source, see what the final report could look like, learn more in detail, then check your own draft.</h2>
+          <p>We keep the heavy flashcard workflow in Workspace, so Scholar Hub can stay focused on understanding sources and improving writing.</p>
           <div className={styles.heroNav}>
             <button className={styles.navChip} onClick={() => sourceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Source Brief</button>
-            <button className={styles.navChip} onClick={() => convertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Convert</button>
-            <button className={styles.navChip} onClick={() => relatedReadingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Related Reading</button>
-            <button className={styles.navChip} onClick={() => studioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Writing Studio</button>
+            <button className={styles.navChip} onClick={() => reportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Report Builder</button>
+            <button className={styles.navChip} onClick={() => deepDiveRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Deep Dive</button>
+            <button className={styles.navChip} onClick={() => workCheckRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Work Checker</button>
             <button className={styles.navChip} onClick={() => recoveryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Recovery</button>
             <button className={styles.navChip} onClick={() => setsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Review Sets</button>
           </div>
           <div className={styles.actions}>
             <button className={styles.primaryButton} onClick={() => sourceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Open Source Brief</button>
-            <button className={styles.secondaryButton} onClick={() => convertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Convert source</button>
-            <button className={styles.secondaryButton} onClick={() => recoveryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Today&apos;s recovery</button>
+            <button className={styles.secondaryButton} onClick={() => reportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Build report</button>
+            <button className={styles.secondaryButton} onClick={() => deepDiveRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Deep dive</button>
             <button className={styles.secondaryButton} onClick={() => void refreshReviewSets().then(() => refreshAnalytics()).then(() => refreshSourceOutputs())}>Refresh</button>
           </div>
         </div>
@@ -625,9 +663,9 @@ export function RevisionCoachPage() {
             <span className={styles.metricLabel}>Workflow</span>
             <ol className={styles.workflowList}>
               <li>Understand a source</li>
-              <li>Convert it into study material</li>
-              <li>Read deeper only if needed</li>
-              <li>Hand off review-set work to Workspace</li>
+              <li>See what a strong report could look like</li>
+              <li>Learn more in detail where needed</li>
+              <li>Check and improve your own writing</li>
             </ol>
           </div>
           <div className={styles.summaryGrid}>
@@ -721,8 +759,8 @@ export function RevisionCoachPage() {
           <div className={styles.sectionHeader}>
             <div>
               <span className={styles.eyebrow}>Source Brief</span>
-              <h3>Understand a source before you turn it into study material</h3>
-              <p>Start with either a public URL or pasted text. Scholar Hub explains what it is about, surfaces the key ideas, and keeps the provenance visible.</p>
+              <h3>Understand the source before you draft or explain it</h3>
+              <p>Start with either a public URL or pasted text. Scholar Hub explains what it is about, extracts the key ideas, and keeps the provenance visible.</p>
             </div>
           </div>
           <div className={styles.sourceWorkspace}>
@@ -832,112 +870,92 @@ export function RevisionCoachPage() {
           </div>
         </section>
 
-        <section ref={convertRef} className={styles.sectionCard}>
+        <section ref={reportRef} className={styles.sectionCard}>
           <div className={styles.sectionHeader}>
             <div>
-              <span className={styles.eyebrow}>Convert to Study Material</span>
-              <h3>Turn the source into notes, a quiz, or a Workspace review set</h3>
-              <p>Create outputs from the current source and keep the next action clear instead of bouncing between separate tools.</p>
+              <span className={styles.eyebrow}>Report Builder</span>
+              <h3>Build an example of what the final report should look like</h3>
+              <p>This is the model-answer step: use the source to shape the structure, the likely argument, and the key points the student should cover.</p>
             </div>
           </div>
-          {!sourceBrief ? (
-            <div className={styles.emptyState}>Analyze a source first. Then Scholar Hub can create notes, a quiz, or send it into Workspace as a review set with source metadata attached.</div>
-          ) : (
-            <div className={styles.importBlock}>
-              <div className={styles.noticeBox}>
-                <strong>Current source</strong>
-                <p>{sourceBrief.title} &mdash; {sourceBrief.sourceType === 'manual-text' ? 'manual text' : safeHostname(sourceBrief.url)}</p>
-              </div>
-              <div className={styles.conversionGrid}>
-                <article className={styles.conversionCard}>
-                  <span className={styles.metricLabel}>Notes</span>
-                  <h4>Build revision notes</h4>
-                  <p>Best when you want a concise study sheet before anything else.</p>
-                  <button className={styles.primaryButton} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('notes')}>
-                    {sourceActionLoading === 'notes' ? 'Creating notes\u2026' : 'Create notes'}
-                  </button>
-                </article>
-                <article className={styles.conversionCard}>
-                  <span className={styles.metricLabel}>Quiz</span>
-                  <h4>Test your understanding</h4>
-                  <p>Generate a quick retrieval check directly from the current source.</p>
-                  <button className={styles.secondaryButton} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('quiz')}>
-                    {sourceActionLoading === 'quiz' ? 'Creating quiz\u2026' : 'Create quiz'}
-                  </button>
-                </article>
-                <article className={styles.conversionCard}>
-                  <span className={styles.metricLabel}>Review Set</span>
-                  <h4>Send it to Workspace as a review set</h4>
-                  <p>Create a reusable review set and continue the full flashcard workflow in Workspace.</p>
-                  <button className={styles.secondaryButton} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('flashcards')}>
-                    {sourceActionLoading === 'flashcards' ? 'Creating set\u2026' : 'Create Workspace review set'}
-                  </button>
-                </article>
-              </div>
-
-              {sourceOutputSummary && (
-                <div className={styles.nextStepStrip}>
-                  <div>
-                    <strong>Next step ready</strong>
-                    <p>
-                      {sourceOutputSummary.mode === 'flashcards'
-                        ? `Review set "${sourceOutputSummary.title}" is ready.`
-                        : `${sourceOutputSummary.title} is saved and ready for the next study step.`}
-                    </p>
-                  </div>
-                  <div className={styles.actions}>
-                    <button className={styles.primaryButton} disabled={!sourceOutputSummary.setId} onClick={() => sourceOutputSummary.setId && openPanel(sourceOutputSummary.setId, 'review')}>
-                      Review in Workspace
-                    </button>
-                    <button className={styles.secondaryButton} onClick={() => openSourceInWorkspace(sourceOutputSummary.mode === 'quiz' ? 'quiz' : 'summarize')}>
-                      Open in Workspace
-                    </button>
-                    <button className={styles.secondaryButton} onClick={() => relatedReadingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-                      Keep reading
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className={styles.sectionHeader}>
-                <div>
-                  <h3>Recent source outputs</h3>
-                  <p>Saved through Library metadata so you can return without adding a new schema.</p>
-                </div>
-              </div>
-              {recentSourceOutputs.length === 0 ? (
-                <div className={styles.emptyState}>No source-derived outputs yet. Create notes or a quiz from the current source to start building this list.</div>
-              ) : (
-                <div className={styles.listStack}>
-                  {recentSourceOutputs.map((item) => {
-                    const metadata = (item.metadata ?? {}) as Record<string, unknown>;
-                    const sourceLabel = metadata.sourceType === 'manual-text' ? 'Manual text' : String(metadata.sourceUrl ?? metadata.sourceTitle ?? 'Web source');
-                    return (
-                      <article key={item.id} className={styles.compactSetCard}>
-                        <div>
-                          <h4>{String(metadata.title ?? item.mode)}</h4>
-                          <p>{String(metadata.sourceTitle ?? 'Source output')}</p>
-                        </div>
-                        <div className={styles.metaRow}>
-                          <span>{item.mode}</span>
-                          <span>{sourceLabel}</span>
-                          <span>{formatDate(item.createdAt)}</span>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
+          {sourceBrief && (
+            <div className={styles.noticeBox}>
+              <strong>Current source context</strong>
+              <p>{sourceBrief.title} &mdash; {sourceBrief.sourceType === 'manual-text' ? 'manual text' : safeHostname(sourceBrief.url)}</p>
             </div>
           )}
+          <div className={styles.importBlock}>
+            <div className={styles.modeBar}>
+              {REPORT_TYPES.map((t) => (
+                <button key={t.id} className={`${styles.modeButton} ${reportType === t.id ? styles.modeButtonActive : ''}`} onClick={() => setReportType(t.id)}>
+                  <span>{t.label}</span><small>{t.desc}</small>
+                </button>
+              ))}
+            </div>
+            <div className={styles.editorGrid}>
+              <label className={styles.fieldBlock}>
+                <span>Topic</span>
+                <input className={styles.textInput} value={reportTopic} onChange={e => setReportTopic(e.target.value)} placeholder="e.g. The causes of World War I" />
+              </label>
+              <label className={styles.fieldBlock}>
+                <span>Word count</span>
+                <input className={styles.textInput} type="number" min={300} max={5000} step={100} value={reportWordCount} onChange={e => setReportWordCount(Math.max(300, Math.min(5000, +e.target.value)))} />
+              </label>
+            </div>
+            <label className={styles.fieldBlock} style={{ marginTop: '0.75rem' }}>
+              <span>Key points to cover (optional)</span>
+              <textarea className={styles.textArea} rows={3} value={reportKeyPoints} onChange={e => setReportKeyPoints(e.target.value)} placeholder="e.g. Alliance system, nationalism, assassination…" />
+            </label>
+            <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
+              <button className={styles.primaryButton} disabled={reportLoading || !reportTopic.trim()} onClick={() => void handleReportBuilder()}>
+                {reportLoading ? 'Building…' : 'Build example report'}
+              </button>
+              {reportResult && <button className={styles.secondaryButton} onClick={() => { setReportResult(''); setReportTopic(''); setReportKeyPoints(''); }}>Clear</button>}
+            </div>
+            {reportResult && (
+              <div>
+                <div className={styles.generatedText}>{reportResult}</div>
+                <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
+                  <button className={styles.secondaryButton} onClick={() => void navigator.clipboard.writeText(reportResult).then(() => toast('Copied!', 'success'))}>Copy</button>
+                  <button className={styles.secondaryButton} onClick={() => {
+                    const blob = new Blob([reportResult], { type: 'text/plain' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `${reportTopic.slice(0, 40).replace(/[^a-z0-9]/gi, '_')}_draft.txt`;
+                    a.click();
+                  }}>Download .txt</button>
+                </div>
+              </div>
+            )}
+
+            <div className={styles.noticeBox} style={{ marginTop: '1rem' }}>
+              <strong>Need to decode the assignment first?</strong>
+              <p>Assignment Helper stays here as a small support step before the model draft.</p>
+              <div className={styles.modeBar}>
+                {ASSIGN_MODES.map((m) => (
+                  <button key={m.id} className={`${styles.modeButton} ${assignMode === m.id ? styles.modeButtonActive : ''}`} onClick={() => setAssignMode(m.id)}>
+                    <span>{m.label}</span><small>{m.desc}</small>
+                  </button>
+                ))}
+              </div>
+              <textarea className={styles.textArea} rows={4} value={assignText} onChange={e => setAssignText(e.target.value)} placeholder="Paste the assignment prompt or confusing instructions here…" />
+              <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
+                <button className={styles.secondaryButton} disabled={assignLoading || !assignText.trim()} onClick={() => void handleAssignHelper()}>
+                  {assignLoading ? 'Working…' : 'Run Assignment Helper'}
+                </button>
+                {assignResult && <button className={styles.secondaryButton} onClick={() => { setAssignResult(''); setAssignText(''); }}>Clear</button>}
+              </div>
+              {assignResult && <div className={styles.generatedText}>{assignResult}</div>}
+            </div>
+          </div>
         </section>
 
-        <section ref={relatedReadingRef} className={styles.sectionCard}>
+        <section ref={deepDiveRef} className={styles.sectionCard}>
           <div className={styles.sectionHeader}>
             <div>
-              <span className={styles.eyebrow}>Related Reading</span>
-              <h3>Keep reading without losing the main source flow</h3>
-              <p>Scholar Hub reuses the same reading panel for source follow-up and weak-topic recovery, instead of scattering reading suggestions around the page.</p>
+              <span className={styles.eyebrow}>Deep Dive</span>
+              <h3>Learn more in detail from the source</h3>
+              <p>Ask follow-up questions about the source, then keep reading from related material if you still need more context.</p>
             </div>
             {sourceBrief && readingSourceLabel !== 'source' && (
               <button className={styles.secondaryButton} onClick={() => void loadRelatedReading(sourceBrief.title, 'source', false)}>
@@ -951,169 +969,181 @@ export function RevisionCoachPage() {
               <p>External lookups are skipped here, so you will only see manual/static study links until you switch privacy mode.</p>
             </div>
           )}
-          {!readingTopic ? (
-            <div className={styles.emptyState}>Analyze a source or choose a weak topic below to load related reading.</div>
-          ) : readingLoading ? (
-            <div className={styles.emptyState}>Loading reading suggestions for {readingTopic}&hellip;</div>
-          ) : (
-            <div className={styles.importBlock}>
-              <div className={styles.noticeBox}>
-                <strong>{readingSourceLabel === 'weak-topic' ? 'Weak-topic follow-up' : 'Current source follow-up'}</strong>
-                <p>{readingTopic}</p>
-              </div>
-              {readingArticles.length === 0 ? (
-                <div className={styles.emptyState}>No related reading suggestions are available right now.</div>
-              ) : (
-                <div className={styles.listStack}>
-                  {readingArticles.map((art) => (
-                    <a
-                      key={art.url}
-                      href={art.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={styles.readingCard}
-                    >
-                      <div className={styles.listTop}>
-                        <div>
-                          <h4>{art.title}</h4>
-                          <p>{art.excerpt}</p>
-                        </div>
-                        <span className={styles.countPill}>{art.source}</span>
-                      </div>
-                      <div className={styles.metaRow}>
-                        <span>~{art.readingMinutes} min read</span>
-                        <span style={{ textTransform: 'capitalize' }}>{art.type}</span>
-                        <span>Open &#x2197;</span>
-                      </div>
-                    </a>
-                  ))}
-                </div>
-              )}
+          <div className={styles.importBlock}>
+            <label className={styles.fieldBlock}>
+              <span>What do you want to understand better?</span>
+              <textarea className={styles.textArea} rows={4} value={deepDiveQuestion} onChange={e => setDeepDiveQuestion(e.target.value)} placeholder="e.g. Explain the main argument in simpler words, or why this evidence matters…" />
+            </label>
+            <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
+              <button className={styles.primaryButton} disabled={deepDiveLoading || !deepDiveQuestion.trim()} onClick={() => void handleDeepDive()}>
+                {deepDiveLoading ? 'Explaining…' : 'Explain this in detail'}
+              </button>
+              {deepDiveResult && <button className={styles.secondaryButton} onClick={() => { setDeepDiveResult(''); setDeepDiveQuestion(''); }}>Clear</button>}
             </div>
-          )}
+            {deepDiveResult && <div className={styles.generatedText}>{deepDiveResult}</div>}
+
+            <div className={styles.sectionHeader} style={{ marginTop: '1rem' }}>
+              <div>
+                <h3>Related reading</h3>
+                <p>Use these links when the source needs more background, examples, or supporting context.</p>
+              </div>
+            </div>
+            {!readingTopic ? (
+              <div className={styles.emptyState}>Analyze a source or choose a weak topic below to load related reading.</div>
+            ) : readingLoading ? (
+              <div className={styles.emptyState}>Loading reading suggestions for {readingTopic}&hellip;</div>
+            ) : (
+              <>
+                <div className={styles.noticeBox}>
+                  <strong>{readingSourceLabel === 'weak-topic' ? 'Weak-topic follow-up' : 'Current source follow-up'}</strong>
+                  <p>{readingTopic}</p>
+                </div>
+                {readingArticles.length === 0 ? (
+                  <div className={styles.emptyState}>No related reading suggestions are available right now.</div>
+                ) : (
+                  <div className={styles.listStack}>
+                    {readingArticles.map((art) => (
+                      <a
+                        key={art.url}
+                        href={art.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.readingCard}
+                      >
+                        <div className={styles.listTop}>
+                          <div>
+                            <h4>{art.title}</h4>
+                            <p>{art.excerpt}</p>
+                          </div>
+                          <span className={styles.countPill}>{art.source}</span>
+                        </div>
+                        <div className={styles.metaRow}>
+                          <span>~{art.readingMinutes} min read</span>
+                          <span style={{ textTransform: 'capitalize' }}>{art.type}</span>
+                          <span>Open &#x2197;</span>
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </section>
 
-        <section ref={studioRef} className={styles.sectionCard}>
+        <section ref={workCheckRef} className={styles.sectionCard}>
           <div className={styles.sectionHeader}>
             <div>
-              <span className={styles.eyebrow}>Writing Studio</span>
-              <h3>Use source context to understand, draft, and check your writing</h3>
-              <p>These tools stay in Scholar Hub, but now they sit under one writing workflow: understand the task, build a draft, then check your own work.</p>
+              <span className={styles.eyebrow}>Work Checker</span>
+              <h3>Check grammar, clarity, and paragraph quality after drafting</h3>
+              <p>Paste the student’s writing here after they use the source and report builder. Scholar Hub will review wording, flow, and places that need rephrasing.</p>
             </div>
           </div>
           {sourceBrief && (
             <div className={styles.noticeBox}>
-              <strong>Current source context is attached</strong>
-              <p>{sourceBrief.title} will be used as optional background context for the writing tools below.</p>
+              <strong>Source-aware checking is active</strong>
+              <p>{sourceBrief.title} is used as optional context so the feedback can stay aligned with the source.</p>
             </div>
           )}
-          <div className={styles.roleRow}>
-            <span className={styles.roleChip}>Assignment Helper = understand the task</span>
-            <span className={styles.roleChip}>Report Builder = draft the answer</span>
-            <span className={styles.roleChip}>Work Checker = review your own writing</span>
-          </div>
+          <div className={styles.importBlock}>
+            <textarea className={styles.textArea} rows={8} value={checkText} onChange={e => setCheckText(e.target.value)} placeholder="Paste the student essay, report, or paragraph here…" />
+            <div className={styles.actions}>
+              <button className={styles.primaryButton} disabled={checkLoading || !checkText.trim()} onClick={() => void handleWorkChecker()}>
+                {checkLoading ? 'Checking…' : 'Check my work'}
+              </button>
+              {checkResult && <button className={styles.secondaryButton} onClick={() => { setCheckResult(''); setCheckText(''); }}>Clear</button>}
+            </div>
+            {checkResult && <div className={styles.generatedText}>{checkResult}</div>}
 
-          <div className={styles.studioGrid}>
-            <article className={styles.studioCard}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <span className={styles.eyebrow}>Assignment Helper</span>
-                  <h3>Understand or reframe the task</h3>
-                  <p>Use this before writing when you need the assignment broken down, clarified, explained, or simplified.</p>
+            <div className={styles.sectionHeader} style={{ marginTop: '1rem' }}>
+              <div>
+                <h3>Secondary study actions</h3>
+                <p>These stay available, but they are no longer the main point of Scholar Hub.</p>
+              </div>
+            </div>
+            {!sourceBrief ? (
+              <div className={styles.emptyState}>Analyze a source first if you want notes, a quiz, or a Workspace review set.</div>
+            ) : (
+              <>
+                <div className={styles.conversionGrid}>
+                  <article className={styles.conversionCard}>
+                    <span className={styles.metricLabel}>Notes</span>
+                    <h4>Build revision notes</h4>
+                    <p>Save a concise study sheet from the current source.</p>
+                    <button className={styles.secondaryButton} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('notes')}>
+                      {sourceActionLoading === 'notes' ? 'Creating notes…' : 'Create notes'}
+                    </button>
+                  </article>
+                  <article className={styles.conversionCard}>
+                    <span className={styles.metricLabel}>Quiz</span>
+                    <h4>Check understanding</h4>
+                    <p>Generate a quick quiz from the current source.</p>
+                    <button className={styles.secondaryButton} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('quiz')}>
+                      {sourceActionLoading === 'quiz' ? 'Creating quiz…' : 'Create quiz'}
+                    </button>
+                  </article>
+                  <article className={styles.conversionCard}>
+                    <span className={styles.metricLabel}>Workspace</span>
+                    <h4>Send to review sets</h4>
+                    <p>Create a review set only when you want long-term recall work in Workspace.</p>
+                    <button className={styles.secondaryButton} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('flashcards')}>
+                      {sourceActionLoading === 'flashcards' ? 'Creating set…' : 'Send to Workspace'}
+                    </button>
+                  </article>
                 </div>
-              </div>
-              <div className={styles.modeBar}>
-                {ASSIGN_MODES.map((m) => (
-                  <button key={m.id} className={`${styles.modeButton} ${assignMode === m.id ? styles.modeButtonActive : ''}`} onClick={() => setAssignMode(m.id)}>
-                    <span>{m.label}</span><small>{m.desc}</small>
-                  </button>
-                ))}
-              </div>
-              <div className={styles.importBlock}>
-                <textarea className={styles.textArea} rows={5} value={assignText} onChange={e => setAssignText(e.target.value)} placeholder="Paste your assignment, question, or notes here\u2026" />
-                <div className={styles.actions}>
-                  <button className={styles.primaryButton} disabled={assignLoading || !assignText.trim()} onClick={() => void handleAssignHelper()}>
-                    {assignLoading ? 'Working\u2026' : ASSIGN_MODES.find((m) => m.id === assignMode)?.label ?? 'Run'}
-                  </button>
-                  {assignResult && <button className={styles.secondaryButton} onClick={() => { setAssignResult(''); setAssignText(''); }}>Clear</button>}
-                </div>
-                {assignResult && <div className={styles.generatedText}>{assignResult}</div>}
-              </div>
-            </article>
 
-            <article className={styles.studioCard}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <span className={styles.eyebrow}>Report Builder</span>
-                  <h3>Draft a structured essay or report</h3>
-                  <p>Use this after you understand the source and the assignment. It turns your topic and key points into a structured first draft.</p>
-                </div>
-              </div>
-              <div className={styles.modeBar}>
-                {REPORT_TYPES.map((t) => (
-                  <button key={t.id} className={`${styles.modeButton} ${reportType === t.id ? styles.modeButtonActive : ''}`} onClick={() => setReportType(t.id)}>
-                    <span>{t.label}</span><small>{t.desc}</small>
-                  </button>
-                ))}
-              </div>
-              <div className={styles.importBlock}>
-                <div className={styles.editorGrid}>
-                  <label className={styles.fieldBlock}>
-                    <span>Topic</span>
-                    <input className={styles.textInput} value={reportTopic} onChange={e => setReportTopic(e.target.value)} placeholder="e.g. The causes of World War I" />
-                  </label>
-                  <label className={styles.fieldBlock}>
-                    <span>Word count</span>
-                    <input className={styles.textInput} type="number" min={300} max={5000} step={100} value={reportWordCount} onChange={e => setReportWordCount(Math.max(300, Math.min(5000, +e.target.value)))} />
-                  </label>
-                </div>
-                <label className={styles.fieldBlock} style={{ marginTop: '0.75rem' }}>
-                  <span>Key points to cover (optional)</span>
-                  <textarea className={styles.textArea} rows={3} value={reportKeyPoints} onChange={e => setReportKeyPoints(e.target.value)} placeholder="e.g. Alliance system, nationalism, assassination\u2026" />
-                </label>
-                <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
-                  <button className={styles.primaryButton} disabled={reportLoading || !reportTopic.trim()} onClick={() => void handleReportBuilder()}>
-                    {reportLoading ? 'Building\u2026' : 'Build draft'}
-                  </button>
-                  {reportResult && <button className={styles.secondaryButton} onClick={() => { setReportResult(''); setReportTopic(''); setReportKeyPoints(''); }}>Clear</button>}
-                </div>
-                {reportResult && (
-                  <div>
-                    <div className={styles.generatedText}>{reportResult}</div>
-                    <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
-                      <button className={styles.secondaryButton} onClick={() => void navigator.clipboard.writeText(reportResult).then(() => toast('Copied!', 'success'))}>Copy</button>
-                      <button className={styles.secondaryButton} onClick={() => {
-                        const blob = new Blob([reportResult], { type: 'text/plain' });
-                        const a = document.createElement('a');
-                        a.href = URL.createObjectURL(blob);
-                        a.download = `${reportTopic.slice(0, 40).replace(/[^a-z0-9]/gi, '_')}_draft.txt`;
-                        a.click();
-                      }}>Download .txt</button>
+                {sourceOutputSummary && (
+                  <div className={styles.nextStepStrip}>
+                    <div>
+                      <strong>Next step ready</strong>
+                      <p>
+                        {sourceOutputSummary.mode === 'flashcards'
+                          ? `Review set "${sourceOutputSummary.title}" is ready in Workspace.`
+                          : `${sourceOutputSummary.title} is saved and ready for the next study step.`}
+                      </p>
+                    </div>
+                    <div className={styles.actions}>
+                      <button className={styles.primaryButton} disabled={!sourceOutputSummary.setId} onClick={() => sourceOutputSummary.setId && openPanel(sourceOutputSummary.setId, 'review')}>
+                        Review in Workspace
+                      </button>
+                      <button className={styles.secondaryButton} onClick={() => openSourceInWorkspace(sourceOutputSummary.mode === 'quiz' ? 'quiz' : 'summarize')}>
+                        Open in Workspace
+                      </button>
                     </div>
                   </div>
                 )}
-              </div>
-            </article>
 
-            <article className={styles.studioCard}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <span className={styles.eyebrow}>Work Checker</span>
-                  <h3>Review what you wrote</h3>
-                  <p>Use this after drafting. It checks grammar, tone, clarity, and logical flow while optionally comparing against the current source context.</p>
+                <div className={styles.sectionHeader} style={{ marginTop: '1rem' }}>
+                  <div>
+                    <h3>Recent source outputs</h3>
+                    <p>Saved through Library metadata so you can return without adding a new schema.</p>
+                  </div>
                 </div>
-              </div>
-              <div className={styles.importBlock}>
-                <textarea className={styles.textArea} rows={7} value={checkText} onChange={e => setCheckText(e.target.value)} placeholder="Paste your essay, report, or answer here\u2026" />
-                <div className={styles.actions}>
-                  <button className={styles.primaryButton} disabled={checkLoading || !checkText.trim()} onClick={() => void handleWorkChecker()}>
-                    {checkLoading ? 'Checking\u2026' : 'Check my work'}
-                  </button>
-                  {checkResult && <button className={styles.secondaryButton} onClick={() => { setCheckResult(''); setCheckText(''); }}>Clear</button>}
-                </div>
-                {checkResult && <div className={styles.generatedText}>{checkResult}</div>}
-              </div>
-            </article>
+                {recentSourceOutputs.length === 0 ? (
+                  <div className={styles.emptyState}>No source-derived outputs yet. Create notes or a quiz from the current source to start building this list.</div>
+                ) : (
+                  <div className={styles.listStack}>
+                    {recentSourceOutputs.map((item) => {
+                      const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+                      const sourceLabel = metadata.sourceType === 'manual-text' ? 'Manual text' : String(metadata.sourceUrl ?? metadata.sourceTitle ?? 'Web source');
+                      return (
+                        <article key={item.id} className={styles.compactSetCard}>
+                          <div>
+                            <h4>{String(metadata.title ?? item.mode)}</h4>
+                            <p>{String(metadata.sourceTitle ?? 'Source output')}</p>
+                          </div>
+                          <div className={styles.metaRow}>
+                            <span>{item.mode}</span>
+                            <span>{sourceLabel}</span>
+                            <span>{formatDate(item.createdAt)}</span>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </section>
 

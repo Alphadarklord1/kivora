@@ -6,6 +6,7 @@ import 'katex/dist/katex.min.css';
 import * as math from 'mathjs';
 import { extractTextFromBlob } from '@/lib/pdf/extract';
 import { readMathContext } from '@/lib/math/context';
+import { MathText } from '@/components/math/MathRenderer';
 import { MATH_CATEGORIES, MATH_CATEGORY_ORDER } from '@/lib/math/catalog';
 import type { MathCategoryId } from '@/lib/math/types';
 
@@ -615,7 +616,11 @@ interface StructParam {
   label: string;
   unit?: string;
   placeholder?: string;
-  inputType: 'number' | 'text';
+  /** 'select' = dropdown (supply options[]); 'matrix-grid' = cell grid (supply rowsKey/colsKey) */
+  inputType: 'number' | 'text' | 'select' | 'matrix-grid';
+  options?:  string[];
+  rowsKey?:  string;
+  colsKey?:  string;
 }
 interface StructForm {
   id: string;
@@ -624,6 +629,13 @@ interface StructForm {
   note: string;
   params: StructParam[];
   buildCommand: (p: Record<string, string>) => string;
+}
+
+// ── buildMatrix ─────────────────────────────────────────────────────────────
+function buildMatrix(p: Record<string,string>, key: string, rows: number, cols: number): string {
+  return '[' + Array.from({length: rows}, (_, r) =>
+    '[' + Array.from({length: cols}, (_, c) => p[`${key}_${r}_${c}`]?.trim() || '0').join(',') + ']'
+  ).join(',') + ']';
 }
 
 const CATEGORY_FORMS: Record<string, StructForm[]> = {
@@ -1007,86 +1019,123 @@ const CATEGORY_FORMS: Record<string, StructForm[]> = {
     },
   ],
 
-  /* ── Vectors ────────────────────────────────────────────────────────── */
+    /* ── Vectors ──────────────────────────────────────────────────────────────────── */
   vectors: [
-    {
-      id: 'vector-dot',
-      label: 'Dot Product',
-      latexFormula: '\\mathbf{u}\\cdot\\mathbf{v} = \\sum u_i v_i',
-      note: 'Enter two vectors of the same length, separated by commas.',
+    { id: 'vec-add-2d', label: 'Add / Subtract  (2D)', latexFormula: '\\mathbf{a} \\pm \\mathbf{b}', note: 'Enter x, y for each vector; pick + or −.',
       params: [
-        { key: 'u', label: 'Vector u', inputType: 'text', placeholder: 'e.g. 3, 2' },
-        { key: 'v', label: 'Vector v', inputType: 'text', placeholder: 'e.g. 1, 4' },
+        { key: 'op', label: 'Operation', inputType: 'select', options: ['+', '-'] },
+        { key: 'A_0', label: 'a₁ (x)', inputType: 'number', placeholder: '0' },
+        { key: 'A_1', label: 'a₂ (y)', inputType: 'number', placeholder: '0' },
+        { key: 'B_0', label: 'b₁ (x)', inputType: 'number', placeholder: '0' },
+        { key: 'B_1', label: 'b₂ (y)', inputType: 'number', placeholder: '0' },
       ],
-      buildCommand: (p) => `dot product [${p.u || ''}] [${p.v || ''}]`,
+      buildCommand: (p) => `[${p.A_0||'0'}, ${p.A_1||'0'}] ${p.op||'+'} [${p.B_0||'0'}, ${p.B_1||'0'}]`,
     },
-    {
-      id: 'vector-magnitude',
-      label: 'Vector Magnitude',
-      latexFormula: '|\\mathbf{v}| = \\sqrt{v_1^2 + v_2^2 + \\cdots + v_n^2}',
-      note: 'Enter one vector to compute its Euclidean length.',
+    { id: 'vec-add-3d', label: 'Add / Subtract  (3D)', latexFormula: '\\mathbf{a} \\pm \\mathbf{b}', note: 'Enter x, y, z for each vector; pick + or −.',
       params: [
-        { key: 'v', label: 'Vector v', inputType: 'text', placeholder: 'e.g. 3, 4' },
+        { key: 'op', label: 'Operation', inputType: 'select', options: ['+', '-'] },
+        { key: 'A_0', label: 'a₁ (x)', inputType: 'number', placeholder: '0' },
+        { key: 'A_1', label: 'a₂ (y)', inputType: 'number', placeholder: '0' },
+        { key: 'A_2', label: 'a₃ (z)', inputType: 'number', placeholder: '0' },
+        { key: 'B_0', label: 'b₁ (x)', inputType: 'number', placeholder: '0' },
+        { key: 'B_1', label: 'b₂ (y)', inputType: 'number', placeholder: '0' },
+        { key: 'B_2', label: 'b₃ (z)', inputType: 'number', placeholder: '0' },
       ],
-      buildCommand: (p) => `magnitude [${p.v || ''}]`,
+      buildCommand: (p) => `[${p.A_0||'0'}, ${p.A_1||'0'}, ${p.A_2||'0'}] ${p.op||'+'} [${p.B_0||'0'}, ${p.B_1||'0'}, ${p.B_2||'0'}]`,
     },
-    {
-      id: 'vector-angle',
-      label: 'Angle Between Two Vectors',
-      latexFormula: '\\cos\\theta = \\dfrac{\\mathbf{u}\\cdot\\mathbf{v}}{|u||v|}',
-      note: 'Enter two vectors to compute the angle between them in degrees.',
+    { id: 'vec-dot-2d', label: 'Dot Product  (2D)', latexFormula: '\\mathbf{a}\\cdot\\mathbf{b}', note: 'Scalar = a₁b₁ + a₂b₂.',
       params: [
-        { key: 'u', label: 'Vector u', inputType: 'text', placeholder: 'e.g. 1, 2' },
-        { key: 'v', label: 'Vector v', inputType: 'text', placeholder: 'e.g. 3, 5' },
+        { key: 'A_0', label: 'a₁', inputType: 'number', placeholder: '0' },
+        { key: 'A_1', label: 'a₂', inputType: 'number', placeholder: '0' },
+        { key: 'B_0', label: 'b₁', inputType: 'number', placeholder: '0' },
+        { key: 'B_1', label: 'b₂', inputType: 'number', placeholder: '0' },
       ],
-      buildCommand: (p) => `angle between [${p.u || ''}] [${p.v || ''}]`,
+      buildCommand: (p) => `dot([${p.A_0||'0'}, ${p.A_1||'0'}], [${p.B_0||'0'}, ${p.B_1||'0'}])`,
+    },
+    { id: 'vec-dot-3d', label: 'Dot Product  (3D)', latexFormula: '\\mathbf{a}\\cdot\\mathbf{b}', note: 'Scalar = a₁b₁ + a₂b₂ + a₃b₃.',
+      params: [
+        { key: 'A_0', label: 'a₁', inputType: 'number', placeholder: '0' },
+        { key: 'A_1', label: 'a₂', inputType: 'number', placeholder: '0' },
+        { key: 'A_2', label: 'a₃', inputType: 'number', placeholder: '0' },
+        { key: 'B_0', label: 'b₁', inputType: 'number', placeholder: '0' },
+        { key: 'B_1', label: 'b₂', inputType: 'number', placeholder: '0' },
+        { key: 'B_2', label: 'b₃', inputType: 'number', placeholder: '0' },
+      ],
+      buildCommand: (p) => `dot([${p.A_0||'0'}, ${p.A_1||'0'}, ${p.A_2||'0'}], [${p.B_0||'0'}, ${p.B_1||'0'}, ${p.B_2||'0'}])`,
+    },
+    { id: 'vec-cross', label: 'Cross Product  (3D)', latexFormula: '\\mathbf{a}\\times\\mathbf{b}', note: 'Returns a vector perpendicular to both inputs.',
+      params: [
+        { key: 'A_0', label: 'a₁', inputType: 'number', placeholder: '0' },
+        { key: 'A_1', label: 'a₂', inputType: 'number', placeholder: '0' },
+        { key: 'A_2', label: 'a₃', inputType: 'number', placeholder: '0' },
+        { key: 'B_0', label: 'b₁', inputType: 'number', placeholder: '0' },
+        { key: 'B_1', label: 'b₂', inputType: 'number', placeholder: '0' },
+        { key: 'B_2', label: 'b₃', inputType: 'number', placeholder: '0' },
+      ],
+      buildCommand: (p) => `cross([${p.A_0||'0'}, ${p.A_1||'0'}, ${p.A_2||'0'}], [${p.B_0||'0'}, ${p.B_1||'0'}, ${p.B_2||'0'}])`,
+    },
+    { id: 'vec-mag-2d', label: 'Magnitude  (2D)', latexFormula: '|\\mathbf{a}|', note: 'Magnitude = √(x²+y²).',
+      params: [{ key: 'A_0', label: 'x', inputType: 'number', placeholder: '3' }, { key: 'A_1', label: 'y', inputType: 'number', placeholder: '4' }],
+      buildCommand: (p) => `norm([${p.A_0||'0'}, ${p.A_1||'0'}])`,
+    },
+    { id: 'vec-mag-3d', label: 'Magnitude  (3D)', latexFormula: '|\\mathbf{a}|', note: 'Magnitude = √(x²+y²+z²).',
+      params: [{ key: 'A_0', label: 'x', inputType: 'number', placeholder: '1' }, { key: 'A_1', label: 'y', inputType: 'number', placeholder: '2' }, { key: 'A_2', label: 'z', inputType: 'number', placeholder: '2' }],
+      buildCommand: (p) => `norm([${p.A_0||'0'}, ${p.A_1||'0'}, ${p.A_2||'0'}])`,
     },
   ],
 
-  /* ── Matrices ───────────────────────────────────────────────────────── */
+    /* ── Matrices ─────────────────────────────────────────────────────────────────── */
   matrices: [
-    {
-      id: 'matrix-multiply',
-      label: 'Multiply Two 2×2 Matrices',
-      latexFormula: 'AB = \\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}\\begin{bmatrix}e&f\\\\g&h\\end{bmatrix}',
-      note: 'Enter both 2×2 matrices row by row.',
+    { id: 'mat-arith', label: 'Add / Subtract  (A ± B)', latexFormula: 'A \\pm B', note: 'Pick size, fill both matrices, choose + or −. Both must be same size.',
       params: [
-        { key: 'a11', label: 'A row 1 col 1', inputType: 'number', placeholder: '1' },
-        { key: 'a12', label: 'A row 1 col 2', inputType: 'number', placeholder: '2' },
-        { key: 'a21', label: 'A row 2 col 1', inputType: 'number', placeholder: '3' },
-        { key: 'a22', label: 'A row 2 col 2', inputType: 'number', placeholder: '4' },
-        { key: 'b11', label: 'B row 1 col 1', inputType: 'number', placeholder: '5' },
-        { key: 'b12', label: 'B row 1 col 2', inputType: 'number', placeholder: '6' },
-        { key: 'b21', label: 'B row 2 col 1', inputType: 'number', placeholder: '7' },
-        { key: 'b22', label: 'B row 2 col 2', inputType: 'number', placeholder: '8' },
+        { key: 'rows', label: 'Rows',      inputType: 'select', options: ['1','2','3','4'] },
+        { key: 'cols', label: 'Columns',   inputType: 'select', options: ['1','2','3','4'] },
+        { key: 'op',   label: 'Operation', inputType: 'select', options: ['+', '-'] },
+        { key: 'A', label: 'Matrix A', inputType: 'matrix-grid', rowsKey: 'rows', colsKey: 'cols' },
+        { key: 'B', label: 'Matrix B', inputType: 'matrix-grid', rowsKey: 'rows', colsKey: 'cols' },
       ],
-      buildCommand: (p) => `[[${p.a11},${p.a12}],[${p.a21},${p.a22}]] * [[${p.b11},${p.b12}],[${p.b21},${p.b22}]]`,
+      buildCommand: (p) => { const r=parseInt(p.rows||'2'),c=parseInt(p.cols||'2'); return `${buildMatrix(p,'A',r,c)} ${p.op||'+'} ${buildMatrix(p,'B',r,c)}`; },
     },
-    {
-      id: 'matrix-det',
-      label: 'Determinant of a 2×2 Matrix',
-      latexFormula: '\\det\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix} = ad-bc',
-      note: 'Enter a 2×2 matrix to compute its determinant.',
+    { id: 'mat-multiply', label: 'Multiply  (A × B)', latexFormula: 'A \\times B', note: 'Cols of A = Rows of B = Shared dim.',
       params: [
-        { key: 'a11', label: 'Row 1 col 1', inputType: 'number', placeholder: '1' },
-        { key: 'a12', label: 'Row 1 col 2', inputType: 'number', placeholder: '2' },
-        { key: 'a21', label: 'Row 2 col 1', inputType: 'number', placeholder: '3' },
-        { key: 'a22', label: 'Row 2 col 2', inputType: 'number', placeholder: '4' },
+        { key: 'rA',  label: 'Rows of A',  inputType: 'select', options: ['1','2','3','4'] },
+        { key: 'sAB', label: 'Shared dim', inputType: 'select', options: ['1','2','3','4'] },
+        { key: 'cB',  label: 'Cols of B',  inputType: 'select', options: ['1','2','3','4'] },
+        { key: 'A', label: 'Matrix A', inputType: 'matrix-grid', rowsKey: 'rA',  colsKey: 'sAB' },
+        { key: 'B', label: 'Matrix B', inputType: 'matrix-grid', rowsKey: 'sAB', colsKey: 'cB'  },
       ],
-      buildCommand: (p) => `det([[${p.a11},${p.a12}],[${p.a21},${p.a22}]])`,
+      buildCommand: (p) => { const rA=parseInt(p.rA||'2'),sAB=parseInt(p.sAB||'2'),cB=parseInt(p.cB||'2'); return `${buildMatrix(p,'A',rA,sAB)} * ${buildMatrix(p,'B',sAB,cB)}`; },
     },
-    {
-      id: 'matrix-inverse',
-      label: 'Inverse of a 2×2 Matrix',
-      latexFormula: 'A^{-1} = \\dfrac{1}{ad-bc}\\begin{pmatrix}d&-b\\\\-c&a\\end{pmatrix}',
-      note: 'Enter a 2×2 matrix with non-zero determinant.',
+    { id: 'mat-det', label: 'Determinant  (square)', latexFormula: '\\det(A)', note: 'Choose 2×2 or 3×3.',
       params: [
-        { key: 'a11', label: 'Row 1 col 1', inputType: 'number', placeholder: '2' },
-        { key: 'a12', label: 'Row 1 col 2', inputType: 'number', placeholder: '1' },
-        { key: 'a21', label: 'Row 2 col 1', inputType: 'number', placeholder: '1' },
-        { key: 'a22', label: 'Row 2 col 2', inputType: 'number', placeholder: '1' },
+        { key: 'dim', label: 'Size', inputType: 'select', options: ['2','3'] },
+        { key: 'A', label: 'Matrix A', inputType: 'matrix-grid', rowsKey: 'dim', colsKey: 'dim' },
       ],
-      buildCommand: (p) => `inv([[${p.a11},${p.a12}],[${p.a21},${p.a22}]])`,
+      buildCommand: (p) => { const d=parseInt(p.dim||'2'); return `det(${buildMatrix(p,'A',d,d)})`; },
+    },
+    { id: 'mat-inv', label: 'Inverse  (A⁻¹)', latexFormula: 'A^{-1}', note: 'Only square, non-singular matrices are invertible.',
+      params: [
+        { key: 'dim', label: 'Size', inputType: 'select', options: ['2','3'] },
+        { key: 'A', label: 'Matrix A', inputType: 'matrix-grid', rowsKey: 'dim', colsKey: 'dim' },
+      ],
+      buildCommand: (p) => { const d=parseInt(p.dim||'2'); return `inv(${buildMatrix(p,'A',d,d)})`; },
+    },
+    { id: 'mat-transpose', label: 'Transpose  (Aᵀ)', latexFormula: 'A^T', note: 'Flips rows ↔ columns.',
+      params: [
+        { key: 'rows', label: 'Rows',    inputType: 'select', options: ['1','2','3','4'] },
+        { key: 'cols', label: 'Columns', inputType: 'select', options: ['1','2','3','4'] },
+        { key: 'A', label: 'Matrix A', inputType: 'matrix-grid', rowsKey: 'rows', colsKey: 'cols' },
+      ],
+      buildCommand: (p) => { const r=parseInt(p.rows||'2'),c=parseInt(p.cols||'2'); return `transpose(${buildMatrix(p,'A',r,c)})`; },
+    },
+    { id: 'mat-scalar', label: 'Scalar Multiply  (k·A)', latexFormula: 'kA', note: 'Multiplies every entry by k.',
+      params: [
+        { key: 'k',    label: 'Scalar k', inputType: 'number' },
+        { key: 'rows', label: 'Rows',     inputType: 'select', options: ['1','2','3','4'] },
+        { key: 'cols', label: 'Columns',  inputType: 'select', options: ['1','2','3','4'] },
+        { key: 'A', label: 'Matrix A', inputType: 'matrix-grid', rowsKey: 'rows', colsKey: 'cols' },
+      ],
+      buildCommand: (p) => { const r=parseInt(p.rows||'2'),c=parseInt(p.cols||'2'); return `${p.k||'2'} * ${buildMatrix(p,'A',r,c)}`; },
     },
   ],
 
@@ -1275,6 +1324,36 @@ const CATEGORY_FORMS: Record<string, StructForm[]> = {
 
 const MATH_SIDEBAR_KEY = 'kivora-math-sidebar';
 
+// ── autoWrapMath: detects math spans and wraps in $...$/$$...$$ for KaTeX
+function autoWrapMath(raw: string): string {
+  if (!raw.trim()) return '';
+  if (raw.includes('$')) return raw;
+  const PROSE = /\b(find|solve|calculate|evaluate|compute|show|prove|given|determine|what|how|when|the|a|an|of|in|at|to|and|or|not|with|that|this|let|where|is|are|was|were|by|be|all|using|use|apply|write)\b/gi;
+  const MS = new RegExp(
+    '\\[\\[[\\s\\S]*?\\]\\]|\\[\\s*[\\d.+\\-*/\\s,a-zA-Z]+\\s*\\]' +
+    '|\\b(?:sin|cos|tan|asin|acos|atan|log|ln|exp|sqrt|abs|det|inv)\\s*\\([^)]{0,80}\\)' +
+    '|d(?:\\^2)?[a-zA-Z]?\\/d[a-zA-Z](?:\\^2)?' +
+    "|y''|y'" +
+    '|[a-zA-Z0-9]+\\^[a-zA-Z0-9{}()_+\\-*/]+' +
+    '|\\b(?:pi|theta|alpha|beta|gamma|delta|epsilon|lambda|mu|sigma|phi|omega)\\b' +
+    '|[a-zA-Z]+(?:\\^[a-zA-Z0-9{}]+)?(?:\\s*[+\\-*/]\\s*[a-zA-Z0-9.]+(?:\\^[a-zA-Z0-9{}]+)?)+\\s*=\\s*[^.?!\\n,]{1,40}' +
+    '|[-]?\\d+(?:\\.\\d+)?(?:\\s*[+\\-*/^]\\s*(?:\\([-]?\\d[^)]*\\)|[-]?\\d+(?:\\.\\d+)?))+',
+    'g'
+  );
+  return raw.split('\n').map(line => {
+    const t = line.trim(); if (!t) return line;
+    const pr = (t.match(PROSE)??[]).length / Math.max((t.match(/\b\w+\b/g)??[]).length, 1);
+    const hasMath = /\b(?:sin|cos|tan|sqrt|log|ln|exp|abs|det|inv)\s*\(/.test(t) ||
+      /\b(?:derivative|integral|limit)\b/i.test(t) || /d[a-z]\/d[a-z]/.test(t) ||
+      /\b(?:pi|theta|alpha|beta|gamma|sigma|omega)\b/i.test(t) ||
+      /[a-zA-Z0-9]\^[a-zA-Z0-9{(]/.test(t) ||
+      (t.match(/[+\-*/^=<>()\[\]{}|]/g)??[]).length > 2;
+    if (!hasMath) return line;
+    if (pr < 0.25 && (t.match(/\b\w+\b/g)??[]).length <= 10) return '$$' + t + '$$';
+    return t.replace(MS, m => '$' + m.trim() + '$');
+  }).join('\n');
+}
+
 export function MathSolverPage() {
   const [active, setActive] = useState<ActiveView>('algebra');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
@@ -1303,10 +1382,10 @@ export function MathSolverPage() {
 
   const [contextName, setContextName] = useState('');
   const [scanBusy, setScanBusy] = useState(false);
-  const [scanFileName, setScanFileName] = useState('');
   const [scanError, setScanError] = useState('');
   const [scanExtracted, setScanExtracted] = useState('');
-  const [scanSource, setScanSource] = useState<'image' | 'pdf' | null>(null);
+  const [scanMode,   setScanMode]   = useState<'upload' | 'type'>('upload');
+  const [typeInput,  setTypeInput]  = useState('');
 
   // Unit converter state
   const [unitCatIdx, setUnitCatIdx] = useState(0);
@@ -1358,9 +1437,6 @@ export function MathSolverPage() {
     setScanBusy(true);
     setScanError('');
     setScanExtracted('');
-    setScanFileName(file.name);
-    setScanSource(isImage ? 'image' : 'pdf');
-
     try {
       if (isImage) {
         const imageBase64 = await new Promise<string>((resolve, reject) => {
@@ -1785,54 +1861,67 @@ export function MathSolverPage() {
                   </div>
 
                   {/* ── Parameter inputs ── */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: pf.params.length >= 6
-                      ? 'repeat(3, 1fr)'
-                      : pf.params.length >= 4
-                        ? 'repeat(2, 1fr)'
-                        : `repeat(${Math.min(pf.params.length, 3)}, 1fr)`,
-                    gap: 12,
-                  }}>
-                    {pf.params.map((param, idx) => (
-                      <div key={param.key} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        <label style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            width: 16, height: 16, borderRadius: '50%', background: `${currentAccent}20`,
-                            color: currentAccent, fontSize: 9, fontWeight: 800, flexShrink: 0,
-                          }}>{idx + 1}</span>
-                          {param.label}
-                          {param.unit && <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-muted)' }}>({param.unit})</span>}
-                        </label>
-                        <input
-                          type={param.inputType === 'number' ? 'number' : 'text'}
-                          step="any"
-                          placeholder={param.placeholder ?? '…'}
-                          value={structFormParams[param.key] ?? ''}
-                          onChange={e => setStructFormParams(prev => ({ ...prev, [param.key]: e.target.value }))}
-                          onKeyDown={e => { if (e.key === 'Enter') handleStructSolve(); }}
-                          style={{
-                            padding: '9px 12px', borderRadius: 10,
-                            border: `1.5px solid var(--border-subtle)`,
-                            background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 14,
-                            outline: 'none',
-                            fontFamily: param.inputType === 'text' ? '"JetBrains Mono", monospace' : 'inherit',
-                            transition: 'border-color 0.15s, box-shadow 0.15s',
-                            width: '100%', boxSizing: 'border-box',
-                          }}
-                          onFocus={e => {
-                            e.currentTarget.style.borderColor = currentAccent;
-                            e.currentTarget.style.boxShadow = `0 0 0 3px ${currentAccent}18`;
-                          }}
-                          onBlur={e => {
-                            e.currentTarget.style.borderColor = 'var(--border-subtle)';
-                            e.currentTarget.style.boxShadow = 'none';
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
+                  {(() => {
+                    const regParams = pf.params.filter(p => p.inputType !== 'matrix-grid');
+                    const matParams = pf.params.filter(p => p.inputType === 'matrix-grid');
+                    const rc = regParams.length;
+                    const gridCols = rc >= 6 ? 'repeat(3, 1fr)' : rc >= 4 ? 'repeat(2, 1fr)' : `repeat(${Math.min(rc, 3)}, 1fr)`;
+                    const bs: React.CSSProperties = { padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', transition: 'border-color 0.15s, box-shadow 0.15s', width: '100%', boxSizing: 'border-box' as const };
+                    const onF = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => { e.currentTarget.style.borderColor = currentAccent; e.currentTarget.style.boxShadow = `0 0 0 3px ${currentAccent}18`; };
+                    const onB = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.boxShadow = 'none'; };
+                    return (
+                      <>
+                        {rc > 0 && (
+                          <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 12 }}>
+                            {regParams.map((param, idx) => (
+                              <div key={param.key} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                <label style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: `${currentAccent}20`, color: currentAccent, fontSize: 9, fontWeight: 800, flexShrink: 0 }}>{idx + 1}</span>
+                                  {param.label}
+                                  {param.unit && <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-muted)' }}>({param.unit})</span>}
+                                </label>
+                                {param.inputType === 'select' ? (
+                                  <select value={structFormParams[param.key] ?? (param.options?.[0] ?? '')} onChange={e => setStructFormParams(prev => ({ ...prev, [param.key]: e.target.value }))} style={{ ...bs, cursor: 'pointer' }} onFocus={onF} onBlur={onB}>
+                                    {param.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                  </select>
+                                ) : (
+                                  <input type={param.inputType === 'number' ? 'number' : 'text'} step="any" placeholder={param.placeholder ?? '…'}
+                                    value={structFormParams[param.key] ?? ''} onChange={e => setStructFormParams(prev => ({ ...prev, [param.key]: e.target.value }))}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleStructSolve(); }}
+                                    style={{ ...bs, fontFamily: param.inputType === 'text' ? '"JetBrains Mono", monospace' : 'inherit' }} onFocus={onF} onBlur={onB} />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {matParams.map(param => {
+                          const rows = Math.max(1, Math.min(4, parseInt(structFormParams[param.rowsKey!] ?? '2')));
+                          const cols = Math.max(1, Math.min(4, parseInt(structFormParams[param.colsKey!] ?? '2')));
+                          return (
+                            <div key={param.key} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                {param.label}<span style={{ marginLeft: 6, fontSize: 10, fontWeight: 400, color: 'var(--text-muted)' }}>({rows}×{cols})</span>
+                              </span>
+                              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 6, maxWidth: cols <= 2 ? 260 : cols === 3 ? 340 : 440 }}>
+                                {Array.from({ length: rows * cols }, (_, idx) => {
+                                  const r = Math.floor(idx / cols), c = idx % cols;
+                                  const ck = `${param.key}_${r}_${c}`;
+                                  return (
+                                    <input key={ck} type="number" step="any" placeholder="0"
+                                      value={structFormParams[ck] ?? ''} onChange={e => setStructFormParams(prev => ({ ...prev, [ck]: e.target.value }))}
+                                      onKeyDown={e => { if (e.key === 'Enter') handleStructSolve(); }}
+                                      style={{ padding: '8px 4px', borderRadius: 8, textAlign: 'center', border: '1.5px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', width: '100%', boxSizing: 'border-box' as const, fontFamily: '"JetBrains Mono", monospace', transition: 'border-color 0.15s, box-shadow 0.15s' }}
+                                      onFocus={e => { e.currentTarget.style.borderColor = currentAccent; e.currentTarget.style.boxShadow = `0 0 0 2px ${currentAccent}18`; }}
+                                      onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.boxShadow = 'none'; }} />
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
 
                   {/* ── Solve / Clear row ── */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -2306,90 +2395,59 @@ export function MathSolverPage() {
           </div>
         )}
 
-        {/* ── QUESTION SCAN ── */}
+                {/* ── QUESTION SCAN ── */}
         {active === 'scan' && (
           <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 900 }}>
-            <WorkflowCard
-              accent={SPECIAL_VIEW_META.scan.accent}
-              title={SPECIAL_VIEW_META.scan.workflowTitle}
-              steps={SPECIAL_VIEW_META.scan.workflow}
-            />
-
-            <div style={{ padding: '14px 16px', borderRadius: 12, border: '1px dashed var(--border-subtle)', background: 'var(--bg-2)' }}>
-              <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, marginBottom: 6 }}>
-                Upload math-question files only
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
-                Best for phone screenshots, worksheet captures, or PDFs that contain a single question or a short worked problem.
-              </div>
-              <input
-                type="file"
-                accept="image/*,.pdf,application/pdf"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) {
-                    void loadQuestionFromFile(file);
-                  }
-                  event.currentTarget.value = '';
-                }}
-                style={{ fontSize: 12, color: 'var(--text-secondary)' }}
-              />
+            <WorkflowCard accent={SPECIAL_VIEW_META.scan.accent} title={SPECIAL_VIEW_META.scan.workflowTitle} steps={SPECIAL_VIEW_META.scan.workflow} />
+            <div style={{ display: 'flex', gap: 6, padding: '3px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', width: 'fit-content' }}>
+              {(['upload', 'type'] as const).map(mode => (
+                <button key={mode} onClick={() => setScanMode(mode)} style={{ padding: '7px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'background 0.15s, color 0.15s', background: scanMode === mode ? '#38bdf8' : 'transparent', color: scanMode === mode ? '#fff' : 'var(--text-secondary)' }}>
+                  {mode === 'upload' ? '📷 Upload file' : '✏️ Write question'}
+                </button>
+              ))}
             </div>
-
-            {scanBusy && (
-              <div style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 12, color: 'var(--text-secondary)' }}>
-                Extracting the question from <strong style={{ color: 'var(--text-primary)' }}>{scanFileName || 'your file'}</strong>…
-              </div>
-            )}
-
-            {scanError && (
-              <div style={{ padding: '12px 14px', borderRadius: 10, background: '#ef444410', border: '1px solid #ef444440', fontSize: 12, color: '#ef4444' }}>
-                ⚠ {scanError}
-              </div>
-            )}
-
-            {scanExtracted && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ padding: '14px 16px', borderRadius: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-                    <div>
-                      <div style={{ fontSize: 11, color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                        Extracted question
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                        {scanFileName || 'Uploaded file'} · {scanSource === 'image' ? 'Screenshot OCR' : 'PDF text extraction'}
-                      </div>
+            {scanMode === 'upload' && (
+              <>
+                <div style={{ padding: '14px 16px', borderRadius: 12, border: '1px dashed var(--border-subtle)', background: 'var(--bg-2)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Upload math-question files</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>Best for screenshots, worksheets, or PDFs.</div>
+                  <input type="file" accept="image/*,.pdf" style={{ fontSize: 13 }} onChange={e => { const f = e.target.files?.[0]; if (f) loadQuestionFromFile(f); }} />
+                </div>
+                {scanBusy && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>⏳ Reading…</div>}
+                {scanError && <div style={{ fontSize: 13, color: '#f87171' }}>⚠️ {scanError}</div>}
+                {scanExtracted && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => { setInput(scanExtracted); setActive('algebra'); inputRef.current?.focus(); }} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: 'var(--bg-3)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Use in solver</button>
+                      <button onClick={() => { setInput(scanExtracted); setActive('algebra'); setTimeout(() => { void solve(scanExtracted, 'algebra'); }, 0); }} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Solve now</button>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button
-                        onClick={() => {
-                          setInput(scanExtracted);
-                          setActive('algebra');
-                          inputRef.current?.focus();
-                        }}
-                        style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}
-                      >
-                        Use in solver
-                      </button>
-                      <button
-                        onClick={() => {
-                          setInput(scanExtracted);
-                          setActive('algebra');
-                          setTimeout(() => { void solve(scanExtracted, 'algebra'); }, 0);
-                        }}
-                        style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
-                      >
-                        Solve now
-                      </button>
-                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Extracted text</div>
+                    <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 13, color: 'var(--text-secondary)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>{scanExtracted}</div>
                   </div>
-
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
-                    Extracted text
+                )}
+              </>
+            )}
+            {scanMode === 'type' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>Type any math question. Use <code>x^2</code>, <code>sqrt(x)</code>, <code>[[1,2],[3,4]]</code>. Preview renders live as you type.</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {([{label:'^',insert:'^'},{label:'√',insert:'sqrt()'},{label:'/',insert:'/'},{label:'π',insert:'pi'},{label:'θ',insert:'theta'},{label:'α',insert:'alpha'},{label:'β',insert:'beta'},{label:'λ',insert:'lambda'},{label:'∞',insert:'inf'},{label:'∂',insert:'d/dx'},{label:'∫',insert:'integrate()'},{label:'sin',insert:'sin()'},{label:'cos',insert:'cos()'},{label:'tan',insert:'tan()'},{label:'ln',insert:'ln()'},{label:'log',insert:'log()'},{label:'e^x',insert:'exp()'},{label:'|x|',insert:'abs()'},{label:'≤',insert:' <= '},{label:'≥',insert:' >= '},{label:'≠',insert:' != '},{label:'[[]]',insert:'[[1,2],[3,4]]'},{label:"y'",insert:"y'"},{label:"y''",insert:"y''"},{label:'Σ',insert:'sum()'},{label:'det',insert:'det()'},{label:'inv',insert:'inv()'}] as Array<{label:string;insert:string}>).map(sym => (
+                    <button key={sym.label+sym.insert} onClick={() => { const ta=document.getElementById('math-question-input') as HTMLTextAreaElement|null; if(!ta){setTypeInput(prev=>prev+sym.insert);return;} const s=ta.selectionStart??typeInput.length,e2=ta.selectionEnd??typeInput.length; setTypeInput(typeInput.slice(0,s)+sym.insert+typeInput.slice(e2)); setTimeout(()=>{ta.focus();ta.setSelectionRange(s+sym.insert.length,s+sym.insert.length);},0); }} style={{ padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace' }}>{sym.label}</button>
+                  ))}
+                </div>
+                <textarea id="math-question-input" value={typeInput} onChange={e => setTypeInput(e.target.value)}
+                  placeholder="e.g.  solve x^2 - 5x + 6 = 0  or  det([[1,2],[3,4]])  or  derivative of sin(x^2)"
+                  rows={4} style={{ padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 14, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.6, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' as const }} />
+                {typeInput.trim() && (
+                  <div style={{ padding: '12px 16px', borderRadius: 12, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', minHeight: 48 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 8 }}>Preview</div>
+                    <MathText>{autoWrapMath(typeInput)}</MathText>
                   </div>
-                  <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 13, color: 'var(--text-secondary)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>
-                    {scanExtracted}
-                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button disabled={!typeInput.trim()} onClick={() => { setInput(typeInput); setActive('algebra'); inputRef.current?.focus(); }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}>Use in solver</button>
+                  <button disabled={!typeInput.trim()} onClick={() => { const q=typeInput.trim(); setInput(q); setActive('algebra'); setTimeout(()=>{ void solve(q,'algebra'); },0); }} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}>Solve now</button>
+                  <button disabled={!typeInput.trim()} onClick={() => setTypeInput('')} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}>Clear</button>
                 </div>
               </div>
             )}
