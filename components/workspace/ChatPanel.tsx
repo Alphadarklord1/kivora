@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
+import { loadClientAiDataMode } from '@/lib/privacy/ai-data';
 import { buildRagContext } from '@/lib/rag/retrieve';
 import { queryIndexedDocument } from '@/lib/rag/index-store';
 
@@ -129,6 +130,7 @@ export function ChatPanel({
 
     try {
       const ai = loadAiRuntimePreferences();
+      const privacyMode = loadClientAiDataMode();
 
       const retrievedSources = extractedText && fileId
         ? await queryIndexedDocument(fileId, extractedText, q, 5).catch(() => [])
@@ -143,6 +145,7 @@ export function ChatPanel({
           context: retrievedSources.length > 0 ? buildRagContext(retrievedSources) : extractedText,
           sources: retrievedSources.map((source) => ({ label: source.label, preview: source.preview, text: source.text })),
           ai,
+          privacyMode,
         }),
         signal: ctrl.signal,
       });

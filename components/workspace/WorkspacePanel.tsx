@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
 import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
+import { loadClientAiDataMode } from '@/lib/privacy/ai-data';
 import { idbStore } from '@/lib/idb';
 import { extractTextFromBlob } from '@/lib/pdf/extract';
 import type { ToolMode } from '@/lib/offline/generate';
@@ -53,19 +54,16 @@ export interface WorkspacePanelProps {
 const GENERATE_TABS = [
   { id: 'summarize',  label: 'Summarize',  icon: '📝', hint: 'Key-point summary of your content' },
   { id: 'notes',      label: 'Notes',      icon: '📋', hint: 'Structured study notes' },
-  { id: 'rephrase',   label: 'Rephrase',   icon: '🔄', hint: 'Simplified rewrite' },
   { id: 'outline',    label: 'Outline',    icon: '📑', hint: 'Chapter outline with learning objectives' },
   { id: 'practice',   label: 'Practice',   icon: '🎯', hint: 'Practice problem with progressive hints and solution' },
   { id: 'mcq',        label: 'MCQ',        icon: '🧩', hint: 'Multiple-choice questions with answers' },
   { id: 'quiz',       label: 'Quiz',       icon: '❓', hint: 'Open-ended quiz questions' },
-  { id: 'flashcards', label: 'Flashcards', icon: '📇', hint: 'Spaced-repetition study cards' },
-  { id: 'assignment', label: 'Assignment', icon: '📌', hint: 'Practice assignment questions' },
   { id: 'exam',       label: 'Exam Prep',  icon: '🏆', hint: 'Timed exam with scoring and weak-area analysis' },
 ] as const;
 
 const GENERATE_TAB_GROUPS = [
-  { label: 'Written',  ids: ['summarize', 'notes', 'rephrase', 'outline'] },
-  { label: 'Practice', ids: ['practice', 'mcq', 'quiz', 'flashcards', 'assignment'] },
+  { label: 'Written',  ids: ['summarize', 'notes', 'outline'] },
+  { label: 'Practice', ids: ['practice', 'mcq', 'quiz'] },
   { label: 'Exam',     ids: ['exam'] },
 ] as const;
 
@@ -501,11 +499,12 @@ export function WorkspacePanel({
 
     try {
       const ai = loadAiRuntimePreferences();
+      const privacyMode = loadClientAiDataMode();
 
       const res = await fetch('/api/generate/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, text: src, fileId: selFile?.id ?? null, retrievalContext, options: { count }, ai }),
+        body: JSON.stringify({ mode, text: src, fileId: selFile?.id ?? null, retrievalContext, options: { count }, ai, privacyMode }),
         signal: ctrl.signal,
       });
 
@@ -513,7 +512,7 @@ export function WorkspacePanel({
         // Fallback to non-streaming route
         const fallback = await fetch('/api/generate', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode, text: retrievalContext, fileId: selFile?.id ?? null, options: { count }, ai }),
+          body: JSON.stringify({ mode, text: retrievalContext, fileId: selFile?.id ?? null, options: { count }, ai, privacyMode }),
         });
         const data = await fallback.json();
         setOutput(data.content ?? data.error ?? 'No output received.');
@@ -573,21 +572,17 @@ export function WorkspacePanel({
     const preferred = handoff.preferredTool ?? 'quiz';
     const nextMode: ToolMode = preferred === 'mcq'
       ? 'mcq'
-      : preferred === 'flashcards'
-        ? 'flashcards'
-        : preferred === 'summarize' || preferred === 'explain'
-          ? 'summarize'
-          : 'quiz';
+      : preferred === 'summarize' || preferred === 'explain'
+        ? 'summarize'
+        : 'quiz';
 
     const sourceText = preferred === 'mcq'
       ? `Topic: ${handoff.topic}\nCreate 6 high-yield multiple-choice questions with answers and short explanations.`
-      : preferred === 'flashcards'
-        ? `Topic: ${handoff.topic}\nCreate a concise flashcard set with front/back cards for rapid revision.`
-        : preferred === 'summarize'
-          ? `Topic: ${handoff.topic}\nCreate a concise revision summary with key ideas, one example, and a checklist.`
-          : preferred === 'explain'
-            ? `Topic: ${handoff.topic}\nExplain this topic simply for a student. Include one worked example and one common mistake to avoid.`
-            : `Topic: ${handoff.topic}\nCreate 5 open-ended quiz questions with answers and brief feedback.`;
+      : preferred === 'summarize'
+        ? `Topic: ${handoff.topic}\nCreate a concise revision summary with key ideas, one example, and a checklist.`
+        : preferred === 'explain'
+          ? `Topic: ${handoff.topic}\nExplain this topic simply for a student. Include one worked example and one common mistake to avoid.`
+          : `Topic: ${handoff.topic}\nCreate 5 open-ended quiz questions with answers and brief feedback.`;
 
     clearCoachHandoff();
     setMainTab('generate');
@@ -1033,7 +1028,7 @@ export function WorkspacePanel({
 
               {(extractedText || pasteMode) && (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, marginLeft: 'auto' }}>
-                  {['quiz','mcq','flashcards','assignment','exam'].includes(genMode) && (
+                  {['quiz','mcq','exam'].includes(genMode) && (
                     <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
                       Count:
                       <input type="number" value={count} min={2} max={25}
@@ -1111,7 +1106,7 @@ export function WorkspacePanel({
                     {!generating && streamSource === 'local' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(74,222,128,0.15)', color: '#4ade80', borderColor: 'rgba(74,222,128,0.3)' }}>● Local AI</span>}
                     {!generating && streamSource === 'openai' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(79,134,247,0.15)', color: '#4f86f7', borderColor: 'rgba(79,134,247,0.3)' }}>● Cloud AI</span>}
                     {/* Edit toggle — only for text modes, not while streaming */}
-                    {!generating && (genMode === 'summarize' || genMode === 'notes' || genMode === 'rephrase' || genMode === 'outline' || genMode === 'assignment' || genMode === 'quiz') && (
+                    {!generating && (genMode === 'summarize' || genMode === 'notes' || genMode === 'outline' || genMode === 'quiz') && (
                       <button
                         className={`btn btn-sm ${editMode ? 'btn-accent' : 'btn-ghost'}`}
                         style={{ marginLeft: 'auto', fontSize: 12 }}
@@ -1124,7 +1119,7 @@ export function WorkspacePanel({
                   </div>
 
                   {/* Output rendering */}
-                  {editMode && !generating && (genMode === 'summarize' || genMode === 'notes' || genMode === 'rephrase' || genMode === 'outline' || genMode === 'assignment' || genMode === 'quiz')
+                  {editMode && !generating && (genMode === 'summarize' || genMode === 'notes' || genMode === 'outline' || genMode === 'quiz')
                     ? (
                       <textarea
                         value={output}
@@ -1137,7 +1132,6 @@ export function WorkspacePanel({
                     ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) + '<span class="stream-cursor">▍</span>' }} />
                     : genMode === 'practice'   ? <PracticeView content={output} />
                     : genMode === 'mcq'        ? <MCQView content={output} />
-                    : genMode === 'flashcards' ? <FlashcardView content={output} title={selFile?.name} />
                     : genMode === 'exam'       ? <ExamView content={output} />
                     : <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) }} />
                   }

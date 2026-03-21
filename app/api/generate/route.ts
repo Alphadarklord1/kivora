@@ -6,10 +6,12 @@ import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/a
 import { cloudProviderForModel } from '@/lib/ai/runtime';
 import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
+import { requireAppAccess } from '@/lib/api/guard';
+import { redactForAi, resolveAiDataMode } from '@/lib/privacy/ai-data';
 
 // Core modes supported by offline fallback
 const OFFLINE_MODES: ToolMode[] = [
-  'summarize', 'rephrase', 'notes', 'quiz',
+  'summarize', 'rephrase', 'explain', 'notes', 'quiz',
   'mcq', 'flashcards', 'assignment',
 ];
 
@@ -30,6 +32,9 @@ const SYSTEM_PROMPT = 'You are a study assistant. Be concise, accurate, and help
  *  4. Deterministic offline generation — always available, no API needed
  */
 export async function POST(req: NextRequest) {
+  const guardResult = await requireAppAccess(req);
+  if (guardResult) return guardResult;
+
   let body: Record<string, unknown>;
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: 'Invalid JSON.' }, { status: 400 }); }
@@ -63,18 +68,29 @@ export async function POST(req: NextRequest) {
     ? `Deck title: ${deckTitle?.trim() || 'Untitled deck'}\n\n${deckContent.trim()}`
     : trimmedText;
   const currentMode = mode as AllModes;
+  const privacyMode = resolveAiDataMode(body);
   const persistedIndex = typeof fileId === 'string' && fileId.trim()
     ? await getPersistedRagIndexForRequest(req, fileId.trim()).catch(() => undefined)
     : undefined;
+  const safeSourceText = redactForAi(privacyMode, baseSourceText, deckTitle?.trim() || 'study material');
   const preparedText = typeof retrievalContext === 'string' && retrievalContext.trim()
-    ? retrievalContext.trim()
-    : buildGenerationContext(currentMode, baseSourceText, options, persistedIndex);
+    ? redactForAi(privacyMode, retrievalContext.trim(), deckTitle?.trim() || 'study material')
+    : buildGenerationContext(currentMode, safeSourceText, options, privacyMode === 'full' ? persistedIndex : undefined);
   const { mode: aiMode, localModel, cloudModel } = resolveAiRuntimeRequest(body);
   const userPrompt = buildUserPrompt(currentMode, preparedText, options);
   const messages = [
     { role: 'system' as const, content: SYSTEM_PROMPT },
     { role: 'user'   as const, content: userPrompt },
   ];
+
+  if (privacyMode === 'offline') {
+    if (OFFLINE_MODES.includes(currentMode as ToolMode)) {
+      const content = offlineGenerate(currentMode as ToolMode, baseSourceText, options);
+      return NextResponse.json({ mode, content, source: 'offline' });
+    }
+    const fallback = buildOfflineFallback(currentMode, baseSourceText, options);
+    return NextResponse.json({ mode, content: fallback, source: 'offline' });
+  }
 
   // ── 1. Grok (primary cloud) ────────────────────────────────────────────────
   if (shouldTryCloud(aiMode) && isGrokConfigured()) {
@@ -167,6 +183,7 @@ function buildUserPrompt(mode: AllModes, text: string, options?: Record<string, 
 
   const instructions: Record<AllModes, string> = {
     summarize:  `Summarize the following study material clearly and concisely:\n\n${text}`,
+    explain:    `Explain the following concept or text clearly for a student, with a plain-language explanation and one practical example:\n\n${text}`,
     rephrase:   `Rephrase the following text in simpler, clearer language for a student:\n\n${text}`,
     notes:      `Extract key study notes as bullet points from:\n\n${text}`,
     quiz:       `Create ${count} short-answer quiz questions (with answers) from:\n\n${text}`,

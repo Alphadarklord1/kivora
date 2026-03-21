@@ -4,6 +4,8 @@ import type { OpenAIMessage } from '@/lib/ai/openai';
 import { buildRagContext, retrieveFromIndex, retrieveRelevantChunks } from '@/lib/rag/retrieve';
 import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
 import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/ai/server-routing';
+import { requireAppAccess } from '@/lib/api/guard';
+import { redactForAi, resolveAiDataMode } from '@/lib/privacy/ai-data';
 
 /**
  * POST /api/chat
@@ -13,6 +15,9 @@ import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/a
  * Uses the document context as a system prompt so the AI answers about the file.
  */
 export async function POST(req: NextRequest) {
+  const guardResult = await requireAppAccess(req);
+  if (guardResult) return guardResult;
+
   let body: Record<string, unknown>;
   try { body = await req.json(); }
   catch { return new Response('Invalid JSON', { status: 400 }); }
@@ -34,6 +39,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { mode, localModel, cloudModel } = resolveAiRuntimeRequest(body);
+  const privacyMode = resolveAiDataMode(body);
   const ollamaBase = process.env.OLLAMA_URL ?? 'http://localhost:11434';
 
   const encoder = new TextEncoder();
@@ -46,7 +52,7 @@ export async function POST(req: NextRequest) {
   const persistedIndex = typeof fileId === 'string' && fileId.trim()
     ? await getPersistedRagIndexForRequest(req, fileId.trim()).catch(() => undefined)
     : undefined;
-  const sources = Array.isArray(providedSources) && providedSources.length > 0
+  const rawSources = Array.isArray(providedSources) && providedSources.length > 0
     ? providedSources.map((source, index) => ({
         id: `provided-${index + 1}`,
         start: 0,
@@ -58,12 +64,20 @@ export async function POST(req: NextRequest) {
       }))
     : persistedIndex
       ? retrieveFromIndex(persistedIndex, lastQ, 5)
-    : context?.trim()
+      : context?.trim()
       ? retrieveRelevantChunks(context, lastQ, 5)
       : [];
+  const sources = privacyMode === 'full'
+    ? rawSources
+    : rawSources.map((source) => ({
+        ...source,
+        text: redactForAi(privacyMode, source.text, source.label),
+        preview: redactForAi(privacyMode, source.preview, source.label),
+      }));
   const ragContext = sources.length > 0 ? buildRagContext(sources) : '';
+  const safeContext = context?.trim() ? redactForAi(privacyMode, context.trim(), 'study context') : '';
 
-  const sysContent = context?.trim()
+  const sysContent = safeContext
     ? `You are a helpful, accurate study assistant. The student has uploaded a document and will ask you questions about it.
 Answer from the retrieved document sources first. If the sources are not enough, say that clearly instead of inventing details.
 When you use a source, cite it inline like [S1] or [S2].
@@ -137,6 +151,27 @@ ${ragContext}`
     } catch {
       // Fall through to cloud/offline.
     }
+  }
+
+  if (privacyMode === 'offline') {
+    const fallback = safeContext
+      ? `Offline-only privacy mode is active. I can only show a local fallback summary right now.\n\nRelevant sources:\n${sources.map(({ label, preview }) => `${label}: ${preview}`).join('\n')}`
+      : 'Offline-only privacy mode is active. Live chat models are disabled in this mode.';
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        const words = fallback.split(/(\s+)/);
+        for (let i = 0; i < words.length; i += 4) {
+          const chunk = words.slice(i, i + 4).join('');
+          if (chunk) controller.enqueue(sseChunk(chunk, false));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        controller.enqueue(sseChunk('', true, 'offline', sources.map(({ label, preview }) => ({ label, preview }))));
+        controller.close();
+      },
+    });
+
+    return new Response(stream, { headers: SSE_HEADERS });
   }
 
   if (shouldTryCloud(mode)) {

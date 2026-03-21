@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://127.0.0.1:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'llama3.2';
+import { requireAppAccess } from '@/lib/api/guard';
+import { callAi } from '@/lib/ai/call';
+import { offlineGenerate } from '@/lib/offline/generate';
+import { redactForAi, resolveAiDataMode } from '@/lib/privacy/ai-data';
 
 function buildConceptPrompt(concept: string, context?: string) {
   return `You are a clear, encouraging study tutor.
@@ -26,59 +27,50 @@ ${context ? `Context: ${context}` : ''}
 Explain in 2-3 sentences WHY the correct answer is right and where the student's thinking likely went wrong. Be encouraging and educational. Keep it concise.`;
 }
 
-async function runPrompt(prompt: string) {
-  const res = await fetch(`${OLLAMA_URL}/v1/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: OLLAMA_MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 220,
-      temperature: 0.4,
-    }),
-    signal: AbortSignal.timeout(20_000),
-  });
-
-  if (res.ok) {
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content?.trim();
-    if (content) return content;
-  }
-
-  const res2 = await fetch(`${OLLAMA_URL}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false }),
-    signal: AbortSignal.timeout(20_000),
-  });
-
-  if (!res2.ok) return null;
-  const data2 = await res2.json();
-  return data2.response?.trim() || null;
-}
-
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { concept, question, userAnswer, correctAnswer, context } = body as {
-      concept?: string;
-      question?: string;
-      userAnswer?: string;
-      correctAnswer?: string;
-      context?: string;
-    };
+  const guardResult = await requireAppAccess(req);
+  if (guardResult) return guardResult;
 
-    if (concept?.trim()) {
-      const explanation = await runPrompt(buildConceptPrompt(concept.trim(), context));
-      return NextResponse.json({ explanation });
+  try {
+    const body = await req.json() as Record<string, unknown>;
+    const privacyMode = resolveAiDataMode(body);
+    const concept = typeof body.concept === 'string' ? body.concept.trim() : '';
+    const question = typeof body.question === 'string' ? body.question.trim() : '';
+    const userAnswer = typeof body.userAnswer === 'string' ? body.userAnswer.trim() : '';
+    const correctAnswer = typeof body.correctAnswer === 'string' ? body.correctAnswer.trim() : '';
+    const context = typeof body.context === 'string' ? body.context.trim() : '';
+    const safeContext = redactForAi(privacyMode, context, concept || question || 'study context');
+
+    if (concept) {
+      const { result } = await callAi({
+        messages: [
+          { role: 'user', content: buildConceptPrompt(concept, safeContext) },
+        ],
+        maxTokens: 260,
+        temperature: 0.4,
+        aiPrefs: body.ai,
+        privacyMode,
+        offlineFallback: () => offlineGenerate('explain', `${concept}\n\n${context || ''}`.trim()),
+      });
+      return NextResponse.json({ explanation: result });
     }
 
     if (!question || !userAnswer || !correctAnswer) {
       return NextResponse.json({ explanation: null });
     }
 
-    const explanation = await runPrompt(buildAnswerFeedbackPrompt(question, userAnswer, correctAnswer, context));
-    return NextResponse.json({ explanation });
+    const { result } = await callAi({
+      messages: [
+        { role: 'user', content: buildAnswerFeedbackPrompt(question, userAnswer, correctAnswer, safeContext) },
+      ],
+      maxTokens: 220,
+      temperature: 0.4,
+      aiPrefs: body.ai,
+      privacyMode,
+      offlineFallback: () => offlineGenerate('explain', `${question}\n${correctAnswer}\n${context}`.trim()),
+    });
+
+    return NextResponse.json({ explanation: result });
   } catch {
     return NextResponse.json({ explanation: null });
   }
