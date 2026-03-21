@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
 import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
