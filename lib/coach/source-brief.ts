@@ -1,4 +1,4 @@
-type ExtractedMeta = {
+export type ExtractedMeta = {
   title: string;
   siteName?: string;
   description?: string;
@@ -32,6 +32,8 @@ const ENTITY_MAP: Record<string, string> = {
 
 export type SourceBrief = ExtractedMeta & {
   url: string;
+  sourceType: 'url' | 'manual-text';
+  sourceLabel: string;
   summary: string;
   keyPoints: string[];
 };
@@ -97,7 +99,7 @@ function extractTitle(html: string, url: URL) {
   return url.hostname.replace(/^www\./, '');
 }
 
-function estimateReadingMinutes(wordCount: number) {
+export function estimateReadingMinutes(wordCount: number) {
   return Math.max(1, Math.ceil(wordCount / 220));
 }
 
@@ -195,9 +197,36 @@ export function extractSourceMetaFromHtml(html: string, url: URL): ExtractedMeta
   return { title, siteName, description, extractedText, wordCount };
 }
 
-export function buildFallbackSourceBrief(meta: ExtractedMeta, url: string): SourceBrief {
+export function extractSourceMetaFromText(rawText: string, rawTitle?: string): ExtractedMeta {
+  const extractedText = collapseWhitespace(rawText);
+  const wordCount = extractedText ? extractedText.split(/\s+/).length : 0;
+  if (!extractedText || wordCount < 40) {
+    throw new Error('Paste at least a short article or study passage before analyzing.');
+  }
+
+  const paragraphs = pickMeaningfulParagraphs(extractedText);
+  const leadSentence = paragraphs[0]?.split(/(?<=[.!?])\s+/)[0]?.trim() ?? '';
+  const title = collapseWhitespace(rawTitle ?? '') || leadSentence.slice(0, 80) || 'Manual text';
+  const description = paragraphs[0]?.slice(0, 220) || undefined;
+
+  return {
+    title,
+    siteName: 'Manual text',
+    description,
+    extractedText,
+    wordCount,
+  };
+}
+
+export function buildFallbackSourceBrief(
+  meta: ExtractedMeta,
+  url: string,
+  sourceType: SourceBrief['sourceType'] = 'url',
+): SourceBrief {
   return {
     url,
+    sourceType,
+    sourceLabel: sourceType === 'manual-text' ? 'Manual text' : meta.siteName ?? 'Web source',
     ...meta,
     summary: makeFallbackSummary(meta),
     keyPoints: makeFallbackKeyPoints(meta),

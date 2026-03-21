@@ -221,7 +221,7 @@ export function FlashcardView({
     'Stats': 'الإحصاءات',
     'Import': 'استيراد',
     'Browse': 'استعراض',
-    'Revision Coach': 'مدرب المراجعة',
+    'Scholar Hub': 'مركز الباحث',
     'Share': 'مشاركة',
     'Shared': 'تمت المشاركة',
     'Error': 'خطأ',
@@ -873,7 +873,7 @@ export function FlashcardView({
           <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('stats')}>📊 {t('Stats')}</button>
           <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('import')}>📥 {t('Import')}</button>
           {showBrowseButton ? (
-            <button className="btn btn-ghost btn-sm" onClick={() => router.push('/coach')}>🧭 {t('Revision Coach')}</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => router.push('/coach')}>🧭 {t('Scholar Hub')}</button>
           ) : (
             <span />
           )}

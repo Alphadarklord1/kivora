@@ -275,6 +275,8 @@ export function WorkspacePanel({
   const [libLoad,       setLibLoad]       = useState(false);
   const [libExpanded,   setLibExpanded]   = useState<Record<string, boolean>>({});
   const [srsDecks,      setSrsDecks]      = useState<SRSDeck[]>([]);
+  const [activeReviewSetId, setActiveReviewSetId] = useState<string | null>(null);
+  const [requestedReviewPhase, setRequestedReviewPhase] = useState<'review' | null>(null);
   const [dragging,      setDragging]      = useState(false);
   const [uploading,     setUploading]     = useState(false);
   const [missingBlobs,  setMissingBlobs]  = useState<Set<string>>(new Set());
@@ -563,7 +565,29 @@ export function WorkspacePanel({
 
     if ((handoff.type === 'review-set' || handoff.type === 'import-success') && handoff.setId) {
       clearCoachHandoff();
-      router.push(`/coach?set=${handoff.setId}&panel=manage`);
+      setMainTab('library');
+      setActiveReviewSetId(handoff.setId);
+      setRequestedReviewPhase(handoff.panel === 'review' ? 'review' : null);
+      toast('Review set opened in Workspace', 'success');
+      return;
+    }
+
+    if (handoff.type === 'source-output' && handoff.sourceText) {
+      const preferred = handoff.preferredTool ?? 'summarize';
+      const nextMode: ToolMode = preferred === 'quiz' || preferred === 'mcq'
+        ? 'quiz'
+        : 'summarize';
+
+      clearCoachHandoff();
+      setMainTab('generate');
+      setPasteMode(true);
+      setViewFile(null);
+      setSelFile(null);
+      setOutput('');
+      setGenMode(nextMode as GenMode);
+      setExtractedText(handoff.sourceText);
+      toast(`${handoff.title ?? 'Source brief'} is ready in Workspace`, 'success');
+      void runGenerate(nextMode, handoff.sourceText);
       return;
     }
 
@@ -596,6 +620,11 @@ export function WorkspacePanel({
     void runGenerate(nextMode, sourceText);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const activeReviewSet = useMemo(
+    () => srsDecks.find((deck) => deck.id === activeReviewSetId) ?? null,
+    [activeReviewSetId, srsDecks],
+  );
 
   // ── Export generated content ───────────────────────────────────────────
 
@@ -1272,6 +1301,30 @@ export function WorkspacePanel({
                   <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>📇 Saved Review Sets</span>
                   <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{srsDecks.length} set{srsDecks.length !== 1 ? 's' : ''}</span>
                 </div>
+                {activeReviewSet && (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 14, padding: 14, marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 'var(--text-base)', marginBottom: 4 }}>{activeReviewSet.name}</div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                          Full review-set study and editing now live in Workspace.
+                        </div>
+                      </div>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setActiveReviewSetId(null); setRequestedReviewPhase(null); }}>
+                        Close
+                      </button>
+                    </div>
+                    <FlashcardView
+                      initialDeck={activeReviewSet}
+                      title={activeReviewSet.name}
+                      requestedPhase={requestedReviewPhase}
+                      onRequestedPhaseHandled={() => setRequestedReviewPhase(null)}
+                      onDeckChange={(next) => setSrsDecks((current) => current.map((deck) => deck.id === next.id ? next : deck))}
+                      showBrowseButton={false}
+                      showPublicActions={false}
+                    />
+                  </div>
+                )}
                 {srsDecks.map(deck => {
                   const st = getDeckStats(deck);
                   return (
@@ -1291,8 +1344,11 @@ export function WorkspacePanel({
                           </div>
                         </div>
                         <button className="btn btn-primary btn-sm"
-                          onClick={() => router.push(`/coach?set=${deck.id}&panel=${st.due > 0 ? 'review' : 'manage'}`)}>
-                          {st.due > 0 ? `▶ Review ${st.due}` : 'Manage set'}
+                          onClick={() => {
+                            setActiveReviewSetId(deck.id);
+                            setRequestedReviewPhase(st.due > 0 ? 'review' : null);
+                          }}>
+                          {st.due > 0 ? `▶ Review ${st.due}` : 'Open in Workspace'}
                         </button>
                         <button className="btn-icon" style={{ color: 'var(--text-3)', width: 24, height: 24, fontSize: 12 }}
                           onClick={() => {
