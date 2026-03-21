@@ -19,6 +19,19 @@
   grid-template-columns: minmax(0, 1.1fr) 420px;
   gap: 1rem;
   padding: 1.35rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: auto -15% -35% auto;
+  width: 320px;
+  height: 320px;
+  border-radius: 999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--primary) 16%, transparent) 0%, transparent 70%);
+  pointer-events: none;
 }
 
 .heroCopy {
@@ -83,6 +96,61 @@
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.heroNav,
+.roleRow {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.navChip,
+.roleChip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.2rem;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.navChip {
+  cursor: pointer;
+}
+
+.heroRail {
+  display: grid;
+  gap: 0.85rem;
+  align-content: start;
+}
+
+.workflowCard,
+.conversionCard,
+.sourceComposer,
+.sourcePreviewPane {
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+  border-radius: 1.15rem;
+}
+
+.workflowCard,
+.sourceComposer,
+.sourcePreviewPane,
+.conversionCard {
+  padding: 1rem;
+}
+
+.workflowList {
+  margin: 0.75rem 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.5rem;
+  color: var(--text-secondary);
 }
 
 .summaryGrid {
@@ -213,14 +281,84 @@
   gap: 1rem;
 }
 
+.coachStack {
+  display: grid;
+  gap: 1rem;
+}
+
 .leftColumn,
 .rightColumn,
 .listStack,
 .cardEditorList,
 .importBlock,
-.sourcePoints {
+.sourcePoints,
+.studioGrid,
+.recoveryGrid,
+.conversionGrid,
+.sourceWorkspace {
   display: grid;
   gap: 1rem;
+}
+
+.sourceWorkspace {
+  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.05fr);
+  align-items: start;
+}
+
+.studioGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.conversionGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.studioCard,
+.readingCard,
+.nextStepStrip {
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+  border-radius: 1.15rem;
+}
+
+.studioCard,
+.conversionCard,
+.nextStepStrip {
+  padding: 1rem;
+}
+
+.readingCard {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.nextStepStrip {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.recoveryGrid {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.conversionCard {
+  display: grid;
+  gap: 0.7rem;
+  align-content: start;
+}
+
+.conversionCard h4 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.conversionCard p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
 }
 
 .sourceBriefCard {
@@ -429,7 +567,11 @@
 @media (max-width: 1100px) {
   .hero,
   .contentGrid,
-  .editorGrid {
+  .editorGrid,
+  .studioGrid,
+  .recoveryGrid,
+  .conversionGrid,
+  .sourceWorkspace {
     grid-template-columns: 1fr;
   }
 

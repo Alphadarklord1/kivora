@@ -567,6 +567,25 @@ export function WorkspacePanel({
       return;
     }
 
+    if (handoff.type === 'source-output' && handoff.sourceText) {
+      const preferred = handoff.preferredTool ?? 'summarize';
+      const nextMode: ToolMode = preferred === 'quiz' || preferred === 'mcq'
+        ? 'quiz'
+        : 'summarize';
+
+      clearCoachHandoff();
+      setMainTab('generate');
+      setPasteMode(true);
+      setViewFile(null);
+      setSelFile(null);
+      setOutput('');
+      setGenMode(nextMode as GenMode);
+      setExtractedText(handoff.sourceText);
+      toast(`${handoff.title ?? 'Source brief'} is ready in Workspace`, 'success');
+      void runGenerate(nextMode, handoff.sourceText);
+      return;
+    }
+
     if (handoff.type !== 'weak-topic' || !handoff.topic) return;
 
     const preferred = handoff.preferredTool ?? 'quiz';

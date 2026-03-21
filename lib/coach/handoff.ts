@@ -1,8 +1,10 @@
 export type CoachHandoff = {
-  type: 'weak-topic' | 'review-set' | 'import-success';
+  type: 'weak-topic' | 'review-set' | 'import-success' | 'source-output';
   setId?: string;
   topic?: string;
   preferredTool?: 'quiz' | 'mcq' | 'flashcards' | 'summarize' | 'explain';
+  sourceText?: string;
+  title?: string;
 };
 
 export const COACH_HANDOFF_KEY = 'kivora_coach_handoff';

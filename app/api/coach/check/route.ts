@@ -1,6 +1,6 @@
 /**
  * POST /api/coach/check
- * Body: { text: string, ai?: AiPrefs }
+ * Body: { text: string, context?: string, ai?: AiPrefs }
  *
  * Returns Grammarly-style feedback on grammar, academic tone, clarity and flow.
  * AI routing: Grok -> OpenAI -> Ollama -> offline summary fallback.
@@ -31,12 +31,20 @@ export async function POST(req: NextRequest) {
   const text = typeof body.text === 'string' ? body.text.trim() : '';
   if (!text)              return NextResponse.json({ error: 'No text provided.' }, { status: 400 });
   if (text.length > 12_000) return NextResponse.json({ error: 'Text too long (max ~12 000 characters).' }, { status: 400 });
+  const context = typeof body.context === 'string' ? body.context.trim().slice(0, 4_000) : '';
   const privacyMode = resolveAiDataMode(body);
   const safeText = redactForAi(privacyMode, text, 'writing sample');
+  const safeContext = context ? redactForAi(privacyMode, context, 'source context') : '';
 
   const messages = [
     { role: 'system' as const, content: SYSTEM_PROMPT },
-    { role: 'user'   as const, content: `Please check the following text:\n\n${safeText}` },
+    {
+      role: 'user' as const,
+      content: [
+        context ? `Optional reference context:\n${safeContext}` : '',
+        `Please check the following student text:\n\n${safeText}`,
+      ].filter(Boolean).join('\n\n'),
+    },
   ];
 
   const { result } = await callAi({

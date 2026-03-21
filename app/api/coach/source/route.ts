@@ -7,6 +7,7 @@ import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/a
 import { cloudProviderForModel } from '@/lib/ai/runtime';
 import {
   buildFallbackSourceBrief,
+  extractSourceMetaFromText,
   extractSourceMetaFromHtml,
   normalizeSourceBriefUrl,
   type SourceBrief,
@@ -139,56 +140,76 @@ export async function POST(req: NextRequest) {
   }
 
   const rawUrl = typeof body.url === 'string' ? body.url : '';
+  const rawText = typeof body.text === 'string' ? body.text : '';
+  const rawTitle = typeof body.title === 'string' ? body.title : '';
   const ai = body.ai && typeof body.ai === 'object' ? body.ai as Record<string, unknown> : {};
   const privacyMode = resolveAiDataMode(body);
 
-  let url: URL;
-  try {
-    url = normalizeSourceBriefUrl(rawUrl);
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid URL.' }, { status: 400 });
-  }
-
-  try {
-    assertNotPrivateUrl(url);
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'This URL is not allowed.' }, { status: 400 });
-  }
-
-  let html = '';
-  try {
-    const response = await fetch(url.toString(), {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; KivoraBot/1.0; +https://kivora.app)',
-        Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(20_000),
-    });
-
-    if (!response.ok) {
-      return NextResponse.json({ error: `Could not fetch this source (${response.status}).` }, { status: 400 });
-    }
-
-    const contentType = response.headers.get('content-type') ?? '';
-    if (!/text\/html|application\/xhtml\+xml/i.test(contentType)) {
-      return NextResponse.json({ error: 'This URL is not a readable web page.' }, { status: 400 });
-    }
-
-    html = await response.text();
-  } catch {
-    return NextResponse.json({ error: 'Could not fetch this source right now.' }, { status: 502 });
+  if (!rawText.trim() && !rawUrl.trim()) {
+    return NextResponse.json({ error: 'Provide either a source URL or pasted text.' }, { status: 400 });
   }
 
   let brief: SourceBrief;
-  try {
-    brief = buildFallbackSourceBrief(extractSourceMetaFromHtml(html, url), url.toString());
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'This source could not be summarized.' },
-      { status: 400 },
-    );
+
+  if (rawText.trim()) {
+    try {
+      const meta = extractSourceMetaFromText(rawText, rawTitle);
+      brief = buildFallbackSourceBrief(meta, 'manual://text', 'manual-text');
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'This text could not be summarized.' },
+        { status: 400 },
+      );
+    }
+  } else {
+    let url: URL;
+    try {
+      url = normalizeSourceBriefUrl(rawUrl);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid URL.' }, { status: 400 });
+    }
+
+    try {
+      assertNotPrivateUrl(url);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'This URL is not allowed.' }, { status: 400 });
+    }
+
+    let html = '';
+    try {
+      const response = await fetch(url.toString(), {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; KivoraBot/1.0; +https://kivora.app)',
+          Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(20_000),
+      });
+
+      if (!response.ok) {
+        return NextResponse.json({ error: `Could not fetch this source (${response.status}).` }, { status: 400 });
+      }
+
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!/text\/html|application\/xhtml\+xml/i.test(contentType)) {
+        return NextResponse.json({ error: 'This URL is not a readable web page.' }, { status: 400 });
+      }
+
+      html = await response.text();
+    } catch {
+      return NextResponse.json({ error: 'Could not fetch this source right now.' }, { status: 502 });
+    }
+
+    try {
+      brief = buildFallbackSourceBrief(extractSourceMetaFromHtml(html, url), url.toString(), 'url');
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'This source could not be summarized.' },
+        { status: 400 },
+      );
+    }
   }
+
   if (privacyMode === 'full') {
     try {
       const generated = await generateSourceBrief(brief, ai);

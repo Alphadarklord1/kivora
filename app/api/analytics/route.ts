@@ -443,7 +443,7 @@ export async function GET(req: NextRequest) {
         type: 'review',
         payload: {
           href: '/coach',
-          cta: 'Open Revision Coach',
+          cta: 'Open Scholar Hub',
           detail: reviewDeck
             ? `${reviewDeck.accuracy}% retention in your most active review set`
             : 'Keep today’s review queue under control to protect retention.',
@@ -496,8 +496,8 @@ export async function GET(req: NextRequest) {
         type: 'review',
         payload: {
           href: '/coach',
-          cta: 'Open Revision Coach',
-          detail: 'Revision Coach unlocks daily missions, review history, and stronger spaced repetition analytics.',
+          cta: 'Open Scholar Hub',
+          detail: 'Scholar Hub helps you analyze sources first, then turn them into review sets, notes, and quizzes.',
         },
       });
     }

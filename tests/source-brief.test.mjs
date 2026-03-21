@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 const {
   normalizeSourceBriefUrl,
   extractSourceMetaFromHtml,
+  extractSourceMetaFromText,
   buildFallbackSourceBrief,
 } = await import('../lib/coach/source-brief.ts');
 
@@ -45,6 +46,25 @@ test('extracts useful source metadata and readable text from html', () => {
 
   const brief = buildFallbackSourceBrief(meta, 'https://example.com/vectors');
   assert.equal(brief.url, 'https://example.com/vectors');
+  assert.equal(brief.sourceType, 'url');
   assert.ok(brief.summary.length > 20);
   assert.ok(brief.keyPoints.length >= 1);
+});
+
+test('builds usable source metadata from pasted manual text', () => {
+  const meta = extractSourceMetaFromText(
+    'Photosynthesis is the process plants use to convert light energy into chemical energy. ' +
+    'Students usually study chloroplasts, chlorophyll, the role of carbon dioxide, and the glucose produced during the process. ' +
+    'It matters because it supports food chains and oxygen production in ecosystems.',
+    'Photosynthesis basics',
+  );
+
+  assert.equal(meta.title, 'Photosynthesis basics');
+  assert.equal(meta.siteName, 'Manual text');
+  assert.ok(meta.wordCount >= 30);
+
+  const brief = buildFallbackSourceBrief(meta, 'manual://text', 'manual-text');
+  assert.equal(brief.sourceType, 'manual-text');
+  assert.equal(brief.sourceLabel, 'Manual text');
+  assert.match(brief.summary, /Photosynthesis/i);
 });

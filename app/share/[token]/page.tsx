@@ -118,8 +118,8 @@ export default function ShareViewerPage() {
               </div>
               {data.resourceType === 'flashcards' && (
                 <div className="sv-import-bar">
-                  <span>This link opens as a shared review-set preview. To use it in Kivora, import it into Revision Coach.</span>
-                  <Link href={importDeckHref} className="sv-import-btn">Import into Revision Coach</Link>
+                  <span>This link opens as a shared review-set preview. To use it in Kivora, import it into Scholar Hub.</span>
+                  <Link href={importDeckHref} className="sv-import-btn">Import into Scholar Hub</Link>
                 </div>
               )}
             </div>
