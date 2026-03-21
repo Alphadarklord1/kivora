@@ -1,14 +1,16 @@
 import { NextRequest } from 'next/server';
 import { offlineGenerate, type ToolMode } from '@/lib/offline/generate';
 import { callOpenAIChat } from '@/lib/ai/openai';
-import { fetchGrokStream, callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
+import { fetchGrokStream, isGrokConfigured } from '@/lib/ai/grok';
 import { cloudProviderForModel } from '@/lib/ai/runtime';
 import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/ai/server-routing';
 import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
+import { requireAppAccess } from '@/lib/api/guard';
+import { redactForAi, resolveAiDataMode } from '@/lib/privacy/ai-data';
 
 const OFFLINE_MODES: ToolMode[] = [
-  'summarize', 'rephrase', 'notes', 'quiz',
+  'summarize', 'rephrase', 'explain', 'notes', 'quiz',
   'mcq', 'flashcards', 'assignment',
 ];
 
@@ -27,6 +29,9 @@ type AllModes = typeof VALID_MODES[number];
  * Falls back to chunked offline output if Ollama is unavailable.
  */
 export async function POST(req: NextRequest) {
+  const guardResult = await requireAppAccess(req);
+  if (guardResult) return guardResult;
+
   let body: Record<string, unknown>;
   try { body = await req.json(); }
   catch { return new Response('Invalid JSON', { status: 400 }); }
@@ -54,12 +59,14 @@ export async function POST(req: NextRequest) {
     ? `Deck title: ${deckTitle?.trim() || 'Untitled deck'}\n\n${deckContent.trim()}`
     : trimmedText;
   const currentMode = mode as AllModes;
+  const privacyMode = resolveAiDataMode(body);
   const persistedIndex = typeof fileId === 'string' && fileId.trim()
     ? await getPersistedRagIndexForRequest(req, fileId.trim()).catch(() => undefined)
     : undefined;
+  const safeSourceText = redactForAi(privacyMode, baseSourceText, deckTitle?.trim() || 'study material');
   const preparedContext = typeof body.retrievalContext === 'string' && body.retrievalContext.trim()
-    ? body.retrievalContext.trim()
-    : buildGenerationContext(currentMode, baseSourceText, options, persistedIndex);
+    ? redactForAi(privacyMode, body.retrievalContext.trim(), deckTitle?.trim() || 'study material')
+    : buildGenerationContext(currentMode, safeSourceText, options, privacyMode === 'full' ? persistedIndex : undefined);
   const { mode: aiMode, localModel, cloudModel } = resolveAiRuntimeRequest(body);
 
   const encoder = new TextEncoder();
@@ -71,6 +78,33 @@ export async function POST(req: NextRequest) {
 
   const ollamaBase = process.env.OLLAMA_URL ?? 'http://localhost:11434';
   const userPrompt = buildUserPrompt(currentMode, preparedContext, options);
+
+  if (privacyMode === 'offline') {
+    const offlineText = OFFLINE_MODES.includes(currentMode as ToolMode)
+      ? offlineGenerate(currentMode as ToolMode, baseSourceText, options)
+      : buildOfflineFallback(currentMode, baseSourceText, options);
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        const words = offlineText.split(/(\s+)/);
+        for (let i = 0; i < words.length; i += 4) {
+          const chunk = words.slice(i, i + 4).join('');
+          if (chunk) controller.enqueue(sseChunk(chunk, false));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        controller.enqueue(sseChunk('', true, 'offline'));
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'X-Accel-Buffering': 'no',
+      },
+    });
+  }
 
   if (shouldTryLocal(aiMode)) {
     try {
@@ -301,6 +335,7 @@ function buildUserPrompt(mode: AllModes, text: string, options?: Record<string, 
   const count = (options?.count as number | undefined) ?? 5;
   const instructions: Record<AllModes, string> = {
     summarize:  `Summarize the following study material clearly and concisely:\n\n${text}`,
+    explain:    `Explain the following concept or text clearly for a student, with a plain-language explanation and one practical example:\n\n${text}`,
     rephrase:   `Rephrase the following text in simpler, clearer language for a student:\n\n${text}`,
     notes:      `Extract key study notes as bullet points from:\n\n${text}`,
     quiz:       `Create ${count} short-answer quiz questions (with answers) from:\n\n${text}`,

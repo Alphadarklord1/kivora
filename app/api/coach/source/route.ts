@@ -1,3 +1,4 @@
+import { requireAppAccess } from '@/lib/api/guard';
 import { NextRequest, NextResponse } from 'next/server';
 import { offlineGenerate } from '@/lib/offline/generate';
 import { callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
@@ -10,6 +11,7 @@ import {
   normalizeSourceBriefUrl,
   type SourceBrief,
 } from '@/lib/coach/source-brief';
+import { resolveAiDataMode } from '@/lib/privacy/ai-data';
 
 const SYSTEM_PROMPT = 'You are a study assistant. Explain what a source is about clearly for students. Return concise plain text.';
 
@@ -28,6 +30,31 @@ function parseSummary(content: string) {
     .map((line) => line.trim())
     .filter(Boolean)
     .find((line) => !/^key points[:]?$/i.test(line)) ?? content.trim();
+}
+
+/**
+ * Blocks requests targeting private/loopback address ranges to prevent SSRF.
+ * Throws with a user-friendly message when the URL is disallowed.
+ */
+function assertNotPrivateUrl(url: URL): void {
+  const host = url.hostname.toLowerCase();
+  // Block loopback
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+    throw new Error('This URL points to a local address and cannot be analyzed.');
+  }
+  // Block IPv4 private ranges using a quick regex check
+  const ipv4Private = /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|169\.254\.)/;
+  if (ipv4Private.test(host)) {
+    throw new Error('This URL points to a private network address and cannot be analyzed.');
+  }
+  // Block metadata services (AWS, GCP, Azure)
+  if (host === '169.254.169.254' || host === 'metadata.google.internal') {
+    throw new Error('This URL points to a cloud metadata service and cannot be analyzed.');
+  }
+  // Only allow http/https
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('Only http:// and https:// URLs are supported.');
+  }
 }
 
 async function generateSourceBrief(meta: Omit<SourceBrief, 'summary' | 'keyPoints'>, aiPrefs: Record<string, unknown>) {
@@ -101,6 +128,9 @@ async function generateSourceBrief(meta: Omit<SourceBrief, 'summary' | 'keyPoint
 }
 
 export async function POST(req: NextRequest) {
+  const guardResult = await requireAppAccess(req);
+  if (guardResult) return guardResult;
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -110,12 +140,19 @@ export async function POST(req: NextRequest) {
 
   const rawUrl = typeof body.url === 'string' ? body.url : '';
   const ai = body.ai && typeof body.ai === 'object' ? body.ai as Record<string, unknown> : {};
+  const privacyMode = resolveAiDataMode(body);
 
   let url: URL;
   try {
     url = normalizeSourceBriefUrl(rawUrl);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid URL.' }, { status: 400 });
+  }
+
+  try {
+    assertNotPrivateUrl(url);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'This URL is not allowed.' }, { status: 400 });
   }
 
   let html = '';
@@ -152,17 +189,19 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  try {
-    const generated = await generateSourceBrief(brief, ai);
-    const keyPoints = parseKeyPoints(generated);
-    const summary = parseSummary(generated).replace(/^summary:\s*/i, '').trim();
-    brief = {
-      ...brief,
-      summary: summary || brief.summary,
-      keyPoints: keyPoints.length ? keyPoints : brief.keyPoints,
-    };
-  } catch {
-    // Fallback brief is already populated.
+  if (privacyMode === 'full') {
+    try {
+      const generated = await generateSourceBrief(brief, ai);
+      const keyPoints = parseKeyPoints(generated);
+      const summary = parseSummary(generated).replace(/^summary:\s*/i, '').trim();
+      brief = {
+        ...brief,
+        summary: summary || brief.summary,
+        keyPoints: keyPoints.length ? keyPoints : brief.keyPoints,
+      };
+    } catch {
+      // Fallback brief is already populated.
+    }
   }
 
   return NextResponse.json(brief);

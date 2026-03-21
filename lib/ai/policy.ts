@@ -1,6 +1,7 @@
 export type StudyAiMode =
   | 'assignment'
   | 'summarize'
+  | 'explain'
   | 'mcq'
   | 'quiz'
   | 'notes'

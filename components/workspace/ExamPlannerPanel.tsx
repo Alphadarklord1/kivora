@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
+import { loadClientAiDataMode } from '@/lib/privacy/ai-data';
 
 interface Exam {
   id: string;
@@ -113,12 +114,13 @@ Requirements:
 - Format in clean markdown with headings per phase`;
 
     const ai = loadAiRuntimePreferences();
+    const privacyMode = loadClientAiDataMode();
 
     try {
       const res = await fetch('/api/generate/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'outline', text: prompt, ai }),
+        body: JSON.stringify({ mode: 'outline', text: prompt, ai, privacyMode }),
         signal: ctrl.signal,
       });
 

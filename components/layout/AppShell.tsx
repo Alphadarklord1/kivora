@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useSettings } from '@/providers/SettingsProvider';
 import { useI18n } from '@/lib/i18n/useI18n';
+import { trackRouteView } from '@/lib/privacy/preferences';
 import { OnboardingModal } from './OnboardingModal';
 import { getStreak } from '@/lib/srs/sm2';
 
@@ -14,7 +15,7 @@ const NAV_ITEMS = [
   { href: '/planner',   key: 'Planner',             icon: '📅' },
   { href: '/math',      key: 'Math',                icon: '∑'  },
   { href: '/library',   key: 'Library',             icon: '🗂️' },
-  { href: '/coach',     key: 'Revision Coach',     icon: '🧭' },
+  { href: '/coach',     key: 'Scholar Hub',     icon: '🎓' },
   { href: '/analytics', key: 'Analytics',           icon: '📊' },
   { href: '/sharing',   key: 'Sharing',             icon: '🔗' },
   { href: '/settings',  key: 'Settings',            icon: '⚙️' },
@@ -56,6 +57,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     try { setStreak(getStreak()); } catch { /* noop */ }
   }, []);
+
+  useEffect(() => {
+    if (!pathname) return;
+    trackRouteView(pathname);
+  }, [pathname]);
 
   function toggleTheme() {
     updateSetting('theme', settings.theme === 'light' ? 'blue' : 'light');

@@ -7,6 +7,7 @@
 export type ToolMode =
   | 'summarize'
   | 'rephrase'
+  | 'explain'
   | 'notes'
   | 'quiz'
   | 'mcq'
@@ -541,6 +542,7 @@ export function getGeneratedContent(
   switch (mode) {
     case 'summarize':  displayText = generateSummary(text); break;
     case 'rephrase':   displayText = generateRephrase(text); break;
+    case 'explain':    displayText = generateSummary(text); break; // offline: best-effort via summary
     case 'notes':      displayText = generateNotes(text); break;
     case 'quiz':       displayText = generateQuiz(text, count); break;
     case 'mcq':        displayText = generateMCQ(text, count); break;
@@ -575,6 +577,7 @@ export function offlineGenerate(
   switch (mode) {
     case 'summarize':  return generateSummary(text);
     case 'rephrase':   return generateRephrase(text);
+    case 'explain':    return generateSummary(text); // offline: best-effort via summary
     case 'notes':      return generateNotes(text);
     case 'quiz':       return generateQuiz(text, count);
     case 'mcq':        return generateMCQ(text, count);

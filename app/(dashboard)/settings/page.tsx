@@ -8,6 +8,12 @@ import { useToast } from '@/providers/ToastProvider';
 import { useSettings, type Density, type Theme } from '@/providers/SettingsProvider';
 import { AiRuntimeControls } from '@/components/models/AiRuntimeControls';
 import { ReportIssuePanel } from '@/components/settings/ReportIssuePanel';
+import {
+  crashReportsEnabledClient,
+  setCrashReportsEnabled,
+  setUsageAnalyticsEnabled,
+  usageAnalyticsEnabledClient,
+} from '@/lib/privacy/preferences';
 
 const THEME_OPTIONS: { id: Theme; label: string; hint: string }[] = [
   { id: 'system', label: 'System', hint: 'Follow your device preference' },
@@ -928,12 +934,10 @@ function PrivacySection() {
     return (localStorage.getItem('kivora_ai_mode') as 'full' | 'metadata-only' | 'offline') ?? 'full';
   });
   const [analyticsEnabled, setAnalyticsEnabled] = useState(() => {
-    if (typeof window === 'undefined') return true;
-    return localStorage.getItem('kivora_analytics_opt_out') !== '1';
+    return usageAnalyticsEnabledClient();
   });
   const [crashReports, setCrashReports] = useState(() => {
-    if (typeof window === 'undefined') return true;
-    return localStorage.getItem('kivora_crash_opt_out') !== '1';
+    return crashReportsEnabledClient();
   });
 
   function saveAiMode(mode: 'full' | 'metadata-only' | 'offline') {
@@ -944,20 +948,14 @@ function PrivacySection() {
 
   function toggleAnalytics(enabled: boolean) {
     setAnalyticsEnabled(enabled);
-    if (enabled) {
-      localStorage.removeItem('kivora_analytics_opt_out');
-    } else {
-      localStorage.setItem('kivora_analytics_opt_out', '1');
-    }
+    setUsageAnalyticsEnabled(enabled);
+    toast(enabled ? 'Local usage diagnostics enabled' : 'Local usage diagnostics cleared', enabled ? 'success' : 'warning');
   }
 
   function toggleCrash(enabled: boolean) {
     setCrashReports(enabled);
-    if (enabled) {
-      localStorage.removeItem('kivora_crash_opt_out');
-    } else {
-      localStorage.setItem('kivora_crash_opt_out', '1');
-    }
+    setCrashReportsEnabled(enabled);
+    toast(enabled ? 'Crash summaries enabled' : 'Crash summaries cleared', enabled ? 'success' : 'warning');
   }
 
   async function exportData() {
@@ -1117,19 +1115,19 @@ function PrivacySection() {
 
       <Section
         title="📈 Telemetry & tracking"
-        subtitle="All telemetry is anonymous and opt-out. No personal data is ever in telemetry payloads."
+        subtitle="Control whether Kivora keeps local usage diagnostics and recent crash summaries for troubleshooting."
       >
         <div style={{ display: 'grid', gap: 12 }}>
           {[
             {
               label: 'Usage analytics',
-              hint: 'Aggregate counts of which tools are used. Helps us improve the product.',
+              hint: 'Store local page and tool counts so issue reports can include useful diagnostics. Turning this off clears the saved snapshot.',
               value: analyticsEnabled,
               onChange: toggleAnalytics,
             },
             {
               label: 'Crash reports',
-              hint: 'Anonymous error details when something breaks. No file content is included.',
+              hint: 'Store recent runtime error summaries locally when something breaks. No file content is included.',
               value: crashReports,
               onChange: toggleCrash,
             },

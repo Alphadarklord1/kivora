@@ -3,6 +3,7 @@ import { buildBalancedDocumentContext, buildRagContext, retrieveFromIndex, retri
 export type GenerationMode =
   | 'summarize'
   | 'rephrase'
+  | 'explain'
   | 'notes'
   | 'quiz'
   | 'mcq'
@@ -33,6 +34,8 @@ function getModeFocus(mode: GenerationMode, count?: number) {
       return 'key concepts, definitions, examples, and structured study notes';
     case 'rephrase':
       return 'the clearest explanations of the most important ideas';
+    case 'explain':
+      return 'the core concept being explained, key terms, definitions, and a practical example';
     case 'outline':
       return 'section structure, headings, topics, and learning objectives';
     default:
