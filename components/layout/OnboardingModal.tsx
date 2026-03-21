@@ -24,11 +24,11 @@ const STEPS = [
   },
   {
     icon: '🃏',
-    title: 'Revision Coach & streaks',
-    desc: 'Revision Coach turns your review sets into a daily mission. Start with what is due now, recover weak topics next, and keep your streak moving with one clear action at a time.',
-    highlight: "Revision Coach → start today's mission → review or manage a set",
+    title: 'Scholar Hub & streaks',
+    desc: 'Scholar Hub turns your review sets into a daily mission. Start with what is due now, recover weak topics next, and keep your streak moving with one clear action at a time.',
+    highlight: "Scholar Hub → start today's mission → review or manage a set",
     tip: 'Your streak counter and due-review queue work together here. One short review session a day is enough to keep momentum alive.',
-    actionLabel: 'Open Revision Coach',
+    actionLabel: 'Open Scholar Hub',
     href: '/coach',
   },
   {
