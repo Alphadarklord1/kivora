@@ -429,13 +429,17 @@ export function RevisionCoachPage() {
     setScholarTopic(topic);
     setScholarArticles([]);
     setScholarLoading(true);
+    const privacyMode = loadClientAiDataMode();
     try {
       const res  = await fetch('/api/coach/articles', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic }),
+        body: JSON.stringify({ topic, privacyMode }),
       });
       const data = await res.json() as ArticleSuggestion[];
       setScholarArticles(Array.isArray(data) ? data : []);
+      if (privacyMode === 'offline') {
+        toast('Offline privacy mode is on, so Scholar Hub is only showing local reading links.', 'info');
+      }
     } catch { toast('Could not load reading suggestions', 'error'); }
     finally   { setScholarLoading(false); }
   }

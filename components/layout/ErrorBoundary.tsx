@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { recordCrashSummary } from '@/lib/privacy/preferences';
 
 interface Props { children: React.ReactNode; fallback?: React.ReactNode; pageName?: string; }
 interface State { hasError: boolean; error: Error | null; }
@@ -17,6 +18,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[ErrorBoundary]', error, info);
+    recordCrashSummary({
+      message: error?.message,
+      page: this.props.pageName ?? (typeof window !== 'undefined' ? window.location.pathname : 'unknown'),
+    });
   }
 
   render() {

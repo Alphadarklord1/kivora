@@ -1,5 +1,6 @@
 import { requireAppAccess } from '@/lib/api/guard';
 import { NextRequest, NextResponse } from 'next/server';
+import { cloudAccessAllowed, resolveAiDataMode } from '@/lib/privacy/ai-data';
 import {
   buildStaticSuggestions,
   fetchWikiSummary,
@@ -33,23 +34,26 @@ export async function POST(req: NextRequest) {
 
   // Clamp the topic to a sensible search length
   const searchTopic = topic.slice(0, 120);
+  const privacyMode = resolveAiDataMode(body);
 
   const articles: ArticleSuggestion[] = [];
 
-  try {
-    // Search Wikipedia for up to 4 relevant page titles
-    const titles = await searchWikipedia(searchTopic, 4);
+  if (cloudAccessAllowed(privacyMode)) {
+    try {
+      // Search Wikipedia for up to 4 relevant page titles
+      const titles = await searchWikipedia(searchTopic, 4);
 
-    // Fetch summaries in parallel, keep the first 3 that return a valid result
-    const summaries = await Promise.all(
-      titles.slice(0, 4).map((title) => fetchWikiSummary(title).catch(() => null)),
-    );
+      // Fetch summaries in parallel, keep the first 3 that return a valid result
+      const summaries = await Promise.all(
+        titles.slice(0, 4).map((title) => fetchWikiSummary(title).catch(() => null)),
+      );
 
-    for (const s of summaries) {
-      if (s && articles.length < 3) articles.push(s);
+      for (const s of summaries) {
+        if (s && articles.length < 3) articles.push(s);
+      }
+    } catch {
+      // Wikipedia is best-effort — fall through to static suggestions
     }
-  } catch {
-    // Wikipedia is best-effort — fall through to static suggestions
   }
 
   // Always append curated static links (Khan Academy + Google Scholar)

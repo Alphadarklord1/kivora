@@ -4,6 +4,12 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useI18n } from '@/lib/i18n/useI18n';
+import {
+  crashReportsEnabledClient,
+  getCrashSnapshot,
+  getUsageSnapshot,
+  usageAnalyticsEnabledClient,
+} from '@/lib/privacy/preferences';
 import { useSettings } from '@/providers/SettingsProvider';
 import styles from '@/app/(dashboard)/report/report.module.css';
 
@@ -96,6 +102,10 @@ export function ReportIssuePanel({ embedded = false }: { embedded?: boolean }) {
   const diagnostics = useMemo(() => {
     const route = typeof window !== 'undefined' ? window.location.href : pathname || '/settings';
     const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown';
+    const usageSnapshot = getUsageSnapshot();
+    const crashSnapshot = getCrashSnapshot();
+    const usageEnabled = usageAnalyticsEnabledClient();
+    const crashEnabled = crashReportsEnabledClient();
     const lines = [
       `${t('Current route')}: ${route}`,
       `${t('Language')}: ${settings.language || 'en'}`,
@@ -103,6 +113,27 @@ export function ReportIssuePanel({ embedded = false }: { embedded?: boolean }) {
       `${t('Timestamp')}: ${new Date().toISOString()}`,
       `${t('User agent')}: ${userAgent}`,
     ];
+
+    if (usageEnabled) {
+      const topRoutes = usageSnapshot.topRoutes.length
+        ? usageSnapshot.topRoutes.map((entry) => `${entry.route} (${entry.count})`).join(', ')
+        : 'none yet';
+      lines.push(`Usage snapshot: ${usageSnapshot.totalViews} local page views`);
+      lines.push(`Top routes: ${topRoutes}`);
+    } else {
+      lines.push('Usage snapshot: disabled');
+    }
+
+    if (crashEnabled) {
+      const latestCrash = crashSnapshot[0];
+      lines.push(`Recent crashes: ${crashSnapshot.length}`);
+      if (latestCrash) {
+        lines.push(`Latest crash: ${latestCrash.message} @ ${latestCrash.page}`);
+      }
+    } else {
+      lines.push('Recent crashes: disabled');
+    }
+
     return lines.join('\n');
   }, [pathname, settings.language, settings.theme, t]);
 
