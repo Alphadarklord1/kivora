@@ -186,6 +186,10 @@ export function RevisionCoachPage() {
     () => sortedReviewSets.find(s => s.id === selectedSetId) ?? null,
     [sortedReviewSets, selectedSetId],
   );
+  const selectedPreviewCards = useMemo(
+    () => selectedSet?.cards.slice(0, 3) ?? [],
+    [selectedSet],
+  );
 
   // Sync selected set -> editor drafts
   useEffect(() => {
@@ -791,7 +795,18 @@ export function RevisionCoachPage() {
           {!selectedSet ? (
             <div className={styles.emptyState}>Select a review set below, or create one from a source first.</div>
           ) : panel === 'review' ? (
-            <div ref={reviewRef}>
+            <div ref={reviewRef} className={styles.reviewWorkspace}>
+              <div className={styles.reviewIntro}>
+                <div>
+                  <strong>{selectedSet.name}</strong>
+                  <p>{getSetDue(selectedSet)} due now · {selectedSet.cards.length} cards · {getSetAccuracy(selectedSet) >= 0 ? `${getSetAccuracy(selectedSet)}% accuracy` : 'No accuracy yet'}</p>
+                </div>
+                <div className={styles.helperSteps}>
+                  <span className={styles.countPill}>Review first</span>
+                  <span className={styles.countPill}>Manage after</span>
+                  <span className={styles.countPill}>Export stays secondary</span>
+                </div>
+              </div>
               <FlashcardView
                 initialDeck={selectedSet}
                 title={selectedSet.name}
@@ -821,14 +836,45 @@ export function RevisionCoachPage() {
                 <article className={styles.infoChip}><strong>{getSetMastered(selectedSet)}</strong><span>mastered</span></article>
               </div>
 
-              <div className={styles.actions} style={{ marginBottom: '1rem' }}>
-                <button className={styles.primaryButton} onClick={() => openPanel(selectedSet.id, 'review')}>Review</button>
-                <button className={styles.secondaryButton} disabled={generatingQuiz} onClick={() => void quizSet(selectedSet)}>{generatingQuiz ? 'Generating\u2026' : 'Quiz'}</button>
-                <button className={styles.secondaryButton} disabled={explaining} onClick={() => void explainSet(selectedSet)}>{explaining ? 'Explaining\u2026' : 'Explain'}</button>
-                <button className={styles.secondaryButton} onClick={() => exportDeckCsv(selectedSet)}>Export CSV</button>
-                <button className={styles.secondaryButton} onClick={() => void exportDeckApkg(selectedSet).catch(() => toast('Anki export failed', 'error'))}>Export Anki</button>
-                <button className={styles.dangerButton} onClick={() => void handleDeleteSet()}>Delete</button>
+              <div className={styles.quickLaunchGrid}>
+                <article className={styles.quickLaunchCard}>
+                  <span className={styles.metricLabel}>Study</span>
+                  <h4>Open live review</h4>
+                  <p>Jump back into the flashcard session with today&apos;s due cards first.</p>
+                  <button className={styles.primaryButton} onClick={() => openPanel(selectedSet.id, 'review')}>Review</button>
+                </article>
+                <article className={styles.quickLaunchCard}>
+                  <span className={styles.metricLabel}>Practice</span>
+                  <h4>Quiz or explain this set</h4>
+                  <p>Use retrieval or explanation without leaving the manager.</p>
+                  <div className={styles.actions}>
+                    <button className={styles.secondaryButton} disabled={generatingQuiz} onClick={() => void quizSet(selectedSet)}>{generatingQuiz ? 'Generating\u2026' : 'Quiz'}</button>
+                    <button className={styles.secondaryButton} disabled={explaining} onClick={() => void explainSet(selectedSet)}>{explaining ? 'Explaining\u2026' : 'Explain'}</button>
+                  </div>
+                </article>
+                <article className={styles.quickLaunchCard}>
+                  <span className={styles.metricLabel}>Utility</span>
+                  <h4>Keep exports secondary</h4>
+                  <p>Export only when needed. The main job here is still to review and refine cards.</p>
+                  <div className={styles.actions}>
+                    <button className={styles.secondaryButton} onClick={() => exportDeckCsv(selectedSet)}>Export CSV</button>
+                    <button className={styles.secondaryButton} onClick={() => void exportDeckApkg(selectedSet).catch(() => toast('Anki export failed', 'error'))}>Export Anki</button>
+                    <button className={styles.dangerButton} onClick={() => void handleDeleteSet()}>Delete</button>
+                  </div>
+                </article>
               </div>
+
+              {selectedPreviewCards.length > 0 && (
+                <div className={styles.previewStrip}>
+                  {selectedPreviewCards.map((card, index) => (
+                    <article key={card.id} className={styles.previewCard}>
+                      <span className={styles.metricLabel}>Card {index + 1}</span>
+                      <strong>{card.front}</strong>
+                      <p>{card.back}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
 
               <div className={styles.editorGrid}>
                 <label className={styles.fieldBlock}>

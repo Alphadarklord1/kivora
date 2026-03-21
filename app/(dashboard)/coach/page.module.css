@@ -315,7 +315,10 @@
 
 .studioCard,
 .readingCard,
-.nextStepStrip {
+.nextStepStrip,
+.quickLaunchCard,
+.previewCard,
+.reviewIntro {
   border: 1px solid color-mix(in srgb, var(--border-subtle) 65%, transparent);
   background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
   border-radius: 1.15rem;
@@ -323,7 +326,10 @@
 
 .studioCard,
 .conversionCard,
-.nextStepStrip {
+.nextStepStrip,
+.quickLaunchCard,
+.previewCard,
+.reviewIntro {
   padding: 1rem;
 }
 
@@ -344,6 +350,30 @@
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1fr);
 }
 
+.reviewWorkspace {
+  display: grid;
+  gap: 1rem;
+}
+
+.reviewIntro {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.reviewIntro strong,
+.quickLaunchCard h4,
+.previewCard strong {
+  color: var(--text-primary);
+}
+
+.reviewIntro p,
+.quickLaunchCard p,
+.previewCard p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
 .conversionCard {
   display: grid;
   gap: 0.7rem;
@@ -359,6 +389,39 @@
   margin: 0;
   color: var(--text-muted);
   line-height: 1.6;
+}
+
+.quickLaunchGrid,
+.previewStrip {
+  display: grid;
+  gap: 1rem;
+}
+
+.quickLaunchGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quickLaunchCard {
+  display: grid;
+  gap: 0.7rem;
+  align-content: start;
+}
+
+.quickLaunchCard h4 {
+  margin: 0;
+}
+
+.previewStrip {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.previewCard {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.previewCard strong {
+  font-size: 0.95rem;
 }
 
 .sourceBriefCard {
@@ -571,7 +634,9 @@
   .studioGrid,
   .recoveryGrid,
   .conversionGrid,
-  .sourceWorkspace {
+  .sourceWorkspace,
+  .quickLaunchGrid,
+  .previewStrip {
     grid-template-columns: 1fr;
   }
 
