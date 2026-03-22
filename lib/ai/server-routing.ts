@@ -1,5 +1,6 @@
 import { callOpenAIChat, type OpenAIMessage } from '@/lib/ai/openai';
 import { callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
+import { callGroqChat, isGroqConfigured } from '@/lib/ai/groq';
 import { resolveAiRuntimeRequest, cloudProviderForModel, type AiMode } from '@/lib/ai/runtime';
 
 export { resolveAiRuntimeRequest };
@@ -70,10 +71,10 @@ export async function tryLocalGeneration(args: {
   return { ok: false as const };
 }
 
-// ── Cloud: Grok (primary) → OpenAI (secondary) ───────────────────────────────
+// ── Cloud routing across Groq, Grok/xAI, and OpenAI ──────────────────────────
 
 /**
- * Try Grok first; if not configured or fails, fall back to OpenAI.
+ * Try the requested cloud provider first, then other configured providers.
  * Source tag lets the UI show users which provider was actually used.
  */
 export async function tryCloudGeneration(args: {
@@ -82,34 +83,57 @@ export async function tryCloudGeneration(args: {
   maxTokens?: number;
 }) {
   const provider = cloudProviderForModel(args.model);
+  const order = [
+    provider,
+    ...(['groq', 'grok', 'openai'] as const).filter((candidate) => candidate !== provider),
+  ];
+  let lastMessage = 'No cloud provider is configured.';
 
-  // ── 1. Grok (primary) ────────────────────────────────────────────────────
-  if (provider === 'grok' || isGrokConfigured()) {
-    const grokModel = provider === 'grok' ? args.model : 'grok-3-fast';
-    const grokResult = await callGrokChat({
-      model: grokModel,
-      messages: args.messages,
-      maxTokens: args.maxTokens ?? 1600,
-      temperature: 0.7,
-    });
-    if (grokResult.ok) {
-      return { ok: true as const, content: grokResult.content, source: 'grok' as const };
+  for (const candidate of order) {
+    if (candidate === 'groq' && isGroqConfigured()) {
+      const groqModel = provider === 'groq' ? args.model : 'openai/gpt-oss-20b';
+      const groqResult = await callGroqChat({
+        model: groqModel,
+        messages: args.messages,
+        maxTokens: args.maxTokens ?? 1600,
+        temperature: 0.7,
+      });
+      if (groqResult.ok) {
+        return { ok: true as const, content: groqResult.content, source: 'groq' as const };
+      }
+      lastMessage = groqResult.message;
+    }
+
+    if (candidate === 'grok' && isGrokConfigured()) {
+      const grokModel = provider === 'grok' ? args.model : 'grok-3-fast';
+      const grokResult = await callGrokChat({
+        model: grokModel,
+        messages: args.messages,
+        maxTokens: args.maxTokens ?? 1600,
+        temperature: 0.7,
+      });
+      if (grokResult.ok) {
+        return { ok: true as const, content: grokResult.content, source: 'grok' as const };
+      }
+      lastMessage = grokResult.message;
+    }
+
+    if (candidate === 'openai') {
+      const openaiModel = provider === 'openai' ? args.model : 'gpt-4o-mini';
+      const openaiResult = await callOpenAIChat({
+        model: openaiModel,
+        messages: args.messages,
+        maxTokens: args.maxTokens ?? 1600,
+        temperature: 0.7,
+      });
+      if (openaiResult.ok) {
+        return { ok: true as const, content: openaiResult.content, source: 'openai' as const };
+      }
+      lastMessage = openaiResult.message;
     }
   }
 
-  // ── 2. OpenAI (secondary / fallback) ─────────────────────────────────────
-  const openaiModel = provider === 'openai' ? args.model : 'gpt-4o-mini';
-  const openaiResult = await callOpenAIChat({
-    model: openaiModel,
-    messages: args.messages,
-    maxTokens: args.maxTokens ?? 1600,
-    temperature: 0.7,
-  });
-  if (openaiResult.ok) {
-    return { ok: true as const, content: openaiResult.content, source: 'openai' as const };
-  }
-
-  return { ok: false as const, message: openaiResult.message };
+  return { ok: false as const, message: lastMessage };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
