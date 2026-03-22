@@ -3,6 +3,27 @@
  * Runs in the browser — uses pdf.js, mammoth.js, and tesseract.js (OCR).
  */
 
+type OcrLocale = 'en' | 'ar' | 'fr' | 'es' | 'de' | 'zh';
+
+const OCR_LANGUAGE_MAP: Record<OcrLocale, string> = {
+  en: 'eng',
+  ar: 'ara+eng',
+  fr: 'fra+eng',
+  es: 'spa+eng',
+  de: 'deu+eng',
+  zh: 'chi_sim+eng',
+};
+
+function normalizeOcrLocale(language?: string): OcrLocale {
+  return language === 'ar' || language === 'fr' || language === 'es' || language === 'de' || language === 'zh'
+    ? language
+    : 'en';
+}
+
+export function getOcrLanguagePack(language?: string): string {
+  return OCR_LANGUAGE_MAP[normalizeOcrLocale(language)];
+}
+
 // ── PDF (pdf.js) with table-aware extraction ──────────────────────────────
 
 /**
@@ -123,10 +144,10 @@ async function extractPptx(blob: Blob): Promise<string> {
 
 // ── Image OCR (tesseract.js) ───────────────────────────────────────────────
 
-async function extractImage(blob: Blob): Promise<string> {
+async function extractImage(blob: Blob, language?: string): Promise<string> {
   try {
     const { createWorker } = await import('tesseract.js');
-    const worker = await createWorker('eng', 1, {
+    const worker = await createWorker(getOcrLanguagePack(language), 1, {
       // Suppress Tesseract's own console spam
       logger: () => {},
       errorHandler: () => {},
@@ -158,15 +179,22 @@ export type ExtractionResult = {
   error?: string;
 };
 
+type ExtractionOptions = {
+  language?: string;
+};
+
 /**
  * Extract text from a file blob based on its MIME type or filename extension.
  */
 export async function extractTextFromBlob(
   blob: Blob,
   filename: string,
+  options: ExtractionOptions = {},
 ): Promise<ExtractionResult> {
   const ext = filename.split('.').pop()?.toLowerCase() ?? '';
   const mime = blob.type.toLowerCase();
+  const language = options.language
+    ?? (typeof document !== 'undefined' ? document.documentElement.getAttribute('lang') ?? undefined : undefined);
 
   try {
     let text = '';
@@ -188,7 +216,7 @@ export async function extractTextFromBlob(
       ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(ext)
     ) {
       // OCR: extract text from images using Tesseract.js
-      text = await extractImage(blob);
+      text = await extractImage(blob, language);
       if (!text) return { text: '', wordCount: 0, error: 'No text detected in image. The image may not contain readable text.' };
     } else if (
       mime.startsWith('text/') ||

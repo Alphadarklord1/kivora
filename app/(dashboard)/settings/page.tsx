@@ -15,6 +15,7 @@ import {
   setUsageAnalyticsEnabled,
   usageAnalyticsEnabledClient,
 } from '@/lib/privacy/preferences';
+import { LOCALE_OPTIONS } from '@/lib/i18n/locales';
 
 const THEME_OPTIONS: { id: Theme; label: string; hint: string }[] = [
   { id: 'system', label: 'System', hint: 'Follow your device preference' },
@@ -1009,14 +1010,7 @@ export default function SettingsPage() {
       </Section>
       <Section title="Language" subtitle="Switch the interface language and text direction.">
         <ChoiceButtons
-          options={[
-            { id: 'en', label: 'English', hint: 'Default interface language' },
-            { id: 'ar', label: 'العربية', hint: 'Arabic with RTL layout' },
-            { id: 'fr', label: 'Français' },
-            { id: 'es', label: 'Español' },
-            { id: 'de', label: 'Deutsch' },
-            { id: 'zh', label: '中文' },
-          ]}
+          options={LOCALE_OPTIONS}
           value={settings.language}
           onChange={value => set('language', value)}
         />

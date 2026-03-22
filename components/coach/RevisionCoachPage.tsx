@@ -915,7 +915,7 @@ ${deepDiveQuestion.trim()}`
                   <>
                     <button className={styles.uploadCard} type="button" onClick={() => sourceFileInputRef.current?.click()}>
                       <strong>{sourceFileName ? `Selected: ${sourceFileName}` : 'Choose a PDF, image, or document'}</strong>
-                      <small>Scholar Hub extracts readable text locally first, then builds the source brief from that text.</small>
+                      <small>Scholar Hub extracts readable text locally first, then builds the source brief from that text. OCR follows the current app language where possible.</small>
                     </button>
                     <input
                       ref={sourceFileInputRef}
