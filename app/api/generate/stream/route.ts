@@ -7,6 +7,7 @@ import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/a
 import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
 import { requireAppAccess } from '@/lib/api/guard';
+import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { redactForAi, resolveAiDataMode } from '@/lib/privacy/ai-data';
 
 const OFFLINE_MODES: ToolMode[] = [
@@ -31,6 +32,8 @@ type AllModes = typeof VALID_MODES[number];
 export async function POST(req: NextRequest) {
   const guardResult = await requireAppAccess(req);
   if (guardResult) return guardResult;
+  const rateLimitResponse = enforceAiRateLimit(req);
+  if (rateLimitResponse) return rateLimitResponse;
 
   let body: Record<string, unknown>;
   try { body = await req.json(); }
