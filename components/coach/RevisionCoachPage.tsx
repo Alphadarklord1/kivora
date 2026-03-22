@@ -52,13 +52,6 @@ type ReportType   = 'essay' | 'report' | 'literature_review';
 type SourceAction = 'notes' | 'quiz' | 'flashcards';
 type SourceInputMode = 'url' | 'text' | 'file';
 type CoachSection = 'brief' | 'report' | 'deep-dive' | 'check-work' | 'recovery' | 'sets';
-type LibraryItem = {
-  id: string;
-  mode: string;
-  content: string;
-  createdAt: string;
-  metadata?: Record<string, unknown> | null;
-};
 type SourceOutputSummary = {
   mode: SourceAction;
   title: string;
@@ -82,20 +75,6 @@ const REPORT_TYPES = [
   { id: 'report'            as const, label: 'Report',     desc: 'Structured report with sections.' },
   { id: 'literature_review' as const, label: 'Lit Review', desc: 'Review of academic sources.' },
 ] as const;
-
-const COACH_SECTIONS: Array<{
-  id: CoachSection;
-  label: string;
-  title: string;
-  description: string;
-}> = [
-  { id: 'brief', label: 'Source Brief', title: 'Break down the source', description: 'Understand what the source is about and pull out its key ideas.' },
-  { id: 'report', label: 'Report Builder', title: 'Model the final report', description: 'Show what a strong final report or essay could look like.' },
-  { id: 'deep-dive', label: 'Deep Dive', title: 'Learn more in detail', description: 'Ask follow-up questions and open related reading only when needed.' },
-  { id: 'check-work', label: 'Work Checker', title: 'Improve the student draft', description: 'Check grammar, clarity, and paragraph quality after writing.' },
-  { id: 'recovery', label: 'Recovery', title: 'Recover weak areas', description: 'See due review and weak-topic guidance without letting it dominate the page.' },
-  { id: 'sets', label: 'Review Sets', title: 'Open Workspace review sets', description: 'Keep long-term flashcard work in Workspace, not inside Scholar Hub.' },
-];
 
 // ── SECTION C: Pure helpers ───────────────────────────────────────────────────
 
@@ -271,7 +250,6 @@ export function RevisionCoachPage() {
   const [sourceBrief,          setSourceBrief]           = useState<SourceBrief | null>(null);
   const [sourceLoading,        setSourceLoading]         = useState(false);
   const [sourceActionLoading,  setSourceActionLoading]   = useState<SourceAction | null>(null);
-  const [recentSourceOutputs,  setRecentSourceOutputs]   = useState<LibraryItem[]>([]);
   const [sourceOutputSummary,  setSourceOutputSummary]   = useState<SourceOutputSummary | null>(null);
   const sourceFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -286,27 +264,6 @@ export function RevisionCoachPage() {
         : '',
     ].filter(Boolean).join('\n\n');
   }, [sourceBrief]);
-
-  const refreshSourceOutputs = useCallback(async () => {
-    try {
-      const res = await fetch('/api/library', { cache: 'no-store' });
-      if (!res.ok) return;
-      const items = await res.json() as LibraryItem[];
-      setRecentSourceOutputs(
-        items.filter((item) => {
-          const metadata = (item.metadata ?? {}) as Record<string, unknown>;
-          return metadata.savedFrom === '/coach'
-            && (metadata.sourceType === 'url' || metadata.sourceType === 'manual-text' || metadata.sourceType === 'file');
-        }).slice(0, 5),
-      );
-    } catch {
-      setRecentSourceOutputs([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshSourceOutputs();
-  }, [refreshSourceOutputs]);
 
   const handleSourceFileSelected = useCallback(async (file: File | null) => {
     if (!file) return;
@@ -348,13 +305,12 @@ export function RevisionCoachPage() {
       });
       if (!res.ok) throw new Error();
       const item = await res.json();
-      await refreshSourceOutputs();
       return item;
     } catch {
       toast('Saved locally, but Library sync failed', 'warning');
       return null;
     }
-  }, [refreshSourceOutputs, sourceBrief, toast]);
+  }, [sourceBrief, toast]);
 
   async function handleAnalyzeSource() {
     if (sourceLoading) return;
@@ -677,11 +633,6 @@ ${deepDiveQuestion.trim()}`
     };
   }, [analytics, dueReviewSets, reviewSets, sortedReviewSets, topWeakAreas, getSetDue]);
 
-  const currentSectionMeta = useMemo(
-    () => COACH_SECTIONS.find((section) => section.id === activeSection) ?? COACH_SECTIONS[0],
-    [activeSection],
-  );
-
   function launchWeakTopic(area: WeakArea, tool: 'quiz' | 'mcq' | 'flashcards' | 'summarize' | 'explain') {
     writeCoachHandoff({ type: 'weak-topic', topic: area.topic, preferredTool: tool });
     toast(`"${area.topic}" is ready in Workspace`, 'success');
@@ -702,784 +653,609 @@ ${deepDiveQuestion.trim()}`
     if (mission.kind === 'plan')                       { router.push('/planner'); return; }
   }
 
-  function openSourceInWorkspace(preferredTool: 'quiz' | 'summarize') {
-    if (!sourceBrief) return;
-    writeCoachHandoff({
-      type: 'source-output',
-      title: sourceBrief.title,
-      sourceText: sourceBrief.extractedText,
-      preferredTool,
-    });
-    router.push('/workspace');
-  }
-
   // ── D5: Render ────────────────────────────────────────────────────────────
+
+  const TAB_LABELS: Record<CoachSection, { label: string; icon: string }> = {
+    'brief':      { label: 'Source',      icon: '\U0001f4c4' },
+    'report':     { label: 'Report',      icon: '\U0001f4dd' },
+    'check-work': { label: 'Writer',      icon: '\u270d\ufe0f' },
+    'deep-dive':  { label: 'Deep Dive',   icon: '\U0001f50d' },
+    'recovery':   { label: 'Recovery',    icon: '\U0001f4ca' },
+    'sets':       { label: 'Review Sets', icon: '\U0001f4da' },
+  };
+
+  const writerWordCount = checkText.trim() ? checkText.trim().split(/\s+/).length : 0;
+  const writerCharCount = checkText.length;
+  const writerStatus    = checkLoading ? 'Checking\u2026' : checkResult ? 'Feedback ready' : 'Ready';
 
   return (
     <div className={styles.page}>
-      <section className={styles.hero}>
-        <div className={styles.heroCopy}>
-          <span className={styles.eyebrow}>Scholar Hub</span>
-          <h1>Understand a source, model the report, then improve your own writing.</h1>
-          <h2>Scholar Hub now follows one learning flow: break down the source, see what the final report could look like, learn more in detail, then check your own draft.</h2>
-          <p>We keep the heavy flashcard workflow in Workspace, so Scholar Hub can stay focused on understanding sources and improving writing.</p>
-          <div className={styles.heroNav}>
-            {COACH_SECTIONS.map((section) => (
-              <button
-                key={section.id}
-                className={`${styles.navChip} ${activeSection === section.id ? styles.navChipActive : ''}`}
-                onClick={() => setActiveSection(section.id)}
-              >
-                {section.label}
-              </button>
-            ))}
-          </div>
-          <div className={styles.actions}>
-            <button className={styles.primaryButton} onClick={() => setActiveSection('brief')}>Open Source Brief</button>
-            <button className={styles.secondaryButton} onClick={() => setActiveSection('report')}>Build report</button>
-            <button className={styles.secondaryButton} onClick={() => setActiveSection('deep-dive')}>Deep dive</button>
-            <button className={styles.secondaryButton} onClick={() => void refreshReviewSets().then(() => refreshAnalytics()).then(() => refreshSourceOutputs())}>Refresh</button>
+
+      {/* ── App Header ─────────────────────────────────────────────────── */}
+      <header className={styles.appHeader}>
+        <div className={styles.brand}>
+          <span className={styles.brandGlyph}>\U0001f393</span>
+          <div className={styles.brandText}>
+            <span className={styles.brandName}>Scholar Hub</span>
+            {sourceBrief && (
+              <span className={styles.sourceIndicator}>\U0001f4c4 {sourceBrief.title.slice(0, 45)}{sourceBrief.title.length > 45 ? '\u2026' : ''}</span>
+            )}
           </div>
         </div>
-        <div className={styles.heroRail}>
-          <div className={styles.workflowCard}>
-            <span className={styles.metricLabel}>Workflow</span>
-            <ol className={styles.workflowList}>
-              <li>Understand a source</li>
-              <li>See what a strong report could look like</li>
-              <li>Learn more in detail where needed</li>
-              <li>Check and improve your own writing</li>
-            </ol>
+        <nav className={styles.tabNav}>
+          {(['brief', 'report', 'check-work', 'deep-dive', 'recovery', 'sets'] as CoachSection[]).map(id => (
+            <button
+              key={id}
+              className={`${styles.tabBtn} ${activeSection === id ? styles.tabBtnActive : ''}`}
+              onClick={() => setActiveSection(id)}
+            >
+              <span>{TAB_LABELS[id].icon}</span>
+              {TAB_LABELS[id].label}
+            </button>
+          ))}
+        </nav>
+        <button
+          className={styles.refreshBtn}
+          title="Refresh all data"
+          onClick={() => void refreshReviewSets().then(() => refreshAnalytics())}
+        >
+          \u21bb
+        </button>
+      </header>
+
+      {/* ── Panel / output overlays ────────────────────────────────────── */}
+      {panel && selectedSet && (
+        <div className={styles.overlayBanner}>
+          <div className={styles.overlayInfo}>
+            <strong>{selectedSet.name}</strong>
+            <span>{selectedSet.cards.length} cards &middot; {getSetDue(selectedSet)} due &middot; {getSetAccuracy(selectedSet) >= 0 ? `${getSetAccuracy(selectedSet)}% accuracy` : 'no accuracy yet'}</span>
           </div>
-          <div className={styles.summaryGrid}>
-            <article className={styles.summaryCard}>
-            <span className={styles.metricLabel}>Due today</span>
-            <strong>{analytics?.deckStats?.dueCardsTotal ?? dueReviewSets.reduce((n, s) => n + getSetDue(s), 0)}</strong>
-            <small>Cards waiting in your review queue.</small>
-            </article>
-            <article className={styles.summaryCard}>
-            <span className={styles.metricLabel}>Recent source outputs</span>
-            <strong>{recentSourceOutputs.length}</strong>
-            <small>Saved notes, quizzes, and source-derived material.</small>
-            </article>
-            <article className={styles.summaryCard}>
-            <span className={styles.metricLabel}>Weak topics</span>
-            <strong>{topWeakAreas.length}</strong>
-            <small>Recovery targets currently worth attention.</small>
-            </article>
-            <article className={styles.summaryCard}>
-            <span className={styles.metricLabel}>Review sets</span>
-            <strong>{reviewSets.length}</strong>
-            <small>Your private spaced-repetition support layer.</small>
-            </article>
+          <div className={styles.overlayActions}>
+            <button className={styles.btnPrimary} onClick={() => openPanel(selectedSet.id, panel === 'review' ? 'review' : 'manage', imported ? true : null)}>Open in Workspace</button>
+            <button className={styles.btnSecondary} onClick={closePanel}>Stay here</button>
           </div>
         </div>
-      </section>
-
-      {panel && (
-        <section className={styles.panelCard}>
-          <div className={styles.panelHeader}>
-            <div>
-              <span className={styles.eyebrow}>{panel === 'review' ? 'Workspace Review' : 'Workspace Review Set Manager'}</span>
-              <h3>{selectedSet ? selectedSet.name : 'Review set not found'}</h3>
-              <p>
-                {selectedSet
-                  ? 'Full flashcard review, editing, and review-set management now happen in Workspace so Scholar Hub can stay source-first.'
-                  : 'This review set is missing from local storage and synced records.'}
-              </p>
-            </div>
-            <div className={styles.actions}>
-              {selectedSet && (
-                <button className={styles.primaryButton} onClick={() => openPanel(selectedSet.id, panel === 'review' ? 'review' : 'manage')}>
-                  Open in Workspace
-                </button>
-              )}
-              <button className={styles.secondaryButton} onClick={closePanel}>Stay in Scholar Hub</button>
-            </div>
-          </div>
-
-          {!selectedSet ? (
-            <div className={styles.emptyState}>Select a review set below, or create one from a source first.</div>
-          ) : (
-            <div className={styles.importedBanner}>
-              <div>
-                <strong>{imported ? 'Review set imported ✓' : 'Review set ready'}</strong>
-                <p>
-                  {selectedSet.name} &mdash; {selectedSet.cards.length} cards, {getSetDue(selectedSet)} due now, {getSetAccuracy(selectedSet) >= 0 ? `${getSetAccuracy(selectedSet)}% accuracy` : 'no accuracy yet'}.
-                </p>
-              </div>
-              <button className={styles.secondaryButton} onClick={() => openPanel(selectedSet.id, panel === 'review' ? 'review' : 'manage', imported ? true : null)}>
-                Open in Workspace
-              </button>
-            </div>
-          )}
-        </section>
       )}
 
       {output && (
-        <section ref={outputRef} className={styles.outputCard}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <h3>{output.title}</h3>
-              <p>
-                {output.kind === 'quiz'
-                  ? 'A quick retrieval check generated from your selected review set.'
-                  : output.kind === 'explanation'
-                    ? 'A focused explanation generated from your selected review set.'
-                    : 'Generated from the source you analyzed in Scholar Hub.'}
-              </p>
-            </div>
-            <button className={styles.inlineAction} onClick={() => setOutput(null)}>Close</button>
+        <div className={styles.outputPanel} ref={outputRef}>
+          <div className={styles.outputPanelHead}>
+            <strong>{output.title}</strong>
+            <button className={styles.iconBtn} onClick={() => setOutput(null)}>\u2715</button>
           </div>
           {output.kind === 'quiz'
             ? <InteractiveQuiz content={output.quiz} deckId={output.setId} onClose={() => setOutput(null)} />
-            : <div className={styles.generatedText}>{output.content}</div>}
-        </section>
+            : <pre className={styles.preText}>{output.content}</pre>
+          }
+        </div>
       )}
 
-      <div className={styles.workspaceShell}>
-        <aside className={styles.sectionRail}>
-          <div className={styles.railCard}>
-            <span className={styles.eyebrow}>Scholar Hub Modes</span>
-            <h3>{currentSectionMeta.title}</h3>
-            <p>{currentSectionMeta.description}</p>
-          </div>
-          <nav className={styles.sectionNav}>
-            {COACH_SECTIONS.map((section) => (
-              <button
-                key={section.id}
-                className={`${styles.sectionNavButton} ${activeSection === section.id ? styles.sectionNavButtonActive : ''}`}
-                onClick={() => setActiveSection(section.id)}
-              >
-                <strong>{section.label}</strong>
-                <span>{section.description}</span>
-              </button>
-            ))}
-          </nav>
-          <div className={styles.railCard}>
-            <span className={styles.metricLabel}>Current Source</span>
-            <strong>{sourceBrief?.title ?? 'No source loaded yet'}</strong>
-            <small>{sourceBrief ? `${sourceBrief.wordCount} words · ${Math.max(1, Math.ceil(sourceBrief.wordCount / 220))} min read` : 'Analyze a URL, paste text, or upload a file to begin.'}</small>
-          </div>
-        </aside>
+      {/* ── Tab content ───────────────────────────────────────────────── */}
+      <div className={styles.tabContent}>
 
-        <div className={styles.sectionStage}>
+        {/* ═══ SOURCE TAB ══════════════════════════════════════════════ */}
         {activeSection === 'brief' && (
-        <section className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <span className={styles.eyebrow}>Source Brief</span>
-              <h3>Understand the source before you draft or explain it</h3>
-              <p>Start with a public URL, pasted text, or an uploaded file. Scholar Hub explains what it is about, extracts the key ideas, and keeps the provenance visible.</p>
-            </div>
-          </div>
-          <div className={styles.sourceWorkspace}>
-            <div className={styles.sourceComposer}>
-              <div className={styles.modeBar}>
-                <button className={`${styles.modeButton} ${sourceMode === 'url' ? styles.modeButtonActive : ''}`} onClick={() => setSourceMode('url')}>
-                  <span>Analyze URL</span>
-                  <small>Fetch and summarize a readable web source.</small>
-                </button>
-                <button className={`${styles.modeButton} ${sourceMode === 'text' ? styles.modeButtonActive : ''}`} onClick={() => setSourceMode('text')}>
-                  <span>Paste text</span>
-                  <small>Work directly from copied study material or notes.</small>
-                </button>
-                <button className={`${styles.modeButton} ${sourceMode === 'file' ? styles.modeButtonActive : ''}`} onClick={() => setSourceMode('file')}>
-                  <span>Upload PDF/Image</span>
-                  <small>Extract and brief assignment sheets, scans, or source packs.</small>
-                </button>
+          <div className={styles.sourceLayout}>
+
+            {/* Left: input */}
+            <div className={styles.inputPanel}>
+              <div className={styles.panelHead}>
+                <h2>Source Brief</h2>
+                <p>Analyze any URL, pasted text, or uploaded file to extract its key ideas.</p>
               </div>
 
-              <div className={styles.importBlock}>
-                {sourceMode === 'url' ? (
-                  <>
+              {/* Compact mode toggle */}
+              <div className={styles.modeToggle}>
+                {(['url', 'text', 'file'] as SourceInputMode[]).map(m => (
+                  <button
+                    key={m}
+                    className={`${styles.modeToggleBtn} ${sourceMode === m ? styles.modeToggleBtnActive : ''}`}
+                    onClick={() => setSourceMode(m)}
+                  >
+                    {m === 'url' ? '\U0001f517\ufe0f URL' : m === 'text' ? '\U0001f4cb Paste' : '\U0001f4c1 File'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Input area */}
+              <div className={styles.inputArea}>
+                {sourceMode === 'url' && (
+                  <div className={styles.inputRow}>
                     <input
                       className={styles.textInput}
                       value={sourceUrl}
                       onChange={e => setSourceUrl(e.target.value)}
-                      placeholder="Paste a source URL to analyze"
+                      placeholder="https://example.com/article"
                       onKeyDown={e => e.key === 'Enter' && void handleAnalyzeSource()}
                     />
-                    <div className={styles.helperSteps}>
-                      <span className={styles.countPill}>1. Fetch source</span>
-                      <span className={styles.countPill}>2. Explain the key ideas</span>
-                      <span className={styles.countPill}>3. Convert it into study material</span>
-                    </div>
-                    <div className={styles.actions}>
-                      <button className={styles.primaryButton} disabled={sourceLoading || !sourceUrl.trim()} onClick={() => void handleAnalyzeSource()}>
-                        {sourceLoading ? 'Analyzing\u2026' : 'Analyze source'}
-                      </button>
-                    </div>
-                  </>
-                ) : sourceMode === 'file' ? (
-                  <>
-                    <button className={styles.uploadCard} type="button" onClick={() => sourceFileInputRef.current?.click()}>
-                      <strong>{sourceFileName ? `Selected: ${sourceFileName}` : 'Choose a PDF, image, or document'}</strong>
-                      <small>Scholar Hub extracts readable text locally first, then builds the source brief from that text. OCR follows the current app language where possible.</small>
+                    <button className={styles.btnPrimary} disabled={sourceLoading || !sourceUrl.trim()} onClick={() => void handleAnalyzeSource()}>
+                      {sourceLoading ? '\u2026' : 'Analyze'}
                     </button>
-                    <input
-                      ref={sourceFileInputRef}
-                      className={styles.fileInput}
-                      type="file"
-                      accept=".pdf,.txt,.docx,.pptx,image/*"
-                      onChange={(event) => void handleSourceFileSelected(event.target.files?.[0] ?? null)}
-                    />
-                    <div className={styles.helperSteps}>
-                      <span className={styles.countPill}>PDFs and images supported</span>
-                      <span className={styles.countPill}>OCR can read screenshots too</span>
-                      <span className={styles.countPill}>Useful for assignment prompts and report sources</span>
-                    </div>
-                    {sourceFileLoading && (
-                      <div className={styles.noticeBox}>
-                        <strong>Preparing file…</strong>
-                        <p>We are extracting readable text from the selected file.</p>
-                      </div>
-                    )}
-                    {!!sourceFileError && (
-                      <div className={styles.noticeBox}>
-                        <strong>File extraction issue</strong>
-                        <p>{sourceFileError}</p>
-                      </div>
-                    )}
-                    {!!sourceFileText && !sourceFileLoading && (
-                      <div className={styles.noticeBox}>
-                        <strong>File ready</strong>
-                        <p>{sourceFileWordCount} words extracted from {sourceFileName}. You can brief it now and then use it in the report flow.</p>
-                      </div>
-                    )}
-                    <div className={styles.actions}>
-                      <button className={styles.primaryButton} disabled={sourceLoading || sourceFileLoading || !sourceFileText.trim()} onClick={() => void handleAnalyzeSource()}>
-                        {sourceLoading ? 'Analyzing\u2026' : 'Analyze file'}
-                      </button>
-                    </div>
-                  </>
-                ) : (
+                  </div>
+                )}
+                {sourceMode === 'text' && (
                   <>
-                    <input
-                      className={styles.textInput}
-                      value={sourceTitleDraft}
-                      onChange={e => setSourceTitleDraft(e.target.value)}
-                      placeholder="Optional title for this pasted text"
-                    />
-                    <textarea
-                      className={styles.textArea}
-                      rows={10}
-                      value={sourceText}
-                      onChange={e => setSourceText(e.target.value)}
-                      placeholder="Paste article text, textbook notes, or a study passage here\u2026"
-                    />
-                    <div className={styles.helperSteps}>
-                      <span className={styles.countPill}>No fetch needed</span>
-                      <span className={styles.countPill}>Works in offline mode</span>
-                      <span className={styles.countPill}>Ready for notes, quiz, or Workspace handoff</span>
-                    </div>
-                    <div className={styles.actions}>
-                      <button className={styles.primaryButton} disabled={sourceLoading || !sourceText.trim()} onClick={() => void handleAnalyzeSource()}>
-                        {sourceLoading ? 'Analyzing\u2026' : 'Analyze pasted text'}
-                      </button>
-                    </div>
+                    <input className={styles.textInput} value={sourceTitleDraft} onChange={e => setSourceTitleDraft(e.target.value)} placeholder="Title (optional)" />
+                    <textarea className={styles.textArea} rows={7} value={sourceText} onChange={e => setSourceText(e.target.value)} placeholder="Paste article, textbook passage, or study notes\u2026" />
+                    <button className={styles.btnPrimary} disabled={sourceLoading || !sourceText.trim()} onClick={() => void handleAnalyzeSource()}>
+                      {sourceLoading ? 'Analyzing\u2026' : 'Analyze text'}
+                    </button>
                   </>
                 )}
-
-                <div className={styles.noticeBox}>
-                  <strong>Privacy mode: {currentPrivacyMode === 'offline' ? 'Offline only' : currentPrivacyMode === 'metadata-only' ? 'Metadata-only' : 'Full AI access'}</strong>
-                  <p>Pasted text and uploaded files work without web fetches. URL mode keeps the current safety checks, and offline mode skips external reading lookups later in the flow.</p>
-                </div>
+                {sourceMode === 'file' && (
+                  <>
+                    <button className={styles.uploadZone} type="button" onClick={() => sourceFileInputRef.current?.click()}>
+                      <span className={styles.uploadIcon}>\U0001f4c1</span>
+                      <strong>{sourceFileName || 'Choose PDF, image, or document'}</strong>
+                      <small>PDF \u00b7 DOCX \u00b7 PPTX \u00b7 images &mdash; click to browse</small>
+                    </button>
+                    <input ref={sourceFileInputRef} type="file" accept=".pdf,.txt,.docx,.pptx,image/*" className={styles.hiddenInput} onChange={e => void handleSourceFileSelected(e.target.files?.[0] ?? null)} />
+                    {sourceFileLoading && <div className={styles.statusNote}>\u23f3 Reading file\u2026</div>}
+                    {sourceFileError && <div className={styles.errorNote}>\u26a0\ufe0f {sourceFileError}</div>}
+                    {sourceFileText && !sourceFileLoading && <div className={styles.successNote}>\u2713 {sourceFileWordCount.toLocaleString()} words ready from {sourceFileName}</div>}
+                    <button className={styles.btnPrimary} disabled={sourceLoading || sourceFileLoading || !sourceFileText.trim()} onClick={() => void handleAnalyzeSource()}>
+                      {sourceLoading ? 'Analyzing\u2026' : 'Analyze file'}
+                    </button>
+                  </>
+                )}
               </div>
+
+              {/* Source-derived actions */}
+              {sourceBrief && (
+                <div className={styles.sourceActions}>
+                  <span className={styles.sectionLabel}>From this source</span>
+                  <div className={styles.chipRow}>
+                    <button className={`${styles.actionChip} ${sourceActionLoading === 'notes' ? styles.actionChipBusy : ''}`} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('notes')}>
+                      \U0001f4dd {sourceActionLoading === 'notes' ? 'Creating\u2026' : 'Notes'}
+                    </button>
+                    <button className={`${styles.actionChip} ${sourceActionLoading === 'quiz' ? styles.actionChipBusy : ''}`} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('quiz')}>
+                      \U0001f9ea {sourceActionLoading === 'quiz' ? 'Creating\u2026' : 'Quiz'}
+                    </button>
+                    <button className={`${styles.actionChip} ${sourceActionLoading === 'flashcards' ? styles.actionChipBusy : ''}`} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('flashcards')}>
+                      \U0001f5c2\ufe0f {sourceActionLoading === 'flashcards' ? 'Creating\u2026' : 'Review Set'}
+                    </button>
+                    <button className={styles.actionChip} onClick={() => void handleCopySourceForMyBib()}>
+                      \U0001f4ce Copy for MyBib
+                    </button>
+                  </div>
+                  {sourceOutputSummary && (
+                    <div className={styles.successStrip}>
+                      <span>\u2713 {sourceOutputSummary.mode === 'flashcards' ? `Review set \u201c${sourceOutputSummary.title}\u201d created` : `${sourceOutputSummary.title} saved`}</span>
+                      {sourceOutputSummary.setId && (
+                        <button className={styles.stripLink} onClick={() => openPanel(sourceOutputSummary.setId!, 'review')}>Review now \u2192</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className={styles.sourcePreviewPane}>
+            {/* Right: brief output */}
+            <div className={styles.briefPanel}>
               {!sourceBrief ? (
-                <div className={styles.emptyState}>Your brief will appear here with provenance, reading time, and key ideas once you analyze a source.</div>
+                <div className={styles.emptyBrief}>
+                  <div className={styles.emptyIcon}>\U0001f4c4</div>
+                  <strong>Brief appears here</strong>
+                  <p>Analyze a URL, paste text, or upload a file to see key ideas, summary, and provenance.</p>
+                </div>
               ) : (
-                <article className={styles.sourceBriefCard}>
-                  <div className={styles.listTop}>
-                    <div>
-                      <h4>{sourceBrief.title}</h4>
-                      <p>{sourceBrief.summary}</p>
-                    </div>
-                    <span className={styles.countPill}>{Math.max(1, Math.ceil(sourceBrief.wordCount / 220))} min read</span>
+                <div className={styles.briefCard}>
+                  <div className={styles.briefCardHead}>
+                    <h3>{sourceBrief.title}</h3>
+                    <span className={styles.readPill}>{Math.max(1, Math.ceil(sourceBrief.wordCount / 220))} min read</span>
                   </div>
-                  <div className={styles.metaRow}>
-                    <span>{sourceBrief.sourceLabel}</span>
-                    <span>{sourceBrief.wordCount} words</span>
-                    <span>{displaySourceOrigin(sourceBrief)}</span>
-                    <span>{currentPrivacyMode === 'offline' ? 'Offline privacy' : currentPrivacyMode === 'metadata-only' ? 'Metadata only' : 'AI enabled'}</span>
+                  <p className={styles.briefSummary}>{sourceBrief.summary}</p>
+                  <div className={styles.metaTagRow}>
+                    <span className={styles.metaTag}>{displaySourceOrigin(sourceBrief)}</span>
+                    <span className={styles.metaTag}>{sourceBrief.wordCount.toLocaleString()} words</span>
+                    <span className={styles.metaTag}>{sourceBrief.sourceLabel}</span>
                   </div>
                   {sourceBrief.description && (
-                    <div className={styles.noticeBox}>
-                      <strong>What this source seems to cover</strong>
+                    <div className={styles.briefDescription}>
+                      <strong>What this covers</strong>
                       <p>{sourceBrief.description}</p>
                     </div>
                   )}
-                  <div className={styles.sourcePoints}>
-                    {sourceBrief.keyPoints.map((pt) => (
-                      <article key={pt} className={styles.helperCard}>
-                        <strong>Key idea</strong>
+                  <div className={styles.keyPointsList}>
+                    <span className={styles.sectionLabel}>Key ideas</span>
+                    {sourceBrief.keyPoints.map((pt, i) => (
+                      <div key={i} className={styles.keyPoint}>
+                        <span className={styles.keyPointNum}>{i + 1}</span>
                         <p>{pt}</p>
-                      </article>
+                      </div>
                     ))}
                   </div>
-                </article>
+                </div>
               )}
             </div>
           </div>
-        </section>
-
         )}
 
+        {/* ═══ REPORT TAB ══════════════════════════════════════════════ */}
         {activeSection === 'report' && (
-        <section className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <span className={styles.eyebrow}>Report Builder</span>
-              <h3>Build an example of what the final report should look like</h3>
-              <p>This is the model-answer step: use the source to shape the structure, the likely argument, and the key points the student should cover.</p>
+          <div className={styles.reportLayout}>
+            <div className={styles.panelHead}>
+              <h2>Report Builder</h2>
+              <p>Generate a model report or essay to use as a reference while you write your own.</p>
             </div>
-          </div>
-          {sourceBrief && (
-            <div className={styles.noticeBox}>
-              <strong>Current source context</strong>
-              <p>{sourceBrief.title} &mdash; {displaySourceOrigin(sourceBrief)}</p>
-              <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
-                <a
-                  className={styles.secondaryButton}
-                  href="https://www.mybib.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open MyBib
-                </a>
-                <button className={styles.secondaryButton} onClick={() => void handleCopySourceForMyBib()}>
-                  {sourceBrief.sourceType === 'url' ? 'Copy source URL' : 'Copy source title'}
-                </button>
+
+            {/* Single-row control bar */}
+            <div className={styles.reportControls}>
+              <div className={styles.controlGroup}>
+                <label className={styles.controlLabel}>Type</label>
+                <div className={styles.segControl}>
+                  {REPORT_TYPES.map(t => (
+                    <button key={t.id} className={`${styles.segBtn} ${reportType === t.id ? styles.segBtnActive : ''}`} onClick={() => setReportType(t.id)}>{t.label}</button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-          <div className={styles.importBlock}>
-            <div className={styles.modeBar}>
-              {REPORT_TYPES.map((t) => (
-                <button key={t.id} className={`${styles.modeButton} ${reportType === t.id ? styles.modeButtonActive : ''}`} onClick={() => setReportType(t.id)}>
-                  <span>{t.label}</span><small>{t.desc}</small>
-                </button>
-              ))}
-            </div>
-            <div className={styles.editorGrid}>
-              <label className={styles.fieldBlock}>
-                <span>Topic</span>
-                <input className={styles.textInput} value={reportTopic} onChange={e => setReportTopic(e.target.value)} placeholder="e.g. The causes of World War I" />
-              </label>
-              <label className={styles.fieldBlock}>
-                <span>Word count</span>
-                <input className={styles.textInput} type="number" min={300} max={5000} step={100} value={reportWordCount} onChange={e => setReportWordCount(Math.max(300, Math.min(5000, +e.target.value)))} />
-              </label>
-            </div>
-            <label className={styles.fieldBlock} style={{ marginTop: '0.75rem' }}>
-              <span>Key points to cover (optional)</span>
-              <textarea className={styles.textArea} rows={3} value={reportKeyPoints} onChange={e => setReportKeyPoints(e.target.value)} placeholder="e.g. Alliance system, nationalism, assassination…" />
-            </label>
-            <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
-              <button className={styles.primaryButton} disabled={reportLoading || !reportTopic.trim()} onClick={() => void handleReportBuilder()}>
-                {reportLoading ? 'Building…' : 'Build example report'}
+              <div className={styles.controlGroup} style={{ flex: 2 }}>
+                <label className={styles.controlLabel}>Topic</label>
+                <input className={styles.textInput} value={reportTopic} onChange={e => setReportTopic(e.target.value)} placeholder="e.g. The causes of World War I" onKeyDown={e => e.key === 'Enter' && !reportLoading && reportTopic.trim() ? void handleReportBuilder() : undefined} />
+              </div>
+              <div className={styles.controlGroup}>
+                <label className={styles.controlLabel}>Words</label>
+                <select className={styles.selectInput} value={reportWordCount} onChange={e => setReportWordCount(+e.target.value)}>
+                  {[500, 750, 1000, 1500, 2000, 3000].map(n => <option key={n} value={n}>{n.toLocaleString()}</option>)}
+                </select>
+              </div>
+              <button className={styles.btnPrimary} style={{ alignSelf: 'flex-end' }} disabled={reportLoading || !reportTopic.trim()} onClick={() => void handleReportBuilder()}>
+                {reportLoading ? 'Generating\u2026' : '\u2728 Generate'}
               </button>
-              {reportResult && <button className={styles.secondaryButton} onClick={() => { setReportResult(''); setReportTopic(''); setReportKeyPoints(''); }}>Clear</button>}
             </div>
-            {reportResult && (
-              <div>
-                <div className={styles.generatedText}>{reportResult}</div>
-                <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
-                  <button className={styles.secondaryButton} onClick={() => void navigator.clipboard.writeText(reportResult).then(() => toast('Copied!', 'success'))}>Copy</button>
-                  <button className={styles.secondaryButton} onClick={() => {
-                    const blob = new Blob([reportResult], { type: 'text/plain' });
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(blob);
-                    a.download = `${reportTopic.slice(0, 40).replace(/[^a-z0-9]/gi, '_')}_draft.txt`;
-                    a.click();
-                  }}>Download .txt</button>
+
+            <div className={styles.controlGroup}>
+              <label className={styles.controlLabel}>Key points to cover <span className={styles.optional}>(optional)</span></label>
+              <textarea className={styles.textArea} rows={2} value={reportKeyPoints} onChange={e => setReportKeyPoints(e.target.value)} placeholder="e.g. Alliance system, nationalism, assassination of Franz Ferdinand\u2026" />
+            </div>
+
+            {sourceBrief && (
+              <div className={styles.contextBanner}>
+                <span>\U0001f4c4 Using source: <strong>{sourceBrief.title}</strong></span>
+                <div className={styles.bannerActions}>
+                  <a className={styles.btnSecondary} href="https://www.mybib.com/" target="_blank" rel="noopener noreferrer">MyBib \u2197</a>
+                  <button className={styles.btnSecondary} onClick={() => void handleCopySourceForMyBib()}>Copy citation</button>
                 </div>
               </div>
             )}
 
-            <div className={styles.noticeBox} style={{ marginTop: '1rem' }}>
-              <strong>References and citations</strong>
-              <p>Use MyBib while you draft so the final report keeps its references in one place. Open MyBib directly here, then paste the source URL or title you copied from Scholar Hub.</p>
-              <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
-                <a
-                  className={styles.secondaryButton}
-                  href="https://www.mybib.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open MyBib for references
-                </a>
+            {reportResult && (
+              <div className={styles.reportOutput}>
+                <div className={styles.reportOutputHead}>
+                  <strong>{reportTopic} \u2014 {REPORT_TYPES.find(t => t.id === reportType)?.label}</strong>
+                  <div className={styles.reportOutputActions}>
+                    <button className={styles.btnSecondary} onClick={() => void navigator.clipboard.writeText(reportResult).then(() => toast('Copied!', 'success'))}>\U0001f4cb Copy</button>
+                    <button className={styles.btnSecondary} onClick={() => {
+                      const blob = new Blob([reportResult], { type: 'text/plain' });
+                      const a = document.createElement('a');
+                      a.href = URL.createObjectURL(blob);
+                      a.download = `${reportTopic.slice(0, 40).replace(/[^a-z0-9]/gi, '_')}_draft.txt`;
+                      a.click();
+                    }}>\U0001f4be Download</button>
+                    <button className={styles.btnSecondary} onClick={() => setReportResult('')}>Clear</button>
+                  </div>
+                </div>
+                <div className={styles.reportDoc}>{reportResult}</div>
               </div>
-            </div>
+            )}
 
-            <div className={styles.noticeBox} style={{ marginTop: '1rem' }}>
-              <strong>Need to decode the assignment first?</strong>
-              <p>Assignment Helper stays here as a small support step before the model draft.</p>
-              <div className={styles.modeBar}>
-                {ASSIGN_MODES.map((m) => (
-                  <button key={m.id} className={`${styles.modeButton} ${assignMode === m.id ? styles.modeButtonActive : ''}`} onClick={() => setAssignMode(m.id)}>
-                    <span>{m.label}</span><small>{m.desc}</small>
+            <details className={styles.detailsBlock}>
+              <summary className={styles.detailsSummary}>\U0001f50d Assignment Helper &mdash; decode a confusing prompt</summary>
+              <div className={styles.detailsBody}>
+                <div className={styles.segControl} style={{ marginBottom: '0.75rem' }}>
+                  {ASSIGN_MODES.map(m => (
+                    <button key={m.id} className={`${styles.segBtn} ${assignMode === m.id ? styles.segBtnActive : ''}`} onClick={() => setAssignMode(m.id)}>{m.label}</button>
+                  ))}
+                </div>
+                <div className={styles.inputRow}>
+                  <textarea className={styles.textArea} rows={3} value={assignText} onChange={e => setAssignText(e.target.value)} placeholder="Paste the assignment prompt here\u2026" style={{ flex: 1 }} />
+                  <button className={styles.btnPrimary} disabled={assignLoading || !assignText.trim()} onClick={() => void handleAssignHelper()} style={{ alignSelf: 'flex-end' }}>
+                    {assignLoading ? '\u2026' : 'Go'}
                   </button>
-                ))}
+                </div>
+                {assignResult && (
+                  <div className={styles.resultBlock}>
+                    <div className={styles.resultHead}>
+                      <strong>Result</strong>
+                      <button className={styles.btnSecondary} onClick={() => { setAssignResult(''); setAssignText(''); }}>Clear</button>
+                    </div>
+                    <pre className={styles.preText}>{assignResult}</pre>
+                  </div>
+                )}
               </div>
-              <textarea className={styles.textArea} rows={4} value={assignText} onChange={e => setAssignText(e.target.value)} placeholder="Paste the assignment prompt or confusing instructions here…" />
-              <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
-                <button className={styles.secondaryButton} disabled={assignLoading || !assignText.trim()} onClick={() => void handleAssignHelper()}>
-                  {assignLoading ? 'Working…' : 'Run Assignment Helper'}
-                </button>
-                {assignResult && <button className={styles.secondaryButton} onClick={() => { setAssignResult(''); setAssignText(''); }}>Clear</button>}
-              </div>
-              {assignResult && <div className={styles.generatedText}>{assignResult}</div>}
-            </div>
+            </details>
           </div>
-        </section>
-
         )}
 
-        {activeSection === 'deep-dive' && (
-        <section className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <span className={styles.eyebrow}>Deep Dive</span>
-              <h3>Learn more in detail from the source</h3>
-              <p>Ask follow-up questions about the source, then keep reading from related material if you still need more context.</p>
-            </div>
-            {sourceBrief && readingSourceLabel !== 'source' && (
-              <button className={styles.secondaryButton} onClick={() => void loadRelatedReading(sourceBrief.title, 'source', false)}>
-                Back to source reading
-              </button>
-            )}
-          </div>
-          {currentPrivacyMode === 'offline' && (
-            <div className={styles.noticeBox}>
-              <strong>Offline privacy mode is active</strong>
-              <p>External lookups are skipped here, so you will only see manual/static study links until you switch privacy mode.</p>
-            </div>
-          )}
-          <div className={styles.importBlock}>
-            <label className={styles.fieldBlock}>
-              <span>What do you want to understand better?</span>
-              <textarea className={styles.textArea} rows={4} value={deepDiveQuestion} onChange={e => setDeepDiveQuestion(e.target.value)} placeholder="e.g. Explain the main argument in simpler words, or why this evidence matters…" />
-            </label>
-            <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
-              <button className={styles.primaryButton} disabled={deepDiveLoading || !deepDiveQuestion.trim()} onClick={() => void handleDeepDive()}>
-                {deepDiveLoading ? 'Explaining…' : 'Explain this in detail'}
-              </button>
-              {deepDiveResult && <button className={styles.secondaryButton} onClick={() => { setDeepDiveResult(''); setDeepDiveQuestion(''); }}>Clear</button>}
-            </div>
-            {deepDiveResult && <div className={styles.generatedText}>{deepDiveResult}</div>}
+        {/* ═══ WRITER TAB (MS Word-like) ══════════════════════════════ */}
+        {activeSection === 'check-work' && (
+          <div className={styles.wordApp}>
 
-            <div className={styles.sectionHeader} style={{ marginTop: '1rem' }}>
-              <div>
-                <h3>Related reading</h3>
-                <p>Use these links when the source needs more background, examples, or supporting context.</p>
+            {/* Ribbon */}
+            <div className={styles.wordRibbon}>
+              <div className={styles.ribbonGroup}>
+                <span className={styles.ribbonLabel}>REVIEW</span>
+                <button
+                  className={`${styles.ribbonBtn} ${styles.ribbonBtnPrimary}`}
+                  disabled={checkLoading || !checkText.trim()}
+                  onClick={() => void handleWorkChecker()}
+                >
+                  {checkLoading
+                    ? <><span className={styles.ribbonIcon}>\u23f3</span>Checking\u2026</>
+                    : <><span className={styles.ribbonIcon}>\u2714</span>Check Writing</>
+                  }
+                </button>
+              </div>
+              <div className={styles.ribbonDivider} />
+              <div className={styles.ribbonGroup}>
+                <span className={styles.ribbonLabel}>DOCUMENT</span>
+                <button className={styles.ribbonBtn} disabled={!checkText} onClick={() => void navigator.clipboard.writeText(checkText).then(() => toast('Copied!', 'success'))}>
+                  <span className={styles.ribbonIcon}>\U0001f4cb</span>Copy
+                </button>
+                <button className={styles.ribbonBtn} disabled={!checkText} onClick={() => { setCheckText(''); setCheckResult(''); }}>
+                  <span className={styles.ribbonIcon}>\U0001f5d1\ufe0f</span>Clear
+                </button>
+              </div>
+              {sourceBrief && (
+                <>
+                  <div className={styles.ribbonDivider} />
+                  <div className={styles.ribbonGroup}>
+                    <span className={styles.ribbonLabel}>SOURCE</span>
+                    <span className={styles.ribbonContext}>\U0001f4c4 {sourceBrief.title.slice(0, 32)}{sourceBrief.title.length > 32 ? '\u2026' : ''}</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Document body */}
+            <div className={styles.wordBody}>
+
+              {/* Paper */}
+              <div className={styles.wordPageWrap}>
+                <div className={styles.wordPage}>
+                  <textarea
+                    className={styles.wordEditor}
+                    value={checkText}
+                    onChange={e => setCheckText(e.target.value)}
+                    placeholder="Paste or type your essay, report, or paragraph here\u2026&#10;&#10;Scholar Hub will check grammar, clarity, flow, and paragraph structure."
+                    spellCheck
+                  />
+                </div>
+              </div>
+
+              {/* Feedback panel */}
+              {checkResult && (
+                <div className={styles.wordFeedback}>
+                  <div className={styles.feedbackHead}>
+                    <strong>\u2714 Writing Feedback</strong>
+                    <button className={styles.iconBtn} onClick={() => setCheckResult('')}>\u2715</button>
+                  </div>
+                  <div className={styles.feedbackBody}>
+                    <pre className={styles.feedbackText}>{checkResult}</pre>
+                  </div>
+                  {sourceBrief && (
+                    <div className={styles.feedbackFooter}>
+                      <span className={styles.sectionLabel}>Save from source</span>
+                      <div className={styles.chipRow}>
+                        <button className={styles.actionChip} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('notes')}>\U0001f4dd Notes</button>
+                        <button className={styles.actionChip} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('quiz')}>\U0001f9ea Quiz</button>
+                        <button className={styles.actionChip} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('flashcards')}>\U0001f5c2\ufe0f Review Set</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Status bar */}
+            <div className={styles.wordStatusBar}>
+              <span className={styles.statusItem}>Words: <strong>{writerWordCount.toLocaleString()}</strong></span>
+              <span className={styles.statusPipe}>|</span>
+              <span className={styles.statusItem}>Characters: <strong>{writerCharCount.toLocaleString()}</strong></span>
+              <span className={styles.statusPipe}>|</span>
+              <span className={`${styles.statusItem} ${checkResult ? styles.statusGood : ''}`}>
+                {checkLoading ? '\u23f3 ' : checkResult ? '\u2714 ' : '\u25cf '}{writerStatus}
+              </span>
+              {sourceBrief && (
+                <>
+                  <span className={styles.statusPipe}>|</span>
+                  <span className={styles.statusItem}>Source: <strong>{sourceBrief.title.slice(0, 28)}{sourceBrief.title.length > 28 ? '\u2026' : ''}</strong></span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ DEEP DIVE TAB ══════════════════════════════════════════ */}
+        {activeSection === 'deep-dive' && (
+          <div className={styles.deepDiveLayout}>
+            <div className={styles.panelHead}>
+              <h2>Deep Dive</h2>
+              <p>Ask follow-up questions and explore related reading to build a fuller understanding.</p>
+            </div>
+
+            <div className={styles.questionBox}>
+              <div className={styles.inputRow}>
+                <textarea
+                  className={styles.textArea}
+                  rows={3}
+                  value={deepDiveQuestion}
+                  onChange={e => setDeepDiveQuestion(e.target.value)}
+                  placeholder={sourceBrief ? `Ask anything about \u201c${sourceBrief.title}\u201d\u2026` : 'Ask a follow-up question about any topic\u2026'}
+                  style={{ flex: 1 }}
+                />
+                <button className={styles.btnPrimary} disabled={deepDiveLoading || !deepDiveQuestion.trim()} onClick={() => void handleDeepDive()} style={{ alignSelf: 'flex-end' }}>
+                  {deepDiveLoading ? '\u2026' : 'Ask'}
+                </button>
+              </div>
+              {deepDiveResult && (
+                <div className={styles.resultBlock}>
+                  <div className={styles.resultHead}>
+                    <strong>Explanation</strong>
+                    <button className={styles.btnSecondary} onClick={() => { setDeepDiveResult(''); setDeepDiveQuestion(''); }}>Clear</button>
+                  </div>
+                  <pre className={styles.preText}>{deepDiveResult}</pre>
+                </div>
+              )}
+            </div>
+
+            <div className={styles.readingSection}>
+              <div className={styles.readingSectionHead}>
+                <h3>Related Reading</h3>
+                {readingTopic && <span className={styles.metaTag}>Topic: {readingTopic}</span>}
+                {sourceBrief && readingSourceLabel !== 'source' && (
+                  <button className={styles.btnSecondary} onClick={() => void loadRelatedReading(sourceBrief.title, 'source')}>Back to source</button>
+                )}
+              </div>
+              {!readingTopic ? (
+                <div className={styles.emptyBrief}>
+                  <div className={styles.emptyIcon}>\U0001f4da</div>
+                  <strong>Related reading appears here</strong>
+                  <p>Analyze a source to auto-load articles, or ask a question above.</p>
+                </div>
+              ) : readingLoading ? (
+                <div className={styles.loadingNote}>\u23f3 Loading suggestions for <em>{readingTopic}</em>\u2026</div>
+              ) : readingArticles.length === 0 ? (
+                <div className={styles.emptyBrief}><strong>No suggestions found</strong></div>
+              ) : (
+                <div className={styles.articleGrid}>
+                  {readingArticles.map(art => (
+                    <a key={art.url} href={art.url} target="_blank" rel="noopener noreferrer" className={styles.articleCard}>
+                      <div className={styles.articleCardHead}>
+                        <span className={styles.articleSource}>{art.source}</span>
+                        <span className={styles.articleTime}>~{art.readingMinutes} min</span>
+                      </div>
+                      <strong className={styles.articleTitle}>{art.title}</strong>
+                      <p className={styles.articleExcerpt}>{art.excerpt}</p>
+                      <span className={styles.articleLink}>Open article \u2197</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ RECOVERY TAB ════════════════════════════════════════════ */}
+        {activeSection === 'recovery' && (
+          <div className={styles.recoveryLayout}>
+            <div className={styles.panelHead}>
+              <h2>Recovery</h2>
+              <p>Due review and weak-area guidance in one place.</p>
+            </div>
+
+            <div className={styles.missionCard}>
+              <div className={styles.missionBody}>
+                <span className={styles.eyebrowPill}>Today&apos;s Mission</span>
+                <h3>{mission.title}</h3>
+                <p>{mission.description}</p>
+              </div>
+              <div className={styles.missionActions}>
+                <button className={styles.btnPrimary} onClick={startMission}>{mission.actionLabel}</button>
+                <button className={styles.btnSecondary} onClick={runMissionSecondary}>{mission.secondaryLabel}</button>
               </div>
             </div>
-            {!readingTopic ? (
-              <div className={styles.emptyState}>Analyze a source or choose a weak topic below to load related reading.</div>
-            ) : readingLoading ? (
-              <div className={styles.emptyState}>Loading reading suggestions for {readingTopic}&hellip;</div>
-            ) : (
-              <>
-                <div className={styles.noticeBox}>
-                  <strong>{readingSourceLabel === 'weak-topic' ? 'Weak-topic follow-up' : 'Current source follow-up'}</strong>
-                  <p>{readingTopic}</p>
-                </div>
-                {readingArticles.length === 0 ? (
-                  <div className={styles.emptyState}>No related reading suggestions are available right now.</div>
+
+            <div className={styles.recoveryColumns}>
+              <div className={styles.recoveryCol}>
+                <h4>Due Review</h4>
+                {loadingSets ? (
+                  <div className={styles.emptyBrief}><strong>Loading\u2026</strong></div>
+                ) : dueReviewSets.length === 0 ? (
+                  <div className={styles.emptyBrief}><strong>Nothing due right now \u2714</strong></div>
                 ) : (
-                  <div className={styles.listStack}>
-                    {readingArticles.map((art) => (
-                      <a
-                        key={art.url}
-                        href={art.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={styles.readingCard}
-                      >
-                        <div className={styles.listTop}>
-                          <div>
-                            <h4>{art.title}</h4>
-                            <p>{art.excerpt}</p>
-                          </div>
-                          <span className={styles.countPill}>{art.source}</span>
+                  <div className={styles.setList}>
+                    {dueReviewSets.slice(0, 5).map(set => (
+                      <div key={set.id} className={styles.setRow}>
+                        <div className={styles.setRowInfo}>
+                          <strong>{set.name}</strong>
+                          <span>{set.cards.length} cards &middot; {getSetDue(set)} due &middot; {getSetAccuracy(set) >= 0 ? `${getSetAccuracy(set)}% accuracy` : 'no accuracy'}</span>
                         </div>
-                        <div className={styles.metaRow}>
-                          <span>~{art.readingMinutes} min read</span>
-                          <span style={{ textTransform: 'capitalize' }}>{art.type}</span>
-                          <span>Open &#x2197;</span>
+                        <div className={styles.setRowActions}>
+                          <button className={styles.btnPrimary} onClick={() => openPanel(set.id, 'review')}>Review</button>
+                          <button className={styles.btnSecondary} onClick={() => openPanel(set.id, 'manage')}>Manage</button>
                         </div>
-                      </a>
+                      </div>
                     ))}
                   </div>
                 )}
-              </>
-            )}
-          </div>
-        </section>
-
-        )}
-
-        {activeSection === 'check-work' && (
-        <section className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <span className={styles.eyebrow}>Work Checker</span>
-              <h3>Check grammar, clarity, and paragraph quality after drafting</h3>
-              <p>Paste the student’s writing here after they use the source and report builder. Scholar Hub will review wording, flow, and places that need rephrasing.</p>
-            </div>
-          </div>
-          {sourceBrief && (
-            <div className={styles.noticeBox}>
-              <strong>Source-aware checking is active</strong>
-              <p>{sourceBrief.title} is used as optional context so the feedback can stay aligned with the source.</p>
-            </div>
-          )}
-          <div className={styles.importBlock}>
-            <textarea className={styles.textArea} rows={8} value={checkText} onChange={e => setCheckText(e.target.value)} placeholder="Paste the student essay, report, or paragraph here…" />
-            <div className={styles.actions}>
-              <button className={styles.primaryButton} disabled={checkLoading || !checkText.trim()} onClick={() => void handleWorkChecker()}>
-                {checkLoading ? 'Checking…' : 'Check my work'}
-              </button>
-              {checkResult && <button className={styles.secondaryButton} onClick={() => { setCheckResult(''); setCheckText(''); }}>Clear</button>}
-            </div>
-            {checkResult && <div className={styles.generatedText}>{checkResult}</div>}
-
-            <div className={styles.sectionHeader} style={{ marginTop: '1rem' }}>
-              <div>
-                <h3>Secondary study actions</h3>
-                <p>These stay available, but they are no longer the main point of Scholar Hub.</p>
               </div>
-            </div>
-            {!sourceBrief ? (
-              <div className={styles.emptyState}>Analyze a source first if you want notes, a quiz, or a Workspace review set.</div>
-            ) : (
-              <>
-                <div className={styles.conversionGrid}>
-                  <article className={styles.conversionCard}>
-                    <span className={styles.metricLabel}>Notes</span>
-                    <h4>Build revision notes</h4>
-                    <p>Save a concise study sheet from the current source.</p>
-                    <button className={styles.secondaryButton} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('notes')}>
-                      {sourceActionLoading === 'notes' ? 'Creating notes…' : 'Create notes'}
-                    </button>
-                  </article>
-                  <article className={styles.conversionCard}>
-                    <span className={styles.metricLabel}>Quiz</span>
-                    <h4>Check understanding</h4>
-                    <p>Generate a quick quiz from the current source.</p>
-                    <button className={styles.secondaryButton} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('quiz')}>
-                      {sourceActionLoading === 'quiz' ? 'Creating quiz…' : 'Create quiz'}
-                    </button>
-                  </article>
-                  <article className={styles.conversionCard}>
-                    <span className={styles.metricLabel}>Workspace</span>
-                    <h4>Send to review sets</h4>
-                    <p>Create a review set only when you want long-term recall work in Workspace.</p>
-                    <button className={styles.secondaryButton} disabled={sourceActionLoading !== null} onClick={() => void handleSourceAction('flashcards')}>
-                      {sourceActionLoading === 'flashcards' ? 'Creating set…' : 'Send to Workspace'}
-                    </button>
-                  </article>
-                </div>
 
-                {sourceOutputSummary && (
-                  <div className={styles.nextStepStrip}>
-                    <div>
-                      <strong>Next step ready</strong>
-                      <p>
-                        {sourceOutputSummary.mode === 'flashcards'
-                          ? `Review set "${sourceOutputSummary.title}" is ready in Workspace.`
-                          : `${sourceOutputSummary.title} is saved and ready for the next study step.`}
-                      </p>
-                    </div>
-                    <div className={styles.actions}>
-                      <button className={styles.primaryButton} disabled={!sourceOutputSummary.setId} onClick={() => sourceOutputSummary.setId && openPanel(sourceOutputSummary.setId, 'review')}>
-                        Review in Workspace
-                      </button>
-                      <button className={styles.secondaryButton} onClick={() => openSourceInWorkspace(sourceOutputSummary.mode === 'quiz' ? 'quiz' : 'summarize')}>
-                        Open in Workspace
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <div className={styles.sectionHeader} style={{ marginTop: '1rem' }}>
-                  <div>
-                    <h3>Recent source outputs</h3>
-                    <p>Saved through Library metadata so you can return without adding a new schema.</p>
-                  </div>
-                </div>
-                {recentSourceOutputs.length === 0 ? (
-                  <div className={styles.emptyState}>No source-derived outputs yet. Create notes or a quiz from the current source to start building this list.</div>
+              <div className={styles.recoveryCol}>
+                <h4>Weak Topics</h4>
+                {analyticsLoading ? (
+                  <div className={styles.emptyBrief}><strong>Loading\u2026</strong></div>
+                ) : topWeakAreas.length === 0 ? (
+                  <div className={styles.emptyBrief}><strong>No weak topics detected \u2714</strong></div>
                 ) : (
-                  <div className={styles.listStack}>
-                    {recentSourceOutputs.map((item) => {
-                      const metadata = (item.metadata ?? {}) as Record<string, unknown>;
-                      const sourceLabel = metadata.sourceType === 'manual-text'
-                        ? 'Manual text'
-                        : metadata.sourceType === 'file'
-                          ? String(metadata.sourceTitle ?? 'Uploaded file')
-                          : String(metadata.sourceUrl ?? metadata.sourceTitle ?? 'Web source');
+                  <div className={styles.setList}>
+                    {topWeakAreas.map(area => {
+                      const pct = Math.round(area.accuracy);
+                      const col = pct < 40 ? '#ef4444' : pct < 65 ? '#f97316' : '#22c55e';
                       return (
-                        <article key={item.id} className={styles.compactSetCard}>
-                          <div>
-                            <h4>{String(metadata.title ?? item.mode)}</h4>
-                            <p>{String(metadata.sourceTitle ?? 'Source output')}</p>
+                        <div key={area.topic} className={styles.setRow}>
+                          <div className={styles.setRowInfo}>
+                            <strong>{area.topic}</strong>
+                            <span style={{ color: col }}>{pct}% accuracy &middot; {area.attempts} attempts &middot; ~{area.estimatedMinutes} min to recover</span>
+                            <small>{area.suggestion}</small>
                           </div>
-                          <div className={styles.metaRow}>
-                            <span>{item.mode}</span>
-                            <span>{sourceLabel}</span>
-                            <span>{formatDate(item.createdAt)}</span>
+                          <div className={styles.setRowActions}>
+                            <button className={styles.btnPrimary} onClick={() => launchWeakTopic(area, 'quiz')}>Practice</button>
+                            <button className={styles.btnSecondary} onClick={() => launchWeakTopic(area, 'explain')}>Explain</button>
+                            <button className={styles.btnSecondary} onClick={() => void loadRelatedReading(area.topic, 'weak-topic', true)}>Reading</button>
                           </div>
-                        </article>
+                        </div>
                       );
                     })}
                   </div>
                 )}
-              </>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ SETS TAB ════════════════════════════════════════════════ */}
+        {activeSection === 'sets' && (
+          <div className={styles.setsLayout}>
+            <div className={styles.panelHead}>
+              <h2>Review Sets</h2>
+              <p>Your spaced-repetition decks, managed in Workspace and accessible here.</p>
+            </div>
+            {loadingSets ? (
+              <div className={styles.emptyBrief}><strong>Loading\u2026</strong></div>
+            ) : sortedReviewSets.length === 0 ? (
+              <div className={styles.emptyBrief}>
+                <div className={styles.emptyIcon}>\U0001f5c2\ufe0f</div>
+                <strong>No review sets yet</strong>
+                <p>Analyze a source on the Source tab and click &ldquo;Review Set&rdquo; to create your first deck.</p>
+              </div>
+            ) : (
+              <div className={styles.setList}>
+                {sortedReviewSets.map(set => {
+                  const accuracy = getSetAccuracy(set);
+                  const due      = getSetDue(set);
+                  return (
+                    <div key={set.id} className={styles.setRow}>
+                      <div className={styles.setRowInfo}>
+                        <strong>{set.name}</strong>
+                        <span>
+                          {set.cards.length} cards &middot; {due > 0 ? `${due} due` : 'nothing due'} &middot; {accuracy >= 0 ? `${accuracy}% accuracy` : 'no accuracy'} &middot; {formatDate(set.lastStudied ?? set.createdAt)}
+                        </span>
+                        {set.description && <small>{set.description}</small>}
+                      </div>
+                      <div className={styles.setRowActions}>
+                        <button className={styles.btnPrimary} onClick={() => openPanel(set.id, 'review')}>Review</button>
+                        <button className={styles.btnSecondary} disabled={generatingQuiz} onClick={() => void quizSet(set)}>Quiz</button>
+                        <button className={styles.btnSecondary} onClick={() => openPanel(set.id, 'manage')}>Manage</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
-        </section>
-
         )}
 
-        {activeSection === 'recovery' && (
-        <section className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <span className={styles.eyebrow}>Today&apos;s Recovery</span>
-              <h3>Keep coaching useful, but secondary</h3>
-              <p>Recovery work still matters here, but it supports your source workflow instead of defining the whole page.</p>
-            </div>
-          </div>
-
-          <div className={styles.recoveryGrid}>
-            <article className={styles.noticeBox}>
-              <strong>{mission.title}</strong>
-              <p>{mission.description}</p>
-              <div className={styles.actions}>
-                <button className={styles.primaryButton} onClick={startMission}>{mission.actionLabel}</button>
-                <button className={styles.secondaryButton} onClick={runMissionSecondary}>{mission.secondaryLabel}</button>
-              </div>
-            </article>
-
-            <article className={styles.helperCard}>
-              <strong>Due Review</strong>
-              <p>Only sets that are due right now appear here.</p>
-              {loadingSets ? (
-                <div className={styles.emptyState}>Loading due review&hellip;</div>
-              ) : dueReviewSets.length === 0 ? (
-                <div className={styles.emptyState}>Nothing is due right now.</div>
-              ) : (
-                <div className={styles.listStack}>
-                  {dueReviewSets.slice(0, 4).map((set) => {
-                    const accuracy = getSetAccuracy(set);
-                    return (
-                      <article key={set.id} className={styles.listCard}>
-                        <div className={styles.listTop}>
-                          <div><h4>{set.name}</h4><p>{set.description || 'Private review set'}</p></div>
-                          <span className={styles.countPill}>{getSetDue(set)} due</span>
-                        </div>
-                        <div className={styles.metaRow}>
-                          <span>{set.cards.length} cards</span>
-                          <span>{accuracy >= 0 ? `${accuracy}% accuracy` : 'No accuracy yet'}</span>
-                          <span>{formatDate(set.lastStudied ?? set.createdAt)}</span>
-                        </div>
-                        <div className={styles.actions}>
-                          <button className={styles.primaryButton} onClick={() => openPanel(set.id, 'review')}>Review</button>
-                          <button className={styles.secondaryButton} onClick={() => openPanel(set.id, 'manage')}>Open in Workspace</button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </article>
-
-            <article className={styles.helperCard}>
-              <strong>Weak Topic Recovery</strong>
-              <p>These come from analytics so Scholar Hub can point you toward the next useful fix.</p>
-              {analyticsLoading ? (
-                <div className={styles.emptyState}>Loading weak-topic data&hellip;</div>
-              ) : topWeakAreas.length === 0 ? (
-                <div className={styles.emptyState}>No weak topics detected yet.</div>
-              ) : (
-                <div className={styles.listStack}>
-                  {topWeakAreas.map((area) => {
-                    const pct = Math.round(area.accuracy);
-                    const aColor = pct < 40 ? '#ef4444' : pct < 65 ? '#f97316' : '#22c55e';
-                    return (
-                      <article key={area.topic} className={styles.listCard}>
-                        <div className={styles.listTop}>
-                          <div><h4>{area.topic}</h4><p>{area.suggestion}</p></div>
-                          <span className={styles.countPill} style={{ background: `${aColor}18`, borderColor: `${aColor}40`, color: aColor }}>{pct}%</span>
-                        </div>
-                        <div className={styles.metaRow}>
-                          <span>{area.attempts} attempts</span>
-                          <span>{area.totalQuestions} questions</span>
-                          <span>~{area.estimatedMinutes} min recovery</span>
-                        </div>
-                        <div className={styles.actions}>
-                          <button className={styles.primaryButton} onClick={() => launchWeakTopic(area, 'quiz')}>Practice</button>
-                          <button className={styles.secondaryButton} onClick={() => launchWeakTopic(area, 'explain')}>Explain</button>
-                          <button className={styles.secondaryButton} onClick={() => void loadRelatedReading(area.topic, 'weak-topic', true)}>Related reading</button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </article>
-          </div>
-        </section>
-
-        )}
-
-        {activeSection === 'sets' && (
-        <section className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <span className={styles.eyebrow}>Review Sets</span>
-              <h3>Your private spaced-repetition support layer</h3>
-              <p>Review sets stay available, but they now support the source workflow instead of defining it.</p>
-            </div>
-          </div>
-          {loadingSets ? (
-            <div className={styles.emptyState}>Loading review sets&hellip;</div>
-          ) : sortedReviewSets.length === 0 ? (
-            <div className={styles.emptyState}>No review sets yet. Create one from a source above to get started.</div>
-          ) : (
-            <div className={styles.listStack}>
-              {sortedReviewSets.slice(0, 8).map((set) => {
-                const accuracy = getSetAccuracy(set);
-                const due = getSetDue(set);
-                return (
-                  <article key={set.id} className={styles.compactSetCard}>
-                    <div>
-                      <h4>{set.name}</h4>
-                      <p>{set.description || set.sourceLabel || 'Private review set'}</p>
-                    </div>
-                    <div className={styles.metaRow}>
-                      <span>{set.cards.length} cards</span>
-                      <span>{due} due</span>
-                      <span>{accuracy >= 0 ? `${accuracy}% accuracy` : 'No accuracy yet'}</span>
-                    </div>
-                      <div className={styles.actions}>
-                        <button className={styles.primaryButton} onClick={() => openPanel(set.id, 'review')}>Review in Workspace</button>
-                        <button className={styles.secondaryButton} onClick={() => void quizSet(set)}>Quiz</button>
-                        <button className={styles.secondaryButton} onClick={() => openPanel(set.id, 'manage')}>Open in Workspace</button>
-                      </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
-        )}
-        </div>
       </div>
     </div>
   );
