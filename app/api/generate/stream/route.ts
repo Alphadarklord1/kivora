@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { offlineGenerate, type ToolMode } from '@/lib/offline/generate';
 import { callOpenAIChat } from '@/lib/ai/openai';
 import { fetchGrokStream, isGrokConfigured } from '@/lib/ai/grok';
+import { callGroqChat, fetchGroqStream, isGroqConfigured } from '@/lib/ai/groq';
 import { cloudProviderForModel } from '@/lib/ai/runtime';
 import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/ai/server-routing';
 import { buildGenerationContext } from '@/lib/rag/generation-context';
@@ -232,7 +233,64 @@ export async function POST(req: NextRequest) {
       { role: 'user'   as const, content: userPrompt },
     ];
 
-    // ── 1. Grok streaming (primary cloud — real token-by-token SSE) ──────────
+    // ── 1. Groq streaming ────────────────────────────────────────────────────
+    if (isGroqConfigured()) {
+      const groqModel = cloudProviderForModel(cloudModel) === 'groq' ? cloudModel : 'openai/gpt-oss-20b';
+      const groqRes = await fetchGroqStream({ model: groqModel, messages: cloudMessages, maxTokens: 1600, temperature: 0.7 });
+
+      if (groqRes?.body) {
+        const stream = new ReadableStream({
+          async start(controller) {
+            const reader = groqRes.body!.getReader();
+            const dec = new TextDecoder();
+            let buf = '';
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buf += dec.decode(value, { stream: true });
+                const lines = buf.split('\n');
+                buf = lines.pop() ?? '';
+                for (const line of lines) {
+                  const trimmed = line.trim();
+                  if (!trimmed || trimmed === 'data: [DONE]') continue;
+                  const jsonStr = trimmed.startsWith('data: ') ? trimmed.slice(6) : trimmed;
+                  try {
+                    const parsed = JSON.parse(jsonStr);
+                    const token = parsed?.choices?.[0]?.delta?.content ?? '';
+                    if (token) controller.enqueue(sseChunk(token, false));
+                  } catch { /* skip malformed */ }
+                }
+              }
+            } finally {
+              controller.enqueue(sseChunk('', true, 'groq'));
+              controller.close();
+            }
+          },
+        });
+        return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no' } });
+      }
+
+      const groqResult = await callGroqChat({ model: groqModel, messages: cloudMessages, maxTokens: 1600, temperature: 0.7 });
+      if (groqResult.ok) {
+        const stream = new ReadableStream({
+          async start(controller) {
+            const words = groqResult.content.split(/(\s+)/);
+            const CHUNK = 4;
+            for (let i = 0; i < words.length; i += CHUNK) {
+              const chunk = words.slice(i, i + CHUNK).join('');
+              if (chunk) controller.enqueue(sseChunk(chunk, false));
+              await new Promise(resolve => setTimeout(resolve, 0));
+            }
+            controller.enqueue(sseChunk('', true, 'groq'));
+            controller.close();
+          },
+        });
+        return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no' } });
+      }
+    }
+
+    // ── 2. Grok streaming (cloud fallback — real token-by-token SSE) ────────
     if (isGrokConfigured()) {
       const grokModel = cloudProviderForModel(cloudModel) === 'grok' ? cloudModel : 'grok-3-fast';
       const grokRes = await fetchGrokStream({ model: grokModel, messages: cloudMessages, maxTokens: 1600, temperature: 0.7 });
@@ -271,7 +329,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── 2. OpenAI (secondary cloud — simulated streaming from full response) ──
+    // ── 3. OpenAI (secondary cloud — simulated streaming from full response) ──
     const openaiModel = cloudProviderForModel(cloudModel) === 'openai' ? cloudModel : 'gpt-4o-mini';
     const openaiResult = await callOpenAIChat({ model: openaiModel, messages: cloudMessages, maxTokens: 1600, temperature: 0.7 });
 

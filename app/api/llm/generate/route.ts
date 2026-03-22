@@ -2,10 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getGeneratedContent, type GeneratedContent, type RewriteOptions, type ToolMode } from '@/lib/offline/generate';
 import { evaluateAiScope } from '@/lib/ai/policy';
 import { InMemoryRateLimiter } from '@/lib/ai/web-rate-limit';
+import { tryCloudGeneration } from '@/lib/ai/server-routing';
 
-type Provider = 'openai';
+type Provider = 'cloud' | 'openai' | 'groq' | 'grok';
 
-const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL_DEFAULT || 'gpt-4o-mini';
+const DEFAULT_CLOUD_MODEL =
+  process.env.GROQ_MODEL_DEFAULT ||
+  process.env.GROK_MODEL_DEFAULT ||
+  process.env.OPENAI_MODEL_DEFAULT ||
+  'openai/gpt-oss-20b';
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -65,55 +70,26 @@ const extractJson = (text: string) => {
   return candidate;
 };
 
-async function callOpenAI(model: string, prompt: string) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+async function callCloud(model: string, prompt: string) {
+  const result = await tryCloudGeneration({
+    model,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: prompt },
+    ],
+    maxTokens: 2200,
+  });
+
+  if (!result.ok) {
     return {
       ok: false as const,
       status: 503,
-      errorCode: 'OPENAI_NOT_CONFIGURED',
-      reason: 'OPENAI_API_KEY not configured',
+      errorCode: 'CLOUD_NOT_CONFIGURED',
+      reason: result.message || 'No cloud AI provider is configured',
     };
   }
 
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.3,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: prompt },
-        ],
-      }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      return {
-        ok: false as const,
-        status: res.status,
-        errorCode: 'OPENAI_UPSTREAM_ERROR',
-        reason: text || 'OpenAI request failed',
-      };
-    }
-
-    const data = await res.json();
-    const content = data?.choices?.[0]?.message?.content || '';
-    return { ok: true as const, raw: content };
-  } catch (error) {
-    return {
-      ok: false as const,
-      status: 502,
-      errorCode: 'OPENAI_REQUEST_FAILED',
-      reason: error instanceof Error ? error.message : 'OpenAI request failed',
-    };
-  }
+  return { ok: true as const, raw: result.content, provider: result.source };
 }
 
 function isValidSubjectArea(value: unknown): value is GeneratedContent['subjectArea'] {
@@ -179,7 +155,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { provider = 'openai', model, text, mode, rewriteOptions } = body as {
+    const { provider = 'cloud', model, text, mode, rewriteOptions } = body as {
       provider?: Provider;
       model?: string;
       text: string;
@@ -191,7 +167,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing text or mode' }, { status: 400 });
     }
 
-    if (provider !== 'openai') {
+    if (!['cloud', 'openai', 'groq', 'grok'].includes(provider)) {
       return NextResponse.json({ error: 'Unsupported provider' }, { status: 400 });
     }
 
@@ -224,8 +200,8 @@ ${outputHints}
 
 Source text:
 ${text}`;
-    const requestedModel = model && typeof model === 'string' ? model : DEFAULT_OPENAI_MODEL;
-    const rawResponse = await callOpenAI(requestedModel, prompt);
+    const requestedModel = model && typeof model === 'string' ? model : DEFAULT_CLOUD_MODEL;
+    const rawResponse = await callCloud(requestedModel, prompt);
 
     if (!rawResponse.ok) {
       return NextResponse.json(
@@ -258,7 +234,7 @@ ${text}`;
       return NextResponse.json({ content: fallbackContent, fallback: true, reason: 'Invalid AI response schema' });
     }
 
-    return NextResponse.json({ content: coerced, provider: 'openai', fallback: false });
+    return NextResponse.json({ content: coerced, provider: rawResponse.provider, fallback: false });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'AI generation failed' },

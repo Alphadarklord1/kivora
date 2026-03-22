@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { offlineGenerate, type ToolMode } from '@/lib/offline/generate';
-import { callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
-import { callOpenAIChat } from '@/lib/ai/openai';
-import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/ai/server-routing';
-import { cloudProviderForModel } from '@/lib/ai/runtime';
+import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal, tryCloudGeneration } from '@/lib/ai/server-routing';
 import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
 import { requireAppAccess } from '@/lib/api/guard';
@@ -27,10 +24,9 @@ const SYSTEM_PROMPT = 'You are a study assistant. Be concise, accurate, and help
  * Body: { mode: AllModes, text: string, options?: Record<string, unknown> }
  *
  * AI Provider Priority:
- *  1. Grok (xAI)   — primary cloud  (GROK_API_KEY / XAI_API_KEY)
+ *  1. Shared cloud router (Groq → Grok/xAI → OpenAI, based on selected model)
  *  2. Ollama local — offline feature (OLLAMA_URL, default localhost:11434)
- *  3. OpenAI       — secondary cloud fallback (OPENAI_API_KEY)
- *  4. Deterministic offline generation — always available, no API needed
+ *  3. Deterministic offline generation — always available, no API needed
  */
 export async function POST(req: NextRequest) {
   const guardResult = await requireAppAccess(req);
@@ -95,12 +91,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ mode, content: fallback, source: 'offline' });
   }
 
-  // ── 1. Grok (primary cloud) ────────────────────────────────────────────────
-  if (shouldTryCloud(aiMode) && isGrokConfigured()) {
-    const grokModel = cloudProviderForModel(cloudModel) === 'grok' ? cloudModel : 'grok-3-fast';
-    const grokResult = await callGrokChat({ model: grokModel, messages, maxTokens: 1600, temperature: 0.7 });
-    if (grokResult.ok) {
-      return NextResponse.json({ mode, content: grokResult.content, source: 'grok' });
+  // ── 1. Cloud providers ─────────────────────────────────────────────────────
+  if (shouldTryCloud(aiMode)) {
+    const cloudResult = await tryCloudGeneration({ model: cloudModel, messages, maxTokens: 1600 });
+    if (cloudResult.ok) {
+      return NextResponse.json({ mode, content: cloudResult.content, source: cloudResult.source });
     }
   }
 
@@ -154,16 +149,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 3. OpenAI (secondary cloud fallback) ──────────────────────────────────
-  if (shouldTryCloud(aiMode)) {
-    const openaiModel = cloudProviderForModel(cloudModel) === 'openai' ? cloudModel : 'gpt-4o-mini';
-    const openaiResult = await callOpenAIChat({ model: openaiModel, messages, maxTokens: 1600, temperature: 0.7 });
-    if (openaiResult.ok) {
-      return NextResponse.json({ mode, content: openaiResult.content, source: 'openai' });
-    }
-  }
-
-  // ── 4. Deterministic offline fallback — always works, no API needed ───────
+  // ── 3. Deterministic offline fallback — always works, no API needed ───────
   if (OFFLINE_MODES.includes(currentMode as ToolMode)) {
     const content = offlineGenerate(currentMode as ToolMode, baseSourceText, options);
     return NextResponse.json({ mode, content, source: 'offline' });

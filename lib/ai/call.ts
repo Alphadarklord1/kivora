@@ -2,7 +2,7 @@
  * lib/ai/call.ts
  *
  * Centralised AI caller.  Every server-side route that needs an AI response
- * should use callAi() instead of repeating the Grok → Ollama → OpenAI →
+ * should use callAi() instead of repeating the Groq → Grok → Ollama → OpenAI →
  * offline routing block.
  *
  * Usage:
@@ -15,10 +15,7 @@
  *   });
  */
 
-import { callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
-import { callOpenAIChat } from '@/lib/ai/openai';
-import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/ai/server-routing';
-import { cloudProviderForModel } from '@/lib/ai/runtime';
+import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal, tryCloudGeneration } from '@/lib/ai/server-routing';
 import type { AiDataMode } from '@/lib/privacy/ai-data';
 
 type AiMessage = { role: 'system' | 'user' | 'assistant'; content: string };
@@ -37,11 +34,11 @@ interface CallAiOptions {
 
 interface CallAiResult {
   result: string;
-  source: 'grok' | 'openai' | 'local' | 'offline';
+  source: 'groq' | 'grok' | 'openai' | 'local' | 'offline';
 }
 
 /**
- * Try AI providers in order: Grok → Ollama → OpenAI → offline fallback.
+ * Try AI providers in order: cloud router → Ollama → offline fallback.
  * Never throws — always returns a usable result.
  */
 export async function callAi(opts: CallAiOptions): Promise<CallAiResult> {
@@ -52,29 +49,17 @@ export async function callAi(opts: CallAiOptions): Promise<CallAiResult> {
     return { result: offlineFallback(), source: 'offline' };
   }
 
-  // 1. Grok (primary cloud)
-  if (shouldTryCloud(mode) && isGrokConfigured() && cloudProviderForModel(cloudModel) === 'grok') {
-    const r = await callGrokChat({
-      model: cloudModel ?? 'grok-3-fast',
+  // 1. Cloud providers
+  if (shouldTryCloud(mode)) {
+    const r = await tryCloudGeneration({
+      model: cloudModel,
       messages,
       maxTokens,
-      temperature,
     });
-    if (r.ok && r.content.trim()) return { result: r.content.trim(), source: 'grok' };
+    if (r.ok && r.content.trim()) return { result: r.content.trim(), source: r.source };
   }
 
-  // 2. OpenAI (secondary cloud)
-  if (shouldTryCloud(mode) && cloudProviderForModel(cloudModel) === 'openai') {
-    const r = await callOpenAIChat({
-      model: cloudModel ?? 'gpt-4o-mini',
-      messages,
-      maxTokens,
-      temperature,
-    });
-    if (r.ok && r.content.trim()) return { result: r.content.trim(), source: 'openai' };
-  }
-
-  // 3. Ollama (local open-source)
+  // 2. Ollama (local open-source)
   if (shouldTryLocal(mode)) {
     const ollamaBase = process.env.OLLAMA_URL ?? 'http://localhost:11434';
     try {
@@ -98,6 +83,6 @@ export async function callAi(opts: CallAiOptions): Promise<CallAiResult> {
     } catch { /* fall through to offline */ }
   }
 
-  // 4. Offline deterministic fallback — always works, no network needed
+  // 3. Offline deterministic fallback — always works, no network needed
   return { result: offlineFallback(), source: 'offline' };
 }

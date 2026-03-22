@@ -1,9 +1,8 @@
 import { NextRequest } from 'next/server';
-import { callOpenAIChat } from '@/lib/ai/openai';
 import type { OpenAIMessage } from '@/lib/ai/openai';
 import { buildRagContext, retrieveFromIndex, retrieveRelevantChunks } from '@/lib/rag/retrieve';
 import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
-import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/ai/server-routing';
+import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal, tryCloudGeneration } from '@/lib/ai/server-routing';
 import { requireAppAccess } from '@/lib/api/guard';
 import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { redactForAi, resolveAiDataMode } from '@/lib/privacy/ai-data';
@@ -178,11 +177,10 @@ ${ragContext}`
   }
 
   if (shouldTryCloud(mode)) {
-    const cloudResult = await callOpenAIChat({
+    const cloudResult = await tryCloudGeneration({
       model: cloudModel,
       messages: ollamaMessages,
       maxTokens: 2000,
-      temperature: 0.7,
     });
 
     if (cloudResult.ok) {
@@ -194,7 +192,7 @@ ${ragContext}`
             if (chunk) controller.enqueue(sseChunk(chunk, false));
             await new Promise((resolve) => setTimeout(resolve, 0));
           }
-          controller.enqueue(sseChunk('', true, 'openai', sources.map(({ label, preview }) => ({ label, preview }))));
+          controller.enqueue(sseChunk('', true, cloudResult.source, sources.map(({ label, preview }) => ({ label, preview }))));
           controller.close();
         },
       });

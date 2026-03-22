@@ -3,6 +3,7 @@ import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { offlineGenerate } from '@/lib/offline/generate';
 import { callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
+import { callGroqChat, isGroqConfigured } from '@/lib/ai/groq';
 import { callOpenAIChat } from '@/lib/ai/openai';
 import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/ai/server-routing';
 import { cloudProviderForModel } from '@/lib/ai/runtime';
@@ -82,9 +83,18 @@ async function generateSourceBrief(meta: Omit<SourceBrief, 'summary' | 'keyPoint
   ];
 
   const { mode, localModel, cloudModel } = resolveAiRuntimeRequest({ ai: aiPrefs });
+  const provider = cloudProviderForModel(cloudModel);
 
-  if (shouldTryCloud(mode) && isGrokConfigured()) {
-    const grokModel = cloudProviderForModel(cloudModel) === 'grok' ? cloudModel : 'grok-3-fast';
+  if (shouldTryCloud(mode) && (provider === 'groq' || isGroqConfigured())) {
+    const groqModel = provider === 'groq' ? cloudModel : 'openai/gpt-oss-20b';
+    const result = await callGroqChat({ model: groqModel, messages, maxTokens: 900, temperature: 0.3 });
+    if (result.ok && result.content.trim()) {
+      return result.content.trim();
+    }
+  }
+
+  if (shouldTryCloud(mode) && (provider === 'grok' || isGrokConfigured())) {
+    const grokModel = provider === 'grok' ? cloudModel : 'grok-3-fast';
     const result = await callGrokChat({ model: grokModel, messages, maxTokens: 900, temperature: 0.3 });
     if (result.ok && result.content.trim()) {
       return result.content.trim();
@@ -111,7 +121,7 @@ async function generateSourceBrief(meta: Omit<SourceBrief, 'summary' | 'keyPoint
   }
 
   if (shouldTryCloud(mode)) {
-    const openaiModel = cloudProviderForModel(cloudModel) === 'openai' ? cloudModel : 'gpt-4o-mini';
+    const openaiModel = provider === 'openai' ? cloudModel : 'gpt-4o-mini';
     const result = await callOpenAIChat({ model: openaiModel, messages, maxTokens: 900, temperature: 0.3 });
     if (result.ok && result.content.trim()) {
       return result.content.trim();
