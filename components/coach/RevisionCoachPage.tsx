@@ -50,6 +50,7 @@ type AssignMode   = 'rephrase' | 'explain' | 'summarize' | 'assignment';
 type ReportType   = 'essay' | 'report' | 'literature_review';
 type SourceAction = 'notes' | 'quiz' | 'flashcards';
 type SourceInputMode = 'url' | 'text';
+type CoachSection = 'brief' | 'report' | 'deep-dive' | 'check-work' | 'recovery' | 'sets';
 type LibraryItem = {
   id: string;
   mode: string;
@@ -80,6 +81,20 @@ const REPORT_TYPES = [
   { id: 'report'            as const, label: 'Report',     desc: 'Structured report with sections.' },
   { id: 'literature_review' as const, label: 'Lit Review', desc: 'Review of academic sources.' },
 ] as const;
+
+const COACH_SECTIONS: Array<{
+  id: CoachSection;
+  label: string;
+  title: string;
+  description: string;
+}> = [
+  { id: 'brief', label: 'Source Brief', title: 'Break down the source', description: 'Understand what the source is about and pull out its key ideas.' },
+  { id: 'report', label: 'Report Builder', title: 'Model the final report', description: 'Show what a strong final report or essay could look like.' },
+  { id: 'deep-dive', label: 'Deep Dive', title: 'Learn more in detail', description: 'Ask follow-up questions and open related reading only when needed.' },
+  { id: 'check-work', label: 'Work Checker', title: 'Improve the student draft', description: 'Check grammar, clarity, and paragraph quality after writing.' },
+  { id: 'recovery', label: 'Recovery', title: 'Recover weak areas', description: 'See due review and weak-topic guidance without letting it dominate the page.' },
+  { id: 'sets', label: 'Review Sets', title: 'Open Workspace review sets', description: 'Keep long-term flashcard work in Workspace, not inside Scholar Hub.' },
+];
 
 // ── SECTION C: Pure helpers ───────────────────────────────────────────────────
 
@@ -113,12 +128,7 @@ export function RevisionCoachPage() {
   const { data: analytics, loading: analyticsLoading, refresh: refreshAnalytics } = useAnalytics(30);
 
   const outputRef = useRef<HTMLDivElement | null>(null);
-  const sourceRef = useRef<HTMLElement | null>(null);
-  const reportRef = useRef<HTMLElement | null>(null);
-  const deepDiveRef = useRef<HTMLElement | null>(null);
-  const workCheckRef = useRef<HTMLElement | null>(null);
-  const recoveryRef = useRef<HTMLElement | null>(null);
-  const setsRef = useRef<HTMLElement | null>(null);
+  const [activeSection, setActiveSection] = useState<CoachSection>('brief');
 
   const selectedSetId = searchParams.get('set');
   const imported      = searchParams.get('imported') === '1';
@@ -434,7 +444,7 @@ export function RevisionCoachPage() {
     } catch { toast('Could not load reading suggestions', 'error'); }
     finally   {
       setReadingLoading(false);
-      if (shouldScroll) deepDiveRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (shouldScroll) setActiveSection('deep-dive');
     }
   }, [currentPrivacyMode, toast]);
 
@@ -602,6 +612,11 @@ ${deepDiveQuestion.trim()}`
     };
   }, [analytics, dueReviewSets, reviewSets, sortedReviewSets, topWeakAreas, getSetDue]);
 
+  const currentSectionMeta = useMemo(
+    () => COACH_SECTIONS.find((section) => section.id === activeSection) ?? COACH_SECTIONS[0],
+    [activeSection],
+  );
+
   function launchWeakTopic(area: WeakArea, tool: 'quiz' | 'mcq' | 'flashcards' | 'summarize' | 'explain') {
     writeCoachHandoff({ type: 'weak-topic', topic: area.topic, preferredTool: tool });
     toast(`"${area.topic}" is ready in Workspace`, 'success');
@@ -644,17 +659,20 @@ ${deepDiveQuestion.trim()}`
           <h2>Scholar Hub now follows one learning flow: break down the source, see what the final report could look like, learn more in detail, then check your own draft.</h2>
           <p>We keep the heavy flashcard workflow in Workspace, so Scholar Hub can stay focused on understanding sources and improving writing.</p>
           <div className={styles.heroNav}>
-            <button className={styles.navChip} onClick={() => sourceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Source Brief</button>
-            <button className={styles.navChip} onClick={() => reportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Report Builder</button>
-            <button className={styles.navChip} onClick={() => deepDiveRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Deep Dive</button>
-            <button className={styles.navChip} onClick={() => workCheckRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Work Checker</button>
-            <button className={styles.navChip} onClick={() => recoveryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Recovery</button>
-            <button className={styles.navChip} onClick={() => setsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Review Sets</button>
+            {COACH_SECTIONS.map((section) => (
+              <button
+                key={section.id}
+                className={`${styles.navChip} ${activeSection === section.id ? styles.navChipActive : ''}`}
+                onClick={() => setActiveSection(section.id)}
+              >
+                {section.label}
+              </button>
+            ))}
           </div>
           <div className={styles.actions}>
-            <button className={styles.primaryButton} onClick={() => sourceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Open Source Brief</button>
-            <button className={styles.secondaryButton} onClick={() => reportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Build report</button>
-            <button className={styles.secondaryButton} onClick={() => deepDiveRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Deep dive</button>
+            <button className={styles.primaryButton} onClick={() => setActiveSection('brief')}>Open Source Brief</button>
+            <button className={styles.secondaryButton} onClick={() => setActiveSection('report')}>Build report</button>
+            <button className={styles.secondaryButton} onClick={() => setActiveSection('deep-dive')}>Deep dive</button>
             <button className={styles.secondaryButton} onClick={() => void refreshReviewSets().then(() => refreshAnalytics()).then(() => refreshSourceOutputs())}>Refresh</button>
           </div>
         </div>
@@ -754,8 +772,35 @@ ${deepDiveQuestion.trim()}`
         </section>
       )}
 
-      <div className={styles.coachStack}>
-        <section ref={sourceRef} className={styles.sectionCard}>
+      <div className={styles.workspaceShell}>
+        <aside className={styles.sectionRail}>
+          <div className={styles.railCard}>
+            <span className={styles.eyebrow}>Scholar Hub Modes</span>
+            <h3>{currentSectionMeta.title}</h3>
+            <p>{currentSectionMeta.description}</p>
+          </div>
+          <nav className={styles.sectionNav}>
+            {COACH_SECTIONS.map((section) => (
+              <button
+                key={section.id}
+                className={`${styles.sectionNavButton} ${activeSection === section.id ? styles.sectionNavButtonActive : ''}`}
+                onClick={() => setActiveSection(section.id)}
+              >
+                <strong>{section.label}</strong>
+                <span>{section.description}</span>
+              </button>
+            ))}
+          </nav>
+          <div className={styles.railCard}>
+            <span className={styles.metricLabel}>Current Source</span>
+            <strong>{sourceBrief?.title ?? 'No source loaded yet'}</strong>
+            <small>{sourceBrief ? `${sourceBrief.wordCount} words · ${Math.max(1, Math.ceil(sourceBrief.wordCount / 220))} min read` : 'Analyze a URL or paste text to begin.'}</small>
+          </div>
+        </aside>
+
+        <div className={styles.sectionStage}>
+        {activeSection === 'brief' && (
+        <section className={styles.sectionCard}>
           <div className={styles.sectionHeader}>
             <div>
               <span className={styles.eyebrow}>Source Brief</span>
@@ -870,7 +915,10 @@ ${deepDiveQuestion.trim()}`
           </div>
         </section>
 
-        <section ref={reportRef} className={styles.sectionCard}>
+        )}
+
+        {activeSection === 'report' && (
+        <section className={styles.sectionCard}>
           <div className={styles.sectionHeader}>
             <div>
               <span className={styles.eyebrow}>Report Builder</span>
@@ -950,7 +998,10 @@ ${deepDiveQuestion.trim()}`
           </div>
         </section>
 
-        <section ref={deepDiveRef} className={styles.sectionCard}>
+        )}
+
+        {activeSection === 'deep-dive' && (
+        <section className={styles.sectionCard}>
           <div className={styles.sectionHeader}>
             <div>
               <span className={styles.eyebrow}>Deep Dive</span>
@@ -1031,7 +1082,10 @@ ${deepDiveQuestion.trim()}`
           </div>
         </section>
 
-        <section ref={workCheckRef} className={styles.sectionCard}>
+        )}
+
+        {activeSection === 'check-work' && (
+        <section className={styles.sectionCard}>
           <div className={styles.sectionHeader}>
             <div>
               <span className={styles.eyebrow}>Work Checker</span>
@@ -1147,7 +1201,10 @@ ${deepDiveQuestion.trim()}`
           </div>
         </section>
 
-        <section ref={recoveryRef} className={styles.sectionCard}>
+        )}
+
+        {activeSection === 'recovery' && (
+        <section className={styles.sectionCard}>
           <div className={styles.sectionHeader}>
             <div>
               <span className={styles.eyebrow}>Today&apos;s Recovery</span>
@@ -1236,7 +1293,10 @@ ${deepDiveQuestion.trim()}`
           </div>
         </section>
 
-        <section ref={setsRef} className={styles.sectionCard}>
+        )}
+
+        {activeSection === 'sets' && (
+        <section className={styles.sectionCard}>
           <div className={styles.sectionHeader}>
             <div>
               <span className={styles.eyebrow}>Review Sets</span>
@@ -1275,6 +1335,8 @@ ${deepDiveQuestion.trim()}`
             </div>
           )}
         </section>
+        )}
+        </div>
       </div>
     </div>
   );
