@@ -1,5 +1,5 @@
-import { ReportIssuePanel } from '@/components/settings/ReportIssuePanel';
+import { redirect } from 'next/navigation';
 
-export default function ReportPage() {
-  return <ReportIssuePanel />;
+export default function ReportRedirectPage() {
+  redirect('/settings#reporting');
 }

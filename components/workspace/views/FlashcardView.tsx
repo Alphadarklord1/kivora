@@ -172,6 +172,7 @@ export function FlashcardView({
   title,
   initialDeck = null,
   requestedPhase = null,
+  initialImportUrl = null,
   onRequestedPhaseHandled,
   onDeckChange,
   showBrowseButton = true,
@@ -181,6 +182,7 @@ export function FlashcardView({
   title?: string;
   initialDeck?: SRSDeck | null;
   requestedPhase?: Exclude<Phase, 'done' | 'edit-card' | 'preview'> | null;
+  initialImportUrl?: string | null;
   onRequestedPhaseHandled?: () => void;
   onDeckChange?: (deck: SRSDeck) => void;
   showBrowseButton?: boolean;
@@ -274,8 +276,8 @@ export function FlashcardView({
     'Next review: {date} · interval {count}d': 'المراجعة التالية: {date} · الفاصل {count} يوم',
     'Import cards': 'استيراد البطاقات',
     'One card per line. Separate term and definition with a comma or tab.': 'بطاقة واحدة في كل سطر. افصل بين المصطلح والتعريف بفاصلة أو بعلامة تبويب.',
-    'Import from Quizlet or Kivora shared deck URL': 'استيراد من رابط Quizlet أو رابط مجموعة Kivora مشتركة',
-    'Import URL': 'استيراد الرابط',
+    'Import from a Kivora shared review-set link': 'استيراد من رابط Kivora مشترك لمجموعة مراجعة',
+    'Import link': 'استيراد الرابط',
     'Could not parse. Use "term, definition" or tab-separated per line.': 'تعذر التحليل. استخدم \"المصطلح، التعريف\" أو افصل بعلامة تبويب في كل سطر.',
     'No cards were found in that URL.': 'لم يتم العثور على بطاقات في هذا الرابط.',
     'Import failed': 'فشل الاستيراد',
@@ -387,7 +389,7 @@ export function FlashcardView({
   // Import
   const [importText,  setImportText]  = useState('');
   const [importError, setImportError] = useState('');
-  const [importUrl,   setImportUrl]   = useState('');
+  const [importUrl,   setImportUrl]   = useState(initialImportUrl ?? '');
   const [importUrlLoading, setImportUrlLoading] = useState(false);
   // Share
   const [shareStatus, setShareStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
@@ -526,7 +528,7 @@ export function FlashcardView({
             cardCount: deck.cards.length,
             sourceDeckId: deck.id,
             sourceDeckName: deck.name,
-            savedFrom: initialDeck ? `/coach?set=${deck.id}&panel=manage` : '/workspace',
+            savedFrom: '/workspace',
           },
         }),
       });
@@ -548,6 +550,11 @@ export function FlashcardView({
     onDeckChange?.(next);
     void syncDeck(next);
   }, [onDeckChange]);
+
+  useEffect(() => {
+    if (initialImportUrl) setImportUrl(initialImportUrl);
+  }, [initialImportUrl]);
+
   const launchPhase = useCallback((nextPhase: Exclude<Phase, 'done' | 'edit-card' | 'preview'>) => {
     if (!deck) return;
     switch (nextPhase) {
@@ -1363,12 +1370,15 @@ export function FlashcardView({
             type="url"
             value={importUrl}
             onChange={e => setImportUrl(e.target.value)}
-            placeholder={t('Import from Quizlet or Kivora shared deck URL')}
+            placeholder={t('Import from a Kivora shared review-set link')}
             style={{ width:'100%', padding:'10px 14px', borderRadius:10, border:'1.5px solid var(--border-2)', background:'var(--surface)', color:'var(--text)', fontSize:'var(--text-sm)', boxSizing:'border-box', outline:'none' }}
           />
           <button className="btn btn-secondary btn-sm" disabled={!importUrl.trim() || importUrlLoading} onClick={importFromUrl}>
-            {importUrlLoading ? '⏳' : t('Import URL')}
+            {importUrlLoading ? '⏳' : t('Import link')}
           </button>
+        </div>
+        <div style={{ fontSize:'var(--text-xs)', color:'var(--text-3)', marginBottom:12, lineHeight:1.7 }}>
+          Quizlet works best as <strong>export → paste</strong>. Direct Quizlet links are kept as a legacy fallback and may be blocked.
         </div>
         <textarea value={importText} autoFocus onChange={e => { setImportText(e.target.value); setImportError(''); }}
           placeholder={'Term 1, Definition 1\nTerm 2, Definition 2'}

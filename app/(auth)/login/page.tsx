@@ -15,6 +15,9 @@ interface AuthCapabilities {
   dbConfigured?: boolean;
   authDisabled?: boolean;
   authDisabledReason?: string | null;
+  supabaseAdminConfigured?: boolean;
+  supabaseBrowserConfigured?: boolean;
+  supabaseStorageConfigured?: boolean;
 }
 
 export default function LoginPage() {
@@ -114,6 +117,13 @@ export default function LoginPage() {
                 <strong>No database connected.</strong> Email sign-in requires a database.
                 Configure <code>DATABASE_URL</code> or <code>SUPABASE_DATABASE_URL</code> to enable accounts.
                 Use <strong>Guest access</strong> below in the meantime.
+              </div>
+            )}
+            {!authDisabled && dbReady && caps && !caps.supabaseAdminConfigured && (
+              <div className={styles.notice}>
+                <strong>Supabase is only partially configured.</strong> Email sign-in can still work with the database,
+                but profile sync, Supabase Auth mirroring, and storage backup will stay limited until
+                <code> NEXT_PUBLIC_SUPABASE_URL </code> and <code> SUPABASE_SERVICE_ROLE_KEY </code> are added.
               </div>
             )}
 

@@ -442,8 +442,8 @@ export async function GET(req: NextRequest) {
           : `Review ${dueCardsTotal} due card${dueCardsTotal === 1 ? '' : 's'} today`,
         type: 'review',
         payload: {
-          href: '/coach',
-          cta: 'Open Scholar Hub',
+          href: '/workspace?tab=library',
+          cta: 'Open Workspace',
           detail: reviewDeck
             ? `${reviewDeck.accuracy}% retention in your most active review set`
             : 'Keep today’s review queue under control to protect retention.',
@@ -495,9 +495,9 @@ export async function GET(req: NextRequest) {
         label: 'Create or import your first review set',
         type: 'review',
         payload: {
-          href: '/coach',
-          cta: 'Open Scholar Hub',
-          detail: 'Scholar Hub helps you analyze sources first, then turn them into review sets, notes, and quizzes.',
+          href: '/workspace?tab=library',
+          cta: 'Open Workspace',
+          detail: 'Start your first review set in Workspace, or analyze a source in Scholar Hub and send the result over.',
         },
       });
     }

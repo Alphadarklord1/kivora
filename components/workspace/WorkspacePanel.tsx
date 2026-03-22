@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
 import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
 import { loadClientAiDataMode } from '@/lib/privacy/ai-data';
@@ -13,7 +13,7 @@ import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteLocalFile, listLocalFiles, upsertLocalFile } from '@/lib/files/local-files';
 import { createFileReplaceRequest, createFileUploadRequest, resolveStoredFileBlob } from '@/lib/files/client-storage';
-import { getDeckStats, loadDecks, deleteDeck, type SRSDeck } from '@/lib/srs/sm2';
+import { getDeckStats, loadDecks, deleteDeck, saveDeck, type SRSDeck } from '@/lib/srs/sm2';
 import { ChatPanel } from '@/components/workspace/ChatPanel';
 import { NotesPanel } from '@/components/workspace/NotesPanel';
 import { ExamPlannerPanel } from '@/components/workspace/ExamPlannerPanel';
@@ -86,6 +86,7 @@ const GENERATE_SHORTCUTS = [
 
 type GenMode    = (typeof GENERATE_TABS)[number]['id'];
 type MainTab    = 'files' | 'generate' | 'chat' | 'notes' | 'focus' | 'library' | 'planner';
+type ReviewSetPhase = 'review' | 'import';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -257,6 +258,7 @@ export function WorkspacePanel({
 }: WorkspacePanelProps) {
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const filePickerRef = useRef<HTMLInputElement>(null);
 
   const [mainTab,       setMainTab]       = useState<MainTab>('files');
@@ -276,7 +278,8 @@ export function WorkspacePanel({
   const [libExpanded,   setLibExpanded]   = useState<Record<string, boolean>>({});
   const [srsDecks,      setSrsDecks]      = useState<SRSDeck[]>([]);
   const [activeReviewSetId, setActiveReviewSetId] = useState<string | null>(null);
-  const [requestedReviewPhase, setRequestedReviewPhase] = useState<'review' | null>(null);
+  const [requestedReviewPhase, setRequestedReviewPhase] = useState<ReviewSetPhase | null>(null);
+  const [pendingReviewImportUrl, setPendingReviewImportUrl] = useState<string | null>(null);
   const [dragging,      setDragging]      = useState(false);
   const [uploading,     setUploading]     = useState(false);
   const [missingBlobs,  setMissingBlobs]  = useState<Set<string>>(new Set());
@@ -288,12 +291,44 @@ export function WorkspacePanel({
   const [notesInject,   setNotesInject]   = useState<string | undefined>(undefined);
   const abortRef    = useRef<AbortController | null>(null);
   const pasteRef    = useRef<HTMLTextAreaElement>(null);
+  const handledReviewImportRef = useRef<string | null>(null);
 
   function requestCreateFolder() {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('kivora:create-folder'));
     }
   }
+
+  const createWorkspaceReviewSet = useCallback((options?: {
+    name?: string;
+    description?: string;
+    phase?: ReviewSetPhase | null;
+    importUrl?: string | null;
+  }) => {
+    const draft: SRSDeck = {
+      id: `deck-${crypto.randomUUID().slice(0, 12)}`,
+      name: options?.name?.trim() || 'New review set',
+      description: options?.description?.trim() || 'Long-term recall work lives here in Workspace.',
+      cards: [],
+      createdAt: new Date().toISOString(),
+      sourceType: 'workspace',
+    };
+
+    saveDeck(draft);
+    setSrsDecks((current) => [draft, ...current.filter((deck) => deck.id !== draft.id)]);
+    setMainTab('library');
+    setActiveReviewSetId(draft.id);
+    setRequestedReviewPhase(options?.phase ?? null);
+    setPendingReviewImportUrl(options?.importUrl ?? null);
+
+    void fetch('/api/srs', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deck: draft }),
+    }).catch(() => {});
+
+    return draft;
+  }, []);
 
   async function markRecentFile(fileId: string) {
     await fetch('/api/recent', {
@@ -568,6 +603,7 @@ export function WorkspacePanel({
       setMainTab('library');
       setActiveReviewSetId(handoff.setId);
       setRequestedReviewPhase(handoff.panel === 'review' ? 'review' : null);
+      setPendingReviewImportUrl(null);
       toast('Review set opened in Workspace', 'success');
       return;
     }
@@ -715,6 +751,29 @@ export function WorkspacePanel({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainTab, extractedText, generating, genMode, output]);
 
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'planner' || tab === 'library' || tab === 'generate' || tab === 'chat' || tab === 'notes' || tab === 'focus') {
+      setMainTab(tab);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const reviewSetImport = searchParams.get('reviewSetImport');
+    if (!reviewSetImport) return;
+    if (handledReviewImportRef.current === reviewSetImport) return;
+    handledReviewImportRef.current = reviewSetImport;
+
+    createWorkspaceReviewSet({
+      name: 'Imported review set',
+      description: 'Import cards here from pasted text, CSV, Anki, or a Kivora share link.',
+      phase: 'import',
+      importUrl: reviewSetImport,
+    });
+    toast('Review-set import is ready in Workspace', 'success');
+    router.replace('/workspace');
+  }, [createWorkspaceReviewSet, router, searchParams, toast]);
+
   const breadcrumb = [selectedFolderName, selectedTopicName].filter(Boolean).join(' › ');
   const currentGen = GENERATE_TABS.find(t => t.id === genMode)!;
   const currentSourceLabel = pasteMode ? 'Pasted text' : selFile?.name ?? null;
@@ -760,6 +819,14 @@ export function WorkspacePanel({
             </span>
           )}
           {files.length > 0 && <span className="badge badge-accent">{files.length} file{files.length !== 1 ? 's' : ''}</span>}
+          <button
+            className={`btn btn-sm ${mainTab === 'library' ? 'btn-accent' : 'btn-ghost'}`}
+            onClick={() => setMainTab('library')}
+            title="Open review sets and saved outputs"
+            style={{ fontSize: 12, padding: '3px 8px' }}
+          >
+            📇 {srsDecks.length}
+          </button>
           {onToggleReports && (
             <button
               className={`btn btn-sm ${reportsOpen ? 'btn-accent' : 'btn-ghost'}`}
@@ -1295,12 +1362,45 @@ export function WorkspacePanel({
             </div>
 
             {/* ── SRS Decks ───────────────────────────────────────────────── */}
-            {srsDecks.length > 0 && (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>📇 Saved Review Sets</span>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{srsDecks.length} set{srsDecks.length !== 1 ? 's' : ''}</span>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+                <div>
+                  <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>📇 Review Sets</span>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>
+                    Flashcards, imports, and long-term recall live here in Workspace.
+                  </div>
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{srsDecks.length} set{srsDecks.length !== 1 ? 's' : ''}</span>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      createWorkspaceReviewSet({
+                        name: `Review set ${srsDecks.length + 1}`,
+                        description: 'Use this set for flashcards, quizzes, and spaced repetition in Workspace.',
+                      });
+                      toast('New review set ready in Workspace', 'success');
+                    }}
+                  >
+                    ＋ New review set
+                  </button>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      createWorkspaceReviewSet({
+                        name: 'Imported review set',
+                        description: 'Import cards here from pasted text, CSV, Anki, or a Kivora share link.',
+                        phase: 'import',
+                      });
+                      toast('Import panel opened in Workspace', 'success');
+                    }}
+                  >
+                    📥 Import cards
+                  </button>
+                </div>
+              </div>
+              {srsDecks.length > 0 ? (
+                <>
                 {activeReviewSet && (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 14, padding: 14, marginBottom: 14 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -1310,7 +1410,7 @@ export function WorkspacePanel({
                           Full review-set study and editing now live in Workspace.
                         </div>
                       </div>
-                      <button className="btn btn-ghost btn-sm" onClick={() => { setActiveReviewSetId(null); setRequestedReviewPhase(null); }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setActiveReviewSetId(null); setRequestedReviewPhase(null); setPendingReviewImportUrl(null); }}>
                         Close
                       </button>
                     </div>
@@ -1318,8 +1418,14 @@ export function WorkspacePanel({
                       initialDeck={activeReviewSet}
                       title={activeReviewSet.name}
                       requestedPhase={requestedReviewPhase}
+                      initialImportUrl={pendingReviewImportUrl}
                       onRequestedPhaseHandled={() => setRequestedReviewPhase(null)}
-                      onDeckChange={(next) => setSrsDecks((current) => current.map((deck) => deck.id === next.id ? next : deck))}
+                      onDeckChange={(next) => setSrsDecks((current) => {
+                        const exists = current.some((deck) => deck.id === next.id);
+                        return exists
+                          ? current.map((deck) => deck.id === next.id ? next : deck)
+                          : [next, ...current];
+                      })}
                       showBrowseButton={false}
                       showPublicActions={false}
                     />
@@ -1347,6 +1453,7 @@ export function WorkspacePanel({
                           onClick={() => {
                             setActiveReviewSetId(deck.id);
                             setRequestedReviewPhase(st.due > 0 ? 'review' : null);
+                            setPendingReviewImportUrl(null);
                           }}>
                           {st.due > 0 ? `▶ Review ${st.due}` : 'Open in Workspace'}
                         </button>
@@ -1361,9 +1468,16 @@ export function WorkspacePanel({
                     </div>
                   );
                 })}
-                <div style={{ height: 1, background: 'var(--border)', margin: '16px 0' }} />
-              </div>
-            )}
+                </>
+              ) : (
+                <div className="empty-state" style={{ padding: '18px 16px', textAlign: 'left' }}>
+                  <div className="empty-icon">📇</div>
+                  <h3 style={{ marginBottom: 6 }}>No review sets yet</h3>
+                  <p>Create one from Workspace or import cards here when you want spaced repetition.</p>
+                </div>
+              )}
+              <div style={{ height: 1, background: 'var(--border)', margin: '16px 0' }} />
+            </div>
 
             {libLoad ? (
               [1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 90, marginBottom: 10, borderRadius: 10 }} />)

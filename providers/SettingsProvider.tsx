@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { normalizeTheme, type AppTheme } from '@/lib/settings/theme';
 import { readCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
+import { isRtlLocale, sanitizeSupportedLocale } from '@/lib/i18n/locales';
 
 export type Theme = AppTheme;
 export type Density = 'compact' | 'normal' | 'comfortable';
@@ -61,7 +62,7 @@ function loadFromStorage(): Settings {
     density: normalizeDensity(readCompatStorage(localStorage, storageKeys.density)),
     fontSize: sanitizeFontSize(readCompatStorage(localStorage, storageKeys.fontSize)),
     lineHeight: sanitizeLineHeight(readCompatStorage(localStorage, storageKeys.lineHeight)),
-    language: readCompatStorage(localStorage, storageKeys.language) || DEFAULTS.language,
+    language: sanitizeSupportedLocale(readCompatStorage(localStorage, storageKeys.language) || DEFAULTS.language),
   };
 }
 
@@ -80,8 +81,8 @@ function applySettings(settings: Settings) {
   document.documentElement.setAttribute('data-density', settings.density);
   document.documentElement.style.setProperty('--font-scale', settings.fontSize);
   document.documentElement.style.setProperty('--line-scale', settings.lineHeight);
-  document.documentElement.setAttribute('lang', settings.language);
-  document.documentElement.setAttribute('dir', settings.language === 'ar' ? 'rtl' : 'ltr');
+  document.documentElement.setAttribute('lang', sanitizeSupportedLocale(settings.language));
+  document.documentElement.setAttribute('dir', isRtlLocale(settings.language) ? 'rtl' : 'ltr');
 }
 
 async function syncSettings(settings: Settings) {
@@ -120,7 +121,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           density: normalizeDensity(remote.density),
           fontSize: sanitizeFontSize(remote.fontSize),
           lineHeight: sanitizeLineHeight(remote.lineHeight),
-          language: typeof remote.language === 'string' ? remote.language : settings.language,
+          language: sanitizeSupportedLocale(typeof remote.language === 'string' ? remote.language : settings.language),
         };
         setSettings(next);
         persistToStorage(next);

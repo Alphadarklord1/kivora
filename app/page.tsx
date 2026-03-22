@@ -13,7 +13,7 @@ export default function RootPage() {
         </Link>
 
         <div className={styles.topbarActions}>
-          <Link href="/models?tab=downloads" className={styles.secondaryAction}>
+          <Link href="/settings#ai-models" className={styles.secondaryAction}>
             Download Desktop
           </Link>
           <Link href="/login" className={styles.secondaryAction}>
@@ -29,47 +29,50 @@ export default function RootPage() {
         <section className={styles.hero}>
           <div className={styles.heroCopy}>
             <div className={styles.kickerRow}>
-              <span className={styles.kicker}>Offline-First Study AI</span>
-              <span className={styles.kickerMuted}>Desktop primary, web beta</span>
+              <span className={styles.kicker}>Welcome to Kivora</span>
+              <span className={styles.kickerMuted}>Study from one calm system instead of five scattered tools</span>
             </div>
 
             <h1 className={styles.heroTitle}>
-              Study, solve, plan, and review from one workspace.
+              Start in the right place: Workspace, Scholar Hub, or Math.
             </h1>
 
             <p className={styles.heroBody}>
-              Kivora combines file-based AI tools, math workflows, planner scheduling,
-              and study analytics into one system. Upload your material, generate what
-              you need, and keep everything connected.
+              Workspace is where you do the work, Scholar Hub is where you understand sources
+              and build reports, and Math is where technical problems stay clean and focused.
+              The homepage should feel like a launchpad, not a brochure.
             </p>
 
             <div className={styles.heroActions}>
               <Link href="/workspace" className={styles.primaryActionLarge}>
                 Open Workspace
               </Link>
-              <Link href="/tools" className={styles.secondaryActionLarge}>
-                Explore Tools
+              <Link href="/coach" className={styles.secondaryActionLarge}>
+                Open Scholar Hub
+              </Link>
+              <Link href="/math" className={styles.secondaryActionLarge}>
+                Open Math
               </Link>
             </div>
 
             <div className={styles.heroMeta}>
               <span>Offline local models</span>
               <span>Arabic + English</span>
-              <span>Planner + analytics</span>
+              <span>Source study + math</span>
             </div>
 
             <div className={styles.statRow}>
               <article className={styles.statCard}>
-                <strong>Workspace-first</strong>
-                <span>Files, folders, AI tools, and saved outputs work from one study hub.</span>
+                <strong>Workspace</strong>
+                <span>Open files, chat with your material, generate notes and quizzes, and keep review sets in one execution space.</span>
               </article>
               <article className={styles.statCard}>
-                <strong>Math-ready</strong>
-                <span>Math solver, graphing, and MATLAB-style workflows are built into the product.</span>
+                <strong>Scholar Hub</strong>
+                <span>Break down a source, understand the key ideas, build a report shape, and check writing against that source.</span>
               </article>
               <article className={styles.statCard}>
-                <strong>Offline-capable</strong>
-                <span>Desktop prefers open-source local models and stays useful without cloud dependency.</span>
+                <strong>Math</strong>
+                <span>Use the solver, graphing, formulas, and units in a dedicated workflow instead of mixing math into everything else.</span>
               </article>
             </div>
           </div>
@@ -87,8 +90,8 @@ export default function RootPage() {
                 <aside className={styles.mockSidebar}>
                   <div className={styles.mockSectionLabel}>Main</div>
                   <div className={`${styles.mockNavItem} ${styles.mockNavItemActive}`}>Workspace</div>
-                  <div className={styles.mockNavItem}>Planner</div>
-                  <div className={styles.mockNavItem}>Library</div>
+                  <div className={styles.mockNavItem}>Scholar Hub</div>
+                  <div className={styles.mockNavItem}>Math</div>
 
                   <div className={styles.mockDivider} />
 
@@ -116,7 +119,7 @@ export default function RootPage() {
                       <div className={styles.mockCalendarCellStrong}>Security notes summary</div>
                       <div className={styles.mockCalendarCell}>Math problem set review</div>
                       <div className={styles.mockCalendarCell}>Generate 10 MCQs</div>
-                      <div className={styles.mockCalendarCell}>Planner check-in</div>
+                      <div className={styles.mockCalendarCell}>Scholar Hub source check</div>
                     </div>
 
                     <div className={styles.mockBottomRow}>
@@ -140,41 +143,39 @@ export default function RootPage() {
 
         <section className={styles.sectionGrid}>
           <div className={styles.sectionIntro}>
-            <div className={styles.sectionEyebrow}>Core product</div>
-            <h2>Everything is connected by study flow, not by separate apps.</h2>
+            <div className={styles.sectionEyebrow}>Quick start</div>
+            <h2>Pick the mode that matches the job you need to do right now.</h2>
             <p>
-              Kivora is designed around how students actually work: collect material,
-              generate outputs, review weak areas, schedule time, and come back later
-              without losing context.
+              The product is no longer meant to be explored as a maze of side pages.
+              Choose the pillar that matches the task, then stay in that flow until the work is done.
             </p>
           </div>
 
           <div className={styles.pillarGrid}>
             <article className={styles.pillarCard}>
-              <div className={styles.cardEyebrow}>Generate</div>
-              <h3>Study outputs from real files</h3>
-              <p>Summaries, notes, rephrasing, quizzes, MCQs, and flashcards run from your material.</p>
+              <div className={styles.cardEyebrow}>Workspace</div>
+              <h3>Do the work from real material</h3>
+              <p>Use files, notes, chat, saved outputs, and review sets from one stable working area.</p>
             </article>
             <article className={styles.pillarCard}>
-              <div className={styles.cardEyebrow}>Plan</div>
-              <h3>Calendar-centered study workflow</h3>
-              <p>Use the planner to turn weak areas and upcoming exams into actual study blocks.</p>
+              <div className={styles.cardEyebrow}>Scholar Hub</div>
+              <h3>Understand sources before you write</h3>
+              <p>Analyze a URL, pasted text, or uploaded source file, then build a report path from it.</p>
             </article>
             <article className={styles.pillarCard}>
-              <div className={styles.cardEyebrow}>Review</div>
-              <h3>Analytics with next steps</h3>
-              <p>Track activity, weak topics, and tool usage so the next study action is clearer.</p>
+              <div className={styles.cardEyebrow}>Math</div>
+              <h3>Keep technical work in one dedicated flow</h3>
+              <p>Solve, graph, use formulas, convert units, and keep technical work separate from the rest of the app.</p>
             </article>
           </div>
         </section>
 
         <section className={styles.dualPanel}>
           <article className={styles.featurePanelStrong}>
-            <div className={styles.sectionEyebrow}>Tools</div>
-            <h2>AI, math, and document tools in one system.</h2>
+            <div className={styles.sectionEyebrow}>What students can do</div>
+            <h2>Use one product for the real study loop.</h2>
             <p>
-              Rephrase, summarize, make quizzes, solve math, graph functions, inspect
-              visuals, and work in a MATLAB-style lab without switching products.
+              Bring in a source, understand it, draft from it, check your own work, then move into review or math only when that is actually the next step.
             </p>
             <div className={styles.toolList}>
               <span className={styles.toolChip}>Summarize</span>
@@ -189,8 +190,8 @@ export default function RootPage() {
           </article>
 
           <article className={styles.featurePanel}>
-            <div className={styles.sectionEyebrow}>Runtime</div>
-            <h2>Desktop-first, with local models preferred.</h2>
+            <div className={styles.sectionEyebrow}>How it runs</div>
+            <h2>Desktop-first, but still usable on the web.</h2>
             <p>
               Kivora is built to work with local open-source models on desktop first,
               then fall back safely when needed. That keeps the app useful even when
@@ -206,25 +207,25 @@ export default function RootPage() {
 
         <section className={styles.workflowSection}>
           <div className={styles.sectionIntroCompact}>
-            <div className={styles.sectionEyebrow}>Workflow</div>
-            <h2>How the product is meant to be used.</h2>
+            <div className={styles.sectionEyebrow}>Flow</div>
+            <h2>A cleaner start-to-finish path.</h2>
           </div>
 
           <div className={styles.workflowSteps}>
             <article className={styles.workflowStep}>
               <span className={styles.stepIndex}>01</span>
               <h3>Bring in material</h3>
-              <p>Upload PDFs, Word files, images, or raw text and organize them into folders and subtopics.</p>
+              <p>Start from files, copied text, or a public source and keep the material tied to the right mode.</p>
             </article>
             <article className={styles.workflowStep}>
               <span className={styles.stepIndex}>02</span>
-              <h3>Generate what you need</h3>
-              <p>Create summaries, notes, quizzes, rephrased text, and math outputs directly from the workspace.</p>
+              <h3>Work in the right pillar</h3>
+              <p>Use Scholar Hub for sources, Workspace for outputs and review, and Math only when the problem becomes technical.</p>
             </article>
             <article className={styles.workflowStep}>
               <span className={styles.stepIndex}>03</span>
-              <h3>Plan and improve</h3>
-              <p>Send the next study action into the planner and use analytics to track weak areas over time.</p>
+              <h3>Review and submit</h3>
+              <p>Check the writing, build review material in Workspace, and keep the final report or study set connected to the source.</p>
             </article>
           </div>
         </section>
@@ -232,9 +233,9 @@ export default function RootPage() {
         <section className={styles.finalCta}>
           <div>
             <div className={styles.sectionEyebrow}>Start</div>
-            <h2>Open the workspace or install the desktop app.</h2>
+            <h2>Open the pillar you need and get moving.</h2>
             <p>
-              Use guest mode immediately, or sign in if you want persistence and provider-linked workflows.
+              Use guest mode immediately, or sign in if you want synced settings, saved profiles, and connected providers.
             </p>
           </div>
 
@@ -242,7 +243,7 @@ export default function RootPage() {
             <Link href="/workspace" className={styles.primaryActionLarge}>
               Continue as Guest
             </Link>
-            <Link href="/models?tab=downloads" className={styles.secondaryActionLarge}>
+            <Link href="/settings#ai-models" className={styles.secondaryActionLarge}>
               Download Kivora
             </Link>
           </div>

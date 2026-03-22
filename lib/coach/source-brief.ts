@@ -32,7 +32,7 @@ const ENTITY_MAP: Record<string, string> = {
 
 export type SourceBrief = ExtractedMeta & {
   url: string;
-  sourceType: 'url' | 'manual-text';
+  sourceType: 'url' | 'manual-text' | 'file';
   sourceLabel: string;
   summary: string;
   keyPoints: string[];
@@ -222,11 +222,18 @@ export function buildFallbackSourceBrief(
   meta: ExtractedMeta,
   url: string,
   sourceType: SourceBrief['sourceType'] = 'url',
+  sourceLabel?: string,
 ): SourceBrief {
   return {
     url,
     sourceType,
-    sourceLabel: sourceType === 'manual-text' ? 'Manual text' : meta.siteName ?? 'Web source',
+    sourceLabel:
+      sourceLabel ??
+      (sourceType === 'manual-text'
+        ? 'Manual text'
+        : sourceType === 'file'
+          ? 'Uploaded file'
+          : meta.siteName ?? 'Web source'),
     ...meta,
     summary: makeFallbackSummary(meta),
     keyPoints: makeFallbackKeyPoints(meta),

@@ -47,7 +47,7 @@ export default function ShareViewerPage() {
     summarize: '📝', quiz: '❓', mcq: '✅', flashcards: '🃏',
     notes: '📓', assignment: '📋', rephrase: '✍️',
   };
-  const importDeckHref = token ? `/coach?importUrl=${encodeURIComponent(`/share/${token}`)}` : '/coach';
+  const importDeckHref = token ? `/workspace?reviewSetImport=${encodeURIComponent(`/share/${token}`)}` : '/workspace';
 
   if (!hasToken) {
     return (
@@ -118,8 +118,8 @@ export default function ShareViewerPage() {
               </div>
               {data.resourceType === 'flashcards' && (
                 <div className="sv-import-bar">
-                  <span>This link opens as a shared review-set preview. To use it in Kivora, import it into Scholar Hub.</span>
-                  <Link href={importDeckHref} className="sv-import-btn">Import into Scholar Hub</Link>
+                  <span>This link opens as a shared review-set preview. To study it inside Kivora, import it into Workspace review sets.</span>
+                  <Link href={importDeckHref} className="sv-import-btn">Import into Workspace</Link>
                 </div>
               )}
             </div>

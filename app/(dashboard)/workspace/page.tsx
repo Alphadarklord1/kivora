@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { Suspense, useState, useCallback } from 'react';
 import { FolderPanel } from '@/components/folders/FolderPanel';
 import { WorkspacePanel } from '@/components/workspace/WorkspacePanel';
 import { ReportsSidebar } from '@/components/workspace/ReportsSidebar';
@@ -45,16 +45,18 @@ export default function WorkspacePage() {
         onToggleCollapse={() => setFolderCollapsed(c => !c)}
         onFilesChanged={handleFilesChanged}
       />
-      <WorkspacePanel
-        selectedFolder={selectedFolder}
-        selectedTopic={selectedTopic}
-        selectedFolderName={selectedFolderName}
-        selectedTopicName={selectedTopicName}
-        onRefresh={handleRefresh}
-        filesRefreshKey={filesRefreshKey}
-        onToggleReports={() => setReportsOpen(o => !o)}
-        reportsOpen={reportsOpen}
-      />
+      <Suspense fallback={<div style={{ flex: 1 }} />}>
+        <WorkspacePanel
+          selectedFolder={selectedFolder}
+          selectedTopic={selectedTopic}
+          selectedFolderName={selectedFolderName}
+          selectedTopicName={selectedTopicName}
+          onRefresh={handleRefresh}
+          filesRefreshKey={filesRefreshKey}
+          onToggleReports={() => setReportsOpen(o => !o)}
+          reportsOpen={reportsOpen}
+        />
+      </Suspense>
       <ReportsSidebar open={reportsOpen} onClose={() => setReportsOpen(false)} />
     </div>
   );

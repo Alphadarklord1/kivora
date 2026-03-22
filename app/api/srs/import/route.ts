@@ -104,7 +104,11 @@ export async function POST(request: NextRequest) {
     try {
       parsedUrl = new URL(rawUrl);
     } catch {
-      return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
+      if (rawUrl.startsWith('/share/') || rawUrl.startsWith('/shared/')) {
+        parsedUrl = new URL(rawUrl, request.nextUrl.origin);
+      } else {
+        return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
+      }
     }
 
     const hostname = parsedUrl.hostname.toLowerCase();

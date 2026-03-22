@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { readCompatStorage, storageKeys } from '@/lib/storage/keys';
+import { isRtlLocale, sanitizeSupportedLocale } from '@/lib/i18n/locales';
 
 export function SettingsInitializer() {
   useEffect(() => {
@@ -10,11 +11,11 @@ export function SettingsInitializer() {
     const fontSize = readCompatStorage(localStorage, storageKeys.fontSize);
     const density = readCompatStorage(localStorage, storageKeys.density);
     const lineHeight = readCompatStorage(localStorage, storageKeys.lineHeight);
-    const language = readCompatStorage(localStorage, storageKeys.language) || 'en';
+    const language = sanitizeSupportedLocale(readCompatStorage(localStorage, storageKeys.language) || 'en');
 
     // Apply language + direction
-    document.documentElement.setAttribute('lang', language === 'ar' ? 'ar' : 'en');
-    document.documentElement.setAttribute('dir', language === 'ar' ? 'rtl' : 'ltr');
+    document.documentElement.setAttribute('lang', language);
+    document.documentElement.setAttribute('dir', isRtlLocale(language) ? 'rtl' : 'ltr');
 
     // Apply theme
     if (theme) {

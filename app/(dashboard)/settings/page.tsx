@@ -8,12 +8,14 @@ import { useToast } from '@/providers/ToastProvider';
 import { useSettings, type Density, type Theme } from '@/providers/SettingsProvider';
 import { AiRuntimeControls } from '@/components/models/AiRuntimeControls';
 import { ReportIssuePanel } from '@/components/settings/ReportIssuePanel';
+import styles from './page.module.css';
 import {
   crashReportsEnabledClient,
   setCrashReportsEnabled,
   setUsageAnalyticsEnabled,
   usageAnalyticsEnabledClient,
 } from '@/lib/privacy/preferences';
+import { LOCALE_OPTIONS } from '@/lib/i18n/locales';
 
 const THEME_OPTIONS: { id: Theme; label: string; hint: string }[] = [
   { id: 'system', label: 'System', hint: 'Follow your device preference' },
@@ -76,6 +78,58 @@ interface DownloadsState {
   checksumsAsset: { browser_download_url: string; name: string } | null;
   hasPublishedModelAssets: boolean;
 }
+
+interface AuthCapabilitiesState {
+  googleConfigured: boolean;
+  githubConfigured: boolean;
+  microsoftConfigured: boolean;
+  guestModeEnabled: boolean;
+  oauthDisabled?: boolean;
+  oauthDisabledReason?: string | null;
+  dbConfigured?: boolean;
+  authDisabled?: boolean;
+  authDisabledReason?: string | null;
+  supabaseUrlConfigured?: boolean;
+  supabaseAnonKeyConfigured?: boolean;
+  supabaseServiceRoleConfigured?: boolean;
+  supabaseBrowserConfigured?: boolean;
+  supabaseAdminConfigured?: boolean;
+  supabaseAuthConfigured?: boolean;
+  supabaseStorageConfigured?: boolean;
+  supabaseStorageBucket?: string | null;
+}
+
+interface AiStatusState {
+  cloudConfigured: boolean;
+  activeCloudProvider: string | null;
+  defaultCloudModel: string;
+}
+
+type SettingsSectionId =
+  | 'account'
+  | 'security'
+  | 'appearance'
+  | 'runtime'
+  | 'ai-models'
+  | 'utilities'
+  | 'reporting'
+  | 'privacy';
+
+const SETTINGS_SECTIONS: Array<{
+  id: SettingsSectionId;
+  label: string;
+  title: string;
+  description: string;
+}> = [
+  { id: 'account', label: 'Account', title: 'Profile and account basics', description: 'Name, image, bio, and sign-in details.' },
+  { id: 'security', label: 'Security', title: 'Password and 2-step verification', description: 'Protect the account before you rely on it.' },
+  { id: 'appearance', label: 'Appearance', title: 'Theme, language, and readability', description: 'Keep the app readable without oversized defaults.' },
+  { id: 'runtime', label: 'Runtime', title: 'What works in this runtime', description: 'Check cloud, auth, and storage readiness.' },
+  { id: 'ai-models', label: 'AI & Downloads', title: 'AI routing and desktop downloads', description: 'One place for model mode and releases.' },
+  { id: 'utilities', label: 'Utilities', title: 'Secondary tools', description: 'Analytics, sharing, and status live here.' },
+  { id: 'reporting', label: 'Report Issue', title: 'Diagnostics and issue reporting', description: 'File bugs without leaving settings.' },
+  { id: 'privacy', label: 'Privacy', title: 'Privacy and data control', description: 'Choose how much Kivora stores and sends.' },
+];
 
 const fieldStyle: CSSProperties = {
   width: '100%',
@@ -225,24 +279,35 @@ function ChoiceButtons<T extends string>({
   );
 }
 
-function JumpLinks() {
-  const links = [
-    { href: '#account', label: 'Account' },
-    { href: '#security', label: 'Security' },
-    { href: '#appearance', label: 'Appearance' },
-    { href: '#ai-models', label: 'AI & downloads' },
-    { href: '#reporting', label: 'Report issue' },
-    { href: '#privacy', label: 'Privacy' },
-  ];
-
+function SettingsRail({
+  activeSection,
+  onSelect,
+}: {
+  activeSection: SettingsSectionId;
+  onSelect: (section: SettingsSectionId) => void;
+}) {
+  const current = SETTINGS_SECTIONS.find((section) => section.id === activeSection) ?? SETTINGS_SECTIONS[0];
   return (
-    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
-      {links.map((link) => (
-        <a key={link.href} href={link.href} className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
-          {link.label}
-        </a>
-      ))}
-    </div>
+    <aside className={styles.settingsRail}>
+      <div className={styles.railIntro}>
+        <span className={styles.railEyebrow}>Settings</span>
+        <h2>{current.title}</h2>
+        <p>{current.description}</p>
+      </div>
+      <nav className={styles.railNav}>
+        {SETTINGS_SECTIONS.map((section) => (
+          <button
+            key={section.id}
+            type="button"
+            className={`${styles.railButton} ${activeSection === section.id ? styles.railButtonActive : ''}`}
+            onClick={() => onSelect(section.id)}
+          >
+            <strong>{section.label}</strong>
+            <span>{section.description}</span>
+          </button>
+        ))}
+      </nav>
+    </aside>
   );
 }
 
@@ -301,6 +366,9 @@ export default function SettingsPage() {
   const [bio, setBio] = useState('');
   const [downloads, setDownloads] = useState<DownloadsState | null>(null);
   const [downloadsLoading, setDownloadsLoading] = useState(true);
+  const [authCapabilities, setAuthCapabilities] = useState<AuthCapabilitiesState | null>(null);
+  const [aiStatus, setAiStatus] = useState<AiStatusState | null>(null);
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>('account');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -364,6 +432,48 @@ export default function SettingsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const applyHash = () => {
+      const hash = window.location.hash.replace('#', '') as SettingsSectionId;
+      if (SETTINGS_SECTIONS.some((section) => section.id === hash)) setActiveSection(hash);
+    };
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/auth/capabilities')
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((data) => {
+        if (!cancelled) setAuthCapabilities(data);
+      })
+      .catch(() => {
+        if (!cancelled) setAuthCapabilities(null);
+      });
+
+    fetch('/api/ai/status')
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((data) => {
+        if (!cancelled) setAiStatus(data);
+      })
+      .catch(() => {
+        if (!cancelled) setAiStatus(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const accountCreatedLabel = useMemo(() => {
     if (!account?.createdAt) return null;
     return new Date(account.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
@@ -378,6 +488,13 @@ export default function SettingsPage() {
   function set<K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) {
     updateSetting(key, value);
     markSaved();
+  }
+
+  function openSection(section: SettingsSectionId) {
+    setActiveSection(section);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', `#${section}`);
+    }
   }
 
   async function handleSignOut() {
@@ -519,19 +636,25 @@ export default function SettingsPage() {
   const showGuestState = !session?.user || Boolean(account?.isGuest);
 
   return (
-    <div style={{ maxWidth: 1080 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
+    <div className={styles.pageShell}>
+      <div className={styles.hero}>
         <div>
-          <h1 style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, marginBottom: 4 }}>Settings</h1>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
-            Keep your account, appearance, AI setup, downloads, and support tools in one place.
+          <h1 className={styles.heroTitle}>Settings</h1>
+          <p className={styles.heroCopy}>
+            Split into focused sections so account, privacy, downloads, and appearance no longer fight for the same page.
           </p>
         </div>
-        {saved ? <span className="badge badge-success">Saved ✓</span> : null}
+        <div className={styles.heroBadges}>
+          <span className="badge">Workspace + Scholar Hub + Math</span>
+          <span className="badge">Downloads live here now</span>
+          {saved ? <span className="badge badge-success">Saved ✓</span> : null}
+        </div>
       </div>
 
-      <JumpLinks />
-
+      <div className={styles.settingsShell}>
+        <SettingsRail activeSection={activeSection} onSelect={openSection} />
+        <div className={styles.settingsStage}>
+      {activeSection === 'account' && (
       <div id="account">
       <Section title="Account" subtitle="Profile, connected sign-in methods, and basic account details.">
         {showGuestState ? (
@@ -638,7 +761,9 @@ export default function SettingsPage() {
         )}
       </Section>
       </div>
+      )}
 
+      {activeSection === 'security' && (
       <div id="security">
       <Section title="Security" subtitle="Password changes and two-step verification for your account.">
         {showGuestState ? (
@@ -794,7 +919,82 @@ export default function SettingsPage() {
         )}
       </Section>
       </div>
+      )}
 
+      {activeSection === 'runtime' && (
+      <div id="runtime">
+      <Section title="Runtime readiness" subtitle="Check what works in this runtime before you rely on cloud sync, sign-in, or hosted AI.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          {[
+            {
+              title: 'Email sign-in & profile sync',
+              ready: Boolean(authCapabilities && authCapabilities.dbConfigured !== false && authCapabilities.authDisabled !== true),
+              detail: !authCapabilities
+                ? 'Checking the current runtime configuration.'
+                : authCapabilities.authDisabled
+                ? authCapabilities.authDisabledReason || 'Authentication is disabled in this runtime.'
+                : authCapabilities?.dbConfigured === false
+                  ? 'Database is missing, so account sign-in cannot start here.'
+                  : authCapabilities?.supabaseAuthConfigured
+                    ? 'Ready for account sync and password changes.'
+                    : authCapabilities?.supabaseAdminConfigured
+                      ? 'Works with the current auth flow, but browser Supabase keys are still missing for a fuller client-side integration.'
+                      : 'Works with the current auth flow, but Supabase Auth sync is not configured here. Add NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to finish it.',
+            },
+            {
+              title: 'OAuth sign-in',
+              ready: Boolean(authCapabilities) && !authCapabilities?.oauthDisabled && Boolean(
+                authCapabilities?.googleConfigured || authCapabilities?.githubConfigured || authCapabilities?.microsoftConfigured,
+              ),
+              detail: !authCapabilities
+                ? 'Checking provider availability.'
+                : (!authCapabilities.oauthDisabled && (authCapabilities.googleConfigured || authCapabilities.githubConfigured || authCapabilities.microsoftConfigured))
+                ? 'At least one provider is available in this runtime.'
+                : authCapabilities.oauthDisabledReason || 'No external sign-in provider is configured right now.',
+            },
+            {
+              title: 'Cloud file backup',
+              ready: Boolean(authCapabilities?.supabaseStorageConfigured),
+              detail: authCapabilities?.supabaseStorageConfigured
+                ? `Uploads can sync to Supabase Storage bucket "${authCapabilities?.supabaseStorageBucket || 'kivora-files'}" as well as local storage.`
+                : authCapabilities?.supabaseAdminConfigured
+                  ? `Supabase admin access is available, but storage is not ready yet. Confirm bucket "${authCapabilities?.supabaseStorageBucket || 'kivora-files'}" exists.`
+                  : 'Local file storage still works, but cloud file backup is unavailable in this runtime. Add NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SUPABASE_STORAGE_BUCKET.',
+            },
+            {
+              title: 'Cloud AI',
+              ready: Boolean(aiStatus?.cloudConfigured),
+              detail: aiStatus?.cloudConfigured
+                ? `Using ${aiStatus?.activeCloudProvider ?? 'cloud AI'} with ${aiStatus?.defaultCloudModel ?? 'the default model'}.`
+                : 'Cloud AI is unavailable, so Kivora will stay local/offline-first here.',
+            },
+          ].map((item) => (
+            <div key={item.title} style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)', display: 'grid', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ fontWeight: 700 }}>{item.title}</div>
+                <span className={`badge ${item.ready ? 'badge-success' : ''}`}>{item.ready ? 'Ready' : 'Local-only / unavailable'}</span>
+              </div>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', margin: 0 }}>{item.detail}</p>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 14, padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)', display: 'grid', gap: 10 }}>
+          <div style={{ fontWeight: 700 }}>Supabase wiring</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span className={`badge ${authCapabilities?.supabaseUrlConfigured ? 'badge-success' : ''}`}>URL {authCapabilities?.supabaseUrlConfigured ? 'ready' : 'missing'}</span>
+            <span className={`badge ${authCapabilities?.supabaseAnonKeyConfigured ? 'badge-success' : ''}`}>Anon key {authCapabilities?.supabaseAnonKeyConfigured ? 'ready' : 'missing'}</span>
+            <span className={`badge ${authCapabilities?.supabaseServiceRoleConfigured ? 'badge-success' : ''}`}>Service role {authCapabilities?.supabaseServiceRoleConfigured ? 'ready' : 'missing'}</span>
+            <span className={`badge ${authCapabilities?.supabaseStorageConfigured ? 'badge-success' : ''}`}>Storage {authCapabilities?.supabaseStorageConfigured ? 'ready' : 'not ready'}</span>
+          </div>
+          <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>
+            Browser features need <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>. Server-side auth sync and storage need <code>SUPABASE_SERVICE_ROLE_KEY</code>. Current bucket: <code>{authCapabilities?.supabaseStorageBucket || 'kivora-files'}</code>.
+          </p>
+        </div>
+      </Section>
+      </div>
+      )}
+
+      {activeSection === 'appearance' && (
       <div id="appearance">
       <Section title="Appearance" subtitle="Make the app readable and comfortable without oversized defaults or confusing labels.">
         <div>
@@ -830,27 +1030,21 @@ export default function SettingsPage() {
           </div>
         </div>
       </Section>
-      </div>
-
       <Section title="Language" subtitle="Switch the interface language and text direction.">
         <ChoiceButtons
-          options={[
-            { id: 'en', label: 'English', hint: 'Default interface language' },
-            { id: 'ar', label: 'العربية', hint: 'Arabic with RTL layout' },
-            { id: 'fr', label: 'Français' },
-            { id: 'es', label: 'Español' },
-            { id: 'de', label: 'Deutsch' },
-            { id: 'zh', label: '中文' },
-          ]}
+          options={LOCALE_OPTIONS}
           value={settings.language}
           onChange={value => set('language', value)}
         />
       </Section>
+      </div>
+      )}
 
+      {activeSection === 'ai-models' && (
       <div id="ai-models">
       <Section title="AI, models & downloads" subtitle="This is now the home for local/cloud mode selection and desktop downloads, instead of separate sidebar entries.">
-        <div style={{ display: 'grid', gap: 16 }}>
-          <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
+        <div className={styles.downloadsStack}>
+          <div className={styles.downloadPanel}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>AI routing</div>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginBottom: 14 }}>
               Choose whether Kivora should prefer local privacy, cloud convenience, or automatic fallback. This replaces the separate models sidebar destination.
@@ -858,7 +1052,7 @@ export default function SettingsPage() {
             <AiRuntimeControls compact />
           </div>
 
-          <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
+          <div className={styles.downloadPanel}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
               <div>
                 <div style={{ fontWeight: 700 }}>Downloads & releases</div>
@@ -876,7 +1070,7 @@ export default function SettingsPage() {
             {downloadsLoading ? (
               <div className="skeleton" style={{ height: 180, borderRadius: 18 }} />
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
+              <div className={styles.downloadGrid}>
                 <DownloadCard
                   title="macOS Apple Silicon"
                   hint="Primary desktop download with offline-first local AI support."
@@ -907,16 +1101,47 @@ export default function SettingsPage() {
         </div>
       </Section>
       </div>
+      )}
 
+      {activeSection === 'utilities' && (
+      <div id="utilities">
+      <Section title="Utilities" subtitle="Secondary pages still exist, but the main product now revolves around Workspace, Scholar Hub, and Math.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          {[
+            { href: '/analytics', title: 'Analytics', description: 'Review weak areas, retention, and next-study actions.' },
+            { href: '/sharing', title: 'Sharing', description: 'Manage shared links for library items and files.' },
+            { href: '/status', title: 'System status', description: 'Check runtime, database, and deployment diagnostics.' },
+          ].map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="btn btn-ghost"
+              style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '16px', minHeight: 0, display: 'grid', gap: 6, textDecoration: 'none' }}
+            >
+              <span style={{ fontWeight: 700 }}>{item.title}</span>
+              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>{item.description}</span>
+            </a>
+          ))}
+        </div>
+      </Section>
+      </div>
+      )}
+
+      {activeSection === 'reporting' && (
       <div id="reporting">
       <Section title="Report & diagnostics" subtitle="File bugs and feature requests directly from settings, with the current route, theme, and language already included.">
         <ReportIssuePanel embedded />
       </Section>
       </div>
+      )}
 
       {/* ── Privacy & Data Control ─────────────────────────────────────── */}
+      {activeSection === 'privacy' && (
       <div id="privacy">
         <PrivacySection />
+      </div>
+      )}
+        </div>
       </div>
     </div>
   );
@@ -1020,7 +1245,7 @@ function PrivacySection() {
   const dataItems = [
     { icon: '📁', label: 'Folders & files', where: 'Cloud (PostgreSQL)', note: 'File metadata — names, sizes, dates' },
     { icon: '📄', label: 'File content', where: 'Local only (IndexedDB)', note: 'Blobs never leave your browser' },
-    { icon: '📇', label: 'Flashcard decks', where: 'Local + Cloud sync', note: 'SRS schedule stored on device' },
+    { icon: '📇', label: 'Review sets', where: 'Local + Cloud sync', note: 'SRS schedule stored on device' },
     { icon: '🗂', label: 'Library items', where: 'Cloud (PostgreSQL)', note: 'Saved generated outputs' },
     { icon: '📊', label: 'Study analytics', where: 'Cloud (PostgreSQL)', note: 'Quiz scores and review history' },
     { icon: '⚙️', label: 'Settings', where: 'Cloud (PostgreSQL)', note: 'Theme, font, density preferences' },
@@ -1166,7 +1391,7 @@ function PrivacySection() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Export everything</div>
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>
-              Download a JSON file of all your folders, files metadata, library items, flashcard decks, quiz history, and study plans.
+              Download a JSON file of all your folders, files metadata, library items, review sets, quiz history, and study plans.
             </div>
           </div>
           <button className="btn btn-secondary btn-sm" onClick={exportData} disabled={exportLoading} style={{ flexShrink: 0 }}>

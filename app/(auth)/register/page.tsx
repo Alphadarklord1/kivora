@@ -13,6 +13,9 @@ interface AuthCapabilities {
   oauthDisabled?: boolean;
   dbConfigured?: boolean;
   guestModeEnabled?: boolean;
+  supabaseAdminConfigured?: boolean;
+  supabaseBrowserConfigured?: boolean;
+  supabaseStorageConfigured?: boolean;
 }
 
 export default function RegisterPage() {
@@ -106,7 +109,7 @@ export default function RegisterPage() {
             </div>
             <div className={styles.proofCard}>
               <strong>☁ Cloud sync</strong>
-              <p>Your decks, plans, and library sync automatically when you sign in.</p>
+              <p>Your review sets, plans, and library sync when account features are configured.</p>
             </div>
             <div className={styles.proofCard}>
               <strong>🔒 Privacy-first</strong>
@@ -135,6 +138,12 @@ export default function RegisterPage() {
                 <strong>Database not connected.</strong> Account creation requires a database.
                 Add <code>DATABASE_URL</code> or <code>SUPABASE_DATABASE_URL</code> to your environment.
                 You can still <Link href="/workspace" style={{ color: '#fbbf24', fontWeight: 600 }}>continue as Guest</Link>.
+              </div>
+            )}
+            {dbReady && caps !== null && !caps.supabaseAdminConfigured && (
+              <div className={styles.notice}>
+                <strong>Supabase setup is incomplete.</strong> Registration can still create local accounts,
+                but full Supabase Auth sync and storage backup need <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>SUPABASE_SERVICE_ROLE_KEY</code>.
               </div>
             )}
 

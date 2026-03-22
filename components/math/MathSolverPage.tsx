@@ -126,13 +126,13 @@ const SPECIAL_VIEW_META: Record<SpecialView, { title: string; subtitle: string; 
   },
   scan: {
     title: 'Question Scan',
-    subtitle: 'Upload a screenshot or PDF of a math question, extract it, and send it to the solver.',
+    subtitle: 'Upload a screenshot or PDF of a math question, extract it, and send it to the solver. OCR now follows your selected app language where possible.',
     icon: '🧾',
     accent: '#38bdf8',
     workflowTitle: 'Question-scan workflow',
     workflow: [
       { label: 'Upload a screenshot or PDF', detail: 'This tab only accepts images and PDFs that contain math questions.' },
-      { label: 'Extract the question text', detail: 'Images use OCR and PDFs use text extraction so we can turn the file into solver-ready input.' },
+      { label: 'Extract the question text', detail: 'Images use OCR and PDFs use text extraction so we can turn the file into solver-ready input, with OCR guided by the current interface language.' },
       { label: 'Review what was captured', detail: 'Check the extracted question before sending it into the solver.' },
       { label: 'Solve it step by step', detail: 'Use “Solve now” to move the extracted text straight into the Solver tab.' },
     ],

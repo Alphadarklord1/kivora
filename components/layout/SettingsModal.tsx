@@ -2,6 +2,7 @@
 
 import { useSettings } from '@/providers/SettingsProvider';
 import { useI18n } from '@/lib/i18n/useI18n';
+import { LOCALE_OPTIONS, sanitizeSupportedLocale } from '@/lib/i18n/locales';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -58,9 +59,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
           <div style={{ marginBottom: '12px' }}>
             <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px' }}>{t('Language')}</label>
-            <select value={settings.language} onChange={(e) => updateSettings({ language: e.target.value === 'ar' ? 'ar' : 'en' })}>
-              <option value="en">{t('English')}</option>
-              <option value="ar">العربية</option>
+            <select value={settings.language} onChange={(e) => updateSettings({ language: sanitizeSupportedLocale(e.target.value) })}>
+              {LOCALE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
             </select>
           </div>
 
