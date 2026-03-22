@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
         name: users.name,
         image: users.image,
         bio: users.bio,
+        studyInterests: users.studyInterests,
         supabaseAuthId: users.supabaseAuthId,
         createdAt: users.createdAt,
         hasPassword: users.passwordHash,
@@ -76,6 +77,7 @@ export async function GET(request: NextRequest) {
       name: user[0].name,
       image: user[0].image,
       bio: user[0].bio,
+      studyInterests: user[0].studyInterests,
       createdAt: user[0].createdAt,
       hasPassword: !!user[0].hasPassword,
       twoFactorEnabled: !!user[0].twoFactorEnabled,
@@ -112,7 +114,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, email, image, bio } = body;
+    const { name, email, image, bio, studyInterests } = body;
     const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : email;
     const currentUser = await db.query.users.findFirst({
       where: eq(users.id, userId),
@@ -211,12 +213,29 @@ export async function PUT(request: NextRequest) {
       });
     }
 
+    if (studyInterests !== undefined && studyInterests !== null && typeof studyInterests !== 'string') {
+      return apiError(400, {
+        errorCode: 'INVALID_STUDY_INTERESTS',
+        reason: 'Study interests must be text',
+        requestId,
+      });
+    }
+
+    if (typeof studyInterests === 'string' && studyInterests.trim().length > 180) {
+      return apiError(400, {
+        errorCode: 'INVALID_STUDY_INTERESTS',
+        reason: 'Study interests must be 180 characters or fewer',
+        requestId,
+      });
+    }
+
     // Update user
     const updateData: Record<string, string | Date | null> = { updatedAt: new Date() };
     if (name !== undefined) updateData.name = name.trim();
     if (normalizedEmail) updateData.email = normalizedEmail;
     if (image !== undefined) updateData.image = typeof image === 'string' && image.trim() ? image.trim() : null;
     if (bio !== undefined) updateData.bio = typeof bio === 'string' && bio.trim() ? bio.trim() : null;
+    if (studyInterests !== undefined) updateData.studyInterests = typeof studyInterests === 'string' && studyInterests.trim() ? studyInterests.trim() : null;
 
     const updated = await db
       .update(users)
@@ -228,6 +247,7 @@ export async function PUT(request: NextRequest) {
         name: users.name,
         image: users.image,
         bio: users.bio,
+        studyInterests: users.studyInterests,
         supabaseAuthId: users.supabaseAuthId,
       });
 
@@ -254,6 +274,7 @@ export async function PUT(request: NextRequest) {
       name: updated[0].name,
       image: updated[0].image,
       bio: updated[0].bio,
+      studyInterests: updated[0].studyInterests,
       supabaseLinked: !!updated[0].supabaseAuthId,
     });
   } catch (error) {

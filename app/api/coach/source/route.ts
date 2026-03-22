@@ -1,4 +1,5 @@
 import { requireAppAccess } from '@/lib/api/guard';
+import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { offlineGenerate } from '@/lib/offline/generate';
 import { callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
@@ -131,6 +132,8 @@ async function generateSourceBrief(meta: Omit<SourceBrief, 'summary' | 'keyPoint
 export async function POST(req: NextRequest) {
   const guardResult = await requireAppAccess(req);
   if (guardResult) return guardResult;
+  const rateLimitResponse = enforceAiRateLimit(req);
+  if (rateLimitResponse) return rateLimitResponse;
 
   let body: Record<string, unknown>;
   try {

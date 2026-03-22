@@ -49,6 +49,27 @@ export interface WorkspacePanelProps {
   reportsOpen?: boolean;
 }
 
+interface LibraryItemRecord {
+  id: string;
+  mode: string;
+  content: string;
+  createdAt: string;
+  metadata?: {
+    title?: string;
+    description?: string;
+    category?: string;
+    problem?: string;
+    sourceFileName?: string;
+    graphExpr?: string;
+    savedFrom?: string;
+    publicProfile?: boolean;
+    publicShareId?: string | null;
+    publicShareUrl?: string | null;
+    publicShareToken?: string | null;
+    cardCount?: number;
+  } | null;
+}
+
 // ── Tab config ─────────────────────────────────────────────────────────────
 
 const GENERATE_TABS = [
@@ -273,7 +294,7 @@ export function WorkspacePanel({
   const [output,        setOutput]        = useState('');
   const [generating,    setGenerating]    = useState(false);
   const [count,         setCount]         = useState(5);
-  const [libItems,      setLibItems]      = useState<Array<{ id: string; mode: string; content: string; createdAt: string; metadata?: { title?: string; category?: string; problem?: string; sourceFileName?: string; graphExpr?: string; savedFrom?: string } | null }>>([]);
+  const [libItems,      setLibItems]      = useState<LibraryItemRecord[]>([]);
   const [libLoad,       setLibLoad]       = useState(false);
   const [libExpanded,   setLibExpanded]   = useState<Record<string, boolean>>({});
   const [srsDecks,      setSrsDecks]      = useState<SRSDeck[]>([]);
@@ -694,6 +715,67 @@ export function WorkspacePanel({
     });
     if (res.ok) toast('Saved to Library ✓', 'success');
     else toast('Could not save — DB may not be configured', 'warning');
+  }
+
+  async function toggleProfileShare(item: LibraryItemRecord) {
+    const currentMeta = item.metadata ?? {};
+    const isPublished = Boolean(currentMeta.publicProfile);
+
+    try {
+      let nextMeta: Record<string, unknown> = { ...currentMeta };
+
+      if (isPublished) {
+        if (currentMeta.publicShareId) {
+          await fetch(`/api/share?id=${currentMeta.publicShareId}`, { method: 'DELETE', credentials: 'include' }).catch(() => null);
+        }
+        nextMeta = {
+          ...currentMeta,
+          publicProfile: false,
+          publicShareId: null,
+          publicShareUrl: null,
+          publicShareToken: null,
+        };
+      } else {
+        let shareId = currentMeta.publicShareId ?? null;
+        let shareUrl = currentMeta.publicShareUrl ?? null;
+        let shareToken = currentMeta.publicShareToken ?? null;
+
+        if (!shareId || !shareUrl) {
+          const shareRes = await fetch('/api/share', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ libraryItemId: item.id, permission: 'view' }),
+          });
+          if (!shareRes.ok) throw new Error('share-create-failed');
+          const shareData = await shareRes.json();
+          shareId = shareData.id ?? null;
+          shareToken = shareData.shareToken ?? null;
+          shareUrl = shareData.shareUrl ?? (shareToken ? `${window.location.origin}/share/${shareToken}` : null);
+        }
+
+        nextMeta = {
+          ...currentMeta,
+          publicProfile: true,
+          publicShareId: shareId,
+          publicShareUrl: shareUrl,
+          publicShareToken: shareToken,
+        };
+      }
+
+      const patchRes = await fetch(`/api/library/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ metadata: nextMeta }),
+      });
+      if (!patchRes.ok) throw new Error('library-update-failed');
+      const updated = await patchRes.json();
+      setLibItems((prev) => prev.map((entry) => (entry.id === item.id ? updated : entry)));
+      toast(isPublished ? 'Removed from public profile' : 'Published to public profile', 'success');
+    } catch {
+      toast(isPublished ? 'Could not remove this item from your public profile' : 'Could not publish this item to your public profile', 'error');
+    }
   }
 
   function applyFileContext(file: FileRecord, text: string, nextTab: MainTab, successMessage: string) {
@@ -1532,6 +1614,11 @@ export function WorkspacePanel({
                   {item.metadata?.sourceFileName && (
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 6 }}>Source: {item.metadata.sourceFileName}</div>
                   )}
+                  {item.metadata?.publicProfile ? (
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginBottom: 6 }}>
+                      Public profile: live{item.metadata?.publicShareUrl ? ' • shared link ready' : ''}
+                    </div>
+                  ) : null}
                   {item.mode === 'flashcards' ? (
                     <div style={{ marginTop: 8 }}>
                       {expanded
@@ -1564,6 +1651,22 @@ export function WorkspacePanel({
                       onClick={() => navigator.clipboard.writeText(item.content).then(() => toast('Copied!', 'success'))}>
                       📋 Copy
                     </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: 11 }}
+                      onClick={() => void toggleProfileShare(item)}
+                    >
+                      {item.metadata?.publicProfile ? '🙈 Remove from profile' : '🌐 Share to profile'}
+                    </button>
+                    {item.metadata?.publicShareUrl ? (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontSize: 11 }}
+                        onClick={() => navigator.clipboard.writeText(item.metadata?.publicShareUrl || '').then(() => toast('Public link copied', 'success'))}
+                      >
+                        🔗 Copy public link
+                      </button>
+                    ) : null}
                     <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
                       onClick={() => {
                         const filename = `${item.mode}-${new Date(item.createdAt).toISOString().slice(0,10)}.md`;

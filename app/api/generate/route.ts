@@ -7,6 +7,7 @@ import { cloudProviderForModel } from '@/lib/ai/runtime';
 import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { getPersistedRagIndexForRequest } from '@/lib/rag/server-index-store';
 import { requireAppAccess } from '@/lib/api/guard';
+import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { redactForAi, resolveAiDataMode } from '@/lib/privacy/ai-data';
 
 // Core modes supported by offline fallback
@@ -34,6 +35,8 @@ const SYSTEM_PROMPT = 'You are a study assistant. Be concise, accurate, and help
 export async function POST(req: NextRequest) {
   const guardResult = await requireAppAccess(req);
   if (guardResult) return guardResult;
+  const rateLimitResponse = enforceAiRateLimit(req);
+  if (rateLimitResponse) return rateLimitResponse;
 
   let body: Record<string, unknown>;
   try { body = await req.json(); }

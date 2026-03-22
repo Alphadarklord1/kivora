@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAppAccess } from '@/lib/api/guard';
+import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { callAi } from '@/lib/ai/call';
 import { offlineGenerate } from '@/lib/offline/generate';
 import { redactForAi, resolveAiDataMode } from '@/lib/privacy/ai-data';
@@ -30,6 +31,8 @@ Explain in 2-3 sentences WHY the correct answer is right and where the student's
 export async function POST(req: NextRequest) {
   const guardResult = await requireAppAccess(req);
   if (guardResult) return guardResult;
+  const rateLimitResponse = enforceAiRateLimit(req);
+  if (rateLimitResponse) return rateLimitResponse;
 
   try {
     const body = await req.json() as Record<string, unknown>;

@@ -20,7 +20,10 @@ export function getSupabaseUrl(): string | null {
 }
 
 export function getSupabaseAnonKey(): string | null {
-  return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? null;
+  return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+    ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
+    ?? null;
 }
 
 export function getSupabaseServiceRoleKey(): string | null {
