@@ -289,11 +289,11 @@ export function RevisionCoachPage() {
     void refreshSourceOutputs();
   }, [refreshSourceOutputs]);
 
-  const saveSourceOutputToLibrary = useCallback(async (mode: SourceAction | 'source-brief', content: string) => {
+  const saveSourceOutputToLibrary = useCallback(async (mode: SourceAction, content: string) => {
     if (!sourceBrief) return null;
     try {
       const metadata = {
-        title: `${mode === 'quiz' ? 'Quiz' : mode === 'flashcards' ? 'Review set' : mode === 'source-brief' ? 'Source brief' : 'Notes'} — ${sourceBrief.title}`,
+        title: `${mode === 'quiz' ? 'Quiz' : mode === 'flashcards' ? 'Review set' : 'Notes'} — ${sourceBrief.title}`,
         savedFrom: '/coach',
         sourceType: sourceBrief.sourceType,
         sourceTitle: sourceBrief.title,
