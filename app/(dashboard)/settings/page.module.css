@@ -1,0 +1,150 @@
+.pageShell {
+  display: grid;
+  gap: 1.5rem;
+  max-width: 1240px;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  padding: 1.4rem 1.5rem;
+  border-radius: 1.5rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 12%, transparent), transparent 28%),
+    color-mix(in srgb, var(--bg-surface) 84%, transparent);
+}
+
+.heroTitle {
+  margin: 0 0 0.35rem;
+  font-size: clamp(2rem, 4vw, 2.7rem);
+  line-height: 1.02;
+}
+
+.heroCopy {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.heroBadges {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.settingsShell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.settingsRail {
+  position: sticky;
+  top: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.railIntro,
+.settingsStage,
+.downloadPanel {
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 86%, transparent);
+  border-radius: 1.35rem;
+}
+
+.railIntro {
+  padding: 1rem 1rem 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.railIntro h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.railIntro p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.94rem;
+}
+
+.railEyebrow {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.railNav {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.railButton {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.9rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 160ms ease, transform 160ms ease, background-color 160ms ease;
+}
+
+.railButton span {
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+}
+
+.railButton:hover {
+  transform: translateY(-1px);
+}
+
+.railButtonActive {
+  border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg-surface));
+}
+
+.settingsStage {
+  padding: 1.2rem;
+  min-height: 70vh;
+}
+
+.downloadsStack {
+  display: grid;
+  gap: 1rem;
+}
+
+.downloadPanel {
+  padding: 1rem;
+}
+
+.downloadGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.75rem;
+}
+
+@media (max-width: 980px) {
+  .settingsShell {
+    grid-template-columns: 1fr;
+  }
+
+  .settingsRail {
+    position: static;
+  }
+
+  .railNav {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+}

@@ -8,6 +8,7 @@ import { useToast } from '@/providers/ToastProvider';
 import { useSettings, type Density, type Theme } from '@/providers/SettingsProvider';
 import { AiRuntimeControls } from '@/components/models/AiRuntimeControls';
 import { ReportIssuePanel } from '@/components/settings/ReportIssuePanel';
+import styles from './page.module.css';
 import {
   crashReportsEnabledClient,
   setCrashReportsEnabled,
@@ -96,6 +97,32 @@ interface AiStatusState {
   activeCloudProvider: string | null;
   defaultCloudModel: string;
 }
+
+type SettingsSectionId =
+  | 'account'
+  | 'security'
+  | 'appearance'
+  | 'runtime'
+  | 'ai-models'
+  | 'utilities'
+  | 'reporting'
+  | 'privacy';
+
+const SETTINGS_SECTIONS: Array<{
+  id: SettingsSectionId;
+  label: string;
+  title: string;
+  description: string;
+}> = [
+  { id: 'account', label: 'Account', title: 'Profile and account basics', description: 'Name, image, bio, and sign-in details.' },
+  { id: 'security', label: 'Security', title: 'Password and 2-step verification', description: 'Protect the account before you rely on it.' },
+  { id: 'appearance', label: 'Appearance', title: 'Theme, language, and readability', description: 'Keep the app readable without oversized defaults.' },
+  { id: 'runtime', label: 'Runtime', title: 'What works in this runtime', description: 'Check cloud, auth, and storage readiness.' },
+  { id: 'ai-models', label: 'AI & Downloads', title: 'AI routing and desktop downloads', description: 'One place for model mode and releases.' },
+  { id: 'utilities', label: 'Utilities', title: 'Secondary tools', description: 'Analytics, sharing, and status live here.' },
+  { id: 'reporting', label: 'Report Issue', title: 'Diagnostics and issue reporting', description: 'File bugs without leaving settings.' },
+  { id: 'privacy', label: 'Privacy', title: 'Privacy and data control', description: 'Choose how much Kivora stores and sends.' },
+];
 
 const fieldStyle: CSSProperties = {
   width: '100%',
@@ -245,26 +272,35 @@ function ChoiceButtons<T extends string>({
   );
 }
 
-function JumpLinks() {
-  const links = [
-    { href: '#account', label: 'Account' },
-    { href: '#security', label: 'Security' },
-    { href: '#runtime', label: 'Runtime' },
-    { href: '#appearance', label: 'Appearance' },
-    { href: '#ai-models', label: 'AI & downloads' },
-    { href: '#utilities', label: 'Utilities' },
-    { href: '#reporting', label: 'Report issue' },
-    { href: '#privacy', label: 'Privacy' },
-  ];
-
+function SettingsRail({
+  activeSection,
+  onSelect,
+}: {
+  activeSection: SettingsSectionId;
+  onSelect: (section: SettingsSectionId) => void;
+}) {
+  const current = SETTINGS_SECTIONS.find((section) => section.id === activeSection) ?? SETTINGS_SECTIONS[0];
   return (
-    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
-      {links.map((link) => (
-        <a key={link.href} href={link.href} className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
-          {link.label}
-        </a>
-      ))}
-    </div>
+    <aside className={styles.settingsRail}>
+      <div className={styles.railIntro}>
+        <span className={styles.railEyebrow}>Settings</span>
+        <h2>{current.title}</h2>
+        <p>{current.description}</p>
+      </div>
+      <nav className={styles.railNav}>
+        {SETTINGS_SECTIONS.map((section) => (
+          <button
+            key={section.id}
+            type="button"
+            className={`${styles.railButton} ${activeSection === section.id ? styles.railButtonActive : ''}`}
+            onClick={() => onSelect(section.id)}
+          >
+            <strong>{section.label}</strong>
+            <span>{section.description}</span>
+          </button>
+        ))}
+      </nav>
+    </aside>
   );
 }
 
@@ -325,6 +361,7 @@ export default function SettingsPage() {
   const [downloadsLoading, setDownloadsLoading] = useState(true);
   const [authCapabilities, setAuthCapabilities] = useState<AuthCapabilitiesState | null>(null);
   const [aiStatus, setAiStatus] = useState<AiStatusState | null>(null);
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>('account');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -389,6 +426,17 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const applyHash = () => {
+      const hash = window.location.hash.replace('#', '') as SettingsSectionId;
+      if (SETTINGS_SECTIONS.some((section) => section.id === hash)) setActiveSection(hash);
+    };
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     fetch('/api/auth/capabilities')
       .then(async (response) => {
@@ -433,6 +481,13 @@ export default function SettingsPage() {
   function set<K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) {
     updateSetting(key, value);
     markSaved();
+  }
+
+  function openSection(section: SettingsSectionId) {
+    setActiveSection(section);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', `#${section}`);
+    }
   }
 
   async function handleSignOut() {
@@ -574,19 +629,25 @@ export default function SettingsPage() {
   const showGuestState = !session?.user || Boolean(account?.isGuest);
 
   return (
-    <div style={{ maxWidth: 1080 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
+    <div className={styles.pageShell}>
+      <div className={styles.hero}>
         <div>
-          <h1 style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, marginBottom: 4 }}>Settings</h1>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
-            Keep your account, runtime status, appearance, AI setup, and support tools in one place.
+          <h1 className={styles.heroTitle}>Settings</h1>
+          <p className={styles.heroCopy}>
+            Split into focused sections so account, privacy, downloads, and appearance no longer fight for the same page.
           </p>
         </div>
-        {saved ? <span className="badge badge-success">Saved ✓</span> : null}
+        <div className={styles.heroBadges}>
+          <span className="badge">Workspace + Scholar Hub + Math</span>
+          <span className="badge">Downloads live here now</span>
+          {saved ? <span className="badge badge-success">Saved ✓</span> : null}
+        </div>
       </div>
 
-      <JumpLinks />
-
+      <div className={styles.settingsShell}>
+        <SettingsRail activeSection={activeSection} onSelect={openSection} />
+        <div className={styles.settingsStage}>
+      {activeSection === 'account' && (
       <div id="account">
       <Section title="Account" subtitle="Profile, connected sign-in methods, and basic account details.">
         {showGuestState ? (
@@ -693,7 +754,9 @@ export default function SettingsPage() {
         )}
       </Section>
       </div>
+      )}
 
+      {activeSection === 'security' && (
       <div id="security">
       <Section title="Security" subtitle="Password changes and two-step verification for your account.">
         {showGuestState ? (
@@ -849,7 +912,9 @@ export default function SettingsPage() {
         )}
       </Section>
       </div>
+      )}
 
+      {activeSection === 'runtime' && (
       <div id="runtime">
       <Section title="Runtime readiness" subtitle="Check what works in this runtime before you rely on cloud sync, sign-in, or hosted AI.">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
@@ -904,7 +969,9 @@ export default function SettingsPage() {
         </div>
       </Section>
       </div>
+      )}
 
+      {activeSection === 'appearance' && (
       <div id="appearance">
       <Section title="Appearance" subtitle="Make the app readable and comfortable without oversized defaults or confusing labels.">
         <div>
@@ -940,8 +1007,6 @@ export default function SettingsPage() {
           </div>
         </div>
       </Section>
-      </div>
-
       <Section title="Language" subtitle="Switch the interface language and text direction.">
         <ChoiceButtons
           options={[
@@ -956,11 +1021,14 @@ export default function SettingsPage() {
           onChange={value => set('language', value)}
         />
       </Section>
+      </div>
+      )}
 
+      {activeSection === 'ai-models' && (
       <div id="ai-models">
       <Section title="AI, models & downloads" subtitle="This is now the home for local/cloud mode selection and desktop downloads, instead of separate sidebar entries.">
-        <div style={{ display: 'grid', gap: 16 }}>
-          <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
+        <div className={styles.downloadsStack}>
+          <div className={styles.downloadPanel}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>AI routing</div>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginBottom: 14 }}>
               Choose whether Kivora should prefer local privacy, cloud convenience, or automatic fallback. This replaces the separate models sidebar destination.
@@ -968,7 +1036,7 @@ export default function SettingsPage() {
             <AiRuntimeControls compact />
           </div>
 
-          <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
+          <div className={styles.downloadPanel}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
               <div>
                 <div style={{ fontWeight: 700 }}>Downloads & releases</div>
@@ -986,7 +1054,7 @@ export default function SettingsPage() {
             {downloadsLoading ? (
               <div className="skeleton" style={{ height: 180, borderRadius: 18 }} />
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
+              <div className={styles.downloadGrid}>
                 <DownloadCard
                   title="macOS Apple Silicon"
                   hint="Primary desktop download with offline-first local AI support."
@@ -1017,7 +1085,9 @@ export default function SettingsPage() {
         </div>
       </Section>
       </div>
+      )}
 
+      {activeSection === 'utilities' && (
       <div id="utilities">
       <Section title="Utilities" subtitle="Secondary pages still exist, but the main product now revolves around Workspace, Scholar Hub, and Math.">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
@@ -1039,16 +1109,23 @@ export default function SettingsPage() {
         </div>
       </Section>
       </div>
+      )}
 
+      {activeSection === 'reporting' && (
       <div id="reporting">
       <Section title="Report & diagnostics" subtitle="File bugs and feature requests directly from settings, with the current route, theme, and language already included.">
         <ReportIssuePanel embedded />
       </Section>
       </div>
+      )}
 
       {/* ── Privacy & Data Control ─────────────────────────────────────── */}
+      {activeSection === 'privacy' && (
       <div id="privacy">
         <PrivacySection />
+      </div>
+      )}
+        </div>
       </div>
     </div>
   );
