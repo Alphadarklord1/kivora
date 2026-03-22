@@ -123,6 +123,12 @@
   cursor: pointer;
 }
 
+.navChipActive {
+  border-color: color-mix(in srgb, var(--primary) 26%, transparent);
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-surface) 88%);
+  color: var(--primary-text);
+}
+
 .heroRail {
   display: grid;
   gap: 0.85rem;
@@ -284,6 +290,80 @@
 .coachStack {
   display: grid;
   gap: 1rem;
+}
+
+.workspaceShell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.sectionRail {
+  position: sticky;
+  top: 1rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.railCard,
+.sectionNavButton {
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 74%, transparent);
+  border-radius: 1.15rem;
+}
+
+.railCard {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1rem;
+}
+
+.railCard h3,
+.railCard strong {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.railCard small,
+.sectionNavButton span {
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.sectionNav {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.sectionNavButton {
+  width: 100%;
+  padding: 0.95rem 1rem;
+  text-align: left;
+  display: grid;
+  gap: 0.28rem;
+  cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease;
+}
+
+.sectionNavButton strong {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.sectionNavButton:hover {
+  transform: translateY(-1px);
+}
+
+.sectionNavButtonActive {
+  border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-surface) 88%);
+}
+
+.sectionStage {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
 }
 
 .leftColumn,
@@ -629,6 +709,7 @@
 
 @media (max-width: 1100px) {
   .hero,
+  .workspaceShell,
   .contentGrid,
   .editorGrid,
   .studioGrid,
@@ -642,6 +723,10 @@
 
   .summaryGrid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .sectionRail {
+    position: static;
   }
 }
 
