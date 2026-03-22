@@ -31,14 +31,47 @@ export function getSupabaseStorageBucket(): string {
   return process.env.SUPABASE_STORAGE_BUCKET?.trim() || 'kivora-files';
 }
 
+export function hasSupabaseUrl(): boolean {
+  return Boolean(getSupabaseUrl());
+}
+
+export function hasSupabaseAnonKey(): boolean {
+  return Boolean(getSupabaseAnonKey());
+}
+
+export function hasSupabaseServiceRoleKey(): boolean {
+  return Boolean(getSupabaseServiceRoleKey());
+}
+
+export function isSupabaseBrowserConfigured(): boolean {
+  return hasSupabaseUrl() && hasSupabaseAnonKey();
+}
+
+export function isSupabaseAdminConfigured(): boolean {
+  return hasSupabaseUrl() && hasSupabaseServiceRoleKey();
+}
+
 export function isSupabaseConfigured(): boolean {
-  return Boolean(getSupabaseUrl() && getSupabaseServiceRoleKey());
+  return isSupabaseAdminConfigured();
 }
 
 export function isSupabaseStorageConfigured(): boolean {
-  return isSupabaseConfigured() && Boolean(getSupabaseStorageBucket());
+  return isSupabaseAdminConfigured() && Boolean(getSupabaseStorageBucket());
 }
 
 export function isSupabaseAuthConfigured(): boolean {
-  return isSupabaseConfigured();
+  return isSupabaseAdminConfigured();
+}
+
+export function getSupabaseCapabilitySummary() {
+  return {
+    urlConfigured: hasSupabaseUrl(),
+    anonKeyConfigured: hasSupabaseAnonKey(),
+    serviceRoleConfigured: hasSupabaseServiceRoleKey(),
+    browserClientConfigured: isSupabaseBrowserConfigured(),
+    adminConfigured: isSupabaseAdminConfigured(),
+    authConfigured: isSupabaseAuthConfigured(),
+    storageConfigured: isSupabaseStorageConfigured(),
+    storageBucket: getSupabaseStorageBucket(),
+  };
 }

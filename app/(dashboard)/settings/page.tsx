@@ -89,8 +89,14 @@ interface AuthCapabilitiesState {
   dbConfigured?: boolean;
   authDisabled?: boolean;
   authDisabledReason?: string | null;
+  supabaseUrlConfigured?: boolean;
+  supabaseAnonKeyConfigured?: boolean;
+  supabaseServiceRoleConfigured?: boolean;
+  supabaseBrowserConfigured?: boolean;
+  supabaseAdminConfigured?: boolean;
   supabaseAuthConfigured?: boolean;
   supabaseStorageConfigured?: boolean;
+  supabaseStorageBucket?: string | null;
 }
 
 interface AiStatusState {
@@ -931,7 +937,9 @@ export default function SettingsPage() {
                   ? 'Database is missing, so account sign-in cannot start here.'
                   : authCapabilities?.supabaseAuthConfigured
                     ? 'Ready for account sync and password changes.'
-                    : 'Works with the current auth flow, but Supabase Auth sync is not configured here.',
+                    : authCapabilities?.supabaseAdminConfigured
+                      ? 'Works with the current auth flow, but browser Supabase keys are still missing for a fuller client-side integration.'
+                      : 'Works with the current auth flow, but Supabase Auth sync is not configured here. Add NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to finish it.',
             },
             {
               title: 'OAuth sign-in',
@@ -948,8 +956,10 @@ export default function SettingsPage() {
               title: 'Cloud file backup',
               ready: Boolean(authCapabilities?.supabaseStorageConfigured),
               detail: authCapabilities?.supabaseStorageConfigured
-                ? 'Uploads can sync to Supabase Storage as well as local storage.'
-                : 'Local file storage still works, but cloud file backup is unavailable in this runtime.',
+                ? `Uploads can sync to Supabase Storage bucket "${authCapabilities?.supabaseStorageBucket || 'kivora-files'}" as well as local storage.`
+                : authCapabilities?.supabaseAdminConfigured
+                  ? `Supabase admin access is available, but storage is not ready yet. Confirm bucket "${authCapabilities?.supabaseStorageBucket || 'kivora-files'}" exists.`
+                  : 'Local file storage still works, but cloud file backup is unavailable in this runtime. Add NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SUPABASE_STORAGE_BUCKET.',
             },
             {
               title: 'Cloud AI',
@@ -967,6 +977,18 @@ export default function SettingsPage() {
               <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', margin: 0 }}>{item.detail}</p>
             </div>
           ))}
+        </div>
+        <div style={{ marginTop: 14, padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)', display: 'grid', gap: 10 }}>
+          <div style={{ fontWeight: 700 }}>Supabase wiring</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span className={`badge ${authCapabilities?.supabaseUrlConfigured ? 'badge-success' : ''}`}>URL {authCapabilities?.supabaseUrlConfigured ? 'ready' : 'missing'}</span>
+            <span className={`badge ${authCapabilities?.supabaseAnonKeyConfigured ? 'badge-success' : ''}`}>Anon key {authCapabilities?.supabaseAnonKeyConfigured ? 'ready' : 'missing'}</span>
+            <span className={`badge ${authCapabilities?.supabaseServiceRoleConfigured ? 'badge-success' : ''}`}>Service role {authCapabilities?.supabaseServiceRoleConfigured ? 'ready' : 'missing'}</span>
+            <span className={`badge ${authCapabilities?.supabaseStorageConfigured ? 'badge-success' : ''}`}>Storage {authCapabilities?.supabaseStorageConfigured ? 'ready' : 'not ready'}</span>
+          </div>
+          <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>
+            Browser features need <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>. Server-side auth sync and storage need <code>SUPABASE_SERVICE_ROLE_KEY</code>. Current bucket: <code>{authCapabilities?.supabaseStorageBucket || 'kivora-files'}</code>.
+          </p>
         </div>
       </Section>
       </div>

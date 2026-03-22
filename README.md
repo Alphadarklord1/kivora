@@ -74,6 +74,11 @@ Notes:
   - `POSTGRES_URL`
   - `POSTGRES_PRISMA_URL`
 - for Supabase, prefer setting `SUPABASE_DATABASE_URL` so the whole app and Drizzle use the same source of truth
+- for fuller Supabase integration, also set:
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `SUPABASE_STORAGE_BUCKET`
 
 ## Runtime Environment
 
