@@ -142,6 +142,8 @@ export async function POST(req: NextRequest) {
   const rawUrl = typeof body.url === 'string' ? body.url : '';
   const rawText = typeof body.text === 'string' ? body.text : '';
   const rawTitle = typeof body.title === 'string' ? body.title : '';
+  const rawSourceLabel = typeof body.sourceLabel === 'string' ? body.sourceLabel.trim() : '';
+  const requestedSourceType = body.sourceType === 'file' ? 'file' : 'manual-text';
   const ai = body.ai && typeof body.ai === 'object' ? body.ai as Record<string, unknown> : {};
   const privacyMode = resolveAiDataMode(body);
 
@@ -154,7 +156,12 @@ export async function POST(req: NextRequest) {
   if (rawText.trim()) {
     try {
       const meta = extractSourceMetaFromText(rawText, rawTitle);
-      brief = buildFallbackSourceBrief(meta, 'manual://text', 'manual-text');
+      brief = buildFallbackSourceBrief(
+        meta,
+        requestedSourceType === 'file' ? `file:///${encodeURIComponent(rawSourceLabel || rawTitle || 'upload')}` : 'manual://text',
+        requestedSourceType,
+        rawSourceLabel || undefined,
+      );
     } catch (error) {
       return NextResponse.json(
         { error: error instanceof Error ? error.message : 'This text could not be summarized.' },

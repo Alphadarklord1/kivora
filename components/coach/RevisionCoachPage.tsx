@@ -38,6 +38,7 @@ import {
   persistDeckLocally,
   syncDeckToCloud,
 } from '@/lib/srs/deck-utils';
+import { extractTextFromBlob } from '@/lib/pdf/extract';
 import type { GeneratedContent } from '@/lib/offline/generate';
 import type { SourceBrief } from '@/lib/coach/source-brief';
 import type { ArticleSuggestion } from '@/lib/coach/articles';
@@ -49,7 +50,7 @@ type CoachPanel   = 'review' | 'manage';
 type AssignMode   = 'rephrase' | 'explain' | 'summarize' | 'assignment';
 type ReportType   = 'essay' | 'report' | 'literature_review';
 type SourceAction = 'notes' | 'quiz' | 'flashcards';
-type SourceInputMode = 'url' | 'text';
+type SourceInputMode = 'url' | 'text' | 'file';
 type CoachSection = 'brief' | 'report' | 'deep-dive' | 'check-work' | 'recovery' | 'sets';
 type LibraryItem = {
   id: string;
@@ -105,6 +106,17 @@ function formatDate(iso?: string) {
 
 function safeHostname(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+}
+
+function displaySourceOrigin(source: Pick<SourceBrief, 'sourceType' | 'sourceLabel' | 'url'>): string {
+  if (source.sourceType === 'manual-text') return 'Manual text';
+  if (source.sourceType === 'file') return source.sourceLabel || 'Uploaded file';
+  return safeHostname(source.url);
+}
+
+function titleFromFilename(filename: string): string {
+  const stem = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+  return stem || 'Uploaded file';
 }
 
 function mergeSets(local: SRSDeck[], remote: SRSDeck[]): SRSDeck[] {
@@ -251,11 +263,17 @@ export function RevisionCoachPage() {
   const [sourceUrl,            setSourceUrl]             = useState('');
   const [sourceText,           setSourceText]            = useState('');
   const [sourceTitleDraft,     setSourceTitleDraft]      = useState('');
+  const [sourceFileName,       setSourceFileName]        = useState('');
+  const [sourceFileText,       setSourceFileText]        = useState('');
+  const [sourceFileWordCount,  setSourceFileWordCount]   = useState(0);
+  const [sourceFileLoading,    setSourceFileLoading]     = useState(false);
+  const [sourceFileError,      setSourceFileError]       = useState('');
   const [sourceBrief,          setSourceBrief]           = useState<SourceBrief | null>(null);
   const [sourceLoading,        setSourceLoading]         = useState(false);
   const [sourceActionLoading,  setSourceActionLoading]   = useState<SourceAction | null>(null);
   const [recentSourceOutputs,  setRecentSourceOutputs]   = useState<LibraryItem[]>([]);
   const [sourceOutputSummary,  setSourceOutputSummary]   = useState<SourceOutputSummary | null>(null);
+  const sourceFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentPrivacyMode = loadClientAiDataMode();
   const sourceContextText = useMemo(() => {
@@ -277,7 +295,8 @@ export function RevisionCoachPage() {
       setRecentSourceOutputs(
         items.filter((item) => {
           const metadata = (item.metadata ?? {}) as Record<string, unknown>;
-          return metadata.savedFrom === '/coach' && (metadata.sourceType === 'url' || metadata.sourceType === 'manual-text');
+          return metadata.savedFrom === '/coach'
+            && (metadata.sourceType === 'url' || metadata.sourceType === 'manual-text' || metadata.sourceType === 'file');
         }).slice(0, 5),
       );
     } catch {
@@ -288,6 +307,29 @@ export function RevisionCoachPage() {
   useEffect(() => {
     void refreshSourceOutputs();
   }, [refreshSourceOutputs]);
+
+  const handleSourceFileSelected = useCallback(async (file: File | null) => {
+    if (!file) return;
+    setSourceFileLoading(true);
+    setSourceFileError('');
+    setSourceFileName(file.name);
+    setSourceFileText('');
+    setSourceFileWordCount(0);
+    try {
+      const extracted = await extractTextFromBlob(file, file.name);
+      if (extracted.error) throw new Error(extracted.error);
+      if (!extracted.text.trim()) throw new Error('No readable text was found in this file.');
+      setSourceFileText(extracted.text);
+      setSourceFileWordCount(extracted.wordCount);
+      toast(`Loaded ${file.name}`, 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not read this file.';
+      setSourceFileError(message);
+      toast(message, 'error');
+    } finally {
+      setSourceFileLoading(false);
+    }
+  }, [toast]);
 
   const saveSourceOutputToLibrary = useCallback(async (mode: SourceAction, content: string) => {
     if (!sourceBrief) return null;
@@ -318,6 +360,7 @@ export function RevisionCoachPage() {
     if (sourceLoading) return;
     if (sourceMode === 'url' && !sourceUrl.trim()) return;
     if (sourceMode === 'text' && !sourceText.trim()) return;
+    if (sourceMode === 'file' && !sourceFileText.trim()) return;
     setSourceLoading(true);
     try {
       const res = await fetch('/api/coach/source', {
@@ -326,7 +369,16 @@ export function RevisionCoachPage() {
         body: JSON.stringify(
           sourceMode === 'url'
             ? { url: sourceUrl.trim(), ai: loadAiRuntimePreferences(), privacyMode: currentPrivacyMode }
-            : { text: sourceText.trim(), title: sourceTitleDraft.trim(), ai: loadAiRuntimePreferences(), privacyMode: currentPrivacyMode },
+            : sourceMode === 'file'
+              ? {
+                  text: sourceFileText.trim(),
+                  title: titleFromFilename(sourceFileName),
+                  sourceType: 'file',
+                  sourceLabel: sourceFileName,
+                  ai: loadAiRuntimePreferences(),
+                  privacyMode: currentPrivacyMode,
+                }
+              : { text: sourceText.trim(), title: sourceTitleDraft.trim(), ai: loadAiRuntimePreferences(), privacyMode: currentPrivacyMode },
         ),
       });
       const payload = await res.json().catch(() => null);
@@ -338,6 +390,19 @@ export function RevisionCoachPage() {
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Could not analyze this source', 'error');
     } finally { setSourceLoading(false); }
+  }
+
+  async function handleCopySourceForMyBib() {
+    if (!sourceBrief) return;
+    const referenceText = sourceBrief.sourceType === 'url'
+      ? `${sourceBrief.title}\n${sourceBrief.url}`
+      : `${sourceBrief.title}\n${sourceBrief.sourceLabel}`;
+    try {
+      await navigator.clipboard.writeText(referenceText);
+      toast('Source details copied for MyBib', 'success');
+    } catch {
+      toast('Could not copy the source details', 'warning');
+    }
   }
 
   async function handleSourceAction(mode: SourceAction) {
@@ -794,7 +859,7 @@ ${deepDiveQuestion.trim()}`
           <div className={styles.railCard}>
             <span className={styles.metricLabel}>Current Source</span>
             <strong>{sourceBrief?.title ?? 'No source loaded yet'}</strong>
-            <small>{sourceBrief ? `${sourceBrief.wordCount} words · ${Math.max(1, Math.ceil(sourceBrief.wordCount / 220))} min read` : 'Analyze a URL or paste text to begin.'}</small>
+            <small>{sourceBrief ? `${sourceBrief.wordCount} words · ${Math.max(1, Math.ceil(sourceBrief.wordCount / 220))} min read` : 'Analyze a URL, paste text, or upload a file to begin.'}</small>
           </div>
         </aside>
 
@@ -805,7 +870,7 @@ ${deepDiveQuestion.trim()}`
             <div>
               <span className={styles.eyebrow}>Source Brief</span>
               <h3>Understand the source before you draft or explain it</h3>
-              <p>Start with either a public URL or pasted text. Scholar Hub explains what it is about, extracts the key ideas, and keeps the provenance visible.</p>
+              <p>Start with a public URL, pasted text, or an uploaded file. Scholar Hub explains what it is about, extracts the key ideas, and keeps the provenance visible.</p>
             </div>
           </div>
           <div className={styles.sourceWorkspace}>
@@ -818,6 +883,10 @@ ${deepDiveQuestion.trim()}`
                 <button className={`${styles.modeButton} ${sourceMode === 'text' ? styles.modeButtonActive : ''}`} onClick={() => setSourceMode('text')}>
                   <span>Paste text</span>
                   <small>Work directly from copied study material or notes.</small>
+                </button>
+                <button className={`${styles.modeButton} ${sourceMode === 'file' ? styles.modeButtonActive : ''}`} onClick={() => setSourceMode('file')}>
+                  <span>Upload PDF/Image</span>
+                  <small>Extract and brief assignment sheets, scans, or source packs.</small>
                 </button>
               </div>
 
@@ -839,6 +908,48 @@ ${deepDiveQuestion.trim()}`
                     <div className={styles.actions}>
                       <button className={styles.primaryButton} disabled={sourceLoading || !sourceUrl.trim()} onClick={() => void handleAnalyzeSource()}>
                         {sourceLoading ? 'Analyzing\u2026' : 'Analyze source'}
+                      </button>
+                    </div>
+                  </>
+                ) : sourceMode === 'file' ? (
+                  <>
+                    <button className={styles.uploadCard} type="button" onClick={() => sourceFileInputRef.current?.click()}>
+                      <strong>{sourceFileName ? `Selected: ${sourceFileName}` : 'Choose a PDF, image, or document'}</strong>
+                      <small>Scholar Hub extracts readable text locally first, then builds the source brief from that text.</small>
+                    </button>
+                    <input
+                      ref={sourceFileInputRef}
+                      className={styles.fileInput}
+                      type="file"
+                      accept=".pdf,.txt,.docx,.pptx,image/*"
+                      onChange={(event) => void handleSourceFileSelected(event.target.files?.[0] ?? null)}
+                    />
+                    <div className={styles.helperSteps}>
+                      <span className={styles.countPill}>PDFs and images supported</span>
+                      <span className={styles.countPill}>OCR can read screenshots too</span>
+                      <span className={styles.countPill}>Useful for assignment prompts and report sources</span>
+                    </div>
+                    {sourceFileLoading && (
+                      <div className={styles.noticeBox}>
+                        <strong>Preparing file…</strong>
+                        <p>We are extracting readable text from the selected file.</p>
+                      </div>
+                    )}
+                    {!!sourceFileError && (
+                      <div className={styles.noticeBox}>
+                        <strong>File extraction issue</strong>
+                        <p>{sourceFileError}</p>
+                      </div>
+                    )}
+                    {!!sourceFileText && !sourceFileLoading && (
+                      <div className={styles.noticeBox}>
+                        <strong>File ready</strong>
+                        <p>{sourceFileWordCount} words extracted from {sourceFileName}. You can brief it now and then use it in the report flow.</p>
+                      </div>
+                    )}
+                    <div className={styles.actions}>
+                      <button className={styles.primaryButton} disabled={sourceLoading || sourceFileLoading || !sourceFileText.trim()} onClick={() => void handleAnalyzeSource()}>
+                        {sourceLoading ? 'Analyzing\u2026' : 'Analyze file'}
                       </button>
                     </div>
                   </>
@@ -872,7 +983,7 @@ ${deepDiveQuestion.trim()}`
 
                 <div className={styles.noticeBox}>
                   <strong>Privacy mode: {currentPrivacyMode === 'offline' ? 'Offline only' : currentPrivacyMode === 'metadata-only' ? 'Metadata-only' : 'Full AI access'}</strong>
-                  <p>Pasted text works without fetches. URL mode keeps the current safety checks, and offline mode skips external reading lookups later in the flow.</p>
+                  <p>Pasted text and uploaded files work without web fetches. URL mode keeps the current safety checks, and offline mode skips external reading lookups later in the flow.</p>
                 </div>
               </div>
             </div>
@@ -892,7 +1003,7 @@ ${deepDiveQuestion.trim()}`
                   <div className={styles.metaRow}>
                     <span>{sourceBrief.sourceLabel}</span>
                     <span>{sourceBrief.wordCount} words</span>
-                    <span>{sourceBrief.sourceType === 'manual-text' ? 'Manual text' : safeHostname(sourceBrief.url)}</span>
+                    <span>{displaySourceOrigin(sourceBrief)}</span>
                     <span>{currentPrivacyMode === 'offline' ? 'Offline privacy' : currentPrivacyMode === 'metadata-only' ? 'Metadata only' : 'AI enabled'}</span>
                   </div>
                   {sourceBrief.description && (
@@ -929,7 +1040,20 @@ ${deepDiveQuestion.trim()}`
           {sourceBrief && (
             <div className={styles.noticeBox}>
               <strong>Current source context</strong>
-              <p>{sourceBrief.title} &mdash; {sourceBrief.sourceType === 'manual-text' ? 'manual text' : safeHostname(sourceBrief.url)}</p>
+              <p>{sourceBrief.title} &mdash; {displaySourceOrigin(sourceBrief)}</p>
+              <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
+                <a
+                  className={styles.secondaryButton}
+                  href="https://www.mybib.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open MyBib
+                </a>
+                <button className={styles.secondaryButton} onClick={() => void handleCopySourceForMyBib()}>
+                  {sourceBrief.sourceType === 'url' ? 'Copy source URL' : 'Copy source title'}
+                </button>
+              </div>
             </div>
           )}
           <div className={styles.importBlock}>
@@ -975,6 +1099,21 @@ ${deepDiveQuestion.trim()}`
                 </div>
               </div>
             )}
+
+            <div className={styles.noticeBox} style={{ marginTop: '1rem' }}>
+              <strong>References and citations</strong>
+              <p>Use MyBib while you draft so the final report keeps its references in one place. Open MyBib directly here, then paste the source URL or title you copied from Scholar Hub.</p>
+              <div className={styles.actions} style={{ marginTop: '0.75rem' }}>
+                <a
+                  className={styles.secondaryButton}
+                  href="https://www.mybib.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open MyBib for references
+                </a>
+              </div>
+            </div>
 
             <div className={styles.noticeBox} style={{ marginTop: '1rem' }}>
               <strong>Need to decode the assignment first?</strong>
@@ -1179,7 +1318,11 @@ ${deepDiveQuestion.trim()}`
                   <div className={styles.listStack}>
                     {recentSourceOutputs.map((item) => {
                       const metadata = (item.metadata ?? {}) as Record<string, unknown>;
-                      const sourceLabel = metadata.sourceType === 'manual-text' ? 'Manual text' : String(metadata.sourceUrl ?? metadata.sourceTitle ?? 'Web source');
+                      const sourceLabel = metadata.sourceType === 'manual-text'
+                        ? 'Manual text'
+                        : metadata.sourceType === 'file'
+                          ? String(metadata.sourceTitle ?? 'Uploaded file')
+                          : String(metadata.sourceUrl ?? metadata.sourceTitle ?? 'Web source');
                       return (
                         <article key={item.id} className={styles.compactSetCard}>
                           <div>

@@ -68,3 +68,16 @@ test('builds usable source metadata from pasted manual text', () => {
   assert.equal(brief.sourceLabel, 'Manual text');
   assert.match(brief.summary, /Photosynthesis/i);
 });
+
+test('preserves uploaded file provenance when building a source brief', () => {
+  const meta = extractSourceMetaFromText(
+    'The assignment sheet explains the report brief, expected structure, required sources, and the marking criteria the student needs to address. ' +
+    'It also tells the student how the conclusion should connect back to the evidence and how references should be presented.',
+    'Assignment brief',
+  );
+
+  const brief = buildFallbackSourceBrief(meta, 'file:///assignment-brief.pdf', 'file', 'assignment-brief.pdf');
+  assert.equal(brief.sourceType, 'file');
+  assert.equal(brief.sourceLabel, 'assignment-brief.pdf');
+  assert.match(brief.summary, /assignment/i);
+});
