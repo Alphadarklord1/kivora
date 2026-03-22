@@ -125,6 +125,11 @@
   gap: 1rem;
 }
 
+.sectionStack {
+  display: grid;
+  gap: 1rem;
+}
+
 .downloadPanel {
   padding: 1rem;
 }
@@ -133,6 +138,128 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 0.75rem;
+}
+
+.utilityGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+}
+
+.utilityCard {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border-radius: 1.1rem;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 92%, transparent), color-mix(in srgb, var(--bg-surface) 82%, transparent));
+  transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+
+.utilityCard:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--primary) 5%, var(--bg-surface)), color-mix(in srgb, var(--bg-surface) 84%, transparent));
+}
+
+.utilityCardHeader {
+  display: flex;
+  gap: 0.9rem;
+  align-items: flex-start;
+}
+
+.utilityIcon {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 0.9rem;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-surface));
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.utilityTitle {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.utilityDescription {
+  margin: 0.2rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.utilityMeta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.reportShell {
+  display: grid;
+  gap: 1rem;
+}
+
+.reportHero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.05rem;
+  border-radius: 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 12%, transparent), transparent 28%),
+    color-mix(in srgb, var(--bg-surface) 84%, transparent);
+}
+
+.reportHeroCopy {
+  max-width: 56ch;
+}
+
+.reportHeroCopy h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.reportHeroCopy p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.reportActionRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.reportPanel {
+  padding: 0.35rem;
+  border-radius: 1.2rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
 }
 
 @media (max-width: 980px) {

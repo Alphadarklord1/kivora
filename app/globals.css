@@ -598,6 +598,40 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   overflow: hidden;
   white-space: nowrap;
 }
+.sidebar-toggle {
+  margin-left: auto;
+  height: 34px;
+  min-width: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.sidebar-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border-2);
+}
+.sidebar-toggle-arrow {
+  font-size: 18px;
+  line-height: 1;
+}
+.sidebar-toggle-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sidebar.collapsed .sidebar-toggle {
+  width: 34px;
+  padding: 0;
+}
 .sidebar-nav {
   flex: 1;
   overflow-y: auto;

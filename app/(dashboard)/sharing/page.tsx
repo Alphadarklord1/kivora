@@ -26,7 +26,8 @@ interface Share {
 
 interface Owner {
   name: string;
-  email: string;
+  email?: string;
+  bio?: string | null;
 }
 
 interface ApiErrorLike {
@@ -82,6 +83,7 @@ export default function SharedWithMePage() {
   const [typeFilter, setTypeFilter] = useState<ShareFilter>('all');
   const [errorMsg, setErrorMsg]   = useState('');
   const [copyMsg, setCopyMsg]     = useState('');
+  const [profileLink, setProfileLink] = useState('');
 
   const fetchShares = useCallback(async () => {
     setLoading(true);
@@ -117,6 +119,16 @@ export default function SharedWithMePage() {
   }, [activeTab, t]);
 
   useEffect(() => { void fetchShares(); }, [fetchShares]);
+
+  useEffect(() => {
+    fetch('/api/account', { credentials: 'include' })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (!data?.id || typeof window === 'undefined') return;
+        setProfileLink(`${window.location.origin}/profile/${data.id}`);
+      })
+      .catch(() => {});
+  }, []);
 
   async function handleRevoke(id: string) {
     if (!confirm(t('Revoke this share?'))) return;
@@ -209,9 +221,32 @@ export default function SharedWithMePage() {
         </div>
         <div className="sp-header-actions">
           <Link href="/workspace" className="sp-btn sp-btn-primary">{t('Share from workspace')}</Link>
+          {profileLink ? (
+            <button type="button" className="sp-btn sp-btn-ghost" onClick={() => copyLink(profileLink)}>
+              Copy public profile
+            </button>
+          ) : null}
           <Link href="/shared" className="sp-btn sp-btn-ghost">{t('Open shared hub')}</Link>
         </div>
       </div>
+
+      {profileLink ? (
+        <div className="sp-card" style={{ marginBottom: 18, display: 'grid', gap: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div>
+              <div className="sp-card-name">Public profile card</div>
+              <div className="sp-card-meta">Share a lightweight profile link with your bio and study identity, then send actual materials from Workspace when you want.</div>
+            </div>
+            <div className="sp-card-actions">
+              <Link href={profileLink} className="sp-btn sp-btn-ghost sp-btn-sm" target="_blank" rel="noreferrer">Open</Link>
+              <button type="button" className="sp-btn sp-btn-ghost sp-btn-sm" onClick={() => copyLink(profileLink)}>📋 {t('Copy Link')}</button>
+            </div>
+          </div>
+          <div className="sp-card-meta">
+            Publish selected notes, quizzes, and review sets from <strong>Workspace → Library</strong> when you want them to appear on your public profile.
+          </div>
+        </div>
+      ) : null}
 
       <div className="sp-stats">
         {statCards.map((card) => (

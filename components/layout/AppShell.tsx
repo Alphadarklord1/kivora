@@ -10,10 +10,15 @@ import { trackRouteView } from '@/lib/privacy/preferences';
 import { OnboardingModal } from './OnboardingModal';
 import { getStreak } from '@/lib/srs/sm2';
 
-const NAV_ITEMS = [
+const CORE_NAV_ITEMS = [
   { href: '/workspace', key: 'Workspace',          icon: '📚' },
   { href: '/coach',     key: 'Scholar Hub',     icon: '🎓' },
   { href: '/math',      key: 'Math',                icon: '∑'  },
+];
+
+const SUPPORT_NAV_ITEMS = [
+  { href: '/planner', key: 'Planner', icon: '📅' },
+  { href: '/sharing', key: 'Sharing', icon: '🔗' },
 ];
 
 // ── Tiny inline avatar ────────────────────────────────────────────────────
@@ -46,11 +51,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [streak, setStreak] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     // Read streak from localStorage on mount (client-side only, no external subscription)
     // eslint-disable-next-line react-hooks/set-state-in-effect
     try { setStreak(getStreak()); } catch { /* noop */ }
+    setMounted(true);
   }, []);
 
   useEffect(() => {
@@ -61,6 +68,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   function toggleTheme() {
     updateSetting('theme', settings.theme === 'light' ? 'blue' : 'light');
   }
+
+  const themeIcon = !mounted ? '◐' : settings.theme === 'light' ? '🌙' : '☀️';
 
   async function handleSignOut() {
     await signOut({ redirect: false });
@@ -100,12 +109,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="sidebar-logo-mark">K</div>
           {!collapsed && <span className="sidebar-logo-name">Kivora</span>}
           <button
-            className="btn-icon"
+            className="sidebar-toggle"
             onClick={() => setCollapsed(c => !c)}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            style={{ marginLeft: 'auto' }}
           >
-            {collapsed ? '→' : '←'}
+            <span className="sidebar-toggle-arrow">{collapsed ? '›' : '‹'}</span>
+            {!collapsed && <span className="sidebar-toggle-label">{collapsed ? 'Expand' : 'Collapse'}</span>}
           </button>
         </div>
 
@@ -113,7 +123,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {!collapsed && (
             <div className="sidebar-section-label">Core</div>
           )}
-          {NAV_ITEMS.map(item => (
+          {CORE_NAV_ITEMS.map(item => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`nav-item${pathname?.startsWith(item.href) ? ' active' : ''}`}
+              title={collapsed ? item.key : undefined}
+              onClick={() => setMobileOpen(false)}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              {!collapsed && <span className="nav-label">{t(item.key)}</span>}
+            </Link>
+          ))}
+
+          {!collapsed && (
+            <div className="sidebar-section-label" style={{ marginTop: 10 }}>Tools</div>
+          )}
+          {SUPPORT_NAV_ITEMS.map(item => (
             <Link
               key={item.href}
               href={item.href}
@@ -168,7 +194,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={toggleTheme}
             title="Toggle theme"
           >
-            <span className="nav-icon">{settings.theme === 'light' ? '🌙' : '☀️'}</span>
+            <span className="nav-icon">{themeIcon}</span>
             {!collapsed && <span className="nav-label">{t('Theme')}</span>}
           </button>
 

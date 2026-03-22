@@ -5,6 +5,20 @@ import { eq } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
 import { normalizeTheme } from '@/lib/settings/theme';
+import { users } from '@/lib/db/schema';
+
+function buildDefaultSettings(userId: string) {
+  return {
+    id: null,
+    userId,
+    theme: 'light',
+    fontSize: '1',
+    lineHeight: '1.5',
+    density: 'normal',
+    createdAt: null,
+    updatedAt: null,
+  };
+}
 
 export async function GET(request: NextRequest) {
   const requestId = createRequestId(request);
@@ -25,6 +39,16 @@ export async function GET(request: NextRequest) {
       .limit(1);
 
     if (settings.length === 0) {
+      const existingUser = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (existingUser.length === 0) {
+        return NextResponse.json(buildDefaultSettings(userId));
+      }
+
       // Create default settings
       const [newSettings] = await db
         .insert(userSettings)
@@ -96,6 +120,22 @@ export async function PUT(request: NextRequest) {
       .from(userSettings)
       .where(eq(userSettings.userId, userId))
       .limit(1);
+
+    const existingUser = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (existingUser.length === 0) {
+      return NextResponse.json({
+        ...buildDefaultSettings(userId),
+        theme: normalizedTheme || 'light',
+        fontSize: fontSize || '1',
+        lineHeight: lineHeight || '1.5',
+        density: density || 'normal',
+      });
+    }
 
     if (existing.length === 0) {
       // Create new settings

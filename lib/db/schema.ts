@@ -11,6 +11,7 @@ export const users = pgTable('users', {
   emailVerified: timestamp('email_verified'),
   image: text('image'),
   bio: text('bio'),
+  studyInterests: text('study_interests'),
   supabaseAuthId: text('supabase_auth_id'),
   passwordHash: text('password_hash'),
   isGuest: boolean('is_guest').notNull().default(false),

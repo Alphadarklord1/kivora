@@ -50,6 +50,7 @@ interface AccountState {
   name: string | null;
   image: string | null;
   bio?: string | null;
+  studyInterests?: string | null;
   createdAt: string;
   hasPassword: boolean;
   twoFactorEnabled: boolean;
@@ -364,6 +365,7 @@ export default function SettingsPage() {
   const [name, setName] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [bio, setBio] = useState('');
+  const [studyInterests, setStudyInterests] = useState('');
   const [downloads, setDownloads] = useState<DownloadsState | null>(null);
   const [downloadsLoading, setDownloadsLoading] = useState(true);
   const [authCapabilities, setAuthCapabilities] = useState<AuthCapabilitiesState | null>(null);
@@ -392,6 +394,7 @@ export default function SettingsPage() {
         setName(data.name ?? '');
         setImageUrl(data.image ?? '');
         setBio(data.bio ?? '');
+        setStudyInterests(data.studyInterests ?? '');
       })
       .catch(() => {
         if (!cancelled) toast('Could not load your account settings', 'error');
@@ -479,6 +482,11 @@ export default function SettingsPage() {
     return new Date(account.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   }, [account?.createdAt]);
 
+  const publicProfileUrl = useMemo(() => {
+    if (!account?.id || typeof window === 'undefined') return '';
+    return `${window.location.origin}/profile/${account.id}`;
+  }, [account?.id]);
+
   function markSaved(message?: string) {
     setSaved(true);
     if (message) toast(message, 'success');
@@ -502,6 +510,16 @@ export default function SettingsPage() {
     router.replace('/login');
   }
 
+  async function copyPublicProfileLink() {
+    if (!publicProfileUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicProfileUrl);
+      toast('Public profile link copied', 'success');
+    } catch {
+      toast('Could not copy the public profile link', 'error');
+    }
+  }
+
   async function saveProfile() {
     if (!account) return;
     setSavingProfile(true);
@@ -513,6 +531,7 @@ export default function SettingsPage() {
           name: name.trim(),
           image: imageUrl.trim() || null,
           bio: bio.trim() || null,
+          studyInterests: studyInterests.trim() || null,
         }),
       });
       const data = await response.json();
@@ -520,7 +539,7 @@ export default function SettingsPage() {
         toast(data.reason || 'Could not update your profile', 'error');
         return;
       }
-      setAccount(prev => prev ? { ...prev, ...data } : prev);
+        setAccount(prev => prev ? { ...prev, ...data } : prev);
       await updateSession({ user: { name: data.name, image: data.image } });
       markSaved('Profile updated');
     } catch {
@@ -669,6 +688,7 @@ export default function SettingsPage() {
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
                   <span className="badge">Profile picture</span>
                   <span className="badge">Short description</span>
+                  <span className="badge">Study interests</span>
                   <span className="badge">Connected accounts</span>
                 </div>
               </div>
@@ -696,6 +716,17 @@ export default function SettingsPage() {
                 disabled
               />
             </div>
+
+            <div>
+              <label style={labelStyle}>Study interests</label>
+              <input
+                style={fieldStyle}
+                value={studyInterests}
+                onChange={e => setStudyInterests(e.target.value)}
+                placeholder="Examples: Biology, essay writing, exam prep"
+                disabled
+              />
+            </div>
           </div>
         ) : accountLoading ? (
           <div className="skeleton" style={{ height: 180, borderRadius: 18 }} />
@@ -713,12 +744,23 @@ export default function SettingsPage() {
                   <span className="badge">{account.stats.folders} folders</span>
                   <span className="badge">{account.stats.files} files</span>
                   <span className="badge">{account.stats.libraryItems} library items</span>
+                  {studyInterests.trim() ? <span className="badge badge-accent">{studyInterests.split(',')[0]?.trim()}</span> : null}
                   {account.connectedAccounts.map(provider => (
                     <span key={provider} className="badge badge-accent">{provider}</span>
                   ))}
                 </div>
               </div>
-              <button className="btn btn-danger btn-sm" onClick={handleSignOut}>Sign out</button>
+              <div style={{ display: 'grid', gap: 8 }}>
+                <button className="btn btn-danger btn-sm" onClick={handleSignOut}>Sign out</button>
+                <button className="btn btn-ghost btn-sm" onClick={copyPublicProfileLink} disabled={!publicProfileUrl}>
+                  Copy public profile link
+                </button>
+                {publicProfileUrl ? (
+                  <a className="btn btn-ghost btn-sm" href={publicProfileUrl} target="_blank" rel="noreferrer">
+                    Open public profile
+                  </a>
+                ) : null}
+              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
@@ -747,6 +789,21 @@ export default function SettingsPage() {
               </div>
             </div>
 
+            <div>
+              <label style={labelStyle}>Study interests</label>
+              <input
+                style={fieldStyle}
+                value={studyInterests}
+                onChange={e => setStudyInterests(e.target.value)}
+                placeholder="Examples: Biology, essay writing, exam prep"
+                maxLength={180}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                <span>Separate topics with commas so they show up as profile tags.</span>
+                <span>{studyInterests.trim().length}/180</span>
+              </div>
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
                 Profile picture, display name, and description are saved to your account.
@@ -754,6 +811,21 @@ export default function SettingsPage() {
               <button className="btn btn-primary" onClick={saveProfile} disabled={savingProfile}>
                 {savingProfile ? 'Saving…' : 'Save profile'}
               </button>
+            </div>
+
+            <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)', display: 'grid', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Public profile</div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginTop: 4 }}>
+                    Give classmates a simple profile card with your picture, bio, study interests, and selected public study items without exposing private account details.
+                  </div>
+                </div>
+                <span className="badge badge-accent">Light social</span>
+              </div>
+              <code style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--bg-2)', border: '1px solid var(--border-2)', overflowWrap: 'anywhere' }}>
+                {publicProfileUrl || 'Save your account first to generate a public profile link.'}
+              </code>
             </div>
           </>
         ) : (
@@ -1106,22 +1178,60 @@ export default function SettingsPage() {
       {activeSection === 'utilities' && (
       <div id="utilities">
       <Section title="Utilities" subtitle="Secondary pages still exist, but the main product now revolves around Workspace, Scholar Hub, and Math.">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-          {[
-            { href: '/analytics', title: 'Analytics', description: 'Review weak areas, retention, and next-study actions.' },
-            { href: '/sharing', title: 'Sharing', description: 'Manage shared links for library items and files.' },
-            { href: '/status', title: 'System status', description: 'Check runtime, database, and deployment diagnostics.' },
-          ].map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="btn btn-ghost"
-              style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '16px', minHeight: 0, display: 'grid', gap: 6, textDecoration: 'none' }}
-            >
-              <span style={{ fontWeight: 700 }}>{item.title}</span>
-              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>{item.description}</span>
-            </a>
-          ))}
+        <div className={styles.sectionStack}>
+          <div className={styles.utilityGrid}>
+            {[
+              {
+                href: '/analytics',
+                icon: '📈',
+                title: 'Analytics',
+                description: 'Review weak areas, retention, and the next best study actions without leaving the app shell.',
+                meta: ['Insights', 'Retention', 'Next actions'],
+              },
+              {
+                href: '/sharing',
+                icon: '🔗',
+                title: 'Sharing',
+                description: 'Manage public profile links, shared files, and review what has already been sent out.',
+                meta: ['Profile', 'Links', 'Permissions'],
+              },
+              {
+                href: '/status',
+                icon: '🩺',
+                title: 'System status',
+                description: 'Check runtime, database, cloud AI, and deployment diagnostics before troubleshooting.',
+                meta: ['Runtime', 'Database', 'Deployments'],
+              },
+            ].map((item) => (
+              <a key={item.href} href={item.href} className={styles.utilityCard}>
+                <div className={styles.utilityCardHeader}>
+                  <span className={styles.utilityIcon}>{item.icon}</span>
+                  <div>
+                    <h3 className={styles.utilityTitle}>{item.title}</h3>
+                    <p className={styles.utilityDescription}>{item.description}</p>
+                  </div>
+                </div>
+                <div className={styles.utilityMeta}>
+                  {item.meta.map((tag) => (
+                    <span key={tag} className={styles.pill}>{tag}</span>
+                  ))}
+                </div>
+              </a>
+            ))}
+          </div>
+
+          <div className={styles.reportHero}>
+            <div className={styles.reportHeroCopy}>
+              <h3>Secondary tools, still easy to reach</h3>
+              <p>
+                These pages are no longer top-level sidebar destinations, but they are still part of the finished product. Keep them here for diagnostics, sharing, and progress review without making the main navigation noisy.
+              </p>
+            </div>
+            <div className={styles.reportActionRow}>
+              <a href="/workspace" className="btn btn-primary btn-sm">Open Workspace</a>
+              <a href="/sharing" className="btn btn-ghost btn-sm">Open Sharing</a>
+            </div>
+          </div>
         </div>
       </Section>
       </div>
@@ -1130,7 +1240,26 @@ export default function SettingsPage() {
       {activeSection === 'reporting' && (
       <div id="reporting">
       <Section title="Report & diagnostics" subtitle="File bugs and feature requests directly from settings, with the current route, theme, and language already included.">
-        <ReportIssuePanel embedded />
+        <div className={styles.reportShell}>
+          <div className={styles.reportHero}>
+            <div className={styles.reportHeroCopy}>
+              <h3>Report a problem without leaving settings</h3>
+              <p>
+                Use this panel for bugs, broken UI, and missing workflows. Kivora will prefill diagnostics so the issue is easier to act on and you do not have to gather everything manually.
+              </p>
+            </div>
+            <div className={styles.reportActionRow}>
+              <a href="/status" className="btn btn-ghost btn-sm">Open status</a>
+              <a href="https://github.com/Alphadarklord1/kivora/issues" className="btn btn-ghost btn-sm" target="_blank" rel="noreferrer">
+                View issues
+              </a>
+            </div>
+          </div>
+
+          <div className={styles.reportPanel}>
+            <ReportIssuePanel embedded />
+          </div>
+        </div>
       </Section>
       </div>
       )}
