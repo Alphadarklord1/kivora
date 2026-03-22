@@ -32,7 +32,7 @@ const MODE_COPY: Record<AiMode, { label: string; hint: string; summary: string }
 
 export function AiRuntimeControls({ compact = false }: { compact?: boolean }) {
   const [prefs, setPrefs] = useState<AiRuntimePreferences>(() => loadAiRuntimePreferences());
-  // Shared singleton — no extra network request if InstalledModelsPanel already checked.
+  // Shared singleton so Settings and any future runtime surfaces reuse one status request.
   const localStatus = useOllamaStatus();
   const [cloudConfigured, setCloudConfigured] = useState<boolean | null>(null);
 

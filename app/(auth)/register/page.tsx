@@ -106,7 +106,7 @@ export default function RegisterPage() {
             </div>
             <div className={styles.proofCard}>
               <strong>☁ Cloud sync</strong>
-              <p>Your decks, plans, and library sync automatically when you sign in.</p>
+              <p>Your review sets, plans, and library sync when account features are configured.</p>
             </div>
             <div className={styles.proofCard}>
               <strong>🔒 Privacy-first</strong>

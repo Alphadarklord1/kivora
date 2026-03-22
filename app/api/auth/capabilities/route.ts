@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthCapabilities } from '@/lib/auth/capabilities';
 import { isDatabaseConfigured } from '@/lib/db';
+import { isSupabaseAuthConfigured, isSupabaseStorageConfigured } from '@/lib/supabase/config';
 
 export async function GET() {
   const capabilities = getAuthCapabilities();
@@ -17,5 +18,7 @@ export async function GET() {
     oauthDisabled: capabilities.oauthDisabled,
     oauthDisabledReason: capabilities.oauthDisabledReason,
     dbConfigured: isDatabaseConfigured,
+    supabaseAuthConfigured: isSupabaseAuthConfigured(),
+    supabaseStorageConfigured: isSupabaseStorageConfigured(),
   });
 }

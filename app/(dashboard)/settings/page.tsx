@@ -77,6 +77,26 @@ interface DownloadsState {
   hasPublishedModelAssets: boolean;
 }
 
+interface AuthCapabilitiesState {
+  googleConfigured: boolean;
+  githubConfigured: boolean;
+  microsoftConfigured: boolean;
+  guestModeEnabled: boolean;
+  oauthDisabled?: boolean;
+  oauthDisabledReason?: string | null;
+  dbConfigured?: boolean;
+  authDisabled?: boolean;
+  authDisabledReason?: string | null;
+  supabaseAuthConfigured?: boolean;
+  supabaseStorageConfigured?: boolean;
+}
+
+interface AiStatusState {
+  cloudConfigured: boolean;
+  activeCloudProvider: string | null;
+  defaultCloudModel: string;
+}
+
 const fieldStyle: CSSProperties = {
   width: '100%',
   padding: '12px 14px',
@@ -229,8 +249,10 @@ function JumpLinks() {
   const links = [
     { href: '#account', label: 'Account' },
     { href: '#security', label: 'Security' },
+    { href: '#runtime', label: 'Runtime' },
     { href: '#appearance', label: 'Appearance' },
     { href: '#ai-models', label: 'AI & downloads' },
+    { href: '#utilities', label: 'Utilities' },
     { href: '#reporting', label: 'Report issue' },
     { href: '#privacy', label: 'Privacy' },
   ];
@@ -301,6 +323,8 @@ export default function SettingsPage() {
   const [bio, setBio] = useState('');
   const [downloads, setDownloads] = useState<DownloadsState | null>(null);
   const [downloadsLoading, setDownloadsLoading] = useState(true);
+  const [authCapabilities, setAuthCapabilities] = useState<AuthCapabilitiesState | null>(null);
+  const [aiStatus, setAiStatus] = useState<AiStatusState | null>(null);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -357,6 +381,37 @@ export default function SettingsPage() {
       })
       .finally(() => {
         if (!cancelled) setDownloadsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/auth/capabilities')
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((data) => {
+        if (!cancelled) setAuthCapabilities(data);
+      })
+      .catch(() => {
+        if (!cancelled) setAuthCapabilities(null);
+      });
+
+    fetch('/api/ai/status')
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((data) => {
+        if (!cancelled) setAiStatus(data);
+      })
+      .catch(() => {
+        if (!cancelled) setAiStatus(null);
       });
 
     return () => {
@@ -524,7 +579,7 @@ export default function SettingsPage() {
         <div>
           <h1 style={{ fontSize: 'var(--text-3xl)', fontWeight: 700, marginBottom: 4 }}>Settings</h1>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
-            Keep your account, appearance, AI setup, downloads, and support tools in one place.
+            Keep your account, runtime status, appearance, AI setup, and support tools in one place.
           </p>
         </div>
         {saved ? <span className="badge badge-success">Saved ✓</span> : null}
@@ -795,6 +850,61 @@ export default function SettingsPage() {
       </Section>
       </div>
 
+      <div id="runtime">
+      <Section title="Runtime readiness" subtitle="Check what works in this runtime before you rely on cloud sync, sign-in, or hosted AI.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          {[
+            {
+              title: 'Email sign-in & profile sync',
+              ready: Boolean(authCapabilities && authCapabilities.dbConfigured !== false && authCapabilities.authDisabled !== true),
+              detail: !authCapabilities
+                ? 'Checking the current runtime configuration.'
+                : authCapabilities.authDisabled
+                ? authCapabilities.authDisabledReason || 'Authentication is disabled in this runtime.'
+                : authCapabilities?.dbConfigured === false
+                  ? 'Database is missing, so account sign-in cannot start here.'
+                  : authCapabilities?.supabaseAuthConfigured
+                    ? 'Ready for account sync and password changes.'
+                    : 'Works with the current auth flow, but Supabase Auth sync is not configured here.',
+            },
+            {
+              title: 'OAuth sign-in',
+              ready: Boolean(authCapabilities) && !authCapabilities?.oauthDisabled && Boolean(
+                authCapabilities?.googleConfigured || authCapabilities?.githubConfigured || authCapabilities?.microsoftConfigured,
+              ),
+              detail: !authCapabilities
+                ? 'Checking provider availability.'
+                : (!authCapabilities.oauthDisabled && (authCapabilities.googleConfigured || authCapabilities.githubConfigured || authCapabilities.microsoftConfigured))
+                ? 'At least one provider is available in this runtime.'
+                : authCapabilities.oauthDisabledReason || 'No external sign-in provider is configured right now.',
+            },
+            {
+              title: 'Cloud file backup',
+              ready: Boolean(authCapabilities?.supabaseStorageConfigured),
+              detail: authCapabilities?.supabaseStorageConfigured
+                ? 'Uploads can sync to Supabase Storage as well as local storage.'
+                : 'Local file storage still works, but cloud file backup is unavailable in this runtime.',
+            },
+            {
+              title: 'Cloud AI',
+              ready: Boolean(aiStatus?.cloudConfigured),
+              detail: aiStatus?.cloudConfigured
+                ? `Using ${aiStatus?.activeCloudProvider ?? 'cloud AI'} with ${aiStatus?.defaultCloudModel ?? 'the default model'}.`
+                : 'Cloud AI is unavailable, so Kivora will stay local/offline-first here.',
+            },
+          ].map((item) => (
+            <div key={item.title} style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)', display: 'grid', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ fontWeight: 700 }}>{item.title}</div>
+                <span className={`badge ${item.ready ? 'badge-success' : ''}`}>{item.ready ? 'Ready' : 'Local-only / unavailable'}</span>
+              </div>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', margin: 0 }}>{item.detail}</p>
+            </div>
+          ))}
+        </div>
+      </Section>
+      </div>
+
       <div id="appearance">
       <Section title="Appearance" subtitle="Make the app readable and comfortable without oversized defaults or confusing labels.">
         <div>
@@ -904,6 +1014,28 @@ export default function SettingsPage() {
               {downloads?.hasPublishedModelAssets ? <span className="badge badge-success">Optional model assets published</span> : null}
             </div>
           </div>
+        </div>
+      </Section>
+      </div>
+
+      <div id="utilities">
+      <Section title="Utilities" subtitle="Secondary pages still exist, but the main product now revolves around Workspace, Scholar Hub, and Math.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          {[
+            { href: '/analytics', title: 'Analytics', description: 'Review weak areas, retention, and next-study actions.' },
+            { href: '/sharing', title: 'Sharing', description: 'Manage shared links for library items and files.' },
+            { href: '/status', title: 'System status', description: 'Check runtime, database, and deployment diagnostics.' },
+          ].map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="btn btn-ghost"
+              style={{ justifyContent: 'flex-start', textAlign: 'left', padding: '16px', minHeight: 0, display: 'grid', gap: 6, textDecoration: 'none' }}
+            >
+              <span style={{ fontWeight: 700 }}>{item.title}</span>
+              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>{item.description}</span>
+            </a>
+          ))}
         </div>
       </Section>
       </div>
@@ -1020,7 +1152,7 @@ function PrivacySection() {
   const dataItems = [
     { icon: '📁', label: 'Folders & files', where: 'Cloud (PostgreSQL)', note: 'File metadata — names, sizes, dates' },
     { icon: '📄', label: 'File content', where: 'Local only (IndexedDB)', note: 'Blobs never leave your browser' },
-    { icon: '📇', label: 'Flashcard decks', where: 'Local + Cloud sync', note: 'SRS schedule stored on device' },
+    { icon: '📇', label: 'Review sets', where: 'Local + Cloud sync', note: 'SRS schedule stored on device' },
     { icon: '🗂', label: 'Library items', where: 'Cloud (PostgreSQL)', note: 'Saved generated outputs' },
     { icon: '📊', label: 'Study analytics', where: 'Cloud (PostgreSQL)', note: 'Quiz scores and review history' },
     { icon: '⚙️', label: 'Settings', where: 'Cloud (PostgreSQL)', note: 'Theme, font, density preferences' },
@@ -1166,7 +1298,7 @@ function PrivacySection() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Export everything</div>
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>
-              Download a JSON file of all your folders, files metadata, library items, flashcard decks, quiz history, and study plans.
+              Download a JSON file of all your folders, files metadata, library items, review sets, quiz history, and study plans.
             </div>
           </div>
           <button className="btn btn-secondary btn-sm" onClick={exportData} disabled={exportLoading} style={{ flexShrink: 0 }}>

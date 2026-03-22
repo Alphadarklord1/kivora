@@ -12,13 +12,8 @@ import { getStreak } from '@/lib/srs/sm2';
 
 const NAV_ITEMS = [
   { href: '/workspace', key: 'Workspace',          icon: '📚' },
-  { href: '/planner',   key: 'Planner',             icon: '📅' },
-  { href: '/math',      key: 'Math',                icon: '∑'  },
-  { href: '/library',   key: 'Library',             icon: '🗂️' },
   { href: '/coach',     key: 'Scholar Hub',     icon: '🎓' },
-  { href: '/analytics', key: 'Analytics',           icon: '📊' },
-  { href: '/sharing',   key: 'Sharing',             icon: '🔗' },
-  { href: '/settings',  key: 'Settings',            icon: '⚙️' },
+  { href: '/math',      key: 'Math',                icon: '∑'  },
 ];
 
 // ── Tiny inline avatar ────────────────────────────────────────────────────
@@ -116,7 +111,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="sidebar-nav">
           {!collapsed && (
-            <div className="sidebar-section-label">{t('Study')}</div>
+            <div className="sidebar-section-label">Core</div>
           )}
           {NAV_ITEMS.map(item => (
             <Link
@@ -159,6 +154,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         <div className="sidebar-footer">
+          <Link
+            href="/settings"
+            className={`nav-item${pathname?.startsWith('/settings') ? ' active' : ''}`}
+            title={t('Settings')}
+          >
+            <span className="nav-icon">⚙️</span>
+            {!collapsed && <span className="nav-label">{t('Settings')}</span>}
+          </Link>
+
           <button
             className="nav-item"
             onClick={toggleTheme}

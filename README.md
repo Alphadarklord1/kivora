@@ -1,9 +1,15 @@
 Kivora is a desktop-primary AI study workspace with a supported web beta, guest-by-default access, offline-first generation, and optional cloud fallback.
 
+The final product is built around three pillars:
+
+- `/workspace` for files, AI tools, notes, quizzes, and review sets
+- `/coach` for Scholar Hub source study and writing support
+- `/math` for solver, graphing, formulas, and technical workflows
+
 ## Product Status
 
 - Desktop app is the primary supported runtime.
-- Web remains available as a beta prototype.
+- Web remains available as a supported beta.
 - Guest mode is enabled by default unless `AUTH_REQUIRED=1`.
 - Encryption password flows are intentionally disabled for the current beta.
 
@@ -143,15 +149,15 @@ npm run build
 ## Supported Stable-Beta Surfaces
 
 - `/workspace`
-- `/tools`
-- `/planner`
-- `/library`
+- `/coach`
+- `/math`
 - `/analytics`
 - `/sharing`
 - `/settings`
 - `/login`
 - `/register`
-- `/downloads`
+
+Compatibility redirects still exist for older links such as `/tools`, `/study`, `/decks`, `/models`, `/report`, and `/downloads`.
 
 Standalone audio navigation and Office-to-PDF visual conversion are intentionally cut from the beta surface until their dependencies are stable.
 

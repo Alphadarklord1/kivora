@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
         cardCount: body.cardCount ?? 0,
         sourceDeckId: body.sourceDeckId ?? null,
         sourceDeckName: body.title,
-        savedFrom: body.sourceDeckId ? `/coach?set=${body.sourceDeckId}&panel=manage` : '/coach',
+        savedFrom: '/workspace',
       },
     }).returning();
 

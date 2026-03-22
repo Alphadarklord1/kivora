@@ -18,7 +18,7 @@ const STEPS = [
     title: 'Upload & generate in seconds',
     desc: 'Upload a lecture slide, PDF, or Word doc. Then pick a tool — Summary, Quiz, MCQ, Flashcards, or Notes — and Kivora generates exam-ready content instantly.',
     highlight: 'Workspace → Upload File → choose a tool',
-    tip: 'Works offline! Install a local AI model from the Models page. Your files never leave your device.',
+    tip: 'Works offline. Open Settings → AI & downloads if you want a local model or desktop installer.',
     actionLabel: 'Open workspace',
     href: '/workspace',
   },
@@ -38,7 +38,7 @@ const STEPS = [
     highlight: 'Math in the sidebar → type any expression → hit Solve',
     tip: 'The solver tries a fast symbolic engine first, then falls back to your local Ollama model for trickier problems.',
     actionLabel: "Let's go →",
-    href: '/workspace',
+    href: '/math',
   },
 ];
 
