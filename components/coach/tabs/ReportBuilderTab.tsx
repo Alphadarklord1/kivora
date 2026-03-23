@@ -8,8 +8,10 @@ import type { SourceBrief } from '@/lib/coach/source-brief';
 import type { TopicResearchResult } from '@/lib/coach/research';
 import type { ArticleSuggestion } from '@/lib/coach/articles';
 import type { OutlineSection } from '@/app/api/coach/report/route';
+import type { GradeResult } from '@/app/api/coach/grade/route';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
+import { mdToHtml } from '@/lib/utils/md';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -129,6 +131,9 @@ export function ReportBuilderTab({ sourceBrief, researchResult, onNavigateToRese
   const [savedToLib,     setSavedToLib]     = useState(false);
   const [exportingDocx,  setExportingDocx]  = useState(false);
   const [exportingPptx,  setExportingPptx]  = useState(false);
+  const [showPreview,    setShowPreview]    = useState(false);
+  const [gradeResult,    setGradeResult]    = useState<GradeResult | null>(null);
+  const [grading,        setGrading]        = useState(false);
 
   // Assignment helper
   const [assignText,    setAssignText]    = useState('');
@@ -327,6 +332,35 @@ export function ReportBuilderTab({ sourceBrief, researchResult, onNavigateToRese
       toast(err instanceof Error ? err.message : 'Assignment helper failed', 'error');
     } finally {
       setAssignLoading(false);
+    }
+  }
+
+  async function handleGrade() {
+    if (!reportResult || grading) return;
+    setGrading(true);
+    try {
+      const res = await fetch('/api/coach/grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          report:           reportResult,
+          topic:            reportTopic,
+          type:             reportType,
+          targetWordCount:  reportWordCount,
+          sourceCount:      selectedSources.length,
+          ai:               loadAiRuntimePreferences(),
+          privacyMode,
+        }),
+      });
+      const data = await res.json() as GradeResult & { error?: string };
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Grading failed');
+      setGradeResult(data);
+      setShowPreview(true);
+      toast(`Report graded: ${data.overall}`, 'success');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not grade report', 'error');
+    } finally {
+      setGrading(false);
     }
   }
 
@@ -589,8 +623,31 @@ export function ReportBuilderTab({ sourceBrief, researchResult, onNavigateToRese
             <div className={styles.reportMeta}>
               <strong>{reportTopic} — {REPORT_TYPES.find(t => t.id === reportType)?.label}</strong>
               <span className={styles.wordCountPill}>~{draftWordCount.toLocaleString()} words</span>
+              {gradeResult && (
+                <span
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '2px 10px', borderRadius: 999, fontWeight: 700, fontSize: 13,
+                    background: gradeResult.overall.startsWith('A') ? '#d1fae5' : gradeResult.overall.startsWith('B') ? '#dbeafe' : gradeResult.overall.startsWith('C') ? '#fef3c7' : '#fee2e2',
+                    color: gradeResult.overall.startsWith('A') ? '#065f46' : gradeResult.overall.startsWith('B') ? '#1e40af' : gradeResult.overall.startsWith('C') ? '#92400e' : '#991b1b',
+                  }}
+                >
+                  {gradeResult.overall} · {gradeResult.percentage}%
+                </span>
+              )}
             </div>
             <div className={styles.reportOutputActions}>
+              <button className={styles.btnPrimary} onClick={() => setShowPreview(true)}>
+                👁 Preview
+              </button>
+              <button
+                className={styles.btnSecondary}
+                disabled={grading}
+                onClick={() => void handleGrade()}
+                title="Grade this report with AI rubric"
+              >
+                {grading ? 'Grading…' : '🏅 Grade'}
+              </button>
               <button className={styles.btnSecondary} onClick={() => void navigator.clipboard.writeText(reportResult).then(() => toast('Copied!', 'success'))}>
                 📋 Copy
               </button>
@@ -608,14 +665,14 @@ export function ReportBuilderTab({ sourceBrief, researchResult, onNavigateToRese
                 onClick={() => void handleExportPptx()}
                 title="Download as PowerPoint presentation (.pptx)"
               >
-                {exportingPptx ? '…' : '📊 PowerPoint'}
+                {exportingPptx ? '…' : '📊 Slides'}
               </button>
               {!savedToLib && (
                 <button className={styles.btnSecondary} onClick={() => void handleSaveToLibrary()}>
-                  📚 Save to Library
+                  📚 Save
                 </button>
               )}
-              <button className={styles.btnSecondary} onClick={() => { setReportResult(''); setSavedToLib(false); }}>
+              <button className={styles.btnSecondary} onClick={() => { setReportResult(''); setSavedToLib(false); setGradeResult(null); }}>
                 Clear
               </button>
             </div>
@@ -648,6 +705,181 @@ export function ReportBuilderTab({ sourceBrief, researchResult, onNavigateToRese
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Report Preview Modal ──────────────────────────────────────────── */}
+      {showPreview && reportResult && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Report preview"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9000,
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+            padding: '20px 16px', overflowY: 'auto',
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setShowPreview(false); }}
+        >
+          <div style={{
+            background: 'var(--bg-elevated, #fff)', borderRadius: 16,
+            width: '100%', maxWidth: 820,
+            boxShadow: '0 24px 80px rgba(0,0,0,0.35)',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}>
+            {/* Preview header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '16px 24px', borderBottom: '1px solid var(--border-subtle)',
+              gap: 12, flexWrap: 'wrap',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
+                  {reportTopic}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '2px 8px' }}>
+                  {REPORT_TYPES.find(t => t.id === reportType)?.label}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>~{draftWordCount.toLocaleString()} words</span>
+                {gradeResult && (
+                  <span style={{
+                    padding: '3px 12px', borderRadius: 999, fontWeight: 700, fontSize: 14,
+                    background: gradeResult.overall.startsWith('A') ? '#d1fae5' : gradeResult.overall.startsWith('B') ? '#dbeafe' : gradeResult.overall.startsWith('C') ? '#fef3c7' : '#fee2e2',
+                    color: gradeResult.overall.startsWith('A') ? '#065f46' : gradeResult.overall.startsWith('B') ? '#1e40af' : gradeResult.overall.startsWith('C') ? '#92400e' : '#991b1b',
+                  }}>
+                    Grade: {gradeResult.overall} ({gradeResult.percentage}%)
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  className={styles.btnSecondary}
+                  disabled={exportingDocx}
+                  onClick={() => void handleExportDocx()}
+                  title="Download as Word .docx"
+                >
+                  {exportingDocx ? '…' : '📄 Download Word'}
+                </button>
+                <button
+                  className={styles.btnSecondary}
+                  disabled={exportingPptx}
+                  onClick={() => void handleExportPptx()}
+                >
+                  {exportingPptx ? '…' : '📊 Download Slides'}
+                </button>
+                <button
+                  onClick={() => setShowPreview(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--text-muted)', lineHeight: 1, padding: '0 4px' }}
+                  aria-label="Close preview"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Document body */}
+            <div style={{ padding: '32px 48px 24px', overflowY: 'auto', maxHeight: '60vh' }}>
+              <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 24px', color: 'var(--text-primary)', borderBottom: '2px solid var(--border-subtle)', paddingBottom: 12 }}>
+                {reportTopic}
+              </h1>
+              <div
+                className={styles.reportDoc}
+                dangerouslySetInnerHTML={{ __html: mdToHtml(reportResult) }}
+                style={{ lineHeight: 1.8, fontSize: 15 }}
+              />
+            </div>
+
+            {/* Sources used */}
+            {selectedSources.length > 0 && (
+              <div style={{ padding: '0 48px 24px', borderTop: '1px solid var(--border-subtle)', marginTop: 8 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, margin: '16px 0 12px', color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Sources Used
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {selectedSources.map((s, i) => {
+                    const grade = gradeSource(s.type);
+                    return (
+                      <div key={s.url} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13 }}>
+                        <span style={{ color: 'var(--text-muted)', flexShrink: 0, minWidth: 20 }}>[{i + 1}]</span>
+                        <span className={`${styles.sourceGradeBadge} ${grade.cssClass}`} style={{ flexShrink: 0 }} title={grade.label}>
+                          {grade.badge}
+                        </span>
+                        <span style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                          <strong style={{ color: 'var(--text-primary)' }}>{s.title}</strong>
+                          {'. '}<em>{s.source}</em>{'. '}
+                          <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', wordBreak: 'break-all' }}>{s.url}</a>
+                          {' [Accessed ' + new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) + ']'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Grade breakdown */}
+            {gradeResult && (
+              <div style={{ padding: '0 48px 32px', borderTop: '1px solid var(--border-subtle)', marginTop: 8 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, margin: '16px 0 12px', color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Grade Breakdown
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {gradeResult.criteria.map(c => (
+                    <div key={c.name}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{c.name}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{c.score}/{c.maxScore}</span>
+                      </div>
+                      <div style={{ height: 6, borderRadius: 999, background: 'var(--border-subtle)', overflow: 'hidden', marginBottom: 4 }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${(c.score / c.maxScore) * 100}%`,
+                          borderRadius: 999,
+                          background: c.score >= 8 ? '#10b981' : c.score >= 6 ? '#3b82f6' : c.score >= 4 ? '#f59e0b' : '#ef4444',
+                          transition: 'width 0.4s ease',
+                        }} />
+                      </div>
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{c.feedback}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 20 }}>
+                  {gradeResult.strengths.length > 0 && (
+                    <div style={{ background: 'color-mix(in srgb, #10b981 8%, var(--bg-surface))', border: '1px solid color-mix(in srgb, #10b981 25%, transparent)', borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#059669', marginBottom: 8 }}>✓ Strengths</div>
+                      <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {gradeResult.strengths.map((s, i) => (
+                          <li key={i} style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {gradeResult.improvements.length > 0 && (
+                    <div style={{ background: 'color-mix(in srgb, #f59e0b 8%, var(--bg-surface))', border: '1px solid color-mix(in srgb, #f59e0b 25%, transparent)', borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#d97706', marginBottom: 8 }}>↑ To Improve</div>
+                      <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {gradeResult.improvements.map((s, i) => (
+                          <li key={i} style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div style={{ padding: '12px 24px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              {!gradeResult && (
+                <button className={styles.btnSecondary} disabled={grading} onClick={() => void handleGrade()}>
+                  {grading ? 'Grading…' : '🏅 Grade this report'}
+                </button>
+              )}
+              <button className={styles.btnPrimary} onClick={() => setShowPreview(false)}>Close</button>
+            </div>
+          </div>
         </div>
       )}
 
