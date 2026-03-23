@@ -947,6 +947,16 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .upload-zone h4  { font-size: var(--text-base); color: var(--text-2); }
 .upload-zone p   { font-size: var(--text-xs); color: var(--text-3); margin-top: var(--sp-1); }
 
+/* ── Tool loading skeleton ── */
+.tool-loading {
+  min-height: 120px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
 /* ── Tool output ── */
 .tool-output {
   background: var(--surface);

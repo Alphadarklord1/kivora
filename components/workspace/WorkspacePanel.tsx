@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { useToast } from '@/providers/ToastProvider';
 import { emitRateLimitEvent, RateLimitedError } from '@/lib/utils/fetchWithRateLimit';
 import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
@@ -15,21 +16,23 @@ import { v4 as uuidv4 } from 'uuid';
 import { deleteLocalFile, listLocalFiles, upsertLocalFile } from '@/lib/files/local-files';
 import { createFileReplaceRequest, createFileUploadRequest, resolveStoredFileBlob } from '@/lib/files/client-storage';
 import { getDeckStats, loadDecks, deleteDeck, saveDeck, type SRSDeck } from '@/lib/srs/sm2';
-import { ChatPanel } from '@/components/workspace/ChatPanel';
-import { KnowledgeMap } from '@/components/tools/KnowledgeMap';
-import { NotesPanel } from '@/components/workspace/NotesPanel';
-import { ExamPlannerPanel } from '@/components/workspace/ExamPlannerPanel';
-import { MCQView } from '@/components/workspace/views/MCQView';
-import { PracticeView } from '@/components/workspace/views/PracticeView';
-import { FlashcardView } from '@/components/workspace/views/FlashcardView';
-import { ExamView } from '@/components/workspace/views/ExamView';
-import { FocusPanel } from '@/components/workspace/views/FocusPanel';
 import { mdToHtml } from '@/lib/utils/md';
 import { writeMathContext } from '@/lib/math/context';
 import { clearCoachHandoff, readCoachHandoff } from '@/lib/coach/handoff';
 import { clearScholarContext, readScholarContext, writeScholarContext, type ScholarContext } from '@/lib/coach/scholar-context';
-import { DocumentPreview } from '@/components/workspace/DocumentPreview';
 import { broadcastInvalidate, listenForInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
+
+// ── Lazy-loaded tool panels (split into separate JS chunks) ────────────────────
+const ChatPanel      = dynamic(() => import('@/components/workspace/ChatPanel').then(m => ({ default: m.ChatPanel })), { ssr: false, loading: () => <div className="tool-loading" /> });
+const KnowledgeMap   = dynamic(() => import('@/components/tools/KnowledgeMap').then(m => ({ default: m.KnowledgeMap })), { ssr: false, loading: () => <div className="tool-loading" /> });
+const NotesPanel     = dynamic(() => import('@/components/workspace/NotesPanel').then(m => ({ default: m.NotesPanel })), { ssr: false, loading: () => <div className="tool-loading" /> });
+const ExamPlannerPanel = dynamic(() => import('@/components/workspace/ExamPlannerPanel').then(m => ({ default: m.ExamPlannerPanel })), { ssr: false, loading: () => <div className="tool-loading" /> });
+const MCQView        = dynamic(() => import('@/components/workspace/views/MCQView').then(m => ({ default: m.MCQView })), { ssr: false, loading: () => <div className="tool-loading" /> });
+const PracticeView   = dynamic(() => import('@/components/workspace/views/PracticeView').then(m => ({ default: m.PracticeView })), { ssr: false, loading: () => <div className="tool-loading" /> });
+const FlashcardView  = dynamic(() => import('@/components/workspace/views/FlashcardView').then(m => ({ default: m.FlashcardView })), { ssr: false, loading: () => <div className="tool-loading" /> });
+const ExamView       = dynamic(() => import('@/components/workspace/views/ExamView').then(m => ({ default: m.ExamView })), { ssr: false, loading: () => <div className="tool-loading" /> });
+const FocusPanel     = dynamic(() => import('@/components/workspace/views/FocusPanel').then(m => ({ default: m.FocusPanel })), { ssr: false, loading: () => <div className="tool-loading" /> });
+const DocumentPreview = dynamic(() => import('@/components/workspace/DocumentPreview').then(m => ({ default: m.DocumentPreview })), { ssr: false, loading: () => <div className="tool-loading" /> });
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -462,15 +465,22 @@ export function WorkspacePanel({
       const r = await fetch(`/api/files?${qs}`);
       const loaded: FileRecord[] = r.ok ? await r.json() : listLocalFiles(selectedFolder, selectedTopic);
       setFiles(loaded);
-      // Check for missing blobs in the background
-      const missing = new Set<string>();
-      await Promise.all(loaded.map(async f => {
-        if (f.localBlobId) {
-          const payload = await idbStore.get(f.localBlobId).catch(() => undefined);
-          if (!payload && !f.content && !f.storagePath) missing.add(f.id);
-        }
-      }));
-      setMissingBlobs(missing);
+      // Check for missing blobs in the background (deferred so file list renders first)
+      const checkMissing = async () => {
+        const missing = new Set<string>();
+        await Promise.all(loaded.map(async f => {
+          if (f.localBlobId) {
+            const payload = await idbStore.get(f.localBlobId).catch(() => undefined);
+            if (!payload && !f.content && !f.storagePath) missing.add(f.id);
+          }
+        }));
+        setMissingBlobs(missing);
+      };
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(() => { void checkMissing(); }, { timeout: 3000 });
+      } else {
+        setTimeout(() => { void checkMissing(); }, 500);
+      }
     } catch {
       const loaded = listLocalFiles(selectedFolder, selectedTopic);
       setFiles(loaded);
@@ -521,7 +531,8 @@ export function WorkspacePanel({
   async function extractFromFile(file: FileRecord): Promise<string | null> {
     if (file.content) {
       setExtractedText(file.content);
-      void ensureRagIndex(file.id, file.content);
+      // Build RAG index after UI updates (non-blocking)
+      setTimeout(() => { void ensureRagIndex(file.id, file.content!); }, 0);
       void markRecentFile(file.id);
       return file.content;
     }
@@ -532,7 +543,8 @@ export function WorkspacePanel({
       const res = await extractTextFromBlob(blob, file.name);
       if (res.error) { toast(res.error, 'error'); return null; }
       setExtractedText(res.text);
-      void ensureRagIndex(file.id, res.text);
+      // Build RAG index after UI updates (non-blocking)
+      setTimeout(() => { void ensureRagIndex(file.id, res.text); }, 0);
       void markRecentFile(file.id);
       toast(`Extracted ${res.wordCount.toLocaleString()} words from "${file.name}"`, 'success');
       return res.text;
