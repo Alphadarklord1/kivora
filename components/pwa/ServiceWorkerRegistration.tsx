@@ -34,7 +34,6 @@ export function ServiceWorkerRegistration() {
         .register('/sw.js')
         .then((registration) => {
           registrationRef = registration;
-          console.log('SW registered:', registration.scope);
 
           // Detect updates immediately on load
           registration.update();
@@ -65,7 +64,7 @@ export function ServiceWorkerRegistration() {
           });
         })
         .catch((error) => {
-          console.log('SW registration failed:', error);
+          console.error('SW registration failed:', error);
         });
     };
 
