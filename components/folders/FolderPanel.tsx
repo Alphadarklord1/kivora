@@ -443,6 +443,7 @@ export function FolderPanel({
                   <input
                     ref={renameRef}
                     className="rename-input"
+                    aria-label="Rename folder"
                     value={renameValue}
                     onChange={e => setRenameValue(e.target.value)}
                     onBlur={() => renameFolder(folder, renameValue)}
@@ -534,6 +535,7 @@ export function FolderPanel({
                     <input
                       ref={renameRef}
                       className="rename-input"
+                      aria-label="Rename topic"
                       value={renameValue}
                       onChange={e => setRenameValue(e.target.value)}
                       onBlur={() => renameTopic(topic, folder, renameValue)}

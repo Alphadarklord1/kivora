@@ -58,6 +58,7 @@ const LOCAL_AR: Record<string, string> = {
 };
 
 export default function LibraryPage() {
+  useEffect(() => { document.title = 'Library — Kivora'; }, []);
   const { toast } = useToast();
   const { t, formatDate, locale } = useI18n(LOCAL_AR);
   const { isOpen: shareOpen, shareTarget, openShare, closeShare } = useShareDialog();
@@ -68,13 +69,21 @@ export default function LibraryPage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [expanded, setExpanded]     = useState<string | null>(null);
 
+  const [loadError, setLoadError] = useState('');
+
   const load = useCallback(async () => {
     setLoading(true);
-    fetch('/api/library')
-      .then(r => r.ok ? r.json() : [])
-      .then(setItems)
-      .catch(() => setItems([]))
-      .finally(() => setLoading(false));
+    setLoadError('');
+    try {
+      const res = await fetch('/api/library');
+      if (!res.ok) throw new Error('Failed to load library');
+      setItems(await res.json());
+    } catch {
+      setLoadError('Could not load library. Check your connection and try again.');
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { void load(); }, [load]);
@@ -85,14 +94,23 @@ export default function LibraryPage() {
   }, [load]);
 
   async function deleteItem(id: string) {
-    await fetch(`/api/library/${id}`, { method: 'DELETE' }).catch(() => {});
-    setItems(prev => prev.filter(i => i.id !== id));
-    broadcastInvalidate(LIBRARY_CHANNEL);
-    toast(t('Deleted'), 'info');
+    const prev = items;
+    setItems(p => p.filter(i => i.id !== id)); // optimistic
+    try {
+      const res = await fetch(`/api/library/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      broadcastInvalidate(LIBRARY_CHANNEL);
+      toast(t('Deleted'), 'info');
+    } catch {
+      setItems(prev); // revert
+      toast('Failed to delete. Please try again.', 'error');
+    }
   }
 
   function copyItem(content: string) {
-    navigator.clipboard.writeText(content).then(() => toast(t('Copied!'), 'success'));
+    navigator.clipboard.writeText(content)
+      .then(() => toast(t('Copied!'), 'success'))
+      .catch(() => toast('Copy failed — try selecting the text manually.', 'error'));
   }
 
   function exportItem(item: LibItem) {
@@ -104,6 +122,7 @@ export default function LibraryPage() {
     const a    = Object.assign(document.createElement('a'), { href: url, download: `${name || 'export'}.txt` });
     a.click();
     URL.revokeObjectURL(url);
+    toast('Saved to downloads.', 'success');
   }
 
   const countByType = useMemo(() => {
@@ -182,6 +201,14 @@ export default function LibraryPage() {
         </div>
       )}
 
+      {/* Load error */}
+      {loadError && !loading && (
+        <div className="lib-error-banner">
+          <span>⚠️ {loadError}</span>
+          <button className="lib-btn lib-btn-ghost lib-btn-sm" onClick={() => void load()}>Retry</button>
+        </div>
+      )}
+
       {/* Content */}
       {loading ? (
         <div className="lib-skeletons">
@@ -232,9 +259,10 @@ export default function LibraryPage() {
                   <button
                     className="lib-icon-btn lib-icon-btn-print"
                     title={t('Print')}
+                    aria-label={t('Print')}
                     onClick={() => printContent(title, item.content)}
                   >{'\uD83D\uDDA8\uFE0F'}</button>
-                  <button className="lib-icon-btn" onClick={() => void deleteItem(item.id)} title={t('Delete')}>{'\u2715'}</button>
+                  <button className="lib-icon-btn" onClick={() => void deleteItem(item.id)} title={t('Delete')} aria-label={t('Delete')}>{'\u2715'}</button>
                 </div>
 
                 {/* Tags */}
@@ -329,6 +357,7 @@ export default function LibraryPage() {
           background-size: 200% 100%; animation: shimmer 1.2s infinite;
         }
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .lib-error-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; margin-bottom: 16px; border-radius: 10px; background: color-mix(in srgb, #ef4444 10%, var(--bg-surface)); border: 1px solid color-mix(in srgb, #ef4444 30%, transparent); color: #b91c1c; font-size: 13px; }
         .lib-empty { text-align: center; padding: 60px 20px; border: 1.5px dashed var(--border-2); border-radius: 14px; }
         .lib-empty-icon { font-size: 52px; margin-bottom: 14px; }
         .lib-empty-title { font-size: var(--text-lg); font-weight: 600; margin: 0 0 8px; }

@@ -544,7 +544,7 @@ export function FlashcardView({
       const sd = await shareRes.json();
       const url: string = sd.shareUrl ?? `${window.location.origin}/share/${sd.shareToken}`;
       setShareUrl(url);
-      await navigator.clipboard.writeText(url).catch(() => {});
+      try { await navigator.clipboard.writeText(url); } catch { /* URL still shown in UI */ }
       setShareStatus('done');
     } catch { setShareStatus('error'); }
   }
@@ -959,13 +959,13 @@ export function FlashcardView({
         {showPublicActions && shareStatus === 'done' && shareUrl && (
           <div style={{ fontSize:'var(--text-xs)', color:'var(--text-3)', marginBottom:10, display:'flex', alignItems:'center', gap:8, background:'var(--surface)', border:'1px solid var(--border-2)', borderRadius:8, padding:'6px 10px' }}>
             <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{shareUrl}</span>
-            <button className="btn btn-ghost btn-sm" style={{ padding:'2px 8px', fontSize:11, flexShrink:0 }} onClick={() => navigator.clipboard.writeText(shareUrl)}>📋 {t('Copy')}</button>
+            <button className="btn btn-ghost btn-sm" aria-label="Copy share link" style={{ padding:'2px 8px', fontSize:11, flexShrink:0 }} onClick={() => navigator.clipboard.writeText(shareUrl).catch(() => {})}>📋 {t('Copy')}</button>
           </div>
         )}
         {showPublicActions && publicStatus === 'done' && publicUrl && (
           <div style={{ fontSize:'var(--text-xs)', color:'var(--text-3)', marginBottom:10, display:'flex', alignItems:'center', gap:8, background:'var(--surface)', border:'1px solid var(--border-2)', borderRadius:8, padding:'6px 10px' }}>
             <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{publicUrl}</span>
-            <button className="btn btn-ghost btn-sm" style={{ padding:'2px 8px', fontSize:11, flexShrink:0 }} onClick={() => navigator.clipboard.writeText(publicUrl)}>📋 {t('Copy')}</button>
+            <button className="btn btn-ghost btn-sm" aria-label="Copy public link" style={{ padding:'2px 8px', fontSize:11, flexShrink:0 }} onClick={() => navigator.clipboard.writeText(publicUrl).catch(() => {})}>📋 {t('Copy')}</button>
           </div>
         )}
 

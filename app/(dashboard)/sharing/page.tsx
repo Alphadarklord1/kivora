@@ -89,6 +89,7 @@ const RESOURCE_ICON: Record<Exclude<ShareFilter, 'all'>, string> = {
 };
 
 export default function SharedWithMePage() {
+  useEffect(() => { document.title = 'Sharing — Kivora'; }, []);
   const { t, formatDate, locale } = useI18n(LOCAL_AR);
 
   const [shares, setShares]       = useState<Share[]>([]);
@@ -170,6 +171,9 @@ export default function SharedWithMePage() {
       const res = await fetch(`/api/share?id=${id}`, { method: 'DELETE', credentials: 'include' });
       if (res.ok) {
         setShares(prev => prev.filter(s => s.id !== id));
+        setErrorMsg('');
+        setCopyMsg(t('Share revoked'));
+        setTimeout(() => setCopyMsg(''), 2500);
       } else {
         const payload = (await res.json()) as ApiErrorLike;
         setErrorMsg(payload.reason || payload.error || t('Failed to revoke share'));
@@ -180,10 +184,15 @@ export default function SharedWithMePage() {
   }
 
   function copyLink(url: string) {
-    navigator.clipboard.writeText(url).then(() => {
-      setCopyMsg(t('Link copied'));
-      setTimeout(() => setCopyMsg(''), 2000);
-    });
+    navigator.clipboard.writeText(url)
+      .then(() => {
+        setCopyMsg(t('Link copied'));
+        setTimeout(() => setCopyMsg(''), 2000);
+      })
+      .catch(() => {
+        setErrorMsg('Failed to copy — try selecting and copying the link manually.');
+        setTimeout(() => setErrorMsg(''), 3000);
+      });
   }
 
   function isExpired(expiresAt: string | null) {
@@ -336,7 +345,7 @@ export default function SharedWithMePage() {
 
       {/* ── Quick-share inline form ── */}
       <div className="sp-quickshare">
-        <div className="sp-qs-label">🔗 {t('Quick Share')}</div>
+        <label className="sp-qs-label" htmlFor="qs-item-select">🔗 {t('Quick Share')}</label>
         {qsSubmitting === 'done' ? (
           <div className="sp-qs-result">
             <input
@@ -364,6 +373,7 @@ export default function SharedWithMePage() {
         ) : (
           <div className="sp-qs-form">
             <select
+              id="qs-item-select"
               className="sp-qs-select"
               value={qsItemId}
               onChange={e => setQsItemId(e.target.value)}

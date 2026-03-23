@@ -96,6 +96,7 @@ function daysUntil(dateStr: string): number {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function PlannerPage() {
+  useEffect(() => { document.title = 'Planner — Kivora'; }, []);
   const today = useMemo(() => new Date(), []);
   const [view, setView] = useState<CalendarView>('week');
   const [cursor, setCursor] = useState<Date>(today);
