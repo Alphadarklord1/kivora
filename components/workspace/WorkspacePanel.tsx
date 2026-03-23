@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
+import { emitRateLimitEvent, RateLimitedError } from '@/lib/utils/fetchWithRateLimit';
 import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
 import { loadClientAiDataMode } from '@/lib/privacy/ai-data';
 import { idbStore } from '@/lib/idb';
@@ -679,12 +680,35 @@ export function WorkspacePanel({
         signal: ctrl.signal,
       });
 
+      if (res.status === 429) {
+        try {
+          const body = await res.json();
+          if (body.errorCode === 'RATE_LIMITED') {
+            emitRateLimitEvent(new RateLimitedError(body.retryAfterSeconds ?? 60, body.reason ?? ''));
+            return;
+          }
+        } catch { /* not JSON */ }
+        toast('Too many requests — please wait a moment.', 'error');
+        return;
+      }
+
       if (!res.ok || !res.body) {
         // Fallback to non-streaming route
         const fallback = await fetch('/api/generate', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mode, text: retrievalContext, fileId: selFile?.id ?? null, options: { count }, ai, privacyMode }),
         });
+        if (fallback.status === 429) {
+          try {
+            const body = await fallback.json();
+            if (body.errorCode === 'RATE_LIMITED') {
+              emitRateLimitEvent(new RateLimitedError(body.retryAfterSeconds ?? 60, body.reason ?? ''));
+              return;
+            }
+          } catch { /* not JSON */ }
+          toast('Too many requests — please wait a moment.', 'error');
+          return;
+        }
         const data = await fallback.json();
         setOutput(data.content ?? data.error ?? 'No output received.');
         if (data.source === 'offline') toast('Generated offline — AI not connected', 'info');
@@ -722,6 +746,7 @@ export function WorkspacePanel({
       if (!accumulated) setOutput('No output received.');
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return; // cancelled
+      if (err instanceof RateLimitedError) { emitRateLimitEvent(err); return; }
       toast('Generation failed. Please try again.', 'error');
     } finally {
       setGenerating(false);

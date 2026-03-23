@@ -1797,6 +1797,74 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   }
 }
 
+/* ── Additional mobile improvements ── */
+@media (max-width: 768px) {
+  /* Workspace split: stack folder sidebar above main panel */
+  .workspace-split {
+    flex-direction: column !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .folder-sidebar {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-height: 200px;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  /* Flashcard grade buttons: horizontal scroll on narrow screens */
+  .flashcard-grade-row {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+    flex-wrap: nowrap !important;
+  }
+  .flashcard-grade-row > button {
+    flex-shrink: 0;
+    min-width: 70px;
+  }
+
+  /* Math solver: full-width layout */
+  .math-split {
+    flex-direction: column !important;
+  }
+  .math-sidebar {
+    width: 100% !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border-subtle);
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  /* Auth pages: single column */
+  .auth-grid,
+  [class*="grid"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* KnowledgeMap SVG: scale to fit */
+  .knowledge-map-svg {
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Sharing cards: full-width */
+  .share-card {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+  .share-card-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  /* Quick-action toolbar: icon-only on mobile */
+  .toolbar-label {
+    display: none !important;
+  }
+}
+
 /* ── Print styles ── */
 @media print {
   .sidebar, .mobile-header, .bottom-nav, .sidebar-desktop { display: none !important; }

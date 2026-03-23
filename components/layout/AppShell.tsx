@@ -16,6 +16,7 @@ import { useAchievementToast } from '@/components/gamification/AchievementToast'
 import { QuickSearchPalette, QuickSearchItem } from '@/components/layout/QuickSearchPalette';
 import { useSyncSubscription } from '@/hooks/useSyncSubscription';
 import { useNotificationScheduler } from '@/hooks/useNotificationScheduler';
+import { useRateLimitToast } from '@/hooks/useRateLimitToast';
 
 const CORE_NAV_ITEMS = [
   { href: '/workspace', key: 'Workspace',          icon: '📚' },
@@ -79,6 +80,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { toastJsx } = useAchievementToast();
+  const { toastJsx: rateLimitToastJsx } = useRateLimitToast();
 
   useEffect(() => {
     // Read streak from localStorage on mount (client-side only, no external subscription)
@@ -303,6 +305,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Global achievement toast — fixed bottom-right, self-positions via styled-jsx */}
       {toastJsx}
+      {/* Global rate-limit toast — fixed bottom-center, shows when any AI call returns 429 */}
+      {rateLimitToastJsx}
 
       {/* Quick search palette — rendered globally, triggered by Cmd+K or search button */}
       <QuickSearchPalette

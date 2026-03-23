@@ -226,6 +226,11 @@ export default function LoginPage() {
               >
                 {loading ? 'Signing in…' : 'Sign in with email'}
               </button>
+              <div style={{ textAlign: 'right', marginTop: -4 }}>
+                <Link href="/forgot-password" style={{ fontSize: 13, color: 'var(--primary, #4f86f7)', textDecoration: 'none', opacity: 0.85 }}>
+                  Forgot password?
+                </Link>
+              </div>
             </form>
 
             {!hasOAuth && <div className={styles.divider}>or</div>}
