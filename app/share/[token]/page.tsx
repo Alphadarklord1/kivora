@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
@@ -26,20 +26,88 @@ export default function ShareViewerPage() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Edit-mode state
+  const [editContent, setEditContent] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fork state
+  const [forking, setForking] = useState(false);
+  const [forkMsg, setForkMsg] = useState('');
+
   useEffect(() => {
     if (!token) return;
     fetch(`/api/share/${token}`)
       .then(r => r.ok ? r.json() : r.json().then((d: { error?: string }) => Promise.reject(d.error || 'Not found')))
-      .then((d: ShareData) => setData(d))
+      .then((d: ShareData) => {
+        setData(d);
+        setEditContent(d.content ?? '');
+      })
       .catch((e: unknown) => setError(String(e) || 'Share not found or expired.'))
       .finally(() => setLoading(false));
   }, [token]);
 
   function copyContent() {
-    if (data?.content) {
-      navigator.clipboard.writeText(data.content).catch(() => {});
+    const text = data?.permission === 'edit' ? editContent : data?.content;
+    if (text) {
+      navigator.clipboard.writeText(text).catch(() => {});
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
+  async function handleSave() {
+    if (!token || !data) return;
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      const res = await fetch(`/api/share/${token}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ content: editContent }),
+      });
+      if (res.ok) {
+        setSaveMsg('Saved');
+      } else {
+        const d = await res.json() as { reason?: string };
+        setSaveMsg(d.reason ?? 'Save failed');
+      }
+    } catch {
+      setSaveMsg('Save failed');
+    } finally {
+      setSaving(false);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => setSaveMsg(''), 3000);
+    }
+  }
+
+  async function handleFork() {
+    if (!token) return;
+    setForking(true);
+    setForkMsg('');
+    try {
+      const res = await fetch(`/api/share/${token}/fork`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        setForkMsg('Saved to your library! Open Workspace → Library to view it.');
+      } else {
+        const d = await res.json() as { reason?: string };
+        if (res.status === 401) {
+          setForkMsg('Sign in to save this to your library.');
+        } else {
+          setForkMsg(d.reason ?? 'Fork failed');
+        }
+      }
+    } catch {
+      setForkMsg('Fork failed');
+    } finally {
+      setForking(false);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => setForkMsg(''), 5000);
     }
   }
 
@@ -48,6 +116,7 @@ export default function ShareViewerPage() {
     notes: '📓', assignment: '📋', rephrase: '✍️',
   };
   const importDeckHref = token ? `/workspace?reviewSetImport=${encodeURIComponent(`/share/${token}`)}` : '/workspace';
+  const isEdit = data?.permission === 'edit';
 
   if (!hasToken) {
     return (
@@ -110,12 +179,19 @@ export default function ShareViewerPage() {
                 <p className="sv-owner">Shared by <strong>{data.ownerName}</strong></p>
               )}
               <div className="sv-badges">
-                <span className="sv-badge">{data.permission}</span>
+                <span className={`sv-badge${isEdit ? ' sv-badge-edit' : ''}`}>
+                  {isEdit ? '✏️ Can edit' : '👁 View only'}
+                </span>
                 <span className="sv-badge">{new Date(data.createdAt).toLocaleDateString()}</span>
                 {data.expiresAt && (
                   <span className="sv-badge exp">Expires {new Date(data.expiresAt).toLocaleDateString()}</span>
                 )}
               </div>
+              {isEdit && (
+                <div className="sv-edit-notice">
+                  ✏️ You have edit access — changes you save update the shared document for everyone.
+                </div>
+              )}
               {data.resourceType === 'flashcards' && (
                 <div className="sv-import-bar">
                   <span>This link opens as a shared review-set preview. To study it inside Kivora, import it into Workspace review sets.</span>
@@ -124,22 +200,59 @@ export default function ShareViewerPage() {
               )}
             </div>
 
-            {data.content ? (
+            {data.content !== undefined ? (
               <div className="sv-card">
                 <div className="sv-card-header">
                   <span>Content</span>
-                  <button className="sv-copy" onClick={copyContent}>
-                    {copied ? '✓ Copied' : '📋 Copy'}
-                  </button>
+                  <div className="sv-card-actions">
+                    {isEdit && saveMsg && (
+                      <span className={`sv-save-msg${saveMsg === 'Saved' ? ' ok' : ' err'}`}>{saveMsg}</span>
+                    )}
+                    <button className="sv-copy" onClick={copyContent}>
+                      {copied ? '✓ Copied' : '📋 Copy'}
+                    </button>
+                    {isEdit && (
+                      <button className="sv-save-btn" onClick={() => void handleSave()} disabled={saving}>
+                        {saving ? 'Saving…' : '💾 Save'}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="sv-card-body">
-                  <pre className="sv-text">{data.content}</pre>
+                  {isEdit ? (
+                    <textarea
+                      className="sv-textarea"
+                      value={editContent}
+                      onChange={e => setEditContent(e.target.value)}
+                      spellCheck
+                    />
+                  ) : (
+                    <pre className="sv-text">{data.content}</pre>
+                  )}
                 </div>
               </div>
             ) : (
               <div className="sv-no-content">
                 <p>This share link points to a file. Sign in to Kivora to view it.</p>
                 <Link href="/login" className="sv-cta">Sign in to view →</Link>
+              </div>
+            )}
+
+            {/* Fork to my library */}
+            {data.content !== undefined && (
+              <div className="sv-fork-bar">
+                <div>
+                  <strong>Save a copy to your library</strong>
+                  <p>Adds this content to your own Kivora workspace so you can study, edit, and build on it.</p>
+                </div>
+                <button
+                  className="sv-fork-btn"
+                  onClick={() => void handleFork()}
+                  disabled={forking}
+                >
+                  {forking ? 'Saving…' : '📥 Save to my library'}
+                </button>
+                {forkMsg && <p className="sv-fork-msg">{forkMsg}</p>}
               </div>
             )}
 
@@ -178,18 +291,37 @@ export default function ShareViewerPage() {
         .sv-badges { display: flex; gap: 6px; flex-wrap: wrap; }
         .sv-badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; background: var(--bg-elevated); border: 1px solid var(--border-subtle); color: var(--text-muted); text-transform: capitalize; }
         .sv-badge.exp { color: #f59e0b; border-color: color-mix(in srgb, #f59e0b 30%, transparent); background: color-mix(in srgb, #f59e0b 8%, transparent); }
+        .sv-badge-edit { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 30%, transparent); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+        .sv-edit-notice { font-size: 13px; color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--bg-elevated)); border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent); padding: 8px 14px; border-radius: 8px; }
         .sv-import-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--primary) 8%, var(--bg-elevated)); border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent); font-size: 13px; color: var(--text-secondary); }
         .sv-import-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 14px; border-radius: 10px; background: var(--primary); color: white; text-decoration: none; font-size: 13px; font-weight: 700; white-space: nowrap; }
         .sv-card { background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; }
         .sv-card-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+        .sv-card-actions { display: flex; align-items: center; gap: 6px; }
         .sv-copy { padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all 0.1s; }
         .sv-copy:hover { border-color: var(--primary); color: var(--primary); }
+        .sv-save-btn { padding: 5px 12px; border-radius: 8px; border: none; background: var(--primary); color: white; font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 0.1s; }
+        .sv-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .sv-save-msg { font-size: 12px; font-weight: 500; }
+        .sv-save-msg.ok { color: #22c55e; }
+        .sv-save-msg.err { color: #ef4444; }
         .sv-card-body { padding: 20px; max-height: 60vh; overflow-y: auto; }
         .sv-text { font-size: 14px; line-height: 1.7; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; margin: 0; font-family: inherit; }
+        .sv-textarea { width: 100%; min-height: 340px; font-size: 14px; line-height: 1.7; color: var(--text-primary); background: transparent; border: none; outline: none; resize: vertical; font-family: inherit; white-space: pre-wrap; }
         .sv-no-content { padding: 40px; text-align: center; background: var(--bg-elevated); border-radius: 14px; border: 1px solid var(--border-subtle); }
         .sv-no-content p { font-size: 14px; color: var(--text-muted); margin: 0 0 16px; }
         .sv-cta, .sv-promo-btn { display: inline-block; padding: 10px 20px; border-radius: 10px; background: var(--primary); color: white; text-decoration: none; font-size: 14px; font-weight: 600; transition: opacity 0.12s; }
         .sv-cta:hover, .sv-promo-btn:hover { opacity: 0.85; }
+
+        /* Fork bar */
+        .sv-fork-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 16px 18px; background: color-mix(in srgb, #22c55e 6%, var(--bg-elevated)); border: 1px solid color-mix(in srgb, #22c55e 20%, var(--border-subtle)); border-radius: 14px; }
+        .sv-fork-bar > div { flex: 1; min-width: 200px; }
+        .sv-fork-bar strong { font-size: 14px; display: block; margin-bottom: 3px; }
+        .sv-fork-bar p { font-size: 13px; color: var(--text-muted); margin: 0; line-height: 1.5; }
+        .sv-fork-btn { padding: 9px 18px; border: none; border-radius: 10px; background: #22c55e; color: white; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: opacity 0.1s; }
+        .sv-fork-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .sv-fork-msg { width: 100%; font-size: 13px; color: var(--text-secondary); margin: 0; }
+
         .sv-promo { display: flex; align-items: flex-start; gap: 14px; padding: 18px; background: color-mix(in srgb, var(--primary) 6%, var(--bg-elevated)); border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border-subtle)); border-radius: 14px; flex-wrap: wrap; }
         .sv-promo-icon { font-size: 28px; flex-shrink: 0; }
         .sv-promo div { flex: 1; min-width: 200px; }

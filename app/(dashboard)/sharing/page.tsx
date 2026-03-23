@@ -106,6 +106,7 @@ export default function SharedWithMePage() {
   const [libItems, setLibItems]         = useState<LibraryItem[]>([]);
   const [libLoading, setLibLoading]     = useState(false);
   const [qsItemId, setQsItemId]         = useState('');
+  const [qsPermission, setQsPermission] = useState<'view' | 'edit'>('view');
   const [qsSubmitting, setQsSubmitting] = useState('');   // '' | 'loading' | 'done'
   const [qsShareUrl, setQsShareUrl]     = useState('');
   const [qsCopied, setQsCopied]         = useState(false);
@@ -207,7 +208,7 @@ export default function SharedWithMePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ libraryItemId: qsItemId, shareType: 'link', permission: 'view' }),
+        body: JSON.stringify({ libraryItemId: qsItemId, shareType: 'link', permission: qsPermission }),
       });
       const data = (await res.json()) as ApiErrorLike;
       if (!res.ok) throw new Error(data.reason || data.error || t('Failed to create share'));
@@ -232,6 +233,7 @@ export default function SharedWithMePage() {
 
   function handleQsReset() {
     setQsItemId('');
+    setQsPermission('view');
     setQsShareUrl('');
     setQsSubmitting('');
     setQsCopied(false);
@@ -392,6 +394,22 @@ export default function SharedWithMePage() {
             {selectedItem && (
               <span className="sp-qs-mode">{selectedItem.mode}</span>
             )}
+            <div className="sp-qs-perm-toggle" role="group" aria-label="Permission">
+              <button
+                type="button"
+                className={`sp-qs-perm${qsPermission === 'view' ? ' active' : ''}`}
+                onClick={() => setQsPermission('view')}
+              >
+                👁 View
+              </button>
+              <button
+                type="button"
+                className={`sp-qs-perm${qsPermission === 'edit' ? ' active' : ''}`}
+                onClick={() => setQsPermission('edit')}
+              >
+                ✏️ Edit
+              </button>
+            </div>
             <button
               type="button"
               className="sp-btn sp-btn-primary sp-btn-sm"
@@ -592,6 +610,15 @@ export default function SharedWithMePage() {
           background: color-mix(in srgb, var(--accent) 12%, var(--bg-inset));
           color: var(--accent); white-space: nowrap; text-transform: uppercase;
         }
+        .sp-qs-perm-toggle {
+          display: flex; border: 1px solid var(--border-2); border-radius: 8px; overflow: hidden; flex-shrink: 0;
+        }
+        .sp-qs-perm {
+          padding: 5px 10px; font-size: 12px; background: var(--bg-surface); color: var(--text-2);
+          border: none; cursor: pointer; transition: all 0.12s; white-space: nowrap;
+        }
+        .sp-qs-perm + .sp-qs-perm { border-left: 1px solid var(--border-2); }
+        .sp-qs-perm.active { background: var(--accent); color: #fff; }
         .sp-qs-result {
           display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
         }
