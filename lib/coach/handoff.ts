@@ -9,10 +9,14 @@ export type CoachHandoff = {
 };
 
 export const COACH_HANDOFF_KEY = 'kivora_coach_handoff';
+const HANDOFF_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+type StoredHandoff = CoachHandoff & { _writtenAt: number };
 
 export function writeCoachHandoff(payload: CoachHandoff) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(COACH_HANDOFF_KEY, JSON.stringify(payload));
+  const stored: StoredHandoff = { ...payload, _writtenAt: Date.now() };
+  window.localStorage.setItem(COACH_HANDOFF_KEY, JSON.stringify(stored));
 }
 
 export function readCoachHandoff(): CoachHandoff | null {
@@ -20,7 +24,13 @@ export function readCoachHandoff(): CoachHandoff | null {
   try {
     const raw = window.localStorage.getItem(COACH_HANDOFF_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as CoachHandoff;
+    const stored = JSON.parse(raw) as StoredHandoff;
+    if (Date.now() - stored._writtenAt > HANDOFF_TTL_MS) {
+      window.localStorage.removeItem(COACH_HANDOFF_KEY);
+      return null;
+    }
+    const { _writtenAt: _, ...payload } = stored;
+    return payload as CoachHandoff;
   } catch {
     return null;
   }

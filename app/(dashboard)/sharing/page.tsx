@@ -30,9 +30,17 @@ interface Owner {
   bio?: string | null;
 }
 
+interface LibraryItem {
+  id: string;
+  mode: string;
+  content: string;
+  metadata?: { title?: string; problem?: string } | null;
+}
+
 interface ApiErrorLike {
   error?: string;
   reason?: string;
+  shareUrl?: string;
 }
 
 type ShareTab = 'received' | 'sent';
@@ -40,27 +48,35 @@ type ShareFilter = 'all' | 'file' | 'folder' | 'topic' | 'library';
 
 // Strings not covered by GLOBAL_TRANSLATIONS — component-specific
 const LOCAL_AR: Record<string, string> = {
-  'Manage content shared with you and by you': 'إدارة المحتوى الذي تمت مشاركته معك ومن طرفك',
-  'Search by name or email…': 'ابحث بالاسم أو البريد الإلكتروني...',
-  'Nothing shared with you yet': 'لا يوجد شيء تمت مشاركته معك بعد',
-  "You haven't shared anything yet": 'لم تشارك أي شيء بعد',
-  'When someone shares content with you, it will appear here.': 'عندما يشارك معك أحد محتوى، سيظهر هنا.',
-  'Start sharing from the Workspace, Library, or Folders panel.': 'ابدأ المشاركة من لوحة مساحة العمل أو المكتبة أو المجلدات.',
-  'Failed to load shares': 'تعذر تحميل المشاركات',
-  'Failed to revoke share': 'تعذر إلغاء المشاركة',
-  'Revoke this share?': 'إلغاء هذه المشاركة؟',
-  Shared: 'تمت المشاركة',
-  'Loading shares…': 'جاري تحميل المشاركات...',
-  'Link copied': 'تم نسخ الرابط',
-  'Share from workspace': 'شارك من مساحة العمل',
-  'Open shared hub': 'افتح مركز المشاركات',
-  'Items shared with you': 'العناصر التي تمت مشاركتها معك',
-  'Items you shared': 'العناصر التي شاركتها',
-  'Link shares': 'مشاركات الروابط',
-  'Direct shares': 'مشاركات مباشرة',
-  'Expiring soon': 'تنتهي قريبًا',
-  'matching results': 'نتائج مطابقة',
-  'Filtered by': 'تمت التصفية حسب',
+  'Manage content shared with you and by you': '\u0625\u062f\u0627\u0631\u0629 \u0627\u0644\u0645\u062d\u062a\u0648\u0649 \u0627\u0644\u0630\u064a \u062a\u0645\u062a \u0645\u0634\u0627\u0631\u0643\u062a\u0647 \u0645\u0639\u0643 \u0648\u0645\u0646 \u0637\u0631\u0641\u0643',
+  'Search by name or email\u2026': '\u0627\u0628\u062d\u062b \u0628\u0627\u0644\u0627\u0633\u0645 \u0623\u0648 \u0627\u0644\u0628\u0631\u064a\u062f \u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a...',
+  'Nothing shared with you yet': '\u0644\u0627 \u064a\u0648\u062c\u062f \u0634\u064a\u0621 \u062a\u0645\u062a \u0645\u0634\u0627\u0631\u0643\u062a\u0647 \u0645\u0639\u0643 \u0628\u0639\u062f',
+  "You haven't shared anything yet": '\u0644\u0645 \u062a\u0634\u0627\u0631\u0643 \u0623\u064a \u0634\u064a\u0621 \u0628\u0639\u062f',
+  'When someone shares content with you, it will appear here.': '\u0639\u0646\u062f\u0645\u0627 \u064a\u0634\u0627\u0631\u0643 \u0645\u0639\u0643 \u0623\u062d\u062f \u0645\u062d\u062a\u0648\u0649\u060c \u0633\u064a\u0638\u0647\u0631 \u0647\u0646\u0627.',
+  'Start sharing from the Workspace, Library, or Folders panel.': '\u0627\u0628\u062f\u0623 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0629 \u0645\u0646 \u0644\u0648\u062d\u0629 \u0645\u0633\u0627\u062d\u0629 \u0627\u0644\u0639\u0645\u0644 \u0623\u0648 \u0627\u0644\u0645\u0643\u062a\u0628\u0629 \u0623\u0648 \u0627\u0644\u0645\u062c\u0644\u062f\u0627\u062a.',
+  'Failed to load shares': '\u062a\u0639\u0630\u0631 \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0627\u062a',
+  'Failed to revoke share': '\u062a\u0639\u0630\u0631 \u0625\u0644\u063a\u0627\u0621 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0629',
+  'Revoke this share?': '\u0625\u0644\u063a\u0627\u0621 \u0647\u0630\u0647 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0629\u061f',
+  Shared: '\u062a\u0645\u062a \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0629',
+  'Loading shares\u2026': '\u062c\u0627\u0631\u064a \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0627\u062a...',
+  'Link copied': '\u062a\u0645 \u0646\u0633\u062e \u0627\u0644\u0631\u0627\u0628\u0637',
+  'Share from workspace': '\u0634\u0627\u0631\u0643 \u0645\u0646 \u0645\u0633\u0627\u062d\u0629 \u0627\u0644\u0639\u0645\u0644',
+  'Open shared hub': '\u0627\u0641\u062a\u062d \u0645\u0631\u0643\u0632 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0627\u062a',
+  'Items shared with you': '\u0627\u0644\u0639\u0646\u0627\u0635\u0631 \u0627\u0644\u062a\u064a \u062a\u0645\u062a \u0645\u0634\u0627\u0631\u0643\u062a\u0647\u0627 \u0645\u0639\u0643',
+  'Items you shared': '\u0627\u0644\u0639\u0646\u0627\u0635\u0631 \u0627\u0644\u062a\u064a \u0634\u0627\u0631\u0643\u062a\u0647\u0627',
+  'Link shares': '\u0645\u0634\u0627\u0631\u0643\u0627\u062a \u0627\u0644\u0631\u0648\u0627\u0628\u0637',
+  'Direct shares': '\u0645\u0634\u0627\u0631\u0643\u0627\u062a \u0645\u0628\u0627\u0634\u0631\u0629',
+  'Expiring soon': '\u062a\u0646\u062a\u0647\u064a \u0642\u0631\u064a\u0628\u064b\u0627',
+  'matching results': '\u0646\u062a\u0627\u0626\u062c \u0645\u0637\u0627\u0628\u0642\u0629',
+  'Filtered by': '\u062a\u0645\u062a \u0627\u0644\u062a\u0635\u0641\u064a\u0629 \u062d\u0633\u0628',
+  'Quick Share': '\u0645\u0634\u0627\u0631\u0643\u0629 \u0633\u0631\u064a\u0639\u0629',
+  'Select a library item\u2026': '\u0627\u062e\u062a\u0631 \u0639\u0646\u0635\u0631 \u0645\u0643\u062a\u0628\u0629...',
+  'Create link': '\u0625\u0646\u0634\u0627\u0621 \u0631\u0627\u0628\u0637',
+  'Creating\u2026': '\u062c\u0627\u0631\u064a \u0627\u0644\u0625\u0646\u0634\u0627\u0621...',
+  'Share created': '\u062a\u0645 \u0625\u0646\u0634\u0627\u0621 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0629',
+  'Failed to create share': '\u062a\u0639\u0630\u0631 \u0625\u0646\u0634\u0627\u0621 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0629',
+  'Copy link': '\u0646\u0633\u062e \u0627\u0644\u0631\u0627\u0628\u0637',
+  'Reset': '\u0625\u0639\u0627\u062f\u0629 \u062a\u0639\u064a\u064a\u0646',
 };
 
 const SHARE_FILTERS: ShareFilter[] = ['all', 'file', 'folder', 'topic', 'library'];
@@ -84,6 +100,14 @@ export default function SharedWithMePage() {
   const [errorMsg, setErrorMsg]   = useState('');
   const [copyMsg, setCopyMsg]     = useState('');
   const [profileLink, setProfileLink] = useState('');
+
+  // ── Quick-share inline form state ──
+  const [libItems, setLibItems]         = useState<LibraryItem[]>([]);
+  const [libLoading, setLibLoading]     = useState(false);
+  const [qsItemId, setQsItemId]         = useState('');
+  const [qsSubmitting, setQsSubmitting] = useState('');   // '' | 'loading' | 'done'
+  const [qsShareUrl, setQsShareUrl]     = useState('');
+  const [qsCopied, setQsCopied]         = useState(false);
 
   const fetchShares = useCallback(async () => {
     setLoading(true);
@@ -130,6 +154,16 @@ export default function SharedWithMePage() {
       .catch(() => {});
   }, []);
 
+  // Fetch library items for the quick-share dropdown
+  useEffect(() => {
+    setLibLoading(true);
+    fetch('/api/library', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then((data: LibraryItem[]) => setLibItems(data))
+      .catch(() => setLibItems([]))
+      .finally(() => setLibLoading(false));
+  }, []);
+
   async function handleRevoke(id: string) {
     if (!confirm(t('Revoke this share?'))) return;
     try {
@@ -154,6 +188,44 @@ export default function SharedWithMePage() {
 
   function isExpired(expiresAt: string | null) {
     return !!expiresAt && new Date(expiresAt) < new Date();
+  }
+
+  async function handleQuickShare() {
+    if (!qsItemId) return;
+    setQsSubmitting('loading');
+    try {
+      const res = await fetch('/api/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ libraryItemId: qsItemId, shareType: 'link', permission: 'view' }),
+      });
+      const data = (await res.json()) as ApiErrorLike;
+      if (!res.ok) throw new Error(data.reason || data.error || t('Failed to create share'));
+      if (data.shareUrl) {
+        setQsShareUrl(data.shareUrl);
+        setQsSubmitting('done');
+        void fetchShares();
+      }
+    } catch (err) {
+      setErrorMsg((err as Error).message);
+      setQsSubmitting('');
+    }
+  }
+
+  function handleQsCopyLink() {
+    if (!qsShareUrl) return;
+    navigator.clipboard.writeText(qsShareUrl).then(() => {
+      setQsCopied(true);
+      setTimeout(() => setQsCopied(false), 2000);
+    });
+  }
+
+  function handleQsReset() {
+    setQsItemId('');
+    setQsShareUrl('');
+    setQsSubmitting('');
+    setQsCopied(false);
   }
 
   const filtered = useMemo(() => shares.filter(s => {
@@ -211,6 +283,8 @@ export default function SharedWithMePage() {
         body: t('Start sharing from the Workspace, Library, or Folders panel.'),
       };
 
+  const selectedItem = libItems.find(i => i.id === qsItemId);
+
   return (
     <div className="sp-page" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
       {/* ── Header ── */}
@@ -260,6 +334,66 @@ export default function SharedWithMePage() {
         ))}
       </div>
 
+      {/* ── Quick-share inline form ── */}
+      <div className="sp-quickshare">
+        <div className="sp-qs-label">🔗 {t('Quick Share')}</div>
+        {qsSubmitting === 'done' ? (
+          <div className="sp-qs-result">
+            <input
+              type="text"
+              readOnly
+              value={qsShareUrl}
+              className="sp-qs-url"
+              onClick={e => (e.target as HTMLInputElement).select()}
+            />
+            <button
+              type="button"
+              className="sp-btn sp-btn-primary sp-btn-sm"
+              onClick={handleQsCopyLink}
+            >
+              {qsCopied ? '✓' : '📋'} {t('Copy link')}
+            </button>
+            <button
+              type="button"
+              className="sp-btn sp-btn-ghost sp-btn-sm"
+              onClick={handleQsReset}
+            >
+              {t('Reset')}
+            </button>
+          </div>
+        ) : (
+          <div className="sp-qs-form">
+            <select
+              className="sp-qs-select"
+              value={qsItemId}
+              onChange={e => setQsItemId(e.target.value)}
+              disabled={libLoading}
+            >
+              <option value="">{libLoading ? t('Loading\u2026') : t('Select a library item\u2026')}</option>
+              {libItems.map(item => {
+                const title = item.metadata?.title || item.metadata?.problem || item.mode;
+                return (
+                  <option key={item.id} value={item.id}>
+                    {title}
+                  </option>
+                );
+              })}
+            </select>
+            {selectedItem && (
+              <span className="sp-qs-mode">{selectedItem.mode}</span>
+            )}
+            <button
+              type="button"
+              className="sp-btn sp-btn-primary sp-btn-sm"
+              disabled={!qsItemId || qsSubmitting === 'loading'}
+              onClick={() => void handleQuickShare()}
+            >
+              {qsSubmitting === 'loading' ? t('Creating\u2026') : t('Create link')}
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* ── Error banner ── */}
       {errorMsg && (
         <div className="sp-banner sp-banner-error" role="alert">
@@ -279,7 +413,7 @@ export default function SharedWithMePage() {
         <input
           className="sp-search"
           type="search"
-          placeholder={t('Search by name or email…')}
+          placeholder={t('Search by name or email\u2026')}
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -321,7 +455,7 @@ export default function SharedWithMePage() {
       {loading ? (
         <div className="sp-loading">
           <div className="sp-spinner" />
-          <span>{t('Loading shares…')}</span>
+          <span>{t('Loading shares\u2026')}</span>
         </div>
       ) : filtered.length === 0 ? (
         <div className="sp-empty">
@@ -425,6 +559,38 @@ export default function SharedWithMePage() {
         .sp-stat-card strong { display:block; font-size: 20px; line-height: 1; color: var(--text-1); }
         .sp-stat-card span:last-child { display:block; margin-top: 3px; font-size: 12px; color: var(--text-3); }
 
+        /* Quick-share form */
+        .sp-quickshare {
+          margin-bottom: 18px; padding: 14px 16px;
+          background: var(--bg-elevated); border: 1px solid var(--border-2);
+          border-radius: 12px;
+        }
+        .sp-qs-label {
+          font-size: 12px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: 0.05em; color: var(--text-3); margin-bottom: 10px;
+        }
+        .sp-qs-form {
+          display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        }
+        .sp-qs-select {
+          flex: 1; min-width: 200px; padding: 7px 10px;
+          border: 1px solid var(--border-2); border-radius: 8px;
+          background: var(--bg-surface); color: var(--text-1); font-size: 13px;
+        }
+        .sp-qs-mode {
+          font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px;
+          background: color-mix(in srgb, var(--accent) 12%, var(--bg-inset));
+          color: var(--accent); white-space: nowrap; text-transform: uppercase;
+        }
+        .sp-qs-result {
+          display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        }
+        .sp-qs-url {
+          flex: 1; min-width: 200px; padding: 7px 10px;
+          border: 1px solid var(--border-2); border-radius: 8px;
+          background: var(--bg-inset); color: var(--text-1); font-size: 13px;
+        }
+
         /* Banner */
         .sp-banner {
           display: flex; align-items: center; gap: 10px; padding: 10px 14px;
@@ -522,6 +688,7 @@ export default function SharedWithMePage() {
         .sp-btn { display: inline-flex; align-items: center; gap: 5px; border-radius: 8px; font-weight: 500; cursor: pointer; text-decoration: none; transition: all 0.15s; }
         .sp-btn-primary { padding: 8px 16px; background: var(--accent); color: #fff; border: none; font-size: var(--text-sm); }
         .sp-btn-primary:hover { opacity: 0.88; }
+        .sp-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
         .sp-btn-ghost { padding: 6px 12px; background: transparent; border: 1px solid var(--border-2); color: var(--text-2); font-size: 12px; }
         .sp-btn-ghost:hover { background: var(--bg-inset); border-color: var(--border-default); color: var(--text-1); }
         .sp-btn-sm { font-size: 12px; padding: 5px 10px; }
@@ -533,6 +700,10 @@ export default function SharedWithMePage() {
           .sp-card { flex-direction: column; align-items: flex-start; }
           .sp-card-actions { width: 100%; margin-top: 8px; }
           .sp-card-actions .sp-btn { flex: 1; justify-content: center; }
+          .sp-qs-form { flex-direction: column; align-items: stretch; }
+          .sp-qs-select { min-width: unset; }
+          .sp-qs-result { flex-direction: column; align-items: stretch; }
+          .sp-qs-url { min-width: unset; }
         }
       `}</style>
     </div>

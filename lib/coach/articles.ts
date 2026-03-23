@@ -81,6 +81,64 @@ export async function fetchWikiSummary(title: string): Promise<ArticleSuggestion
   };
 }
 
+// ── Semantic Scholar API ──────────────────────────────────────────────────────
+
+interface SemanticScholarPaper {
+  paperId: string;
+  title:   string;
+  abstract: string | null;
+  year:    number | null;
+  authors: { name: string }[];
+  url:     string | null;
+  openAccessPdf: { url: string } | null;
+}
+
+interface SemanticScholarResponse {
+  data: SemanticScholarPaper[];
+}
+
+/**
+ * Search Semantic Scholar for real academic papers on a topic.
+ * Returns up to `limit` results. Free API — no key required.
+ */
+export async function searchSemanticScholar(query: string, limit = 3): Promise<ArticleSuggestion[]> {
+  const params = new URLSearchParams({
+    query,
+    limit:  String(limit),
+    fields: 'title,abstract,year,authors,url,openAccessPdf',
+  });
+  const res = await fetch(
+    `https://api.semanticscholar.org/graph/v1/paper/search?${params.toString()}`,
+    {
+      headers: { 'User-Agent': 'Kivora/1.0 (study assistant)' },
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  if (!res.ok) return [];
+
+  const data = await res.json() as SemanticScholarResponse;
+  const papers = data?.data ?? [];
+
+  return papers
+    .filter(p => p.title && p.abstract)
+    .slice(0, limit)
+    .map(p => {
+      const paperUrl = p.openAccessPdf?.url ?? p.url ?? `https://www.semanticscholar.org/paper/${p.paperId}`;
+      const authors  = p.authors.slice(0, 2).map(a => a.name).join(', ');
+      const yearStr  = p.year ? ` (${p.year})` : '';
+      const excerpt  = (p.abstract ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+
+      return {
+        title:          `${p.title}${yearStr}${authors ? ' — ' + authors : ''}`,
+        url:            paperUrl,
+        source:         'Semantic Scholar',
+        excerpt:        excerpt.endsWith('.') ? excerpt : excerpt + '…',
+        readingMinutes: Math.max(3, Math.ceil((p.abstract?.split(/\s+/).length ?? 100) / 220) + 10),
+        type:           'academic' as const,
+      };
+    });
+}
+
 /**
  * Build static "further reading" suggestions for a topic — links to curated
  * educational platforms that don't require scraping.
@@ -97,12 +155,28 @@ export function buildStaticSuggestions(topic: string): ArticleSuggestion[] {
       type: 'educational',
     },
     {
+      title: `Britannica — ${topic}`,
+      url: `https://www.britannica.com/search?query=${q}`,
+      source: 'Britannica',
+      excerpt: 'Peer-reviewed encyclopedia articles written by subject experts.',
+      readingMinutes: 5,
+      type: 'encyclopedia',
+    },
+    {
       title: `Google Scholar — ${topic}`,
       url: `https://scholar.google.com/scholar?q=${q}`,
       source: 'Google Scholar',
       excerpt: 'Academic papers, theses, and peer-reviewed research on this topic.',
       readingMinutes: 10,
       type: 'academic',
+    },
+    {
+      title: `OpenStax — ${topic}`,
+      url: `https://openstax.org/subjects`,
+      source: 'OpenStax',
+      excerpt: 'Free peer-reviewed textbooks used by universities worldwide.',
+      readingMinutes: 15,
+      type: 'educational',
     },
   ];
 }

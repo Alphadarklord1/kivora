@@ -6,14 +6,17 @@ import { getUserId } from '@/lib/auth/session';
 import { v4 as uuidv4 } from 'uuid';
 
 // GET /api/library
-export async function GET() {
+export async function GET(req: NextRequest) {
   if (!isDatabaseConfigured) return NextResponse.json([], { status: 200 });
   const userId = await getUserId();
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
+  const limit = parseInt(new URL(req.url).searchParams.get('limit') ?? '0', 10) || undefined;
+
   const items = await db.query.libraryItems.findMany({
     where: eq(libraryItems.userId, userId),
     orderBy: [desc(libraryItems.createdAt)],
+    limit,
   });
 
   return NextResponse.json(items);

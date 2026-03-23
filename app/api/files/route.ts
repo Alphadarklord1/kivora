@@ -50,14 +50,17 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const folderId = searchParams.get('folderId');
   const topicId = searchParams.get('topicId');
+  const all = searchParams.get('all') === 'true';
 
-  if (!folderId) return NextResponse.json({ error: 'folderId is required.' }, { status: 400 });
+  if (!all && !folderId) return NextResponse.json({ error: 'folderId is required.' }, { status: 400 });
 
-  const conditions = [
-    eq(files.userId, userId),
-    eq(files.folderId, folderId),
-    ...(topicId ? [eq(files.topicId, topicId)] : []),
-  ];
+  const conditions = all
+    ? [eq(files.userId, userId)]
+    : [
+        eq(files.userId, userId),
+        eq(files.folderId, folderId!),
+        ...(topicId ? [eq(files.topicId, topicId)] : []),
+      ];
 
   const rows = await db.query.files.findMany({
     where: and(...conditions),

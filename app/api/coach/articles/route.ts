@@ -1,9 +1,11 @@
 import { requireAppAccess } from '@/lib/api/guard';
+import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { cloudAccessAllowed, resolveAiDataMode } from '@/lib/privacy/ai-data';
 import {
   buildStaticSuggestions,
   fetchWikiSummary,
+  searchSemanticScholar,
   searchWikipedia,
   type ArticleSuggestion,
 } from '@/lib/coach/articles';
@@ -19,6 +21,8 @@ import {
 export async function POST(req: NextRequest) {
   const guardResult = await requireAppAccess(req);
   if (guardResult) return guardResult;
+  const rl = enforceAiRateLimit(req);
+  if (rl) return rl;
 
   let body: Record<string, unknown>;
   try {
@@ -39,21 +43,22 @@ export async function POST(req: NextRequest) {
   const articles: ArticleSuggestion[] = [];
 
   if (cloudAccessAllowed(privacyMode)) {
-    try {
-      // Search Wikipedia for up to 4 relevant page titles
-      const titles = await searchWikipedia(searchTopic, 4);
+    // Run Wikipedia + Semantic Scholar searches in parallel
+    const [wikiTitles, scholarResults] = await Promise.all([
+      searchWikipedia(searchTopic, 4).catch(() => [] as string[]),
+      searchSemanticScholar(searchTopic, 3).catch(() => [] as ArticleSuggestion[]),
+    ]);
 
-      // Fetch summaries in parallel, keep the first 3 that return a valid result
-      const summaries = await Promise.all(
-        titles.slice(0, 4).map((title) => fetchWikiSummary(title).catch(() => null)),
-      );
-
-      for (const s of summaries) {
-        if (s && articles.length < 3) articles.push(s);
-      }
-    } catch {
-      // Wikipedia is best-effort — fall through to static suggestions
+    // Fetch Wikipedia summaries in parallel
+    const wikiSummaries = await Promise.all(
+      wikiTitles.slice(0, 4).map((title) => fetchWikiSummary(title).catch(() => null)),
+    );
+    for (const s of wikiSummaries) {
+      if (s && articles.length < 3) articles.push(s);
     }
+
+    // Prepend academic papers — most credible sources go first
+    articles.unshift(...scholarResults);
   }
 
   // Always append curated static links (Khan Academy + Google Scholar)

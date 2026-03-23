@@ -91,7 +91,7 @@ export async function tryCloudGeneration(args: {
 
   for (const candidate of order) {
     if (candidate === 'groq' && isGroqConfigured()) {
-      const groqModel = provider === 'groq' ? args.model : 'openai/gpt-oss-20b';
+      const groqModel = provider === 'groq' ? args.model : 'llama-3.3-70b-versatile';
       const groqResult = await callGroqChat({
         model: groqModel,
         messages: args.messages,

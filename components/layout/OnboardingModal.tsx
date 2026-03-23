@@ -18,7 +18,7 @@ const STEPS = [
     title: 'Upload & generate in seconds',
     desc: 'Upload a lecture slide, PDF, or Word doc. Then pick a tool — Summary, Quiz, MCQ, Flashcards, or Notes — and Kivora generates exam-ready content instantly.',
     highlight: 'Workspace → Upload File → choose a tool',
-    tip: 'Works offline. Open Settings → AI & downloads if you want a local model or desktop installer.',
+    tip: 'Desktop installs include Mini local AI by default. Open Settings → AI & downloads if you want to switch models or add a bigger one later.',
     actionLabel: 'Open workspace',
     href: '/workspace',
   },

@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useStudyPlans } from '@/hooks/useStudyPlans';
+import { PlanList } from '@/components/planner/PlanList';
+import { PlanForm } from '@/components/planner/PlanForm';
+import { generateStudySchedule } from '@/lib/planner/generate';
+import type { StudyPlan } from '@/lib/planner/study-plan-types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -105,7 +109,10 @@ export default function PlannerPage() {
     startTime: '09:00', endTime: '10:00', description: '',
   });
   const weekScrollRef = useRef<HTMLDivElement>(null);
-  const { plans } = useStudyPlans();
+  const [dragOverSlot, setDragOverSlot] = useState<{ date: string; hour: number } | null>(null);
+  const { plans, createPlan, deletePlan, loading: plansLoading } = useStudyPlans();
+  const [showPlanForm, setShowPlanForm] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
   // Load from localStorage + inject from study plans
   useEffect(() => {
@@ -220,6 +227,26 @@ export default function PlannerPage() {
     setSelectedEvent(prev => prev?.id === id ? { ...prev, completed: !prev.completed } : prev);
   }, [events, persistEvents]);
 
+  const onEventDrop = useCallback((eventId: string, newDate: string, newHour: number) => {
+    setDragOverSlot(null);
+    setEvents(prev => {
+      const updated = prev.map(e => {
+        if (e.id !== eventId) return e;
+        const [sh, sm] = e.startTime.split(':').map(Number);
+        const [eh, em] = e.endTime.split(':').map(Number);
+        const durationMins = (eh * 60 + em) - (sh * 60 + sm);
+        const newStart = `${pad(newHour)}:00`;
+        const endTotalMins = newHour * 60 + durationMins;
+        const newEnd = `${pad(Math.floor(endTotalMins / 60) % 24)}:${pad(endTotalMins % 60)}`;
+        return { ...e, date: newDate, startTime: newStart, endTime: newEnd };
+      });
+      localStorage.setItem(LS_KEY, JSON.stringify(
+        updated.filter(e => !e.id.startsWith('plan_') && !e.id.startsWith('exam_'))
+      ));
+      return updated;
+    });
+  }, []);
+
   // Upcoming exams for sidebar countdown
   const upcomingExams = useMemo(() => {
     const todayStr = toDateStr(today);
@@ -324,6 +351,24 @@ export default function PlannerPage() {
             ))
           }
         </div>
+
+        {/* Study Plans section */}
+        <div className="sidebar-section sidebar-section-plans">
+          <PlanList
+            plans={plans}
+            loading={plansLoading}
+            selectedPlanId={selectedPlanId}
+            onSelectPlan={(plan: StudyPlan) => {
+              setSelectedPlanId(plan.id);
+              // Jump calendar to exam date
+              const examD = new Date(plan.examDate);
+              setCursor(examD);
+              setMiniDate(examD);
+            }}
+            onNewPlan={() => setShowPlanForm(true)}
+            onDeletePlan={(planId: string) => { void deletePlan(planId); }}
+          />
+        </div>
       </aside>
 
       {/* ── Main Calendar ────────────────────────────────────────────── */}
@@ -358,6 +403,7 @@ export default function PlannerPage() {
             onDayClick={(d) => { setCursor(parseDate(d)); setView('day'); }}
             onEventClick={setSelectedEvent}
             onCellDblClick={(d) => openNewEvent(d)}
+            onEventDrop={onEventDrop}
           />
         )}
         {view === 'week' && (
@@ -368,6 +414,10 @@ export default function PlannerPage() {
             scrollRef={weekScrollRef}
             onEventClick={setSelectedEvent}
             onSlotClick={(d, t) => openNewEvent(d, t)}
+            dragOverSlot={dragOverSlot}
+            onDragOverSlot={setDragOverSlot}
+            onDragLeaveSlot={() => setDragOverSlot(null)}
+            onEventDrop={onEventDrop}
           />
         )}
         {view === 'day' && (
@@ -378,6 +428,10 @@ export default function PlannerPage() {
             scrollRef={weekScrollRef}
             onEventClick={setSelectedEvent}
             onSlotClick={(t) => openNewEvent(toDateStr(cursor), t)}
+            dragOverSlot={dragOverSlot}
+            onDragOverSlot={setDragOverSlot}
+            onDragLeaveSlot={() => setDragOverSlot(null)}
+            onEventDrop={onEventDrop}
           />
         )}
         {view === 'agenda' && (
@@ -508,6 +562,25 @@ export default function PlannerPage() {
         </div>
       )}
 
+      {/* ── Study Plan Form Modal ────────────────────────────────────── */}
+      {showPlanForm && (
+        <div className="modal-overlay" onClick={() => setShowPlanForm(false)}>
+          <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
+            <PlanForm
+              onGenerate={async ({ title, examDate, dailyMinutes, topics, folderId }) => {
+                const schedule = generateStudySchedule(new Date(examDate), topics, dailyMinutes);
+                const newPlan = await createPlan({ title, examDate, dailyMinutes, topics, schedule, folderId });
+                if (newPlan) {
+                  setSelectedPlanId(newPlan.id);
+                  setShowPlanForm(false);
+                }
+              }}
+              onCancel={() => setShowPlanForm(false)}
+            />
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
         /* ── Shell ─────────────────────────────────────────────────── */
         .cal-shell {
@@ -554,6 +627,13 @@ export default function PlannerPage() {
           margin-top: 16px;
           padding-top: 16px;
           border-top: 1px solid var(--border-subtle);
+        }
+        .sidebar-section-plans {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          overflow: hidden;
         }
         .sidebar-label {
           font-size: 11px;
@@ -663,6 +743,9 @@ export default function PlannerPage() {
           width: 460px; max-width: 94vw; max-height: 90vh; overflow-y: auto;
           box-shadow: 0 32px 80px rgba(0,0,0,0.35);
           animation: modalIn 0.2s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        .modal-wide {
+          width: 620px; padding: 24px;
         }
         @keyframes modalIn {
           from { transform: scale(0.88) translateY(20px); opacity: 0; }
@@ -787,11 +870,12 @@ function MiniCalendar({
 
 // ─── Month View ────────────────────────────────────────────────────────────────
 
-function MonthView({ cursor, today, events, onDayClick, onEventClick, onCellDblClick }: {
+function MonthView({ cursor, today, events, onDayClick, onEventClick, onCellDblClick, onEventDrop }: {
   cursor: Date; today: Date; events: CalendarEvent[];
   onDayClick: (d: string) => void;
   onEventClick: (e: CalendarEvent) => void;
   onCellDblClick: (d: string) => void;
+  onEventDrop: (eventId: string, newDate: string, newHour: number) => void;
 }) {
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -799,6 +883,7 @@ function MonthView({ cursor, today, events, onDayClick, onEventClick, onCellDblC
   const daysInMonth = new Date(year, month+1, 0).getDate();
   const cells: (number|null)[] = [...Array(firstDay).fill(null), ...Array.from({length:daysInMonth},(_,i)=>i+1)];
   while (cells.length % 7 !== 0) cells.push(null);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
 
   const eventsByDate = useMemo(() => {
     const map: Record<string, CalendarEvent[]> = {};
@@ -816,13 +901,23 @@ function MonthView({ cursor, today, events, onDayClick, onEventClick, onCellDblC
         if (!day) return <div key={i} className="month-cell empty" />;
         const ds = `${year}-${pad(month+1)}-${pad(day)}`;
         const isToday = sameDay(new Date(year,month,day), today);
+        const isDragOver = dragOverDate === ds;
         const dayEvts = eventsByDate[ds] ?? [];
         return (
           <div
             key={i}
-            className={`month-cell${isToday ? ' today' : ''}`}
+            className={`month-cell${isToday ? ' today' : ''}${isDragOver ? ' drag-over' : ''}`}
             onClick={() => onDayClick(ds)}
             onDoubleClick={() => onCellDblClick(ds)}
+            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverDate(ds); }}
+            onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverDate(null); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOverDate(null);
+              const eventId = e.dataTransfer.getData('eventId');
+              const origHour = parseInt(e.dataTransfer.getData('origHour') || '9', 10);
+              if (eventId) onEventDrop(eventId, ds, origHour);
+            }}
           >
             <span className="month-day-num">{day}</span>
             <div className="month-evts">
@@ -830,10 +925,19 @@ function MonthView({ cursor, today, events, onDayClick, onEventClick, onCellDblC
                 <div
                   key={evt.id}
                   className="month-evt"
+                  draggable={true}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('eventId', evt.id);
+                    const [sh] = evt.startTime.split(':').map(Number);
+                    e.dataTransfer.setData('origHour', String(sh));
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.stopPropagation();
+                  }}
                   style={{
                     background: EVENT_COLORS[evt.type]+'22',
                     borderLeft: `3px solid ${EVENT_COLORS[evt.type]}`,
                     textDecoration: evt.completed ? 'line-through' : 'none',
+                    cursor: 'grab',
                   }}
                   onClick={e => { e.stopPropagation(); onEventClick(evt); }}
                 >
@@ -865,6 +969,7 @@ function MonthView({ cursor, today, events, onDayClick, onEventClick, onCellDblC
           transition:background 0.1s; min-height:100px; vertical-align:top;
         }
         .month-cell:hover { background:var(--bg-elevated); }
+        .month-cell.drag-over { background:rgba(99,102,241,0.1); outline:2px dashed rgba(99,102,241,0.4); outline-offset:-2px; }
         .month-cell.empty { background:var(--bg-surface); cursor:default; opacity:0.4; }
         .month-cell.today { background:color-mix(in srgb, var(--primary) 6%, var(--bg-surface)); }
         .month-day-num {
@@ -879,7 +984,7 @@ function MonthView({ cursor, today, events, onDayClick, onEventClick, onCellDblC
         .month-evt {
           font-size:11px; padding:2px 6px; border-radius:4px;
           color:var(--text-secondary); white-space:nowrap; overflow:hidden;
-          text-overflow:ellipsis; cursor:pointer;
+          text-overflow:ellipsis; cursor:grab;
         }
         .month-evt:hover { filter:brightness(0.9); }
         .month-more { font-size:11px; color:var(--text-muted); padding:1px 4px; }
@@ -890,11 +995,15 @@ function MonthView({ cursor, today, events, onDayClick, onEventClick, onCellDblC
 
 // ─── Week View ─────────────────────────────────────────────────────────────────
 
-function WeekView({ cursor, today, events, scrollRef, onEventClick, onSlotClick }: {
+function WeekView({ cursor, today, events, scrollRef, onEventClick, onSlotClick, dragOverSlot, onDragOverSlot, onDragLeaveSlot, onEventDrop }: {
   cursor: Date; today: Date; events: CalendarEvent[];
   scrollRef: React.RefObject<HTMLDivElement | null>;
   onEventClick: (e: CalendarEvent) => void;
   onSlotClick: (date: string, time: string) => void;
+  dragOverSlot: { date: string; hour: number } | null;
+  onDragOverSlot: (slot: { date: string; hour: number }) => void;
+  onDragLeaveSlot: () => void;
+  onEventDrop: (eventId: string, newDate: string, newHour: number) => void;
 }) {
   const weekStart = startOfWeek(cursor);
   const days = Array.from({length:7}, (_,i) => addDays(weekStart, i));
@@ -931,8 +1040,23 @@ function WeekView({ cursor, today, events, scrollRef, onEventClick, onSlotClick 
               {days.map(d => {
                 const ds = toDateStr(d);
                 const t = `${pad(h)}:00`;
+                const isOver = dragOverSlot?.date === ds && dragOverSlot?.hour === h;
                 return (
-                  <div key={ds} className="hour-cell" onClick={() => onSlotClick(ds, t)} />
+                  <div
+                    key={ds}
+                    className="hour-cell"
+                    data-date={ds}
+                    data-hour={h}
+                    style={isOver ? { background: 'rgba(99,102,241,0.12)' } : undefined}
+                    onClick={() => onSlotClick(ds, t)}
+                    onDragOver={(e) => { e.preventDefault(); onDragOverSlot({ date: ds, hour: h }); }}
+                    onDragLeave={onDragLeaveSlot}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const eventId = e.dataTransfer.getData('eventId');
+                      if (eventId) onEventDrop(eventId, ds, h);
+                    }}
+                  />
                 );
               })}
             </div>
@@ -951,12 +1075,18 @@ function WeekView({ cursor, today, events, scrollRef, onEventClick, onSlotClick 
                 <div
                   key={evt.id}
                   className="week-evt"
+                  draggable={true}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('eventId', evt.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
                   style={{
                     top, height,
                     left: `calc(60px + (100% - 60px) * ${dayIndex} / 7 + 3px)`,
                     width: `calc((100% - 60px) / 7 - 6px)`,
                     background: EVENT_COLORS[evt.type]+'dd',
                     textDecoration: evt.completed ? 'line-through' : 'none',
+                    cursor: 'grab',
                   }}
                   onClick={() => onEventClick(evt)}
                 >
@@ -1017,11 +1147,15 @@ function WeekView({ cursor, today, events, scrollRef, onEventClick, onSlotClick 
 
 // ─── Day View ──────────────────────────────────────────────────────────────────
 
-function DayView({ date, today, events, scrollRef, onEventClick, onSlotClick }: {
+function DayView({ date, today, events, scrollRef, onEventClick, onSlotClick, dragOverSlot, onDragOverSlot, onDragLeaveSlot, onEventDrop }: {
   date: Date; today: Date; events: CalendarEvent[];
   scrollRef: React.RefObject<HTMLDivElement | null>;
   onEventClick: (e: CalendarEvent) => void;
   onSlotClick: (time: string) => void;
+  dragOverSlot: { date: string; hour: number } | null;
+  onDragOverSlot: (slot: { date: string; hour: number }) => void;
+  onDragLeaveSlot: () => void;
+  onEventDrop: (eventId: string, newDate: string, newHour: number) => void;
 }) {
   const ds = toDateStr(date);
   const isToday = sameDay(date, today);
@@ -1037,12 +1171,27 @@ function DayView({ date, today, events, scrollRef, onEventClick, onSlotClick }: 
       </div>
       <div className="day-body" ref={scrollRef as React.RefObject<HTMLDivElement>}>
         <div className="day-grid">
-          {HOURS.map(h => (
-            <div key={h} className="day-hour-row">
-              <div className="day-time-lbl">{h === 0 ? '' : `${h%12||12}${h<12?'am':'pm'}`}</div>
-              <div className="day-slot" onClick={() => onSlotClick(`${pad(h)}:00`)} />
-            </div>
-          ))}
+          {HOURS.map(h => {
+            const isOver = dragOverSlot?.date === ds && dragOverSlot?.hour === h;
+            return (
+              <div key={h} className="day-hour-row">
+                <div className="day-time-lbl">{h === 0 ? '' : `${h%12||12}${h<12?'am':'pm'}`}</div>
+                <div
+                  className="day-slot"
+                  data-hour={h}
+                  style={isOver ? { background: 'rgba(99,102,241,0.12)' } : undefined}
+                  onClick={() => onSlotClick(`${pad(h)}:00`)}
+                  onDragOver={(e) => { e.preventDefault(); onDragOverSlot({ date: ds, hour: h }); }}
+                  onDragLeave={onDragLeaveSlot}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const eventId = e.dataTransfer.getData('eventId');
+                    if (eventId) onEventDrop(eventId, ds, h);
+                  }}
+                />
+              </div>
+            );
+          })}
           {dayEvts.map(evt => {
             const [sh, sm] = evt.startTime.split(':').map(Number);
             const [eh, em] = evt.endTime.split(':').map(Number);
@@ -1052,7 +1201,12 @@ function DayView({ date, today, events, scrollRef, onEventClick, onSlotClick }: 
               <div
                 key={evt.id}
                 className="day-evt"
-                style={{ top, height, background: EVENT_COLORS[evt.type]+'dd', textDecoration: evt.completed?'line-through':'none' }}
+                draggable={true}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('eventId', evt.id);
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                style={{ top, height, background: EVENT_COLORS[evt.type]+'dd', textDecoration: evt.completed?'line-through':'none', cursor: 'grab' }}
                 onClick={() => onEventClick(evt)}
               >
                 <span className="day-evt-icon">{EVENT_ICONS[evt.type]}</span>

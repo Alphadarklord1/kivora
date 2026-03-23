@@ -39,11 +39,6 @@ type MatlabHistoryItem = {
   timestamp: string;
 };
 
-type MatlabTemplate = {
-  label: string;
-  command: string;
-  description: string;
-};
 
 interface MatlabSession {
   variables: Record<string, MatlabValue>;
@@ -123,24 +118,49 @@ function determinant(matrix: Matrix): number | null {
   if (n !== matrix[0].length) return null;
   if (n === 1) return matrix[0][0];
   if (n === 2) return matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0];
-  if (n === 3) {
-    const [a, b, c] = matrix[0];
-    const [d, e, f] = matrix[1];
-    const [g, h, i] = matrix[2];
-    return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  // Gaussian elimination with partial pivoting for nxn
+  const a = matrix.map(row => [...row]);
+  let det = 1;
+  for (let col = 0; col < n; col++) {
+    let pivotRow = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(a[r][col]) > Math.abs(a[pivotRow][col])) pivotRow = r;
+    }
+    if (Math.abs(a[pivotRow][col]) < 1e-10) return 0;
+    if (pivotRow !== col) { [a[col], a[pivotRow]] = [a[pivotRow], a[col]]; det *= -1; }
+    det *= a[col][col];
+    const pivot = a[col][col];
+    for (let r = col + 1; r < n; r++) {
+      const factor = a[r][col] / pivot;
+      for (let c = col; c < n; c++) a[r][c] -= factor * a[col][c];
+    }
   }
-  return null;
+  return det;
 }
 
-function inverse2x2(matrix: Matrix): Matrix | null {
-  if (matrix.length !== 2 || matrix[0].length !== 2) return null;
-  const det = determinant(matrix);
-  if (!det) return null;
-  const [[a, b], [c, d]] = matrix;
-  return [
-    [d / det, -b / det],
-    [-c / det, a / det],
-  ];
+function inverseMatrix(matrix: Matrix): Matrix | null {
+  const n = matrix.length;
+  if (n !== matrix[0].length) return null;
+  // Gauss-Jordan elimination on augmented [A | I]
+  const aug: number[][] = matrix.map((row, i) =>
+    [...row, ...Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))]
+  );
+  for (let col = 0; col < n; col++) {
+    let pivotRow = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(aug[r][col]) > Math.abs(aug[pivotRow][col])) pivotRow = r;
+    }
+    if (Math.abs(aug[pivotRow][col]) < 1e-10) return null; // singular
+    [aug[col], aug[pivotRow]] = [aug[pivotRow], aug[col]];
+    const pivot = aug[col][col];
+    for (let c = 0; c < 2 * n; c++) aug[col][c] /= pivot;
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const factor = aug[r][col];
+      for (let c = 0; c < 2 * n; c++) aug[r][c] -= factor * aug[col][c];
+    }
+  }
+  return aug.map(row => row.slice(n));
 }
 
 function traceMatrix(matrix: Matrix): number | null {
@@ -268,9 +288,6 @@ function splitArguments(args: string): string[] {
   return parts;
 }
 
-function serializeMatrixBuilder(values: string[][]) {
-  return `[${values.map((row) => row.map((cell) => cell || '0').join(' ')).join('; ')}]`;
-}
 
 function eigen2x2(matrix: Matrix): Eigen2Result | null {
   if (matrix.length !== 2 || matrix[0].length !== 2) return null;
@@ -315,17 +332,6 @@ function scalarFirstMatrixOp(scalar: number, matrix: Matrix, op: '+' | '-'): Mat
   return matrix.map(row => row.map(v => (op === '+' ? scalar + v : scalar - v)));
 }
 
-const MATLAB_TEMPLATES: MatlabTemplate[] = [
-  { label: 'A = [1 2; 3 4]', command: 'A = [1 2; 3 4]', description: 'Create a matrix in the workspace.' },
-  { label: 'B = [5 6; 7 8]', command: 'B = [5 6; 7 8]', description: 'Create a second matrix for comparison.' },
-  { label: 'A * B', command: 'A * B', description: 'Multiply two matrices from the workspace.' },
-  { label: 'det(A)', command: 'det(A)', description: 'Compute a determinant.' },
-  { label: 'inv(A)', command: 'inv(A)', description: 'Find a 2x2 inverse.' },
-  { label: 'eig(A)', command: 'eig(A)', description: 'Estimate 2x2 eigenvalues.' },
-  { label: 'transpose(A)', command: 'transpose(A)', description: 'Transpose a matrix.' },
-  { label: 'solve(A,b)', command: 'solve(A,b)', description: 'Solve a linear system after defining A and b.' },
-  { label: 'plot(sin(x) + x^2)', command: 'plot(sin(x) + x^2)', description: 'Send a graphable expression to the Graph tab.' },
-];
 
 function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValue>): MatlabValue | null {
   const trimmed = expr.trim();
@@ -383,19 +389,137 @@ function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValu
     if (fn === 'trace' && isMatrix(arg)) return traceMatrix(arg);
     if (fn === 'rank' && isMatrix(arg)) return rankMatrix(arg);
     if (fn === 'norm' && isMatrix(arg)) return matrixNormFro(arg);
-    if (fn === 'inv' && isMatrix(arg)) return inverse2x2(arg);
+    if (fn === 'inv' && isMatrix(arg)) return inverseMatrix(arg);
     if (fn === 'transpose' && isMatrix(arg)) return transposeMatrix(arg);
     if (fn === 'eig' && isMatrix(arg)) {
       const eig = eigen2x2(arg);
       if (!eig) return null;
       return [[eig.lambda1], [eig.lambda2]];
     }
-    if (fn === 'sqrt' && !isMatrix(arg)) return Math.sqrt(arg);
-    if (fn === 'sin' && !isMatrix(arg)) return Math.sin(arg);
-    if (fn === 'cos' && !isMatrix(arg)) return Math.cos(arg);
-    if (fn === 'tan' && !isMatrix(arg)) return Math.tan(arg);
-    if (fn === 'log' && !isMatrix(arg)) return Math.log(arg);
+    // Scalar math functions
+    if (!isMatrix(arg)) {
+      if (fn === 'sqrt') return Math.sqrt(arg);
+      if (fn === 'sin') return Math.sin(arg);
+      if (fn === 'cos') return Math.cos(arg);
+      if (fn === 'tan') return Math.tan(arg);
+      if (fn === 'asin') return Math.asin(arg);
+      if (fn === 'acos') return Math.acos(arg);
+      if (fn === 'atan') return Math.atan(arg);
+      if (fn === 'log' || fn === 'ln') return Math.log(arg);
+      if (fn === 'log2') return Math.log2(arg);
+      if (fn === 'log10') return Math.log10(arg);
+      if (fn === 'exp') return Math.exp(arg);
+      if (fn === 'abs') return Math.abs(arg);
+      if (fn === 'floor') return Math.floor(arg);
+      if (fn === 'ceil') return Math.ceil(arg);
+      if (fn === 'round') return Math.round(arg);
+      if (fn === 'sign') return Math.sign(arg);
+    }
+    // Matrix element-wise
+    if (isMatrix(arg)) {
+      if (fn === 'abs') return arg.map(row => row.map(v => Math.abs(v)));
+      if (fn === 'floor') return arg.map(row => row.map(v => Math.floor(v)));
+      if (fn === 'ceil') return arg.map(row => row.map(v => Math.ceil(v)));
+      if (fn === 'round') return arg.map(row => row.map(v => Math.round(v)));
+      if (fn === 'sqrt') return arg.map(row => row.map(v => Math.sqrt(v)));
+      if (fn === 'exp') return arg.map(row => row.map(v => Math.exp(v)));
+      // sum / mean / max / min over all elements
+      if (fn === 'sum') { const flat = arg.flat(); return flat.reduce((a, v) => a + v, 0); }
+      if (fn === 'mean') { const flat = arg.flat(); return flat.reduce((a, v) => a + v, 0) / flat.length; }
+      if (fn === 'max') return Math.max(...arg.flat());
+      if (fn === 'min') return Math.min(...arg.flat());
+      if (fn === 'size') return [[arg.length, arg[0]?.length ?? 0]];
+      if (fn === 'length') return Math.max(arg.length, arg[0]?.length ?? 0);
+      if (fn === 'numel') return arg.length * (arg[0]?.length ?? 0);
+    }
     return null;
+  }
+
+  // Multi-arg built-ins handled before the single-arg block above
+  const multiArgFnMatch = trimmed.match(/^([a-zA-Z_]\w*)\((.*)\)$/);
+  if (multiArgFnMatch) {
+    const fn2 = multiArgFnMatch[1].toLowerCase();
+    const argRaw2 = multiArgFnMatch[2].trim();
+    const parts = splitArguments(argRaw2).map(p => {
+      const v = vars[p] ?? evaluateCommandExpression(p, vars);
+      return typeof v === 'number' ? v : null;
+    });
+    if (fn2 === 'zeros') {
+      const r = parts[0] ?? null; const c = parts[1] ?? r;
+      if (r !== null && c !== null) return Array.from({ length: r }, () => Array(c).fill(0) as number[]);
+    }
+    if (fn2 === 'ones') {
+      const r = parts[0] ?? null; const c = parts[1] ?? r;
+      if (r !== null && c !== null) return Array.from({ length: r }, () => Array(c).fill(1) as number[]);
+    }
+    if (fn2 === 'eye') {
+      const n2 = parts[0] ?? null;
+      if (n2 !== null) return identityMatrix(n2);
+    }
+    if (fn2 === 'linspace') {
+      const [a2, b2, n2] = parts;
+      if (a2 !== null && b2 !== null) {
+        const steps = n2 !== null ? Math.max(2, Math.round(n2)) : 5;
+        const arr: number[] = Array.from({ length: steps }, (_, i) => a2 + (i / (steps - 1)) * (b2 - a2));
+        return [arr];
+      }
+    }
+    if (fn2 === 'mod') {
+      const [a2, b2] = parts;
+      if (a2 !== null && b2 !== null) return ((a2 % b2) + b2) % b2;
+    }
+    if (fn2 === 'atan2') {
+      const [a2, b2] = parts;
+      if (a2 !== null && b2 !== null) return Math.atan2(a2, b2);
+    }
+    if (fn2 === 'power' || fn2 === 'pow') {
+      const [a2, b2] = parts;
+      if (a2 !== null && b2 !== null) return Math.pow(a2, b2);
+    }
+    if (fn2 === 'cross') {
+      // 3-element vector cross product
+      const leftRaw2 = splitArguments(argRaw2)[0];
+      const rightRaw2 = splitArguments(argRaw2)[1];
+      if (leftRaw2 && rightRaw2) {
+        const lv = vars[leftRaw2] ?? evaluateCommandExpression(leftRaw2, vars);
+        const rv = vars[rightRaw2] ?? evaluateCommandExpression(rightRaw2, vars);
+        const lu = isMatrix(lv) ? lv.flat() : null;
+        const ru = isMatrix(rv) ? rv.flat() : null;
+        if (lu && ru && lu.length === 3 && ru.length === 3) {
+          return [[
+            lu[1] * ru[2] - lu[2] * ru[1],
+            lu[2] * ru[0] - lu[0] * ru[2],
+            lu[0] * ru[1] - lu[1] * ru[0],
+          ]];
+        }
+      }
+    }
+    if (fn2 === 'dot') {
+      const leftRaw2 = splitArguments(argRaw2)[0];
+      const rightRaw2 = splitArguments(argRaw2)[1];
+      if (leftRaw2 && rightRaw2) {
+        const lv = vars[leftRaw2] ?? evaluateCommandExpression(leftRaw2, vars);
+        const rv = vars[rightRaw2] ?? evaluateCommandExpression(rightRaw2, vars);
+        const lu = isMatrix(lv) ? lv.flat() : null;
+        const ru = isMatrix(rv) ? rv.flat() : null;
+        if (lu && ru && lu.length === ru.length) {
+          return lu.reduce((sum, v, i) => sum + v * ru[i], 0);
+        }
+      }
+    }
+    if (fn2 === 'diag') {
+      const v2 = vars[argRaw2] ?? evaluateCommandExpression(argRaw2, vars);
+      if (isMatrix(v2)) {
+        if (v2.length === 1) {
+          // row vector → diagonal matrix
+          const n2 = v2[0].length;
+          return Array.from({ length: n2 }, (_, i) => Array.from({ length: n2 }, (_, j) => i === j ? v2[0][i] : 0));
+        }
+        // matrix → extract main diagonal as column vector
+        const diag2 = Math.min(v2.length, v2[0]?.length ?? 0);
+        return Array.from({ length: diag2 }, (_, i) => [v2[i][i]]);
+      }
+    }
   }
 
   const binary = trimmed.match(/^(.+)\s*([+\-*])\s*(.+)$/);
@@ -435,93 +559,29 @@ function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValu
 export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
   const { settings } = useSettings();
   const isArabic = settings.language === 'ar';
-  const t = useCallback((key: string) => {
-    const ar: Record<string, string> = {
-      'MATLAB Lab': 'مختبر MATLAB',
-      'Matrix operations, quick plots, and MATLAB-style inputs.': 'عمليات المصفوفات ورسوم سريعة وإدخال بأسلوب MATLAB.',
-      'Plot Expression': 'رسم التعبير',
-      'Matrix A': 'المصفوفة A',
-      'Matrix B': 'المصفوفة B',
-      'Operations': 'العمليات',
-      'Linear System / Power': 'نظام خطي / أس',
-      'Result': 'النتيجة',
-      'Command Window': 'نافذة الأوامر',
-      'Live Script Lite': 'السكربت المباشر (خفيف)',
-      'Run Script': 'تشغيل السكربت',
-      'Running...': 'جارٍ التشغيل...',
-      'Command History': 'سجل الأوامر',
-      'No commands yet.': 'لا توجد أوامر بعد.',
-      'Variables Workspace': 'مساحة المتغيرات',
-      'No variables in workspace yet. Assign with `A = [1 2; 3 4]`.': 'لا توجد متغيرات بعد. أضف متغيرًا مثل: `A = [1 2; 3 4]`.',
-      'Name': 'الاسم',
-      'Type': 'النوع',
-      'Shape': 'الأبعاد',
-      'Preview': 'معاينة',
-      'Run': 'تشغيل',
-      'Use `Enter` to run. Use `↑/↓` for command history. Commands: `clear`, `clc`.': 'استخدم `Enter` للتشغيل و`↑/↓` للتنقل في السجل. أوامر: `clear` و`clc`.',
-      'One command per line. `%` and `//` are treated as comments.': 'أمر واحد في كل سطر. `%` و`//` يعتبران تعليقًا.',
-      'Vector Field': 'حقل متجهات',
-      'Grid': 'الشبكة',
-      'Scale': 'المقياس',
-      'Solve Ax = b': 'حل Ax = b',
-      'A^n': 'A^n',
-      'Workspace cleared.': 'تم مسح مساحة المتغيرات.',
-      'History cleared.': 'تم مسح سجل الأوامر.',
-      'Matrix A is invalid. Use MATLAB format like [1 2; 3 4].': 'المصفوفة A غير صالحة. استخدم صيغة MATLAB مثل [1 2; 3 4].',
-      'Matrix B is invalid. Use MATLAB format like [5 6; 7 8].': 'المصفوفة B غير صالحة. استخدم صيغة MATLAB مثل [5 6; 7 8].',
-      'Vector b is invalid. Use format like [1; 2] or [1 2].': 'المتجه b غير صالح. استخدم [1; 2] أو [1 2].',
-      'Operation failed. Check matrix sizes (A+B requires same size, A*B requires columns of A = rows of B).': 'فشلت العملية. تحقق من أبعاد المصفوفات.',
-      'Run an operation to see output.': 'شغّل عملية لعرض النتيجة.',
-      'Enter a valid matrix A to preview a heatmap.': 'أدخل مصفوفة A صحيحة لعرض الخريطة الحرارية.',
-      'Command templates': 'قوالب الأوامر',
-      'Supported syntax': 'الصياغة المدعومة',
-      'Matrix builder': 'منشئ المصفوفات',
-      'Apply to Matrix A': 'تطبيق على المصفوفة A',
-      'Apply to Matrix B': 'تطبيق على المصفوفة B',
-      'Load Matrix A': 'تحميل المصفوفة A',
-      'Use a template to seed the command window or hand a plot straight to the Graph tab.': 'استخدم قالباً لملء نافذة الأوامر أو لإرسال الرسم مباشرة إلى تبويب Graph.',
-      'Core commands: assignments, det, inv, trace, rank, norm, eig, transpose, solve(A,b), and plot(expr).': 'الأوامر الأساسية: الإسناد و det و inv و trace و rank و norm و eig و transpose و solve(A,b) و plot(expr).',
-      'The matrix builder is meant for fast 2x2 or 3x3 study cases, not full MATLAB table editing.': 'منشئ المصفوفات مخصص لحالات الدراسة السريعة 2x2 أو 3x3 وليس لتحرير جداول MATLAB الكاملة.',
-    };
-    return isArabic ? (ar[key] || key) : key;
-  }, [isArabic]);
 
-  const [matrixA, setMatrixA] = useState('[1 2; 3 4]');
-  const [matrixB, setMatrixB] = useState('[5 6; 7 8]');
-  const [builderRows, setBuilderRows] = useState(2);
-  const [builderCols, setBuilderCols] = useState(2);
-  const [builderValues, setBuilderValues] = useState<string[][]>(() => Array.from({ length: 2 }, () => Array(2).fill('0')));
-  const [expression, setExpression] = useState('sin(x) + x^2');
-  const [result, setResult] = useState<string>('');
-  const [error, setError] = useState<string>('');
   const [fieldU, setFieldU] = useState('y');
   const [fieldV, setFieldV] = useState('-x');
   const [gridSize, setGridSize] = useState(9);
   const [fieldScale, setFieldScale] = useState(0.7);
-  const [vectorB, setVectorB] = useState('[1; 1]');
-  const [powerN, setPowerN] = useState(2);
   const [restoredSession] = useState<MatlabSession | null>(() => loadStoredSession());
-  const [command, setCommand] = useState(restoredSession?.command || 'A = [1 2; 3 4]');
+  const [command, setCommand] = useState(restoredSession?.command || '');
   const [scriptText, setScriptText] = useState(restoredSession?.script || 'A = [1 2; 3 4]\nB = A^2\ndet(B)');
   const [runtimeVars, setRuntimeVars] = useState<Record<string, MatlabValue>>(
     restoredSession?.variables && typeof restoredSession.variables === 'object' ? restoredSession.variables : {}
   );
+  // Always-current ref so runSingleCommand can read vars without a stale closure
+  const runtimeVarsRef = useRef<Record<string, MatlabValue>>(runtimeVars);
   const [history, setHistory] = useState<MatlabHistoryItem[]>(
     Array.isArray(restoredSession?.history) ? restoredSession.history.slice(-100) : []
   );
   const [, setHistoryIndex] = useState<number>(-1);
   const [runningScript, setRunningScript] = useState(false);
+  const [showScript, setShowScript] = useState(false);
+  const [selectedVar, setSelectedVar] = useState<string | null>(null);
   const commandInputRef = useRef<HTMLInputElement | null>(null);
+  const terminalEndRef = useRef<HTMLDivElement | null>(null);
 
-  const resizeBuilder = useCallback((rows: number, cols: number) => {
-    setBuilderRows(rows);
-    setBuilderCols(cols);
-    setBuilderValues((prev) =>
-      Array.from({ length: rows }, (_, rowIndex) =>
-        Array.from({ length: cols }, (_, colIndex) => prev[rowIndex]?.[colIndex] ?? '0'),
-      ),
-    );
-  }, []);
 
   const variableRows = useMemo<MatlabVariable[]>(() => {
     return Object.entries(runtimeVars)
@@ -535,6 +595,16 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       }));
   }, [runtimeVars]);
 
+  // Keep vars ref in sync so runSingleCommand always sees the latest workspace
+  useEffect(() => {
+    runtimeVarsRef.current = runtimeVars;
+  }, [runtimeVars]);
+
+  // Auto-scroll terminal to bottom on new history items
+  useEffect(() => {
+    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [history]);
+
   useEffect(() => {
     try {
       const session: MatlabSession = {
@@ -544,22 +614,20 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
         command,
       };
       writeCompatStorage(localStorage, storageKeys.matlabSession, JSON.stringify(session));
-    } catch {
-      // Ignore storage write failures (quota/private mode).
-    }
+    } catch { /* noop */ }
   }, [runtimeVars, history, scriptText, command]);
 
-  const parsedA = useMemo(() => parseMatrix(matrixA), [matrixA]);
-  const parsedB = useMemo(() => parseMatrix(matrixB), [matrixB]);
-
-  const matrixHeatmap = useMemo(() => {
-    if (!parsedA) return null;
-    const flat = parsedA.flat();
+  // Heatmap for whichever variable the user clicked (auto-picks first matrix if none selected)
+  const selectedHeatmap = useMemo(() => {
+    const varName = selectedVar ?? Object.keys(runtimeVars).find(k => isMatrix(runtimeVars[k]));
+    if (!varName) return null;
+    const val = runtimeVars[varName];
+    if (!val || !isMatrix(val)) return null;
+    const flat = val.flat();
     const min = Math.min(...flat);
     const max = Math.max(...flat);
-    const range = max - min || 1;
-    return { matrix: parsedA, min, max, range };
-  }, [parsedA]);
+    return { name: varName, matrix: val, min, max, range: max - min || 1 };
+  }, [selectedVar, runtimeVars]);
 
   const normalizeExpression = (expr: string) => {
     let out = expr.trim();
@@ -611,86 +679,43 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
     }
 
     if (text.toLowerCase() === 'clear') {
+      runtimeVarsRef.current = {};
       setRuntimeVars({});
-      return {
-        command: rawCommand,
-        output: t('Workspace cleared.'),
-        timestamp: new Date().toISOString(),
-      };
+      setSelectedVar(null);
+      return { command: rawCommand, output: 'Workspace cleared.', timestamp: new Date().toISOString() };
     }
 
     if (text.toLowerCase() === 'clc') {
       setHistory([]);
-      return {
-        command: rawCommand,
-        output: t('History cleared.'),
-        timestamp: new Date().toISOString(),
-      };
+      return { command: rawCommand, output: 'Output cleared.', timestamp: new Date().toISOString() };
     }
 
     const plotMatch = text.match(/^plot\((.+)\)$/i);
     if (plotMatch) {
-      const plotExpression = plotMatch[1].trim();
-      setExpression(plotExpression);
-      onGraphExpression?.(plotExpression);
-      return {
-        command: rawCommand,
-        output: `Sent ${plotExpression} to the Graph tab.`,
-        timestamp: new Date().toISOString(),
-      };
+      const plotExpr = plotMatch[1].trim();
+      onGraphExpression?.(plotExpr);
+      return { command: rawCommand, output: `Sent "${plotExpr}" to Graph tab.`, timestamp: new Date().toISOString() };
     }
 
     const assignMatch = text.match(/^([A-Za-z]\w*)\s*=\s*(.+)$/);
     if (assignMatch) {
       const varName = assignMatch[1];
       const expr = assignMatch[2];
-      let computed: MatlabValue | null = null;
-      let output = '';
-
-      setRuntimeVars(prev => {
-        computed = evaluateCommandExpression(expr, prev);
-        if (computed === null) return prev;
-        output = `${varName} = ${formatValue(computed)}`;
-        return { ...prev, [varName]: computed };
-      });
-
+      const computed = evaluateCommandExpression(expr, runtimeVarsRef.current);
       if (computed === null) {
-        return {
-          command: rawCommand,
-          output: source === 'script' ? `Script line failed: "${rawCommand}"` : `Could not evaluate: ${expr}`,
-          error: true,
-          timestamp: new Date().toISOString(),
-        };
+        return { command: rawCommand, output: source === 'script' ? `Line failed: "${rawCommand}"` : `Cannot evaluate: ${expr}`, error: true, timestamp: new Date().toISOString() };
       }
-
-      return {
-        command: rawCommand,
-        output,
-        timestamp: new Date().toISOString(),
-      };
+      runtimeVarsRef.current = { ...runtimeVarsRef.current, [varName]: computed };
+      setRuntimeVars({ ...runtimeVarsRef.current });
+      return { command: rawCommand, output: `${varName} =\n${formatValue(computed)}`, timestamp: new Date().toISOString() };
     }
 
-    let evaluated: MatlabValue | null = null;
-    setRuntimeVars(prev => {
-      evaluated = evaluateCommandExpression(text, prev);
-      return prev;
-    });
-
+    const evaluated = evaluateCommandExpression(text, runtimeVarsRef.current);
     if (evaluated === null) {
-      return {
-        command: rawCommand,
-        output: source === 'script' ? `Script line failed: "${rawCommand}"` : `Could not evaluate: ${text}`,
-        error: true,
-        timestamp: new Date().toISOString(),
-      };
+      return { command: rawCommand, output: source === 'script' ? `Line failed: "${rawCommand}"` : `Unknown command: ${text}`, error: true, timestamp: new Date().toISOString() };
     }
-
-    return {
-      command: rawCommand,
-      output: formatValue(evaluated),
-      timestamp: new Date().toISOString(),
-    };
-  }, [onGraphExpression, t]);
+    return { command: rawCommand, output: `ans =\n${formatValue(evaluated)}`, timestamp: new Date().toISOString() };
+  }, [onGraphExpression]);
 
   const runCommand = useCallback(() => {
     const item = runSingleCommand(command, 'command');
@@ -703,31 +728,6 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
     }
   }, [command, pushHistory, runSingleCommand]);
 
-  const applyTemplate = useCallback((template: MatlabTemplate) => {
-    if (template.command.startsWith('plot(')) {
-      const expr = template.command.replace(/^plot\(/, '').replace(/\)$/, '');
-      setExpression(expr);
-      onGraphExpression?.(expr);
-    }
-    setCommand(template.command);
-    commandInputRef.current?.focus();
-  }, [onGraphExpression]);
-
-  const applyBuilderToMatrix = useCallback((target: 'A' | 'B') => {
-    const serialized = serializeMatrixBuilder(builderValues);
-    if (target === 'A') {
-      setMatrixA(serialized);
-      return;
-    }
-    setMatrixB(serialized);
-  }, [builderValues]);
-
-  const loadBuilderFromA = useCallback(() => {
-    const parsed = parseMatrix(matrixA);
-    if (!parsed) return;
-    resizeBuilder(parsed.length, parsed[0]?.length || 0);
-    setBuilderValues(parsed.map((row) => row.map((value) => String(value))));
-  }, [matrixA, resizeBuilder]);
 
   const runScript = useCallback(async () => {
     if (runningScript) return;
@@ -788,705 +788,370 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
     }
   }, [history, runCommand]);
 
-  const handleMatrixOp = (op: 'add' | 'sub' | 'mul' | 'transA' | 'detA' | 'invA' | 'traceA' | 'rankA' | 'normA' | 'powA' | 'solveAxB' | 'eig2A') => {
-    setError('');
-    if (!parsedA) {
-      setError(t('Matrix A is invalid. Use MATLAB format like [1 2; 3 4].'));
-      return;
-    }
 
-    if (['add', 'sub', 'mul'].includes(op) && !parsedB) {
-      setError(t('Matrix B is invalid. Use MATLAB format like [5 6; 7 8].'));
-      return;
-    }
-
-    let output: string | null = null;
-    if (op === 'add') {
-      const res = addMatrices(parsedA, parsedB!);
-      output = res ? formatMatrix(res) : null;
-    }
-    if (op === 'sub') {
-      const res = subtractMatrices(parsedA, parsedB!);
-      output = res ? formatMatrix(res) : null;
-    }
-    if (op === 'mul') {
-      const res = multiplyMatrices(parsedA, parsedB!);
-      output = res ? formatMatrix(res) : null;
-    }
-    if (op === 'transA') {
-      output = formatMatrix(transposeMatrix(parsedA));
-    }
-    if (op === 'detA') {
-      const det = determinant(parsedA);
-      output = det === null ? null : `det(A) = ${det}`;
-    }
-    if (op === 'invA') {
-      const inv = inverse2x2(parsedA);
-      output = inv ? formatMatrix(inv) : null;
-    }
-    if (op === 'traceA') {
-      const tr = traceMatrix(parsedA);
-      output = tr === null ? null : `trace(A) = ${Number(tr.toFixed(6))}`;
-    }
-    if (op === 'rankA') {
-      output = `rank(A) = ${rankMatrix(parsedA)}`;
-    }
-    if (op === 'normA') {
-      output = `||A||_F = ${Number(matrixNormFro(parsedA).toFixed(6))}`;
-    }
-    if (op === 'powA') {
-      const pw = matrixPower(parsedA, powerN);
-      output = pw ? formatMatrix(pw) : null;
-    }
-    if (op === 'solveAxB') {
-      const b = parseVector(vectorB);
-      if (!b) {
-        setError(t('Vector b is invalid. Use format like [1; 2] or [1 2].'));
-        return;
-      }
-      const sol = solveLinearSystem(parsedA, b);
-      output = sol ? `x = [${sol.map(v => Number(v.toFixed(6))).join(', ')}]` : null;
-    }
-    if (op === 'eig2A') {
-      const eig = eigen2x2(parsedA);
-      output = eig ? `eig(A) = [${Number(eig.lambda1.toFixed(6))}, ${Number(eig.lambda2.toFixed(6))}]` : null;
-    }
-
-    if (!output) {
-      setError(t('Operation failed. Check matrix sizes (A+B requires same size, A*B requires columns of A = rows of B).'));
-      return;
-    }
-    setResult(output);
-  };
+  const CHIPS = [
+    'A = [1 2; 3 4]', 'B = [5 6; 7 8]', 'A * B', 'det(A)', 'inv(A)', 'eig(A)',
+    'transpose(A)', 'eye(3)', 'zeros(3)', 'ones(2,3)', 'linspace(0,1,5)',
+    'sum(A)', 'mean(A)', 'size(A)', 'dot(A,B)', 'plot(sin(x))',
+  ];
 
   return (
-    <div className="matlab-lab">
-      <div className="lab-header">
-        <div>
-          <h3>{t('MATLAB Lab')}</h3>
-          <p>{t('Matrix operations, quick plots, and MATLAB-style inputs.')}</p>
-        </div>
-        {onGraphExpression && (
-          <button className="btn secondary" onClick={() => onGraphExpression(expression)}>
-            📈 {t('Plot Expression')}
+    <div className="ml-root" dir={isArabic ? 'rtl' : 'ltr'}>
+      {/* Quick-start chips */}
+      <div className="ml-chips">
+        {CHIPS.map(chip => (
+          <button
+            key={chip}
+            className="ml-chip"
+            onClick={() => { setCommand(chip); commandInputRef.current?.focus(); }}
+          >
+            {chip}
           </button>
-        )}
+        ))}
       </div>
 
-      <div className="lab-grid">
-        <section className="lab-card wide">
-          <h4>{t('Command templates')}</h4>
-          <p className="hint">{t('Use a template to seed the command window or hand a plot straight to the Graph tab.')}</p>
-          <div className="template-grid">
-            {MATLAB_TEMPLATES.map((template) => (
-              <button key={template.command} className="template-card" onClick={() => applyTemplate(template)}>
-                <strong>{template.label}</strong>
-                <span>{template.description}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="lab-card">
-          <h4>{t('Supported syntax')}</h4>
-          <ul className="syntax-list">
-            <li>{t('Core commands: assignments, det, inv, trace, rank, norm, eig, transpose, solve(A,b), and plot(expr).')}</li>
-            <li>{t('The matrix builder is meant for fast 2x2 or 3x3 study cases, not full MATLAB table editing.')}</li>
-            <li>Use `A = [1 2; 3 4]`, `b = [1; 2]`, then `solve(A,b)` for linear systems.</li>
-          </ul>
-        </section>
-
-        <section className="lab-card">
-          <h4>{t('Matrix builder')}</h4>
-          <div className="builder-toolbar">
-            <label>
-              Rows
-              <select value={builderRows} onChange={(e) => resizeBuilder(Number(e.target.value), builderCols)}>
-                <option value={2}>2</option>
-                <option value={3}>3</option>
-              </select>
-            </label>
-            <label>
-              Cols
-              <select value={builderCols} onChange={(e) => resizeBuilder(builderRows, Number(e.target.value))}>
-                <option value={2}>2</option>
-                <option value={3}>3</option>
-              </select>
-            </label>
-          </div>
-          <div className="builder-grid" style={{ gridTemplateColumns: `repeat(${builderCols}, minmax(0, 1fr))` }}>
-            {builderValues.map((row, rowIndex) =>
-              row.map((value, colIndex) => (
-                <input
-                  key={`${rowIndex}-${colIndex}`}
-                  value={value}
-                  onChange={(e) =>
-                    setBuilderValues((prev) =>
-                      prev.map((currentRow, currentRowIndex) =>
-                        currentRowIndex === rowIndex
-                          ? currentRow.map((cell, currentColIndex) => (currentColIndex === colIndex ? e.target.value : cell))
-                          : currentRow,
-                      ),
-                    )
-                  }
-                />
-              )),
-            )}
-          </div>
-          <div className="builder-actions">
-            <button className="btn secondary" onClick={() => applyBuilderToMatrix('A')}>{t('Apply to Matrix A')}</button>
-            <button className="btn secondary" onClick={() => applyBuilderToMatrix('B')}>{t('Apply to Matrix B')}</button>
-            <button className="btn secondary" onClick={loadBuilderFromA}>{t('Load Matrix A')}</button>
-          </div>
-        </section>
-
-        <section className="lab-card">
-          <h4>{t('Matrix A')}</h4>
-          <textarea
-            value={matrixA}
-            onChange={(e) => setMatrixA(e.target.value)}
-            rows={4}
-          />
-          <p className="hint">Format: `[1 2; 3 4]` or rows on new lines.</p>
-        </section>
-
-        <section className="lab-card">
-          <h4>{t('Matrix B')}</h4>
-          <textarea
-            value={matrixB}
-            onChange={(e) => setMatrixB(e.target.value)}
-            rows={4}
-          />
-          <p className="hint">Use for A + B, A - B, A * B.</p>
-        </section>
-
-        <section className="lab-card">
-          <h4>{t('Operations')}</h4>
-          <div className="button-grid">
-            <button className="btn" onClick={() => handleMatrixOp('add')}>A + B</button>
-            <button className="btn" onClick={() => handleMatrixOp('sub')}>A - B</button>
-            <button className="btn" onClick={() => handleMatrixOp('mul')}>A * B</button>
-            <button className="btn secondary" onClick={() => handleMatrixOp('transA')}>A&apos;</button>
-            <button className="btn secondary" onClick={() => handleMatrixOp('detA')}>det(A)</button>
-            <button className="btn secondary" onClick={() => handleMatrixOp('invA')}>inv(A) (2x2)</button>
-            <button className="btn secondary" onClick={() => handleMatrixOp('traceA')}>trace(A)</button>
-            <button className="btn secondary" onClick={() => handleMatrixOp('rankA')}>rank(A)</button>
-            <button className="btn secondary" onClick={() => handleMatrixOp('normA')}>norm(A)</button>
-            <button className="btn secondary" onClick={() => handleMatrixOp('eig2A')}>eig(A) (2x2)</button>
-          </div>
-          {error && <div className="error">{error}</div>}
-        </section>
-
-        <section className="lab-card">
-          <h4>{t('Linear System / Power')}</h4>
-          <label>b vector (Ax = b)</label>
-          <input
-            value={vectorB}
-            onChange={(e) => setVectorB(e.target.value)}
-            placeholder="[1; 2]"
-          />
-          <button className="btn" onClick={() => handleMatrixOp('solveAxB')}>{t('Solve Ax = b')}</button>
-          <label>Power n</label>
-          <input
-            type="number"
-            min={0}
-            max={8}
-            value={powerN}
-            onChange={(e) => setPowerN(Number(e.target.value))}
-          />
-          <button className="btn secondary" onClick={() => handleMatrixOp('powA')}>{t('A^n')}</button>
-          <p className="hint">`A^n` supports non-negative integers and square matrices.</p>
-        </section>
-
-        <section className="lab-card wide">
-          <h4>{t('Result')}</h4>
-          <pre>{result || t('Run an operation to see output.')}</pre>
-        </section>
-
-        <section className="lab-card wide">
-          <h4>{t('Command Window')}</h4>
-          <div className="command-row">
-            <span className="command-prompt">&gt;&gt;</span>
-            <input
-              ref={commandInputRef}
-              value={command}
-              onChange={(e) => setCommand(e.target.value)}
-              onKeyDown={onCommandKeyDown}
-              placeholder={isArabic ? 'اكتب أمر MATLAB مثل A=[1 2;3 4] أو det(A)' : 'Type MATLAB-style command, e.g. A=[1 2;3 4] or det(A)'}
-            />
-            <button className="btn" onClick={runCommand}>{t('Run')}</button>
-          </div>
-          <p className="hint">{t('Use `Enter` to run. Use `↑/↓` for command history. Commands: `clear`, `clc`.')}</p>
-        </section>
-
-        <section className="lab-card wide">
-          <h4>{t('Live Script Lite')}</h4>
-          <textarea
-            value={scriptText}
-            onChange={(e) => setScriptText(e.target.value)}
-            rows={6}
-          />
-          <div className="script-actions">
-            <button className="btn" onClick={runScript} disabled={runningScript}>
-              {runningScript ? t('Running...') : t('Run Script')}
-            </button>
-            <p className="hint">{t('One command per line. `%` and `//` are treated as comments.')}</p>
-          </div>
-        </section>
-
-        <section className="lab-card wide">
-          <h4>{t('Command History')}</h4>
-          <div className="history-list">
-            {history.length === 0 ? (
-              <p className="hint">{t('No commands yet.')}</p>
-            ) : (
-              history
-                .slice()
-                .reverse()
-                .map((item, idx) => (
-                  <div key={`${item.timestamp}-${idx}`} className={`history-item${item.error ? ' history-error' : ''}`}>
+      <div className="ml-body">
+        {/* Left: REPL + Script */}
+        <div className="ml-left">
+          {/* Terminal */}
+          <div className="ml-terminal">
+            <div className="ml-terminal-output">
+              {history.length === 0 ? (
+                <span className="ml-terminal-empty">
+                  No output yet. Click a chip above or type a command below.
+                  <br />Try: <code>A = [1 2; 3 4]</code> then <code>det(A)</code>
+                </span>
+              ) : (
+                history.map((item, idx) => (
+                  <div key={`${item.timestamp}-${idx}`} className={`ml-entry${item.error ? ' ml-entry-err' : ''}`}>
                     <button
-                      type="button"
-                      className="history-command"
-                      onClick={() => {
-                        setCommand(item.command);
-                        commandInputRef.current?.focus();
-                      }}
+                      className="ml-entry-cmd"
+                      onClick={() => { setCommand(item.command); commandInputRef.current?.focus(); }}
+                      title="Click to recall"
                     >
                       &gt;&gt; {item.command}
                     </button>
-                    <pre>{item.output}</pre>
+                    {item.output && <pre className="ml-entry-out">{item.output}</pre>}
                   </div>
                 ))
-            )}
+              )}
+              <div ref={terminalEndRef} />
+            </div>
+            <div className="ml-terminal-input">
+              <span className="ml-prompt">&gt;&gt;</span>
+              <input
+                ref={commandInputRef}
+                value={command}
+                onChange={e => setCommand(e.target.value)}
+                onKeyDown={onCommandKeyDown}
+                placeholder="e.g.  A = [1 2; 3 4]   or   det(A)   or   plot(sin(x))"
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <button className="ml-run-btn" onClick={runCommand}>Run</button>
+              <button className="ml-clr-btn" onClick={() => setHistory([])} title="Clear output">✕</button>
+            </div>
+            <div className="ml-hint-bar">↑/↓ recalls history · <code>clear</code> wipes workspace · <code>clc</code> clears output</div>
           </div>
-        </section>
 
-        <section className="lab-card wide">
-          <h4>{t('Variables Workspace')}</h4>
-          {variableRows.length === 0 ? (
-            <p className="hint">{t('No variables in workspace yet. Assign with `A = [1 2; 3 4]`.')}</p>
-          ) : (
-            <div className="workspace-table-wrap">
-              <table className="workspace-table">
+          {/* Script editor (collapsible) */}
+          <button className="ml-script-toggle" onClick={() => setShowScript(s => !s)}>
+            {showScript ? '▾' : '▸'} Script Editor
+          </button>
+          {showScript && (
+            <div className="ml-script-wrap">
+              <textarea
+                value={scriptText}
+                onChange={e => setScriptText(e.target.value)}
+                rows={8}
+                spellCheck={false}
+                placeholder={'% Write multi-line code here\nA = [1 2; 3 4]\nB = A^2\ndet(B)'}
+              />
+              <div className="ml-script-bar">
+                <button className="ml-run-btn" onClick={runScript} disabled={runningScript}>
+                  {runningScript ? '⏳ Running…' : '▶ Run Script'}
+                </button>
+                <span className="ml-dim">% comments · one command per line</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Workspace + Visualizations */}
+        <div className="ml-right">
+          {/* Variables workspace */}
+          <div className="ml-panel">
+            <div className="ml-panel-hd">
+              <span>Workspace</span>
+              {Object.keys(runtimeVars).length > 0 && (
+                <button className="ml-clear-btn" onClick={() => { setRuntimeVars({}); setSelectedVar(null); }}>
+                  clear all
+                </button>
+              )}
+            </div>
+            {variableRows.length === 0 ? (
+              <span className="ml-dim">No variables yet.</span>
+            ) : (
+              <table className="ml-ws-table">
                 <thead>
-                  <tr>
-                    <th>{t('Name')}</th>
-                    <th>{t('Type')}</th>
-                    <th>{t('Shape')}</th>
-                    <th>{t('Preview')}</th>
-                  </tr>
+                  <tr><th>Name</th><th>Shape</th><th>Value</th></tr>
                 </thead>
                 <tbody>
-                  {variableRows.map((row) => (
-                    <tr key={row.name}>
-                      <td>{row.name}</td>
-                      <td>{row.type}</td>
-                      <td>{row.shape}</td>
-                      <td>{row.preview}</td>
+                  {variableRows.map(row => (
+                    <tr
+                      key={row.name}
+                      className={selectedVar === row.name ? 'ml-ws-sel' : ''}
+                      onClick={() => setSelectedVar(prev => prev === row.name ? null : row.name)}
+                      title={row.type === 'matrix' ? 'Click to toggle heatmap' : String(row.value)}
+                    >
+                      <td className="ml-ws-name">{row.name}</td>
+                      <td className="ml-ws-shape">{row.shape}</td>
+                      <td className="ml-ws-prev">{row.preview}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            )}
+          </div>
+
+          {/* Matrix heatmap — shows selected var or first matrix */}
+          {selectedHeatmap && (
+            <div className="ml-panel">
+              <div className="ml-panel-hd">
+                <span>Heatmap — <code>{selectedHeatmap.name}</code></span>
+              </div>
+              <div className="ml-heatmap">
+                {selectedHeatmap.matrix.map((row, i) => (
+                  <div key={i} className="ml-hm-row">
+                    {row.map((v, j) => {
+                      const t2 = (v - selectedHeatmap.min) / selectedHeatmap.range;
+                      return (
+                        <div
+                          key={j}
+                          className="ml-hm-cell"
+                          style={{ background: `hsl(${210 - t2 * 220} 70% 60%)` }}
+                          title={`(${i+1},${j+1}) = ${Number(v.toFixed(4))}`}
+                        />
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+              <span className="ml-dim">{selectedHeatmap.min.toFixed(3)} … {selectedHeatmap.max.toFixed(3)}</span>
             </div>
           )}
-        </section>
 
-        <section className="lab-card wide">
-          <h4>{t('Plot Expression')}</h4>
-          <input
-            value={expression}
-            onChange={(e) => setExpression(e.target.value)}
-            placeholder="sin(x) + x^2"
-          />
-          <p className="hint">Supports MATLAB-style `.^`, `.*`, `./` (normalized in Math Solver).</p>
-        </section>
-
-        <section className="lab-card wide">
-          <h4>{isArabic ? 'خريطة حرارة المصفوفة' : 'Matrix Plot (Heatmap)'}</h4>
-          {matrixHeatmap ? (
-            <div className="heatmap">
-              {matrixHeatmap.matrix.map((row, i) => (
-                <div key={i} className="heatmap-row">
-                  {row.map((value, j) => {
-                    const t = (value - matrixHeatmap.min) / matrixHeatmap.range;
-                    const hue = 210 - t * 220;
-                    return (
-                      <div
-                        key={j}
-                        className="heatmap-cell"
-                        style={{ background: `hsl(${hue} 70% 60%)` }}
-                        title={`A(${i + 1},${j + 1}) = ${value}`}
-                      />
-                    );
-                  })}
-                </div>
-              ))}
+          {/* Vector field */}
+          <div className="ml-panel">
+            <div className="ml-panel-hd"><span>Vector Field</span></div>
+            <div className="ml-vf-grid">
+              <label>u(x,y)<input value={fieldU} onChange={e => setFieldU(e.target.value)} /></label>
+              <label>v(x,y)<input value={fieldV} onChange={e => setFieldV(e.target.value)} /></label>
+              <label>Grid<input type="number" min={3} max={15} value={gridSize} onChange={e => setGridSize(Number(e.target.value))} /></label>
+              <label>Scale<input type="number" step={0.1} min={0.2} max={2} value={fieldScale} onChange={e => setFieldScale(Number(e.target.value))} /></label>
             </div>
-          ) : (
-            <p className="hint">{t('Enter a valid matrix A to preview a heatmap.')}</p>
-          )}
-        </section>
-
-        <section className="lab-card wide">
-          <h4>{t('Vector Field')}</h4>
-          <div className="field-controls">
-            <div>
-              <label>u(x,y)</label>
-              <input value={fieldU} onChange={(e) => setFieldU(e.target.value)} />
+            <div className="ml-vf-canvas">
+              <svg viewBox="-10 -10 20 20" role="img" aria-label="Vector field">
+                <line x1="-9.5" y1="0" x2="9.5" y2="0" stroke="currentColor" strokeOpacity="0.2" />
+                <line x1="0" y1="-9.5" x2="0" y2="9.5" stroke="currentColor" strokeOpacity="0.2" />
+                {fieldData.points.map((p, idx) => {
+                  const mag = Math.sqrt(p.u * p.u + p.v * p.v) || 1;
+                  const ux = (p.u / mag) * fieldScale;
+                  const vy = (p.v / mag) * fieldScale;
+                  return (
+                    <g key={idx} transform={`translate(${p.x},${-p.y})`}>
+                      <line x1={0} y1={0} x2={ux} y2={-vy} stroke="currentColor" strokeOpacity="0.6" strokeWidth="0.08" />
+                      <circle cx={ux} cy={-vy} r="0.15" fill="currentColor" opacity="0.4" />
+                    </g>
+                  );
+                })}
+              </svg>
             </div>
-            <div>
-              <label>v(x,y)</label>
-              <input value={fieldV} onChange={(e) => setFieldV(e.target.value)} />
-            </div>
-            <div>
-              <label>{t('Grid')}</label>
-              <input
-                type="number"
-                min={3}
-                max={15}
-                value={gridSize}
-                onChange={(e) => setGridSize(Number(e.target.value))}
-              />
-            </div>
-            <div>
-              <label>{t('Scale')}</label>
-              <input
-                type="number"
-                step={0.1}
-                min={0.2}
-                max={2}
-                value={fieldScale}
-                onChange={(e) => setFieldScale(Number(e.target.value))}
-              />
-            </div>
+            <span className="ml-dim">Example: u = y, v = -x (circular field)</span>
           </div>
-          <div className="field-canvas">
-            <svg viewBox="-10 -10 20 20" role="img" aria-label="Vector field">
-              <line x1="-9.5" y1="0" x2="9.5" y2="0" stroke="currentColor" strokeOpacity="0.2" />
-              <line x1="0" y1="-9.5" x2="0" y2="9.5" stroke="currentColor" strokeOpacity="0.2" />
-              {fieldData.points.map((p, idx) => {
-                const mag = Math.sqrt(p.u * p.u + p.v * p.v) || 1;
-                const ux = (p.u / mag) * fieldScale;
-                const vy = (p.v / mag) * fieldScale;
-                return (
-                  <g key={idx} transform={`translate(${p.x},${-p.y})`}>
-                    <line
-                      x1={0}
-                      y1={0}
-                      x2={ux}
-                      y2={-vy}
-                      stroke="currentColor"
-                      strokeOpacity="0.6"
-                      strokeWidth="0.08"
-                    />
-                    <circle cx={ux} cy={-vy} r="0.15" fill="currentColor" opacity="0.4" />
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
-          <p className="hint">Example: u = y, v = -x (circular field).</p>
-        </section>
+        </div>
       </div>
 
       <style jsx>{`
-        .matlab-lab {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-4);
+        .ml-root {
+          display: flex; flex-direction: column; gap: 10px;
+          padding: 16px; height: 100%; box-sizing: border-box;
         }
 
-        .lab-header {
-          display: flex;
-          justify-content: space-between;
-          gap: var(--space-3);
-          align-items: flex-start;
-          flex-wrap: wrap;
+        /* Chips */
+        .ml-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+        .ml-chip {
+          padding: 3px 10px; border-radius: 20px; font-size: 11px;
+          font-family: var(--font-mono, monospace); border: 1px solid var(--border-subtle);
+          background: var(--bg-2); color: var(--text-secondary); cursor: pointer;
+          white-space: nowrap; transition: border-color 0.12s, color 0.12s;
         }
+        .ml-chip:hover { border-color: #f97316; color: #f97316; }
 
-        .lab-header h3 {
-          margin: 0 0 var(--space-1);
+        /* Body */
+        .ml-body { display: flex; gap: 14px; flex: 1; min-height: 0; }
+        .ml-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+        .ml-right { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+
+        /* Terminal */
+        .ml-terminal {
+          display: flex; flex-direction: column;
+          border: 1px solid var(--border-subtle); border-radius: 10px;
+          overflow: hidden; background: var(--bg-inset); flex: 1; min-height: 280px;
         }
-
-        .lab-header p {
-          margin: 0;
-          color: var(--text-muted);
-          font-size: var(--font-meta);
+        .ml-terminal-output {
+          flex: 1; overflow-y: auto; padding: 12px 14px;
+          display: flex; flex-direction: column; gap: 10px;
         }
-
-        .lab-grid {
-          display: grid;
-          gap: var(--space-3);
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        .ml-terminal-empty {
+          font-size: 12px; color: var(--text-muted);
+          font-family: var(--font-mono, monospace); line-height: 1.8;
         }
+        .ml-terminal-empty code {
+          background: var(--bg-surface); padding: 1px 6px;
+          border-radius: 4px; font-size: 11px; border: 1px solid var(--border-subtle);
+        }
+        .ml-entry { display: flex; flex-direction: column; gap: 2px; }
+        .ml-entry-cmd {
+          background: none; border: none; text-align: left; cursor: pointer;
+          font-family: var(--font-mono, monospace); font-size: 12px;
+          color: var(--text-muted); padding: 0; opacity: 0.75;
+          transition: opacity 0.1s, color 0.1s;
+        }
+        .ml-entry-cmd:hover { opacity: 1; color: #f97316; }
+        .ml-entry-out {
+          margin: 0; font-family: var(--font-mono, monospace); font-size: 12px;
+          color: var(--text-primary); white-space: pre-wrap;
+          padding-left: 20px; line-height: 1.55; border-left: 2px solid var(--border-subtle);
+        }
+        .ml-entry-err .ml-entry-cmd { color: #f87171; opacity: 1; }
+        .ml-entry-err .ml-entry-out { color: #f87171; border-left-color: #f87171; }
 
-        .lab-card {
+        /* Input row */
+        .ml-terminal-input {
+          display: flex; align-items: center; gap: 6px;
+          padding: 8px 10px; border-top: 1px solid var(--border-subtle);
           background: var(--bg-surface);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
-          padding: var(--space-4);
-          box-shadow: var(--shadow-sm);
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-2);
+        }
+        .ml-prompt {
+          font-family: var(--font-mono, monospace); font-size: 13px;
+          color: #f97316; font-weight: 700; flex-shrink: 0;
+        }
+        .ml-terminal-input input {
+          flex: 1; border: none; background: transparent;
+          font-family: var(--font-mono, monospace); font-size: 13px;
+          color: var(--text-primary); outline: none; padding: 0; min-width: 0;
+        }
+        .ml-run-btn {
+          padding: 5px 14px; border-radius: 6px; border: none;
+          background: #f97316; color: #fff; font-size: 12px; font-weight: 600;
+          cursor: pointer; flex-shrink: 0; transition: opacity 0.1s;
+        }
+        .ml-run-btn:hover { opacity: 0.88; }
+        .ml-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .ml-clr-btn {
+          padding: 5px 9px; border-radius: 6px; flex-shrink: 0;
+          border: 1px solid var(--border-subtle); background: none;
+          color: var(--text-muted); font-size: 11px; cursor: pointer;
+          transition: color 0.1s, border-color 0.1s;
+        }
+        .ml-clr-btn:hover { color: #f87171; border-color: #f87171; }
+        .ml-hint-bar {
+          font-size: 10px; color: var(--text-muted); padding: 3px 12px;
+          background: var(--bg-2); border-top: 1px solid var(--border-subtle);
+        }
+        .ml-hint-bar code {
+          background: var(--bg-surface); padding: 0 4px; border-radius: 3px;
+          font-size: 9px; border: 1px solid var(--border-subtle);
         }
 
-        .lab-card.wide {
-          grid-column: 1 / -1;
+        /* Script */
+        .ml-script-toggle {
+          background: none; border: none; color: var(--text-secondary);
+          font-size: 12px; font-weight: 600; cursor: pointer;
+          text-align: left; padding: 2px 0;
+          transition: color 0.1s;
+        }
+        .ml-script-toggle:hover { color: #f97316; }
+        .ml-script-wrap { display: flex; flex-direction: column; gap: 6px; }
+        .ml-script-wrap textarea {
+          width: 100%; border: 1px solid var(--border-subtle); border-radius: 8px;
+          padding: 10px 12px; font-family: var(--font-mono, monospace); font-size: 12px;
+          background: var(--bg-inset); color: var(--text-primary);
+          resize: vertical; outline: none; box-sizing: border-box; line-height: 1.6;
+        }
+        .ml-script-wrap textarea:focus { border-color: #f97316; }
+        .ml-script-bar { display: flex; align-items: center; gap: 12px; }
+        .ml-dim { font-size: 11px; color: var(--text-muted); }
+
+        /* Right panels */
+        .ml-panel {
+          border: 1px solid var(--border-subtle); border-radius: 10px;
+          padding: 12px; background: var(--bg-surface);
+          display: flex; flex-direction: column; gap: 8px;
+        }
+        .ml-panel-hd {
+          font-size: 10px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: 0.1em; color: var(--text-muted);
+          display: flex; justify-content: space-between; align-items: center;
+        }
+        .ml-panel-hd code {
+          font-size: 10px; background: var(--bg-2); padding: 1px 5px;
+          border-radius: 3px; border: 1px solid var(--border-subtle);
+          color: var(--text-secondary); font-weight: 400; text-transform: none;
+          letter-spacing: 0;
+        }
+        .ml-clear-btn {
+          background: none; border: 1px solid var(--border-subtle);
+          color: var(--text-muted); font-size: 10px; padding: 2px 7px;
+          border-radius: 4px; cursor: pointer; transition: color 0.1s, border-color 0.1s;
+        }
+        .ml-clear-btn:hover { color: #f87171; border-color: #f87171; }
+
+        /* Workspace table */
+        .ml-ws-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .ml-ws-table th {
+          color: var(--text-muted); font-weight: 600; padding: 3px 4px;
+          text-align: left; border-bottom: 1px solid var(--border-subtle); font-size: 10px;
+        }
+        .ml-ws-table td {
+          padding: 5px 4px; border-bottom: 1px solid var(--border-subtle);
+          color: var(--text-secondary); cursor: pointer;
+        }
+        .ml-ws-table tbody tr:hover td { background: var(--bg-2); }
+        .ml-ws-sel td { background: rgba(249,115,22,0.07) !important; }
+        .ml-ws-name { font-family: var(--font-mono, monospace); color: var(--text-primary) !important; font-weight: 600; }
+        .ml-ws-shape { color: var(--text-muted) !important; font-size: 10px; }
+        .ml-ws-prev {
+          font-family: var(--font-mono, monospace); font-size: 10px;
+          max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
 
-        textarea, input {
-          width: 100%;
-          border: 1px solid var(--border-default);
-          border-radius: var(--radius-md);
-          padding: var(--space-2);
-          font-family: var(--font-mono, monospace);
-          background: var(--bg-inset);
+        /* Heatmap */
+        .ml-heatmap { display: inline-flex; flex-direction: column; gap: 3px; }
+        .ml-hm-row { display: flex; gap: 3px; }
+        .ml-hm-cell { width: 20px; height: 20px; border-radius: 3px; cursor: default; }
+
+        /* Vector field */
+        .ml-vf-grid {
+          display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
         }
-
-        pre {
-          background: var(--bg-inset);
-          padding: var(--space-3);
-          border-radius: var(--radius-md);
-          font-family: var(--font-mono, monospace);
-          font-size: var(--font-meta);
-          white-space: pre-wrap;
-          margin: 0;
+        .ml-vf-grid label {
+          font-size: 10px; color: var(--text-muted);
+          display: flex; flex-direction: column; gap: 3px;
         }
-
-        .heatmap {
-          display: inline-flex;
-          flex-direction: column;
-          gap: 4px;
-          padding: var(--space-2);
-          background: var(--bg-inset);
-          border-radius: var(--radius-md);
-          width: fit-content;
+        .ml-vf-grid input {
+          border: 1px solid var(--border-subtle); border-radius: 6px;
+          padding: 4px 6px; background: var(--bg-inset); color: var(--text-primary);
+          font-size: 11px; font-family: var(--font-mono, monospace); outline: none;
         }
+        .ml-vf-canvas { background: var(--bg-inset); border-radius: 8px; overflow: hidden; }
+        .ml-vf-canvas svg { width: 100%; height: 190px; color: var(--text-primary); display: block; }
 
-        .heatmap-row {
-          display: flex;
-          gap: 4px;
-        }
-
-        .heatmap-cell {
-          width: 22px;
-          height: 22px;
-          border-radius: 4px;
-          border: 1px solid rgba(15, 23, 42, 0.08);
-        }
-
-        .field-controls {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-          gap: var(--space-2);
-        }
-
-        .field-controls label {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-          display: block;
-          margin-bottom: 4px;
-        }
-
-        .field-canvas {
-          margin-top: var(--space-3);
-          background: var(--bg-inset);
-          border-radius: var(--radius-md);
-          padding: var(--space-3);
-        }
-
-        .field-canvas svg {
-          width: 100%;
-          height: 260px;
-          color: var(--text-primary);
-        }
-
-        .button-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-          gap: var(--space-2);
-        }
-
-        .template-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-          gap: var(--space-2);
-        }
-
-        .template-card {
-          display: grid;
-          gap: 6px;
-          text-align: left;
-          padding: var(--space-3);
-          border-radius: var(--radius-md);
-          border: 1px solid var(--border-subtle);
-          background: color-mix(in srgb, var(--bg-inset) 84%, transparent);
-          color: var(--text-primary);
-          cursor: pointer;
-        }
-
-        .template-card strong {
-          font-family: var(--font-mono, monospace);
-          font-size: var(--font-meta);
-        }
-
-        .template-card span {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-          line-height: 1.45;
-        }
-
-        .syntax-list {
-          margin: 0;
-          padding-left: 1.1rem;
-          color: var(--text-secondary);
-          display: grid;
-          gap: 0.45rem;
-          line-height: 1.6;
-        }
-
-        .builder-toolbar {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: var(--space-2);
-        }
-
-        .builder-toolbar label {
-          display: grid;
-          gap: 6px;
-          color: var(--text-muted);
-          font-size: var(--font-tiny);
-        }
-
-        .builder-toolbar select {
-          width: 100%;
-          border: 1px solid var(--border-default);
-          border-radius: var(--radius-md);
-          padding: var(--space-2);
-          background: var(--bg-inset);
-          color: var(--text-primary);
-        }
-
-        .builder-grid {
-          display: grid;
-          gap: var(--space-2);
-        }
-
-        .builder-grid input {
-          text-align: center;
-        }
-
-        .builder-actions {
-          display: flex;
-          gap: var(--space-2);
-          flex-wrap: wrap;
-        }
-
-        .hint {
-          font-size: var(--font-tiny);
-          color: var(--text-muted);
-        }
-
-        .error {
-          background: var(--error-muted);
-          color: var(--error);
-          font-size: var(--font-meta);
-          padding: var(--space-2);
-          border-radius: var(--radius-md);
-        }
-
-        .command-row {
-          display: grid;
-          grid-template-columns: auto 1fr auto;
-          gap: var(--space-2);
-          align-items: center;
-        }
-
-        .command-prompt {
-          font-family: var(--font-mono, monospace);
-          color: var(--text-secondary);
-          font-size: var(--font-meta);
-        }
-
-        .script-actions {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: var(--space-3);
-          flex-wrap: wrap;
-        }
-
-        .history-list {
-          display: grid;
-          gap: var(--space-2);
-          max-height: 320px;
-          overflow: auto;
-          padding-right: var(--space-1);
-        }
-
-        .history-item {
-          background: var(--bg-inset);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-md);
-          padding: var(--space-2);
-          display: grid;
-          gap: var(--space-1);
-        }
-
-        .history-error {
-          border-color: color-mix(in srgb, var(--error) 40%, transparent);
-        }
-
-        .history-command {
-          border: 0;
-          background: transparent;
-          text-align: left;
-          cursor: pointer;
-          font-family: var(--font-mono, monospace);
-          color: var(--text-primary);
-          font-size: var(--font-meta);
-          padding: 0;
-        }
-
-        .workspace-table-wrap {
-          overflow-x: auto;
-        }
-
-        .workspace-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: var(--font-meta);
-        }
-
-        .workspace-table th,
-        .workspace-table td {
-          padding: var(--space-2);
-          border-bottom: 1px solid var(--border-subtle);
-          text-align: left;
-          white-space: nowrap;
-        }
-
-        .workspace-table th {
-          color: var(--text-muted);
-          font-weight: 600;
-        }
-
-        @media (max-width: 600px) {
-          .lab-header {
-            flex-direction: column;
-            align-items: flex-start;
-          }
-
-          .heatmap-cell {
-            width: 18px;
-            height: 18px;
-          }
-
-          .field-canvas svg {
-            height: 220px;
-          }
+        @media (max-width: 700px) {
+          .ml-body { flex-direction: column; }
+          .ml-right { width: 100%; }
+          .ml-terminal { min-height: 240px; }
         }
       `}</style>
     </div>

@@ -9,7 +9,7 @@ import { renderAllPDFPages, cropImageRegion, PDFPageRender, extractImagesFromPDF
 import { MathText } from '@/components/math/MathRenderer';
 import { useI18n } from '@/lib/i18n/useI18n';
 
-type AnalysisMode = 'describe' | 'explain' | 'extract-text' | 'solve-math';
+type AnalysisMode = 'describe' | 'explain' | 'extract-text' | 'solve-math' | 'scan-questions';
 
 interface AnalysisResult {
   mode: AnalysisMode;
@@ -22,6 +22,82 @@ interface SelectionRegion {
   y: number;
   width: number;
   height: number;
+}
+
+function ScanQuestionsResult({ content }: { content: string }) {
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+
+  const questions = content
+    .split(/\n/)
+    .map(line => line.trim())
+    .filter(line => /^\d+[\.\)]\s/.test(line))
+    .map(line => line.replace(/^\d+[\.\)]\s+/, '').trim())
+    .filter(Boolean);
+
+  if (!questions.length) {
+    return <span style={{ whiteSpace: 'pre-wrap' }}>{content}</span>;
+  }
+
+  const handleCopy = (text: string, idx: number) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 1500);
+    }).catch(() => {});
+  };
+
+  const handleSendToMath = (text: string) => {
+    localStorage.setItem('math_pending_problem', text);
+    window.location.href = '/math';
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {questions.map((q, idx) => (
+        <div key={idx} style={{
+          padding: '10px 12px',
+          background: 'var(--bg-inset)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 'var(--radius-md)',
+        }}>
+          <div style={{ marginBottom: 8, fontSize: 'var(--font-meta)', lineHeight: 1.5 }}>
+            <span style={{ fontWeight: 600, color: 'var(--primary)', marginRight: 6 }}>{idx + 1}.</span>
+            {q}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={() => handleSendToMath(q)}
+              style={{
+                padding: '3px 10px',
+                fontSize: 'var(--font-tiny)',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--primary)',
+                background: 'var(--primary-muted)',
+                color: 'var(--primary)',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              → Math Solver
+            </button>
+            <button
+              onClick={() => handleCopy(q, idx)}
+              style={{
+                padding: '3px 10px',
+                fontSize: 'var(--font-tiny)',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border-subtle)',
+                background: 'var(--bg-surface)',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+              }}
+            >
+              {copiedIdx === idx ? '✓ Copied' : '📋 Copy'}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function VisualAnalyzer() {
@@ -376,6 +452,11 @@ export function VisualAnalyzer() {
       label: t('Solve Math'),
       icon: '🧮',
       description: t('Solve equations or math problems in the image'),
+    },
+    'scan-questions': {
+      label: 'Scan Questions',
+      icon: '🔍',
+      description: 'Extract study questions or problems from the image as a numbered list',
     },
   };
 
@@ -795,6 +876,8 @@ export function VisualAnalyzer() {
                       }}>
                         {result.mode === 'solve-math' ? (
                           <MathText>{result.content}</MathText>
+                        ) : result.mode === 'scan-questions' ? (
+                          <ScanQuestionsResult content={result.content} />
                         ) : (
                           result.content
                         )}
@@ -905,7 +988,13 @@ export function VisualAnalyzer() {
                         <span style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)' }}>{result.timestamp.toLocaleTimeString(locale)}</span>
                       </div>
                       <div style={{ fontSize: 'var(--font-meta)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                        {result.mode === 'solve-math' ? <MathText>{result.content}</MathText> : result.content}
+                        {result.mode === 'solve-math' ? (
+                          <MathText>{result.content}</MathText>
+                        ) : result.mode === 'scan-questions' ? (
+                          <ScanQuestionsResult content={result.content} />
+                        ) : (
+                          result.content
+                        )}
                       </div>
                     </div>
                   ))}

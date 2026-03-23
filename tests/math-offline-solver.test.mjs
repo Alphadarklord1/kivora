@@ -7,7 +7,7 @@ test('offline solver handles simple definite integrals with bounds', async () =>
 
   assert.equal(result.problemType, 'definite-integral');
   assert.equal(result.finalAnswer, '2.6667');
-  assert.ok(result.steps.some((step) => /Evaluate the bounds/.test(step.description)));
+  assert.ok(result.steps.some((step) => /Substitute the bounds/.test(step.description)));
 });
 
 test('offline solver keeps indefinite integrals symbolic', async () => {

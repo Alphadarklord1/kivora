@@ -38,8 +38,11 @@ export function normalizeMathInput(input: string) {
     .replace(/\be\^x\b/gi, 'exp(x)')
     .replace(/\be\^\(([^)]+)\)/gi, 'exp($1)')
     .replace(/\bderivative of\b/gi, 'derivative of ')
+    .replace(/\bdifferentiation of\b/gi, 'derivative of ')
+    .replace(/\bdifferentiate\b/gi, 'derivative of ')
     .replace(/\bintegral of\b/gi, 'integral of ')
     .replace(/\s*=\s*/g, ' = ')
+    .replace(/^lim\s+/i, 'limit ')
     .trim();
 
   return normalized;
@@ -156,7 +159,16 @@ function exactTrigAnswer(compactInput: string) {
 }
 
 function deriveGraphExpression(normalizedInput: string, category: MathCategoryId) {
-  if (category === 'statistics' || category === 'vectors' || category === 'matrices' || category === 'linear-algebra') {
+  if (
+    category === 'statistics' ||
+    category === 'vectors' ||
+    category === 'matrices' ||
+    category === 'linear-algebra' ||
+    category === 'discrete' ||
+    category === 'physics' ||
+    category === 'sequences-series' ||
+    category === 'differential-equations'
+  ) {
     return undefined;
   }
 
@@ -190,7 +202,7 @@ function categoryFromProblem(normalizedInput: string): MathCategoryId {
   if (/\[\[[^\]]+\]\]/.test(normalizedInput) || /\bdet\(|\binv\(/.test(lower)) return 'matrices';
   if (/mean\(|median\(|variance\(|std\(/.test(lower)) return 'statistics';
   if (/hypotenuse|distance\s*\(|distance between|midpoint of|line through|equation of circle|area circle|circumference circle|area triangle|area rectangle|volume of sphere|pythagorean/.test(lower)) return 'geometry';
-  if (/derivative|integral|limit|d\/dx|\bint\b|\blim\b/.test(lower)) return 'calculus';
+  if (/derivative|integral|limit|d\/dx|\bint\b|\blim\b|differentiat|\bdiff\b/.test(lower)) return 'calculus';
   if (/\bsin\(|\bcos\(|\btan\(|\bcot\(|\bsec\(|\bcsc\(/.test(lower)) return 'trigonometry';
   if (/arithmetic (?:nth|sum)|geometric (?:nth|sum)|sequence|series/.test(lower)) return 'sequences-series';
   if (/matrix|determinant|inverse/.test(lower)) return 'linear-algebra';
@@ -272,6 +284,17 @@ function solveEquation(normalizedInput: string, category: MathCategoryId): Solve
     result.answer = cleaned.map((value) => `x = ${value}`).join(', ');
     result.answerLatex = cleaned.map((value) => `x = ${expressionToLatex(value)}`).join(', \quad ');
     result.explanation = `Solved ${canonical} exactly and isolated x.`;
+
+    // Fix 3b: Add log notation note when log() is used without explicit base
+    if (/\blog\s*\(/.test(normalizedInput) && !/log10|log_10|\bln\b/.test(normalizedInput)) {
+      result.steps.push({
+        step: result.steps.length + 1,
+        description: 'Note on log notation',
+        expression: '\\log(x) \\equiv \\ln(x)',
+        explanation: 'In this solver, log() means the natural logarithm (base e). For base-10 logarithm, use log10(x).',
+      });
+    }
+
     return result;
   } catch (error) {
     result.verified = false;
@@ -404,6 +427,160 @@ function solveQuadraticEquation(normalizedInput: string, category: MathCategoryI
   }
 
   return solveEquation(normalizedInput, category);
+}
+
+function solveCubicEquation(problem: string): SolverResult | null {
+  // Matches: ax^3 + bx^2 + cx + d = 0
+  const match = problem.match(
+    /^([+-]?\s*\d*\.?\d*)\s*[x*]\^?\s*3\s*([+-]\s*\d*\.?\d*)\s*[x*]\^?\s*2\s*([+-]\s*\d*\.?\d*)\s*[x*]\s*([+-]\s*\d*\.?\d*)\s*=\s*0$/i,
+  );
+  if (!match) return null;
+
+  const a = parseFloat(match[1].replace(/\s/g, '') || '1') || 1;
+  const b = parseFloat(match[2].replace(/\s/g, '') || '0') || 0;
+  const c = parseFloat(match[3].replace(/\s/g, '') || '0') || 0;
+  const d = parseFloat(match[4].replace(/\s/g, '') || '0') || 0;
+
+  // Use mathjs polynomial root finding
+  try {
+    // Depress: t = x - b/(3a)
+    const p = (3 * a * c - b * b) / (3 * a * a);
+    const q = (2 * b * b * b - 9 * a * b * c + 27 * a * a * d) / (27 * a * a * a);
+    const disc = -(4 * p * p * p + 27 * q * q);
+    const shift = -b / (3 * a);
+
+    const roots: number[] = [];
+
+    if (Math.abs(disc) < 1e-10) {
+      // Repeated roots
+      const u = Math.cbrt(-q / 2);
+      roots.push(2 * u + shift, -u + shift);
+    } else if (disc > 0) {
+      // 3 real roots via trigonometric method
+      const m = 2 * Math.sqrt(-p / 3);
+      for (let k = 0; k < 3; k++) {
+        const t = m * Math.cos((1 / 3) * Math.acos((3 * q) / (p * m)) - (2 * Math.PI * k) / 3);
+        roots.push(t + shift);
+      }
+    } else {
+      // 1 real root via Cardano
+      const sqrt_disc = Math.sqrt(-disc / 108);
+      const u = Math.cbrt(-q / 2 + sqrt_disc);
+      const v = Math.cbrt(-q / 2 - sqrt_disc);
+      roots.push(u + v + shift);
+    }
+
+    const realRoots = roots
+      .filter((r, i, arr) => arr.findIndex(x => Math.abs(x - r) < 1e-9) === i)
+      .sort((a, b) => a - b)
+      .map(r => Number(r.toFixed(6)));
+
+    const rootStr = realRoots.map(r => `x = ${r}`).join(', ');
+
+    return {
+      category: 'algebra',
+      normalizedInput: problem,
+      previewLatex: problem,
+      answer: rootStr,
+      answerLatex: realRoots.map(r => `x = ${r}`).join(',\\;'),
+      steps: [
+        { step: 1, description: 'Identify coefficients', expression: `a=${a}, b=${b}, c=${c}, d=${d}`, explanation: 'Cubic: ax³ + bx² + cx + d = 0' },
+        { step: 2, description: 'Depress to t³ + pt + q = 0', expression: `p = ${p.toFixed(4)}, q = ${q.toFixed(4)}`, explanation: 'Substitute x = t - b/(3a) to remove quadratic term' },
+        { step: 3, description: 'Discriminant Δ = −(4p³ + 27q²)', expression: `Δ = ${disc.toFixed(4)}`, explanation: disc > 0 ? 'Δ > 0: three distinct real roots — use trigonometric method' : disc < 0 ? 'Δ < 0: one real root, two complex — use Cardano' : 'Δ = 0: repeated roots' },
+        { step: 4, description: 'Real roots', expression: rootStr, explanation: 'Shift back: x = t + b/(3a)' },
+      ],
+      explanation: `Cubic equation solved. Real roots: ${rootStr}`,
+      graphExpr: `${a}*x^3 + ${b}*x^2 + ${c}*x + ${d}`,
+      verified: true,
+      engine: 'mathjs',
+      error: undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function solveQuarticEquation(problem: string): SolverResult | null {
+  // Matches: ax^4 + bx^3 + cx^2 + dx + e = 0 (coefficients may be 0)
+  // Use companion matrix eigenvalue approach via numerical iteration
+  const match = problem.match(
+    /^([+-]?\s*\d*\.?\d*)\s*[x*]\^?\s*4\s*([+-]\s*\d*\.?\d*)\s*[x*]\^?\s*3\s*([+-]\s*\d*\.?\d*)\s*[x*]\^?\s*2\s*([+-]\s*\d*\.?\d*)\s*[x*]\s*([+-]\s*\d*\.?\d*)\s*=\s*0$/i,
+  );
+  if (!match) return null;
+
+  const a = parseFloat(match[1].replace(/\s/g, '') || '1') || 1;
+  const b = parseFloat(match[2].replace(/\s/g, '') || '0') || 0;
+  const c = parseFloat(match[3].replace(/\s/g, '') || '0') || 0;
+  const d = parseFloat(match[4].replace(/\s/g, '') || '0') || 0;
+  const e = parseFloat(match[5].replace(/\s/g, '') || '0') || 0;
+
+  // Normalize: divide by a
+  const B = b / a, C = c / a, D = d / a, E = e / a;
+
+  // Depressed quartic: u = x + B/4
+  const p2 = C - (3 * B * B) / 8;
+  const q2 = B * B * B / 8 - B * C / 2 + D;
+  const r2 = -(3 * B * B * B * B) / 256 + (B * B * C) / 16 - (B * D) / 4 + E;
+
+  // Suppress unused variable warnings — retained for documentation of the depressed form
+  void p2; void q2; void r2;
+
+  try {
+    // Use numerical Newton's method to find roots
+    function polyVal(x: number): number {
+      return x * x * x * x + B * x * x * x + C * x * x + D * x + E;
+    }
+    function polyDeriv(x: number): number {
+      return 4 * x * x * x + 3 * B * x * x + 2 * C * x + D;
+    }
+
+    // Newton's method from multiple starting points
+    const candidates = [-3, -1, 0, 1, 3, -B / 4];
+    const roots: number[] = [];
+
+    for (const start of candidates) {
+      let x = start;
+      for (let iter = 0; iter < 80; iter++) {
+        const f = polyVal(x);
+        const fp = polyDeriv(x);
+        if (Math.abs(fp) < 1e-14) break;
+        const dx = -f / fp;
+        x += dx;
+        if (Math.abs(dx) < 1e-11) break;
+      }
+      if (Math.abs(polyVal(x)) < 1e-6) {
+        const rounded = Number(x.toFixed(6));
+        if (!roots.some(r => Math.abs(r - rounded) < 1e-5)) {
+          roots.push(rounded);
+        }
+      }
+    }
+
+    if (roots.length === 0) return null;
+    roots.sort((a, b) => a - b);
+    const rootStr = roots.map(r => `x = ${r}`).join(', ');
+
+    return {
+      category: 'algebra',
+      normalizedInput: problem,
+      previewLatex: problem,
+      answer: rootStr,
+      answerLatex: roots.map(r => `x = ${r}`).join(',\\;'),
+      steps: [
+        { step: 1, description: 'Identify coefficients', expression: `a=${a}, b=${b}, c=${c}, d=${d}, e=${e}`, explanation: 'Quartic: ax⁴ + bx³ + cx² + dx + e = 0' },
+        { step: 2, description: 'Normalise by leading coefficient', expression: `x⁴ + ${B.toFixed(3)}x³ + ${C.toFixed(3)}x² + ${D.toFixed(3)}x + ${E.toFixed(3)} = 0`, explanation: 'Divide every term by a' },
+        { step: 3, description: 'Apply Newton\'s method from multiple starting points', expression: `${roots.length} real root${roots.length !== 1 ? 's' : ''} found`, explanation: 'Iterative root-finding converges to each real root' },
+        { step: 4, description: 'Real roots', expression: rootStr, explanation: 'Verified by back-substitution' },
+      ],
+      explanation: `Quartic equation solved. Real roots: ${rootStr}`,
+      graphExpr: `${a}*x^4 + ${b}*x^3 + ${c}*x^2 + ${d}*x + ${e}`,
+      verified: true,
+      engine: 'mathjs',
+      error: undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function flipInequality(sign: string) {
@@ -870,14 +1047,62 @@ function solveSequenceSeries(normalizedInput: string): SolverResult {
   };
 }
 
+function solveExponentialEquation(normalizedInput: string, category: MathCategoryId): SolverResult | null {
+  // Matches: a^x = b  (e.g. 2^x = 16, e^x = 7, 3^x = 27)
+  const match = normalizedInput.match(/^([0-9e.]+)\^x\s*=\s*([0-9e.\-+*/()]+)$/i);
+  if (!match) return null;
+
+  const base = match[1].toLowerCase() === 'e' ? Math.E : parseFloat(match[1]);
+  let rhs: number;
+  try { rhs = Number(math.evaluate(match[2])); } catch { return null; }
+  if (!Number.isFinite(base) || base <= 0 || base === 1 || !Number.isFinite(rhs) || rhs <= 0) return null;
+
+  const x = Math.log(rhs) / Math.log(base);
+  const result = baseResult(category === 'calculus' ? 'algebra' : category, normalizedInput, 'mathjs');
+  const baseStr = match[1].toLowerCase() === 'e' ? 'e' : formatNumber(base);
+
+  result.steps.push({
+    step: 1, description: 'Write the exponential equation',
+    expression: `${baseStr}^{x} = ${expressionToLatex(formatNumber(rhs))}`,
+    explanation: 'Identify the base and the right-hand side value.',
+  });
+  result.steps.push({
+    step: 2, description: 'Take the logarithm of both sides',
+    expression: `x \\cdot \\ln(${baseStr}) = \\ln(${expressionToLatex(formatNumber(rhs))})`,
+    explanation: 'Apply ln to both sides. Use the power rule: ln(aˣ) = x·ln(a).',
+  });
+  result.steps.push({
+    step: 3, description: 'Solve for x',
+    expression: `x = \\frac{\\ln(${expressionToLatex(formatNumber(rhs))})}{\\ln(${baseStr})} = ${expressionToLatex(formatNumber(x))}`,
+    explanation: `Divide both sides by ln(${baseStr}).`,
+  });
+
+  // Check if x is a nice integer
+  const rounded = Math.round(x);
+  const isExact = Math.abs(x - rounded) < 1e-9;
+  result.answer = isExact ? `x = ${rounded}` : `x ≈ ${formatNumber(x)}`;
+  result.answerLatex = isExact ? `x = ${rounded}` : `x \\approx ${expressionToLatex(formatNumber(x))}`;
+  result.explanation = `Solved the exponential equation using logarithms.`;
+  result.graphExpr = `${baseStr}^x - ${formatNumber(rhs)}`;
+  return result;
+}
+
 function solveDerivative(normalizedInput: string): SolverResult {
   const result = baseResult('calculus', normalizedInput, 'nerdamer');
-  const expression = normalizedInput
+  let expression = normalizedInput
     .replace(/^derivative of\s+/i, '')
+    .replace(/^differentiation of\s+/i, '')
+    .replace(/^differentiate\s+/i, '')
+    .replace(/^diff\s+/i, '')
     .replace(/^d\/dx\s*/i, '')
     .replace(/^d\s*\(\s*/i, '')
     .replace(/\)$/g, '')
+    .replace(/^\((.+)\)$/, '$1')
     .trim();
+
+  // Handle diff(expr, var) form
+  const diffCallMatch = expression.match(/^diff\s*\(\s*(.+?)\s*,\s*[a-zA-Z]\s*\)$/i);
+  if (diffCallMatch) expression = diffCallMatch[1];
 
   result.steps.push({
     step: 1,
@@ -964,7 +1189,9 @@ function solveIntegral(normalizedInput: string): SolverResult {
 
   const expression = normalizedInput
     .replace(/^integral of\s+/i, '')
+    .replace(/^integral\s+/i, '')
     .replace(/^integrate\s+/i, '')
+    .replace(/^int\s+/i, '')
     .replace(/\s+dx$/i, '')
     .trim();
 
@@ -2167,6 +2394,61 @@ function solveGeneralExpression(normalizedInput: string, category: MathCategoryI
   }
 }
 
+function solveCompleteSquare(normalizedInput: string): SolverResult {
+  const result = baseResult('algebra', normalizedInput, 'hybrid');
+  const expr = normalizedInput
+    .replace(/^complete\s+the\s+square\s+(?:of\s+|for\s+)?/i, '')
+    .replace(/^completing\s+the\s+square\s+(?:of\s+|for\s+)?/i, '')
+    .trim();
+
+  // Parse as ax^2 + bx + c (= 0 optional)
+  const hasEq = expr.includes('=');
+  const lhs = hasEq ? expr.split('=')[0].trim() : expr;
+
+  const coeffs = extractQuadraticCoefficients(lhs);
+  if (!coeffs) {
+    return {
+      ...result,
+      verified: false,
+      answer: 'Could not parse as a quadratic',
+      answerLatex: '\\text{Could not parse as a quadratic}',
+      explanation: 'Use format: complete the square x^2 + 6x + 5',
+    };
+  }
+
+  const { a, b, c } = coeffs;
+  const h = -b / (2 * a);
+  const k = c - (b * b) / (4 * a);
+
+  result.steps.push({
+    step: 1, description: 'Write in standard form ax² + bx + c',
+    expression: `${expressionToLatex(formatNumber(a))}x^2 + ${expressionToLatex(formatNumber(b))}x + ${expressionToLatex(formatNumber(c))}`,
+    explanation: `Identify a = ${formatNumber(a)}, b = ${formatNumber(b)}, c = ${formatNumber(c)}.`,
+  });
+  result.steps.push({
+    step: 2, description: 'Find h = −b/(2a)',
+    expression: `h = \\frac{-${expressionToLatex(formatNumber(b))}}{2 \\cdot ${expressionToLatex(formatNumber(a))}} = ${expressionToLatex(formatNumber(h))}`,
+    explanation: 'This is the x-coordinate of the vertex.',
+  });
+  result.steps.push({
+    step: 3, description: 'Find k = c − b²/(4a)',
+    expression: `k = ${expressionToLatex(formatNumber(c))} - \\frac{(${expressionToLatex(formatNumber(b))})^2}{4 \\cdot ${expressionToLatex(formatNumber(a))}} = ${expressionToLatex(formatNumber(k))}`,
+    explanation: 'This is the y-coordinate of the vertex.',
+  });
+  result.steps.push({
+    step: 4, description: 'Write in vertex form a(x − h)² + k',
+    expression: `${a === 1 ? '' : expressionToLatex(formatNumber(a))}(x - ${expressionToLatex(formatNumber(h))})^2 + ${expressionToLatex(formatNumber(k))}`,
+    explanation: 'The completed square (vertex form) reveals the vertex of the parabola.',
+  });
+
+  const vertexForm = `${a === 1 ? '' : formatNumber(a)}(x - ${formatNumber(h)})^2 + ${formatNumber(k)}`;
+  result.answer = vertexForm;
+  result.answerLatex = `${a === 1 ? '' : expressionToLatex(formatNumber(a))}\\left(x - ${expressionToLatex(formatNumber(h))}\\right)^2 + ${expressionToLatex(formatNumber(k))}`;
+  result.explanation = `Vertex form: vertex at (${formatNumber(h)}, ${formatNumber(k)}).`;
+  result.graphExpr = lhs;
+  return result;
+}
+
 export function solveMathProblem(problem: string, requestedCategory?: string | null): SolverResult {
   const normalizedInput = normalizeMathInput(problem);
   const category = detectMathCategory(normalizedInput, requestedCategory);
@@ -2179,9 +2461,21 @@ export function solveMathProblem(problem: string, requestedCategory?: string | n
     if (category === 'discrete' || /^gcd\(|^lcm\(|^fibonacci\(|^fib\(|^f\(\d|^c\(\d|^p\(\d|^ncr\(|^npr\(|combinations?\(|permutations?\(|\d+\s*mod\s*\d|^\d+\^[\d]+\s*mod/.test(lower)) return solveDiscreteMath(normalizedInput);
     // Physics
     if (category === 'physics' || /\bohm\b|kinetic.energy|\bke\b|projectile|\bwave\b|wave\s*speed|wavelength|\bforce\b|\bf\s*=\s*m\s*a\b|potential.energy|\bpe\b|newton/.test(lower)) return solvePhysics(normalizedInput);
-    if (lower.startsWith('derivative of') || lower.startsWith('d/dx')) return solveDerivative(normalizedInput);
-    if (lower.startsWith('integral from') || lower.startsWith('integral of') || lower.startsWith('integrate')) return solveIntegral(normalizedInput);
-    if (lower.startsWith('limit ')) return solveLimit(normalizedInput);
+    if (
+      lower.startsWith('derivative of') ||
+      lower.startsWith('d/dx') ||
+      lower.startsWith('differentiate ') ||
+      lower.startsWith('differentiation of ') ||
+      /^diff\s+[a-zA-Z(]/.test(lower)
+    ) return solveDerivative(normalizedInput);
+    if (
+      lower.startsWith('integral from') ||
+      lower.startsWith('integral of') ||
+      lower.startsWith('integral ') ||
+      lower.startsWith('integrate') ||
+      /^int\s+/.test(lower)
+    ) return solveIntegral(normalizedInput);
+    if (lower.startsWith('limit ') || lower.startsWith('lim ')) return solveLimit(normalizedInput.replace(/^lim\s+/i, 'limit '));
     if (/hypotenuse|distance\s*\(|distance between|midpoint of|line through|equation of circle|area circle|circumference circle|area triangle|area rectangle|volume of sphere|pythagorean/.test(lower)) return solveGeometryProblem(normalizedInput);
     if (/arithmetic (?:nth|sum)|geometric (?:nth|sum)|sequence|series/.test(lower)) return solveSequenceSeries(normalizedInput);
     if (lower.startsWith('system ') || lower.startsWith('solve system ') || (normalizedInput.includes(';') && normalizedInput.includes('='))) return solveSystem(normalizedInput);
@@ -2189,9 +2483,23 @@ export function solveMathProblem(problem: string, requestedCategory?: string | n
     if (/^det\(|^inv\(|^\[\[/.test(normalizedInput)) return solveMatrixProblem(normalizedInput, category === 'linear-algebra' ? 'linear-algebra' : 'matrices');
     if (/mean\(|median\(|variance\(|std\(|combinations\(|permutations\(/.test(lower)) return solveStatisticsProblem(normalizedInput);
     if (category === 'trigonometry' || /\bsin\(|\bcos\(|\btan\(|\bcot\(|\bsec\(|\bcsc\(/.test(lower)) return solveTrigonometry(normalizedInput);
+    if (/^complete.*square|^completing.*square/i.test(lower)) return solveCompleteSquare(normalizedInput);
     if (/^(simplify|expand|factor)\b/i.test(lower)) return solveTransform(normalizedInput);
     if (/(<=|>=|<|>)/.test(normalizedInput)) return solveInequality(normalizedInput);
+    if (normalizedInput.includes('=') && (lower.includes('x^3') || lower.includes('x**3'))) {
+      const cubicResult = solveCubicEquation(normalizedInput);
+      if (cubicResult) return cubicResult;
+    }
+    if (normalizedInput.includes('=') && (lower.includes('x^4') || lower.includes('x**4'))) {
+      const quarticResult = solveQuarticEquation(normalizedInput);
+      if (quarticResult) return quarticResult;
+    }
     if (normalizedInput.includes('=') && (lower.includes('x^2') || lower.includes('x**2'))) return solveQuadraticEquation(normalizedInput, category);
+    // Exponential equation: a^x = b
+    if (normalizedInput.includes('=')) {
+      const expResult = solveExponentialEquation(normalizedInput, category);
+      if (expResult) return expResult;
+    }
     if (normalizedInput.includes('=')) return solveEquation(normalizedInput, category);
     return solveGeneralExpression(normalizedInput, category);
   } catch (error) {

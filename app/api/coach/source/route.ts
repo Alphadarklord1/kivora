@@ -40,23 +40,32 @@ function parseSummary(content: string) {
  * Throws with a user-friendly message when the URL is disallowed.
  */
 function assertNotPrivateUrl(url: URL): void {
-  const host = url.hostname.toLowerCase();
-  // Block loopback
-  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
-    throw new Error('This URL points to a local address and cannot be analyzed.');
-  }
-  // Block IPv4 private ranges using a quick regex check
-  const ipv4Private = /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|169\.254\.)/;
-  if (ipv4Private.test(host)) {
-    throw new Error('This URL points to a private network address and cannot be analyzed.');
-  }
-  // Block metadata services (AWS, GCP, Azure)
-  if (host === '169.254.169.254' || host === 'metadata.google.internal') {
-    throw new Error('This URL points to a cloud metadata service and cannot be analyzed.');
-  }
   // Only allow http/https
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error('Only http:// and https:// URLs are supported.');
+  }
+
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, ''); // strip IPv6 brackets
+
+  // Block loopback
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0') {
+    throw new Error('This URL points to a local address and cannot be analyzed.');
+  }
+
+  // Block IPv4 private/link-local ranges
+  const ipv4Private = /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|169\.254\.|0\.)/;
+  if (ipv4Private.test(host)) {
+    throw new Error('This URL points to a private network address and cannot be analyzed.');
+  }
+
+  // Block cloud metadata services
+  if (host === '169.254.169.254' || host === 'metadata.google.internal' || host === 'metadata.internal') {
+    throw new Error('This URL points to a cloud metadata service and cannot be analyzed.');
+  }
+
+  // Block IPv6 private/link-local ranges (fc00::/7 = fc** or fd**; fe80::/10 link-local)
+  if (/^f[cd]/i.test(host) || /^fe[89ab]/i.test(host)) {
+    throw new Error('This URL points to a private network address and cannot be analyzed.');
   }
 }
 
@@ -202,9 +211,14 @@ export async function POST(req: NextRequest) {
           'User-Agent': 'Mozilla/5.0 (compatible; KivoraBot/1.0; +https://kivora.app)',
           Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
         },
-        redirect: 'follow',
+        redirect: 'manual',
         signal: AbortSignal.timeout(20_000),
       });
+
+      // Reject redirects rather than following them — prevents DNS rebinding attacks
+      if (response.status >= 300 && response.status < 400) {
+        return NextResponse.json({ error: 'This URL redirects and cannot be analyzed.' }, { status: 400 });
+      }
 
       if (!response.ok) {
         return NextResponse.json({ error: `Could not fetch this source (${response.status}).` }, { status: 400 });

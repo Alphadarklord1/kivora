@@ -10,35 +10,36 @@ export interface AiRuntimePreferences {
 
 export const AI_PREFS_UPDATED_EVENT = 'kivora:ai-preferences-updated';
 
-export const DEFAULT_LOCAL_MODEL  = 'mistral';
-export const DEFAULT_CLOUD_MODEL  = 'openai/gpt-oss-20b';
+export const DEFAULT_LOCAL_MODEL  = 'qwen2.5';
+export const DEFAULT_CLOUD_MODEL  = 'llama-3.3-70b-versatile';
 export const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 
-// ── Local (Ollama) models ─────────────────────────────────────────────────────
+// ── Local (Ollama / offline) models — Qwen is default ────────────────────────
 export const LOCAL_MODEL_OPTIONS = [
-  { id: 'mistral',         label: 'Mistral 7B',          hint: 'Balanced local model for most study tasks' },
-  { id: 'qwen2.5',         label: 'Qwen2.5 1.5B',        hint: 'Fastest option for lighter hardware' },
-  { id: 'qwen2.5-math',    label: 'Qwen2.5-Math 1.5B',   hint: 'Best local choice for school math' },
-  { id: 'phi4-mini',       label: 'Phi-4 Mini 3.8B',     hint: 'Strong STEM reasoning' },
-  { id: 'llama3.2:3b',     label: 'Llama 3.2 3B',        hint: 'Quick all-round local assistant' },
-  { id: 'gemma3:4b',       label: 'Gemma 3 4B',          hint: 'Writing and structured output' },
+  { id: 'qwen2.5',         label: 'Qwen 2.5 7B',         hint: 'Default offline model — balanced for most study tasks' },
+  { id: 'qwen2.5:1.5b',    label: 'Qwen 2.5 1.5B',       hint: 'Fastest Qwen option for lighter hardware' },
+  { id: 'qwen2.5-math',    label: 'Qwen 2.5 Math 7B',    hint: 'Best local model for school math and STEM' },
+  { id: 'qwen2.5-coder',   label: 'Qwen 2.5 Coder 7B',   hint: 'Code explanation and technical study' },
+  { id: 'phi4-mini',       label: 'Phi-4 Mini 3.8B',     hint: 'Strong STEM reasoning on lighter hardware' },
+  { id: 'llama3.2:3b',     label: 'Llama 3.2 3B',        hint: 'Fast all-round local assistant' },
+  { id: 'mistral',         label: 'Mistral 7B',          hint: 'Reliable general local model' },
   { id: 'deepseek-r1:7b',  label: 'DeepSeek R1 7B',      hint: 'Heavy reasoning on stronger machines' },
-  { id: 'mistral:latest',  label: 'Mistral Large 24B',   hint: 'Highest local quality if hardware allows' },
 ] as const;
 
-// ── Cloud models (Groq, Grok/xAI, OpenAI) ─────────────────────────────────────
+// ── Cloud models — Groq is primary, others are fallback ───────────────────────
 export const CLOUD_MODEL_OPTIONS = [
-  { id: 'openai/gpt-oss-20b', label: 'Groq GPT-OSS 20B', hint: 'Strong hosted reasoning on Groq', provider: 'groq' as const },
-  { id: 'llama-3.1-8b-instant', label: 'Groq Llama 3.1 8B', hint: 'Fastest hosted option for quick study tasks', provider: 'groq' as const },
-  // ── Grok (xAI) — primary provider ──────────────────────────────────────────
-  { id: 'grok-3-fast',  label: 'Grok 3 Fast',   hint: 'Best balance of speed and quality — recommended', provider: 'grok' as const },
-  { id: 'grok-3',       label: 'Grok 3',         hint: 'Maximum capability for complex study tasks',      provider: 'grok' as const },
-  { id: 'grok-3-mini',  label: 'Grok 3 Mini',   hint: 'Compact model, great for quick tasks',             provider: 'grok' as const },
-  { id: 'grok-2',       label: 'Grok 2',         hint: 'Previous generation — fast and reliable',         provider: 'grok' as const },
-  // ── OpenAI — secondary / backup ────────────────────────────────────────────
-  { id: 'gpt-4o-mini',  label: 'GPT-4o mini',   hint: 'OpenAI backup — fast and lower cost',             provider: 'openai' as const },
-  { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini',  hint: 'OpenAI backup — stronger reasoning',              provider: 'openai' as const },
-  { id: 'gpt-4.1',      label: 'GPT-4.1',        hint: 'OpenAI backup — highest quality',                 provider: 'openai' as const },
+  // ── Groq — primary online provider ─────────────────────────────────────────
+  { id: 'llama-3.3-70b-versatile', label: 'Groq Llama 3.3 70B', hint: 'Best online model — recommended for all study tasks', provider: 'groq' as const },
+  { id: 'llama-3.1-70b-versatile', label: 'Groq Llama 3.1 70B', hint: 'Strong online reasoning on Groq', provider: 'groq' as const },
+  { id: 'llama-3.1-8b-instant',    label: 'Groq Llama 3.1 8B',  hint: 'Fastest online option for quick study tasks', provider: 'groq' as const },
+  { id: 'mixtral-8x7b-32768',      label: 'Groq Mixtral 8×7B',  hint: 'Great for long documents and summaries', provider: 'groq' as const },
+  { id: 'gemma2-9b-it',            label: 'Groq Gemma 2 9B',    hint: 'Compact and fast for notes and quizzes', provider: 'groq' as const },
+  // ── Grok (xAI) — secondary ─────────────────────────────────────────────────
+  { id: 'grok-3-fast',  label: 'Grok 3 Fast',  hint: 'xAI backup — good balance of speed and quality', provider: 'grok' as const },
+  { id: 'grok-3-mini',  label: 'Grok 3 Mini',  hint: 'xAI backup — compact and quick',                 provider: 'grok' as const },
+  // ── OpenAI — tertiary / backup ─────────────────────────────────────────────
+  { id: 'gpt-4o-mini',  label: 'GPT-4o mini',  hint: 'OpenAI backup — fast and lower cost',  provider: 'openai' as const },
+  { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini', hint: 'OpenAI backup — stronger reasoning',   provider: 'openai' as const },
 ] as const;
 
 export type CloudProvider = 'groq' | 'grok' | 'openai';

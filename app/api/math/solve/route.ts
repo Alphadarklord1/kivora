@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAppAccess } from '@/lib/api/guard';
+import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { solveMathProblem } from '@/lib/math/symbolic-solver';
 import type { MathSolveRequest, SolverResult } from '@/lib/math/types';
 
@@ -97,6 +99,11 @@ async function tryAiSolve(problem: string, category: string | null, contextText?
 }
 
 export async function POST(request: NextRequest) {
+  const guardResult = await requireAppAccess(request);
+  if (guardResult) return guardResult;
+  const rateLimitResponse = enforceAiRateLimit(request);
+  if (rateLimitResponse) return rateLimitResponse;
+
   const body = await request.json().catch(() => null) as MathSolveRequest | null;
   const problem = body?.problem?.trim();
   if (!problem) {

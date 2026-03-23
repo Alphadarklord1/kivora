@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, boolean, integer, jsonb, primaryKey, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, boolean, integer, real, jsonb, primaryKey, uniqueIndex } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import type { RAGIndex } from '@/lib/rag/retrieve';
 
@@ -284,8 +284,8 @@ export const srsReviewHistory = pgTable('srs_review_history', {
   nextReview: text('next_review').notNull(),
   interval: integer('interval').notNull().default(1),
   elapsedDays: integer('elapsed_days').notNull().default(0),
-  stability: integer('stability'),
-  difficulty: integer('difficulty'),
+  stability: real('stability'),
+  difficulty: real('difficulty'),
 });
 
 // ============ STUDY PLANS ============

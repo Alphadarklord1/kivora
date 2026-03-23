@@ -7,6 +7,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAppAccess } from '@/lib/api/guard';
+import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { callAi } from '@/lib/ai/call';
 import { offlineGenerate } from '@/lib/offline/generate';
 import { redactForAi, resolveAiDataMode } from '@/lib/privacy/ai-data';
@@ -24,6 +25,8 @@ Be specific, reference the actual text where possible, and keep feedback constru
 export async function POST(req: NextRequest) {
   const guard = await requireAppAccess(req);
   if (guard) return guard;
+  const rl = enforceAiRateLimit(req);
+  if (rl) return rl;
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON.' }, { status: 400 }); }

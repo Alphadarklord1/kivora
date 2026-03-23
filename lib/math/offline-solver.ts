@@ -5,6 +5,7 @@ import 'nerdamer/Calculus.js';
 type OfflineStep = {
   description: string;
   expression?: string;
+  explanation?: string;
 };
 
 type OfflineSolveResult = {
@@ -44,12 +45,29 @@ export function solveOffline(problem: string): OfflineSolveResult {
       finalAnswer: formatNumber(value),
       steps: [
         {
-          description: 'Find an antiderivative',
-          expression: `∫ ${definite.integrand} dx = ${antiderivative}`,
+          description: 'Identify the integrand f(x)',
+          expression: `f(x) = ${definite.integrand}`,
+          explanation: 'We need to evaluate the definite integral from ' + definite.lower + ' to ' + definite.upper,
         },
         {
-          description: 'Evaluate the bounds',
-          expression: `F(${definite.upper}) - F(${definite.lower}) = ${formatNumber(upperValue)} - ${formatNumber(lowerValue)}`,
+          description: 'Find the antiderivative F(x) = ∫ f(x) dx',
+          expression: `F(x) = ${antiderivative} + C`,
+          explanation: 'Use integration rules (power rule, chain rule, etc.) to find F(x)',
+        },
+        {
+          description: 'Apply the Fundamental Theorem of Calculus',
+          expression: `∫[${definite.lower}→${definite.upper}] f(x)dx = F(${definite.upper}) − F(${definite.lower})`,
+          explanation: 'The definite integral equals F(upper) − F(lower) where F is any antiderivative',
+        },
+        {
+          description: 'Substitute the bounds',
+          expression: `F(${definite.upper}) = ${formatNumber(upperValue)},  F(${definite.lower}) = ${formatNumber(lowerValue)}`,
+          explanation: 'Evaluate the antiderivative at each bound',
+        },
+        {
+          description: 'Compute the result',
+          expression: `${formatNumber(upperValue)} − ${formatNumber(lowerValue)} = ${formatNumber(value)}`,
+          explanation: 'Subtract to get the signed area under the curve',
         },
       ],
     };

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { srsDecks } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 // GET  /api/srs   — return all decks for the current user
 export async function GET(req: NextRequest) {
@@ -35,6 +35,7 @@ export async function PUT(req: NextRequest) {
       .onConflictDoUpdate({
         target: srsDecks.id,
         set:    { deckData: body.deck, updatedAt: new Date() },
+        where:  eq(srsDecks.userId, userId),
       });
     return NextResponse.json({ ok: true });
   } catch (e) {

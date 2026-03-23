@@ -35,8 +35,8 @@ export async function GET(req: NextRequest) {
       nextReview: row.nextReview,
       interval: row.interval,
       elapsedDays: row.elapsedDays,
-      stability: typeof row.stability === 'number' ? row.stability / 100 : null,
-      difficulty: typeof row.difficulty === 'number' ? row.difficulty / 100 : null,
+      stability: typeof row.stability === 'number' ? row.stability : null,
+      difficulty: typeof row.difficulty === 'number' ? row.difficulty : null,
     })));
   } catch (error) {
     console.error('[srs/review-history][GET]', error);
@@ -78,8 +78,8 @@ export async function POST(req: NextRequest) {
       nextReview: body.nextReview,
       interval: Math.max(1, Math.round(Number(body.interval ?? 1))),
       elapsedDays: Math.max(0, Math.round(Number(body.elapsedDays ?? 0))),
-      stability: typeof body.stability === 'number' ? Math.round(body.stability * 100) : null,
-      difficulty: typeof body.difficulty === 'number' ? Math.round(body.difficulty * 100) : null,
+      stability: typeof body.stability === 'number' ? body.stability : null,
+      difficulty: typeof body.difficulty === 'number' ? body.difficulty : null,
     });
 
     return NextResponse.json({ ok: true });

@@ -9,6 +9,7 @@ import {
   createSearchIndex,
   SecureLibraryItem,
 } from '@/lib/crypto/secure-storage';
+import { broadcastInvalidate, listenForInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
 
 export interface LibraryItem extends SecureLibraryItem {
   metadata?: Record<string, unknown>;
@@ -50,6 +51,11 @@ export function useLibrary() {
     fetchItems();
   }, [fetchItems]);
 
+  // Re-fetch when another tab saves to the library
+  useEffect(() => {
+    return listenForInvalidate(LIBRARY_CHANNEL, fetchItems);
+  }, [fetchItems]);
+
   // Save to library (encrypts before sending)
   const saveToLibrary = useCallback(
     async (mode: string, content: string, metadata?: Record<string, unknown>) => {
@@ -76,6 +82,7 @@ export function useLibrary() {
       const decrypted = await decryptLibraryItem(newItem);
 
       setItems((prev) => [decrypted as LibraryItem, ...prev]);
+      broadcastInvalidate(LIBRARY_CHANNEL);
       return decrypted;
     },
     [isUnlocked]

@@ -61,8 +61,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ error: 'Vision model not available. Make sure a vision model is installed (e.g., ollama pull llama3.2-vision)' }, { status: 503 });
+    return NextResponse.json(
+      { error: 'OCR requires a local vision model (Ollama). For now, type your problem manually.' },
+      { status: 503 },
+    );
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    // Surface a friendly fallback rather than a raw error or silent crash
+    return NextResponse.json(
+      { error: 'OCR requires a local vision model (Ollama). For now, type your problem manually.', detail: message },
+      { status: 500 },
+    );
   }
 }

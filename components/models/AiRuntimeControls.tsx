@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AI_PREFS_UPDATED_EVENT,
   CLOUD_MODEL_OPTIONS,
@@ -10,7 +10,126 @@ import {
   type AiMode,
   type AiRuntimePreferences,
 } from '@/lib/ai/runtime';
-import { useOllamaStatus } from '@/hooks/useOllamaStatus';
+import { INTERNET_REQUIRED_FEATURES, OFFLINE_READY_FEATURES } from '@/lib/ai/local-runtime';
+import { useLocalRuntimeStatus } from '@/hooks/useLocalRuntimeStatus';
+
+const QWEN_CMD = 'ollama pull qwen2.5';
+const QWEN_DISMISS_KEY = 'qwen-setup-dismissed';
+
+function QwenSetupBanner() {
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return sessionStorage.getItem(QWEN_DISMISS_KEY) === '1';
+  });
+  const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function dismiss() {
+    sessionStorage.setItem(QWEN_DISMISS_KEY, '1');
+    setDismissed(true);
+  }
+
+  function copyCmd() {
+    void navigator.clipboard.writeText(QWEN_CMD).then(() => {
+      setCopied(true);
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
+
+  if (dismissed) return null;
+
+  return (
+    <div
+      style={{
+        background: 'rgba(245,158,11,0.1)',
+        border: '1px solid rgba(245,158,11,0.3)',
+        borderRadius: 10,
+        padding: '10px 14px',
+        fontSize: 13,
+        display: 'grid',
+        gap: 8,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <p style={{ margin: 0, color: 'var(--text)', lineHeight: 1.5 }}>
+          <span role="img" aria-label="llama">🦙</span>{' '}
+          <strong>Offline AI setup</strong> — Run{' '}
+          <code
+            style={{
+              background: 'rgba(245,158,11,0.15)',
+              borderRadius: 4,
+              padding: '1px 5px',
+              fontFamily: 'monospace',
+              fontSize: 12,
+            }}
+          >
+            {QWEN_CMD}
+          </code>{' '}
+          in your terminal to enable local AI. Groq (online) is active as fallback.
+        </p>
+        <button
+          type="button"
+          onClick={dismiss}
+          aria-label="Dismiss"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--text-3)',
+            fontSize: 16,
+            lineHeight: 1,
+            flexShrink: 0,
+            padding: '0 2px',
+          }}
+        >
+          ✕
+        </button>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={copyCmd}
+          style={{
+            background: 'rgba(245,158,11,0.18)',
+            border: '1px solid rgba(245,158,11,0.35)',
+            borderRadius: 6,
+            padding: '4px 10px',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+            color: 'var(--text)',
+          }}
+        >
+          {copied ? '✓ Copied' : 'Copy command'}
+        </button>
+        <button
+          type="button"
+          onClick={dismiss}
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--border-2)',
+            borderRadius: 6,
+            padding: '4px 10px',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+            color: 'var(--text-2)',
+          }}
+        >
+          Got it
+        </button>
+      </div>
+    </div>
+  );
+}
 
 const MODE_COPY: Record<AiMode, { label: string; hint: string; summary: string }> = {
   auto: {
@@ -32,8 +151,7 @@ const MODE_COPY: Record<AiMode, { label: string; hint: string; summary: string }
 
 export function AiRuntimeControls({ compact = false }: { compact?: boolean }) {
   const [prefs, setPrefs] = useState<AiRuntimePreferences>(() => loadAiRuntimePreferences());
-  // Shared singleton so Settings and any future runtime surfaces reuse one status request.
-  const localStatus = useOllamaStatus();
+  const localStatus = useLocalRuntimeStatus();
   const [cloudConfigured, setCloudConfigured] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -60,9 +178,9 @@ export function AiRuntimeControls({ compact = false }: { compact?: boolean }) {
 
   const statusTone = useMemo(() => {
     if (prefs.mode === 'cloud' && cloudConfigured === false) return 'warning';
-    if (prefs.mode !== 'cloud' && localStatus === 'missing') return 'warning';
+    if (prefs.mode !== 'cloud' && localStatus.state === 'missing') return 'warning';
     return 'neutral';
-  }, [cloudConfigured, localStatus, prefs.mode]);
+  }, [cloudConfigured, localStatus.state, prefs.mode]);
 
   const panelStyle = compact
     ? { display: 'grid', gap: 14 }
@@ -75,8 +193,12 @@ export function AiRuntimeControls({ compact = false }: { compact?: boolean }) {
         background: 'var(--surface-2)',
       };
 
+  // Show the Qwen setup banner when user chose "local only" but Ollama isn't reachable
+  const showQwenBanner = prefs.mode === 'local' && localStatus.state === 'missing';
+
   return (
     <div style={panelStyle}>
+      {showQwenBanner && <QwenSetupBanner />}
       <div style={{ display: 'grid', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span className="badge badge-accent">Privacy-first routing</span>
@@ -178,12 +300,15 @@ export function AiRuntimeControls({ compact = false }: { compact?: boolean }) {
         <div style={{ padding: '12px 14px', borderRadius: 14, border: '1px solid var(--border-2)', background: 'var(--surface)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
             <strong style={{ fontSize: 'var(--text-sm)' }}>Local runtime</strong>
-            <span className={`badge${localStatus === 'ready' ? ' badge-success' : ''}`}>
-              {localStatus === 'checking' ? 'Checking…' : localStatus === 'ready' ? 'Ready' : 'Not detected'}
+            <span className={`badge${localStatus.state === 'ready' ? ' badge-success' : ''}`}>
+              {localStatus.state === 'checking' ? 'Checking…' : localStatus.state === 'ready' ? 'Ready' : 'Not detected'}
             </span>
           </div>
+          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 4 }}>
+            {localStatus.label}
+          </div>
           <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 'var(--text-xs)' }}>
-            Uses Ollama or the bundled desktop path so your study material can stay on-device.
+            {localStatus.detail}
           </p>
         </div>
 
@@ -197,6 +322,25 @@ export function AiRuntimeControls({ compact = false }: { compact?: boolean }) {
           <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 'var(--text-xs)' }}>
             Uses your server-side API key. Best for convenience and stronger hosted reasoning, but it needs internet.
           </p>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+        <div style={{ padding: '12px 14px', borderRadius: 14, border: '1px solid var(--border-2)', background: 'var(--surface)' }}>
+          <strong style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: 8 }}>Works fully local</strong>
+          <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-3)', fontSize: 'var(--text-xs)', display: 'grid', gap: 6 }}>
+            {OFFLINE_READY_FEATURES.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 14, border: '1px solid var(--border-2)', background: 'var(--surface)' }}>
+          <strong style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: 8 }}>Still needs internet</strong>
+          <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-3)', fontSize: 'var(--text-xs)', display: 'grid', gap: 6 }}>
+            {INTERNET_REQUIRED_FEATURES.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
         </div>
       </div>
     </div>

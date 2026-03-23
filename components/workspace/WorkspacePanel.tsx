@@ -15,6 +15,7 @@ import { deleteLocalFile, listLocalFiles, upsertLocalFile } from '@/lib/files/lo
 import { createFileReplaceRequest, createFileUploadRequest, resolveStoredFileBlob } from '@/lib/files/client-storage';
 import { getDeckStats, loadDecks, deleteDeck, saveDeck, type SRSDeck } from '@/lib/srs/sm2';
 import { ChatPanel } from '@/components/workspace/ChatPanel';
+import { KnowledgeMap } from '@/components/tools/KnowledgeMap';
 import { NotesPanel } from '@/components/workspace/NotesPanel';
 import { ExamPlannerPanel } from '@/components/workspace/ExamPlannerPanel';
 import { MCQView } from '@/components/workspace/views/MCQView';
@@ -25,6 +26,9 @@ import { FocusPanel } from '@/components/workspace/views/FocusPanel';
 import { mdToHtml } from '@/lib/utils/md';
 import { writeMathContext } from '@/lib/math/context';
 import { clearCoachHandoff, readCoachHandoff } from '@/lib/coach/handoff';
+import { clearScholarContext, readScholarContext, writeScholarContext, type ScholarContext } from '@/lib/coach/scholar-context';
+import { DocumentPreview } from '@/components/workspace/DocumentPreview';
+import { broadcastInvalidate, listenForInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -89,13 +93,11 @@ const GENERATE_TAB_GROUPS = [
 ] as const;
 
 const WORKSPACE_TABS: Array<{ id: MainTab; icon: string; label: string; getMeta?: (ctx: { filesCount: number; libraryCount: number }) => string }> = [
-  { id: 'files', icon: '📁', label: 'Files', getMeta: ({ filesCount }) => (filesCount ? `(${filesCount})` : '') },
+  { id: 'files',    icon: '📁', label: 'Files',   getMeta: ({ filesCount })   => (filesCount   ? `(${filesCount})`   : '') },
   { id: 'generate', icon: '⚡', label: 'Tools' },
-  { id: 'chat', icon: '💬', label: 'Chat' },
-  { id: 'notes', icon: '📓', label: 'Notes' },
-  { id: 'focus', icon: '🍅', label: 'Focus' },
-  { id: 'planner', icon: '📅', label: 'Planner' },
-  { id: 'library', icon: '🗂', label: 'Library', getMeta: ({ libraryCount }) => (libraryCount ? `(${libraryCount})` : '') },
+  { id: 'chat',     icon: '💬', label: 'Chat' },
+  { id: 'notes',    icon: '📓', label: 'Notes' },
+  { id: 'focus',    icon: '🍅', label: 'Focus' },
 ];
 
 const GENERATE_SHORTCUTS = [
@@ -106,7 +108,7 @@ const GENERATE_SHORTCUTS = [
 ] as const;
 
 type GenMode    = (typeof GENERATE_TABS)[number]['id'];
-type MainTab    = 'files' | 'generate' | 'chat' | 'notes' | 'focus' | 'library' | 'planner';
+type MainTab    = 'files' | 'generate' | 'chat' | 'notes' | 'focus' | 'planner' | 'analytics';
 type ReviewSetPhase = 'review' | 'import';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -123,6 +125,7 @@ function fileIcon(f: FileRecord): string {
 
 function isPDF(f: FileRecord)   { return f.mimeType === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'); }
 function isImage(f: FileRecord) { return !!f.name.toLowerCase().match(/\.(png|jpg|jpeg|gif|webp|svg)$/); }
+function isDocxOrPptx(f: FileRecord) { return !!f.name.toLowerCase().match(/\.(docx|pptx)$/); }
 
 function fmt(bytes?: number): string {
   if (!bytes) return '';
@@ -160,10 +163,16 @@ function FileViewer({
   const [textContent, setTextContent] = useState<string | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [err,         setErr]         = useState<string | null>(null);
+  // Preview tab state — only relevant for .docx / .pptx files
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const canPreview = isDocxOrPptx(file);
+  type ViewTab = 'text' | 'preview';
+  const [viewTab, setViewTab] = useState<ViewTab>('text');
 
   useEffect(() => {
     let url: string | null = null;
     setLoading(true); setErr(null); setBlobUrl(null); setTextContent(null);
+    setPreviewBlob(null); setViewTab('text');
     (async () => {
       try {
         if (file.content && !file.localBlobId) { setTextContent(file.content); return; }
@@ -172,7 +181,12 @@ function FileViewer({
           setErr('This file is not available locally or in remote storage yet.');
           return;
         }
-        if (isPDF(file) || isImage(file)) {
+        if (canPreview) {
+          // Store blob for the preview tab; also extract text for the text tab
+          setPreviewBlob(blob);
+          const res = await extractTextFromBlob(blob, file.name);
+          if (res.error) setErr(res.error); else setTextContent(res.text);
+        } else if (isPDF(file) || isImage(file)) {
           url = URL.createObjectURL(blob);
           setBlobUrl(url);
         } else {
@@ -225,6 +239,7 @@ function FileViewer({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', borderLeft: '1px solid var(--border)', background: 'var(--bg)', animation: 'slideInRight 0.18s ease' }}>
+      {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0, minWidth: 0 }}>
         <span style={{ fontSize: 18, flexShrink: 0 }}>{fileIcon(file)}</span>
         <span style={{ flex: 1, fontSize: 'var(--text-sm)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{file.name}</span>
@@ -240,6 +255,38 @@ function FileViewer({
         </button>
         <button className="btn-icon" onClick={onClose} title="Close" style={{ flexShrink: 0 }}>✕</button>
       </div>
+
+      {/* ── Tab switcher (only for .docx / .pptx) ── */}
+      {canPreview && !loading && !err && (
+        <div style={{ display: 'flex', gap: 4, padding: '6px 14px', borderBottom: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
+          <button
+            className="btn btn-sm"
+            onClick={() => setViewTab('text')}
+            style={{
+              padding: '3px 12px', borderRadius: 20, fontSize: 'var(--text-xs)',
+              fontWeight: 500, border: `1.5px solid ${viewTab === 'text' ? 'var(--accent)' : 'var(--border-2)'}`,
+              background: viewTab === 'text' ? 'var(--accent)' : 'var(--surface-2)',
+              color: viewTab === 'text' ? '#fff' : 'var(--text-2)', cursor: 'pointer',
+            }}
+          >
+            Text
+          </button>
+          <button
+            className="btn btn-sm"
+            onClick={() => setViewTab('preview')}
+            style={{
+              padding: '3px 12px', borderRadius: 20, fontSize: 'var(--text-xs)',
+              fontWeight: 500, border: `1.5px solid ${viewTab === 'preview' ? 'var(--accent)' : 'var(--border-2)'}`,
+              background: viewTab === 'preview' ? 'var(--accent)' : 'var(--surface-2)',
+              color: viewTab === 'preview' ? '#fff' : 'var(--text-2)', cursor: 'pointer',
+            }}
+          >
+            Preview
+          </button>
+        </div>
+      )}
+
+      {/* ── Content ── */}
       <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
         {loading && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10 }}>
@@ -257,7 +304,24 @@ function FileViewer({
             <img src={blobUrl} alt={file.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }} />
           </div>
         )}
-        {!loading && !err && textContent !== null && (
+        {/* ── docx / pptx: text tab ── */}
+        {!loading && !err && canPreview && viewTab === 'text' && textContent !== null && (
+          <div style={{ height: '100%', overflow: 'auto', padding: '16px 20px' }}>
+            <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span className="badge badge-accent">{wordCount(textContent).toLocaleString()} words</span>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>Extracted text preview</span>
+            </div>
+            <pre style={{ fontFamily: 'inherit', fontSize: 'var(--text-sm)', lineHeight: 1.8, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: 'var(--text)', margin: 0 }}>{textContent}</pre>
+          </div>
+        )}
+        {/* ── docx / pptx: preview tab ── */}
+        {!loading && !err && canPreview && viewTab === 'preview' && previewBlob && (
+          <div style={{ height: '100%', overflow: 'auto' }}>
+            <DocumentPreview blob={previewBlob} fileName={file.name} />
+          </div>
+        )}
+        {/* ── non-docx/pptx plain text ── */}
+        {!loading && !err && !canPreview && textContent !== null && (
           <div style={{ height: '100%', overflow: 'auto', padding: '16px 20px' }}>
             <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
               <span className="badge badge-accent">{wordCount(textContent).toLocaleString()} words</span>
@@ -281,6 +345,11 @@ export function WorkspacePanel({
   const router = useRouter();
   const searchParams = useSearchParams();
   const filePickerRef = useRef<HTMLInputElement>(null);
+
+  const [scholarCtx,    setScholarCtx]    = useState<ScholarContext | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return readScholarContext();
+  });
 
   const [mainTab,       setMainTab]       = useState<MainTab>('files');
   const [genMode,       setGenMode]       = useState<GenMode>('summarize');
@@ -309,6 +378,14 @@ export function WorkspacePanel({
   const [streamSource,  setStreamSource]  = useState<string>('');
   const [editMode,      setEditMode]      = useState(false);
   const [streak,        setStreak]        = useState<number>(0);
+  const [weekScore,     setWeekScore]     = useState<number | null>(null);
+  const [weekQuizzes,   setWeekQuizzes]   = useState<number>(0);
+  const [analyticsData, setAnalyticsData] = useState<{
+    weakAreas: Array<{ topic: string; accuracy: number; attempts: number; suggestion: string }>;
+    totalQuizzes: number;
+    avgScore: number;
+  } | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [notesInject,   setNotesInject]   = useState<string | undefined>(undefined);
   const abortRef    = useRef<AbortController | null>(null);
   const pasteRef    = useRef<HTMLTextAreaElement>(null);
@@ -337,7 +414,7 @@ export function WorkspacePanel({
 
     saveDeck(draft);
     setSrsDecks((current) => [draft, ...current.filter((deck) => deck.id !== draft.id)]);
-    setMainTab('library');
+    router.push('/library');
     setActiveReviewSetId(draft.id);
     setRequestedReviewPhase(options?.phase ?? null);
     setPendingReviewImportUrl(options?.importUrl ?? null);
@@ -420,11 +497,14 @@ export function WorkspacePanel({
   }, []);
 
   useEffect(() => {
-    if (mainTab === 'library') {
-      loadLib();
-      setSrsDecks(loadDecks());
-    }
-  }, [mainTab, loadLib]);
+    loadLib();
+    setSrsDecks(loadDecks());
+  }, [loadLib]);
+
+  // Re-fetch library when another tab saves a new item
+  useEffect(() => {
+    return listenForInvalidate(LIBRARY_CHANNEL, loadLib);
+  }, [loadLib]);
 
   // Auto-extract when a file is selected from the dropdown
   useEffect(() => {
@@ -545,6 +625,42 @@ export function WorkspacePanel({
       ? buildGenerationContext(mode as Parameters<typeof buildGenerationContext>[0], textForAI, { count }, await ensureRagIndex(selFile.id, src).catch(() => undefined))
       : buildGenerationContext(mode as Parameters<typeof buildGenerationContext>[0], textForAI, { count });
 
+    const ai = loadAiRuntimePreferences();
+    const privacyMode = loadClientAiDataMode();
+
+    if (ai.mode === 'local' && typeof window !== 'undefined' && window.electronAPI?.desktopAI) {
+      setGenerating(true); setOutput(''); setStreamSource('local'); setEditMode(false);
+      try {
+        const result = await window.electronAPI.desktopAI.generate({ mode, text: retrievalContext });
+        if (result.ok) {
+          setOutput(result.content.displayText);
+          setStreamSource('local');
+          toast('Generated locally on-device', 'success');
+          return;
+        }
+
+        if (result.errorCode === 'OUT_OF_SCOPE') {
+          setOutput(result.reason || result.message);
+          toast(result.message, 'warning');
+          return;
+        }
+
+        const { offlineGenerate } = await import('@/lib/offline/generate');
+        setOutput(offlineGenerate(mode as ToolMode, src, { count }));
+        setStreamSource('offline');
+        toast(result.message || 'Local model unavailable — used offline fallback instead', 'warning');
+        return;
+      } catch {
+        const { offlineGenerate } = await import('@/lib/offline/generate');
+        setOutput(offlineGenerate(mode as ToolMode, src, { count }));
+        setStreamSource('offline');
+        toast('Local generation failed — used offline fallback instead', 'warning');
+        return;
+      } finally {
+        setGenerating(false);
+      }
+    }
+
     // Cancel any in-flight stream
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -556,9 +672,6 @@ export function WorkspacePanel({
     setEditMode(false);
 
     try {
-      const ai = loadAiRuntimePreferences();
-      const privacyMode = loadClientAiDataMode();
-
       const res = await fetch('/api/generate/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -621,7 +734,7 @@ export function WorkspacePanel({
 
     if ((handoff.type === 'review-set' || handoff.type === 'import-success') && handoff.setId) {
       clearCoachHandoff();
-      setMainTab('library');
+      router.push('/library');
       setActiveReviewSetId(handoff.setId);
       setRequestedReviewPhase(handoff.panel === 'review' ? 'review' : null);
       setPendingReviewImportUrl(null);
@@ -700,12 +813,38 @@ export function WorkspacePanel({
 
   // ── Streak counter from localStorage ─────────────────────────────────
   useEffect(() => {
-    // Read study streak from local analytics data
     try {
       const raw = localStorage.getItem('kivora_study_streak');
       if (raw) setStreak(parseInt(raw, 10) || 0);
     } catch {}
   }, []);
+
+  // ── Analytics fetch (lazy, on tab open) ───────────────────────────────
+  useEffect(() => {
+    if (mainTab !== 'analytics' || analyticsData || analyticsLoading) return;
+    setAnalyticsLoading(true);
+    fetch('/api/analytics?period=7', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const qs = data.quizStats ?? {};
+        const wScore = qs.averageScore ?? null;
+        const wCount = qs.totalAttempts ?? 0;
+        setWeekScore(typeof wScore === 'number' ? Math.round(wScore) : null);
+        setWeekQuizzes(wCount);
+        setAnalyticsData({
+          weakAreas: (data.weakAreas ?? []).slice(0, 5),
+          totalQuizzes: wCount,
+          avgScore: wScore ?? 0,
+        });
+        // Keep streak in sync
+        const s = data.activity?.currentStreak ?? 0;
+        if (s > 0) { setStreak(s); try { localStorage.setItem('kivora_study_streak', String(s)); } catch {} }
+      })
+      .catch(() => {})
+      .finally(() => setAnalyticsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainTab]);
 
   async function saveToLibrary() {
     if (!output) return;
@@ -713,8 +852,12 @@ export function WorkspacePanel({
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: genMode, content: output }),
     });
-    if (res.ok) toast('Saved to Library ✓', 'success');
-    else toast('Could not save — DB may not be configured', 'warning');
+    if (res.ok) {
+      toast('Saved to Library ✓', 'success');
+      broadcastInvalidate(LIBRARY_CHANNEL);
+    } else {
+      toast('Could not save — DB may not be configured', 'warning');
+    }
   }
 
   async function toggleProfileShare(item: LibraryItemRecord) {
@@ -772,6 +915,7 @@ export function WorkspacePanel({
       if (!patchRes.ok) throw new Error('library-update-failed');
       const updated = await patchRes.json();
       setLibItems((prev) => prev.map((entry) => (entry.id === item.id ? updated : entry)));
+      broadcastInvalidate(LIBRARY_CHANNEL);
       toast(isPublished ? 'Removed from public profile' : 'Published to public profile', 'success');
     } catch {
       toast(isPublished ? 'Could not remove this item from your public profile' : 'Could not publish this item to your public profile', 'error');
@@ -835,10 +979,20 @@ export function WorkspacePanel({
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab === 'planner' || tab === 'library' || tab === 'generate' || tab === 'chat' || tab === 'notes' || tab === 'focus') {
+    if (tab === 'planner' || tab === 'generate' || tab === 'chat' || tab === 'notes' || tab === 'focus' || tab === 'analytics') {
       setMainTab(tab);
     }
   }, [searchParams]);
+
+  // Listen for sidebar tool navigation events
+  useEffect(() => {
+    function onOpenTab(e: Event) {
+      const tab = (e as CustomEvent<string>).detail as MainTab;
+      setMainTab(tab);
+    }
+    window.addEventListener('kivora:open-tab', onOpenTab);
+    return () => window.removeEventListener('kivora:open-tab', onOpenTab);
+  }, []);
 
   useEffect(() => {
     const reviewSetImport = searchParams.get('reviewSetImport');
@@ -902,8 +1056,8 @@ export function WorkspacePanel({
           )}
           {files.length > 0 && <span className="badge badge-accent">{files.length} file{files.length !== 1 ? 's' : ''}</span>}
           <button
-            className={`btn btn-sm ${mainTab === 'library' ? 'btn-accent' : 'btn-ghost'}`}
-            onClick={() => setMainTab('library')}
+            className="btn btn-sm btn-ghost"
+            onClick={() => router.push('/library')}
             title="Open review sets and saved outputs"
             style={{ fontSize: 12, padding: '3px 8px' }}
           >
@@ -920,6 +1074,55 @@ export function WorkspacePanel({
           )}
         </div>
       </div>
+
+      {/* Scholar Hub context banner */}
+      {scholarCtx && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          padding: '6px 14px',
+          background: 'color-mix(in srgb, var(--accent, #3b82f6) 8%, var(--surface))',
+          borderBottom: '1px solid color-mix(in srgb, var(--accent, #3b82f6) 20%, transparent)',
+          fontSize: 'var(--text-xs)', flexShrink: 0,
+        }}>
+          <span style={{ color: 'var(--text-2)' }}>
+            {scholarCtx.kind === 'research' ? '🔍' : '📄'}{' '}
+            <strong style={{ color: 'var(--text)' }}>Scholar Hub:</strong>{' '}
+            <span style={{ color: 'var(--text-2)' }}>{scholarCtx.label.slice(0, 60)}{scholarCtx.label.length > 60 ? '…' : ''}</span>
+          </span>
+          <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+            {scholarCtx.sourceText && (
+              <button
+                className="btn btn-sm btn-secondary"
+                style={{ fontSize: 11, padding: '2px 8px' }}
+                onClick={() => {
+                  setMainTab('generate');
+                  setPasteMode(true);
+                  setSelFile(null);
+                  setExtractedText(scholarCtx.sourceText!);
+                  setOutput('');
+                }}
+              >
+                Use as source ↓
+              </button>
+            )}
+            <a
+              href="/coach"
+              className="btn btn-sm btn-ghost"
+              style={{ fontSize: 11, padding: '2px 8px', textDecoration: 'none' }}
+            >
+              Open Scholar Hub ↗
+            </a>
+            <button
+              className="btn btn-sm btn-ghost"
+              style={{ fontSize: 11, padding: '2px 8px', opacity: 0.7 }}
+              onClick={() => { clearScholarContext(); setScholarCtx(null); }}
+              title="Dismiss Scholar Hub context"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="tab-bar" style={{ flexShrink: 0, overflowX: 'auto', flexWrap: 'nowrap' }}>
@@ -1134,6 +1337,33 @@ export function WorkspacePanel({
         {mainTab === 'generate' && (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
 
+            {/* Analytics strip */}
+            {(streak > 0 || weekScore !== null) && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '5px 14px',
+                background: 'color-mix(in srgb, var(--accent,#6366f1) 6%, var(--surface))',
+                borderBottom: '1px solid var(--border)', flexShrink: 0, flexWrap: 'wrap',
+              }}>
+                {streak > 0 && (
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    🔥 <strong>{streak}</strong>d streak
+                  </span>
+                )}
+                {weekScore !== null && (
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    📊 <strong>{weekScore}%</strong> avg · {weekQuizzes} quiz{weekQuizzes !== 1 ? 'zes' : ''} this week
+                  </span>
+                )}
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ fontSize: 10, padding: '1px 7px', marginLeft: 'auto', opacity: 0.7 }}
+                  onClick={() => setMainTab('analytics')}
+                >
+                  Full analytics →
+                </button>
+              </div>
+            )}
+
             {/* Tool mode pills — grouped */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
               {GENERATE_TAB_GROUPS.map((group, gi) => (
@@ -1192,6 +1422,19 @@ export function WorkspacePanel({
                       onClick={() => extractFromFile(selFile)}>
                       {extracting ? 'Extracting…' : '↓ Extract text'}
                     </button>
+                  )}
+                  {selFile && extractedText && (
+                    <a
+                      href="/coach"
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: 11, textDecoration: 'none', opacity: 0.75 }}
+                      title="Analyze this content deeply in Scholar Hub"
+                      onClick={() => {
+                        writeScholarContext({ label: selFile.name, sourceText: extractedText, kind: 'source' });
+                      }}
+                    >
+                      Scholar Hub ↗
+                    </a>
                   )}
                 </>
               )}
@@ -1432,261 +1675,110 @@ export function WorkspacePanel({
         {/* ─────────────────── PLANNER ─────────────────── */}
         {mainTab === 'planner' && <ExamPlannerPanel />}
 
-        {/* ─────────────────── LIBRARY ───────────────── */}
-        {mainTab === 'library' && (
-          <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        {/* ─────────────────── ANALYTICS ─────────────────── */}
+        {mainTab === 'analytics' && (
+          <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 'var(--text-lg)' }}>Saved outputs</h3>
-                {libItems.length > 0 && <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>{libItems.length} item{libItems.length !== 1 ? 's' : ''}</div>}
+                <h3 style={{ margin: 0, fontSize: 'var(--text-lg)' }}>Analytics</h3>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>Last 7 days · quiz attempts and review activity</div>
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={loadLib}>↻ Refresh</button>
+              <a href="/coach" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>Full analysis in Scholar Hub ↗</a>
             </div>
 
-            {/* ── SRS Decks ───────────────────────────────────────────────── */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
-                <div>
-                  <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>📇 Review Sets</span>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>
-                    Flashcards, imports, and long-term recall live here in Workspace.
-                  </div>
+            {/* Stat cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 20 }}>
+              {[
+                { label: 'Streak',     value: streak > 0 ? `🔥 ${streak}d` : '—', sub: 'days in a row' },
+                { label: 'Avg Score',  value: weekScore !== null ? `${weekScore}%` : analyticsLoading ? '…' : '—', sub: 'this week' },
+                { label: 'Quizzes',    value: analyticsLoading ? '…' : String(weekQuizzes), sub: 'this week' },
+                { label: 'Review Sets',value: String(srsDecks.length), sub: 'total decks' },
+              ].map(card => (
+                <div key={card.label} style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 12, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{card.label}</div>
+                  <div style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--text)' }}>{card.value}</div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>{card.sub}</div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{srsDecks.length} set{srsDecks.length !== 1 ? 's' : ''}</span>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => {
-                      createWorkspaceReviewSet({
-                        name: `Review set ${srsDecks.length + 1}`,
-                        description: 'Use this set for flashcards, quizzes, and spaced repetition in Workspace.',
-                      });
-                      toast('New review set ready in Workspace', 'success');
-                    }}
-                  >
-                    ＋ New review set
-                  </button>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => {
-                      createWorkspaceReviewSet({
-                        name: 'Imported review set',
-                        description: 'Import cards here from pasted text, CSV, Anki, or a Kivora share link.',
-                        phase: 'import',
-                      });
-                      toast('Import panel opened in Workspace', 'success');
-                    }}
-                  >
-                    📥 Import cards
-                  </button>
-                </div>
-              </div>
-              {srsDecks.length > 0 ? (
-                <>
-                {activeReviewSet && (
-                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 14, padding: 14, marginBottom: 14 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 'var(--text-base)', marginBottom: 4 }}>{activeReviewSet.name}</div>
-                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                          Full review-set study and editing now live in Workspace.
-                        </div>
-                      </div>
-                      <button className="btn btn-ghost btn-sm" onClick={() => { setActiveReviewSetId(null); setRequestedReviewPhase(null); setPendingReviewImportUrl(null); }}>
-                        Close
-                      </button>
-                    </div>
-                    <FlashcardView
-                      initialDeck={activeReviewSet}
-                      title={activeReviewSet.name}
-                      requestedPhase={requestedReviewPhase}
-                      initialImportUrl={pendingReviewImportUrl}
-                      onRequestedPhaseHandled={() => setRequestedReviewPhase(null)}
-                      onDeckChange={(next) => setSrsDecks((current) => {
-                        const exists = current.some((deck) => deck.id === next.id);
-                        return exists
-                          ? current.map((deck) => deck.id === next.id ? next : deck)
-                          : [next, ...current];
-                      })}
-                      showBrowseButton={false}
-                      showPublicActions={false}
-                    />
-                  </div>
-                )}
-                {srsDecks.map(deck => {
-                  const st = getDeckStats(deck);
+              ))}
+            </div>
+
+            {/* Weak areas */}
+            {analyticsLoading ? (
+              [1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 56, marginBottom: 8, borderRadius: 10 }} />)
+            ) : analyticsData && analyticsData.weakAreas.length > 0 ? (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', marginBottom: 10 }}>⚠️ Weak Areas</div>
+                {analyticsData.weakAreas.map(area => {
+                  const pct = Math.round(area.accuracy);
+                  const color = pct < 40 ? '#ef4444' : pct < 65 ? '#f97316' : '#22c55e';
                   return (
-                    <div key={deck.id} style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 500, fontSize: 'var(--text-sm)', marginBottom: 3 }}>{deck.name}</div>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {[
-                              { label: `${st.new} new`,       color: '#4f86f7' },
-                              { label: `${st.learning} lrn`,  color: '#f59e0b' },
-                              { label: `${st.mature} mature`,  color: '#52b788' },
-                            ].map(b => (
-                              <span key={b.label} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 10, background: `${b.color}22`, color: b.color, fontWeight: 600 }}>{b.label}</span>
-                            ))}
-                            {st.due > 0 && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 10, background: 'var(--accent-subtle, rgba(79,134,247,0.12))', color: 'var(--accent)', fontWeight: 700 }}>{st.due} due</span>}
+                    <div key={area.topic} style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10, padding: '10px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 500, fontSize: 'var(--text-sm)' }}>{area.topic}</div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>{area.suggestion}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color }}>{pct}%</span>
+                          <div style={{ flex: 1, height: 5, background: 'var(--border-2)', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3 }} />
                           </div>
+                          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{area.attempts} attempts</span>
                         </div>
-                        <button className="btn btn-primary btn-sm"
-                          onClick={() => {
-                            setActiveReviewSetId(deck.id);
-                            setRequestedReviewPhase(st.due > 0 ? 'review' : null);
-                            setPendingReviewImportUrl(null);
-                          }}>
-                          {st.due > 0 ? `▶ Review ${st.due}` : 'Open in Workspace'}
-                        </button>
-                        <button className="btn-icon" style={{ color: 'var(--text-3)', width: 24, height: 24, fontSize: 12 }}
-                          onClick={() => {
-                            if (!confirm(`Delete review set "${deck.name}"?`)) return;
-                            deleteDeck(deck.id);
-                            setSrsDecks(d => d.filter(x => x.id !== deck.id));
-                            void fetch(`/api/srs/${deck.id}`, { method: 'DELETE' }).catch(() => {});
-                          }}>✕</button>
                       </div>
+                      <a href="/coach" style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none', whiteSpace: 'nowrap' }}>Practice in Scholar Hub →</a>
                     </div>
                   );
                 })}
-                </>
-              ) : (
-                <div className="empty-state" style={{ padding: '18px 16px', textAlign: 'left' }}>
-                  <div className="empty-icon">📇</div>
-                  <h3 style={{ marginBottom: 6 }}>No review sets yet</h3>
-                  <p>Create one from Workspace or import cards here when you want spaced repetition.</p>
-                </div>
-              )}
-              <div style={{ height: 1, background: 'var(--border)', margin: '16px 0' }} />
+              </div>
+            ) : analyticsData ? (
+              <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginBottom: 20, padding: '8px 0' }}>✔ No weak areas detected this week</div>
+            ) : null}
+
+            {/* Knowledge Map */}
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
+              <KnowledgeMap />
             </div>
 
-            {libLoad ? (
-              [1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 90, marginBottom: 10, borderRadius: 10 }} />)
-            ) : libItems.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">🗂️</div>
-                <h3>Library is empty</h3>
-                <p>Generate something in <strong>Generate</strong>, then click <strong>Save to Library</strong>.</p>
+            {/* Library quick-access */}
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>🗂 Recent Saves</div>
+                <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => router.push('/library')}>See all in Library →</button>
               </div>
-            ) : libItems.map(item => {
-              const tool = GENERATE_TABS.find(t => t.id === item.mode);
-              const label = item.mode === 'math-solution'
-                ? 'Math Solution'
-                : item.mode === 'math-practice'
-                  ? 'Math Practice'
-                  : (tool?.label ?? item.mode);
-              const expanded = libExpanded[item.id];
-              return (
-                <div key={item.id} className="lib-item" style={{ marginBottom: 10 }}>
-                  <div className="lib-item-header">
-                    <span style={{ fontSize: 16 }}>{tool?.icon ?? '📄'}</span>
-                    <span className="lib-item-mode">{label}</span>
-                    <span className="lib-item-date">{fmtDate(item.createdAt)}</span>
-                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                      <button className="btn btn-ghost btn-sm" onClick={() => setLibExpanded(p => ({ ...p, [item.id]: !expanded }))}>
-                        {expanded ? 'Collapse' : 'Expand'}
-                      </button>
-                      <button className="btn btn-ghost btn-sm"
+              {libLoad ? (
+                [1,2].map(i => <div key={i} className="skeleton" style={{ height: 52, marginBottom: 8, borderRadius: 8 }} />)
+              ) : libItems.length === 0 ? (
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', padding: '8px 0' }}>
+                  Nothing saved yet — generate something and click <strong>Save</strong>.
+                </div>
+              ) : (
+                libItems.slice(0, 5).map(item => {
+                  const tool = GENERATE_TABS.find(t => t.id === item.mode);
+                  return (
+                    <div key={item.id} style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 9, padding: '9px 12px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 16, flexShrink: 0 }}>{tool?.icon ?? '📄'}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.metadata?.title ?? item.mode}</div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{fmtDate(item.createdAt)}</div>
+                      </div>
+                      <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, flexShrink: 0 }}
                         onClick={() => {
-                          if (item.mode === 'math-solution' || item.mode === 'math-practice') {
-                            router.push('/math');
-                            toast('Open the Math page to review this item.', 'info');
-                            return;
-                          }
                           setOutput(item.content);
                           const match = GENERATE_TABS.find(t => t.id === item.mode);
                           setGenMode(match ? item.mode as GenMode : 'summarize');
                           setMainTab('generate');
-                          toast('Loaded into Generate', 'info');
                         }}>Open ↗</button>
-                      <button className="btn-icon" style={{ color: 'var(--danger)', width: 26, height: 26 }}
-                        onClick={async () => {
-                          await fetch(`/api/library/${item.id}`, { method: 'DELETE' });
-                          setLibItems(p => p.filter(x => x.id !== item.id));
-                          toast('Deleted', 'info');
-                        }}>✕</button>
                     </div>
-                  </div>
-                  {item.metadata?.problem && (
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 6 }}>Problem: {item.metadata.problem}</div>
-                  )}
-                  {item.metadata?.sourceFileName && (
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 6 }}>Source: {item.metadata.sourceFileName}</div>
-                  )}
-                  {item.metadata?.publicProfile ? (
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginBottom: 6 }}>
-                      Public profile: live{item.metadata?.publicShareUrl ? ' • shared link ready' : ''}
-                    </div>
-                  ) : null}
-                  {item.mode === 'flashcards' ? (
-                    <div style={{ marginTop: 8 }}>
-                      {expanded
-                        ? <FlashcardView content={item.content} />
-                        : <div className="lib-item-preview" style={{ maxHeight: 80, overflow: 'hidden', WebkitMaskImage: 'linear-gradient(to bottom, #000 60%, transparent)', maskImage: 'linear-gradient(to bottom, #000 60%, transparent)', fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                            {item.content.slice(0, 300)}…
-                          </div>
-                      }
-                    </div>
-                  ) : item.mode === 'mcq' ? (
-                    <div style={{ marginTop: 8 }}>
-                      {expanded
-                        ? <MCQView content={item.content} />
-                        : <div className="lib-item-preview" style={{ maxHeight: 80, overflow: 'hidden', WebkitMaskImage: 'linear-gradient(to bottom, #000 60%, transparent)', maskImage: 'linear-gradient(to bottom, #000 60%, transparent)' }}>
-                            <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(item.content.slice(0, 400)) }} />
-                          </div>
-                      }
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: 8 }}>
-                      {expanded
-                        ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(item.content) }} />
-                        : <div className="tool-output" style={{ maxHeight: 90, overflow: 'hidden', WebkitMaskImage: 'linear-gradient(to bottom, #000 50%, transparent)', maskImage: 'linear-gradient(to bottom, #000 50%, transparent)', pointerEvents: 'none' }}
-                            dangerouslySetInnerHTML={{ __html: mdToHtml(item.content.slice(0, 600)) }} />
-                      }
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
-                      onClick={() => navigator.clipboard.writeText(item.content).then(() => toast('Copied!', 'success'))}>
-                      📋 Copy
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      style={{ fontSize: 11 }}
-                      onClick={() => void toggleProfileShare(item)}
-                    >
-                      {item.metadata?.publicProfile ? '🙈 Remove from profile' : '🌐 Share to profile'}
-                    </button>
-                    {item.metadata?.publicShareUrl ? (
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        style={{ fontSize: 11 }}
-                        onClick={() => navigator.clipboard.writeText(item.metadata?.publicShareUrl || '').then(() => toast('Public link copied', 'success'))}
-                      >
-                        🔗 Copy public link
-                      </button>
-                    ) : null}
-                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
-                      onClick={() => {
-                        const filename = `${item.mode}-${new Date(item.createdAt).toISOString().slice(0,10)}.md`;
-                        const blob = new Blob([item.content], { type: 'text/markdown' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
-                        URL.revokeObjectURL(url);
-                        toast(`Downloaded ${filename}`, 'success');
-                      }}>
-                      ⬇ .md
-                    </button>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center', marginLeft: 2 }}>
-                      {wordCount(item.content).toLocaleString()} words
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })
+              )}
+            </div>
+
           </div>
         )}
+
+        {/* Library is now a standalone page at /library */}
+
       </div>
     </div>
   );

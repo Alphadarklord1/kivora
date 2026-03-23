@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
+import { LevelBadge } from '@/components/gamification/LevelBadge';
+import { getGamificationState, ACHIEVEMENTS, type GamificationState } from '@/lib/gamification/index';
 
 interface UserProfile {
   id: string;
@@ -64,7 +66,8 @@ export default function AccountPage() {
 
   const [profile,     setProfile]     = useState<UserProfile | null>(null);
   const [loading,     setLoading]     = useState(true);
-  const [section,     setSection]     = useState<'profile' | 'security' | 'danger'>('profile');
+  const [section,     setSection]     = useState<'profile' | 'security' | 'progress' | 'danger'>('profile');
+  const [gamification, setGamification] = useState<GamificationState | null>(null);
 
   // Profile form
   const [name,        setName]        = useState('');
@@ -82,6 +85,11 @@ export default function AccountPage() {
   // Delete account
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting,      setDeleting]      = useState(false);
+
+  // Load gamification state from localStorage (client-side only)
+  useEffect(() => {
+    setGamification(getGamificationState());
+  }, []);
 
   // Fetch profile on mount
   useEffect(() => {
@@ -191,6 +199,7 @@ export default function AccountPage() {
   const SECTIONS: { id: typeof section; label: string; icon: string }[] = [
     { id: 'profile',  label: 'Profile',  icon: '👤' },
     { id: 'security', label: 'Security', icon: '🔐' },
+    { id: 'progress', label: 'Progress', icon: '🏆' },
     { id: 'danger',   label: 'Danger Zone', icon: '⚠️' },
   ];
 
@@ -404,6 +413,75 @@ export default function AccountPage() {
                 <span className="badge badge-accent" style={{ marginLeft: 'auto', fontSize: 10 }}>Active</span>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Progress / Gamification section ──────────────────────────────── */}
+      {section === 'progress' && (
+        <div className="settings-card" style={{ padding: '24px 24px 20px' }}>
+          <h2 style={{ margin: '0 0 20px', fontSize: 'var(--text-lg)' }}>Your Progress</h2>
+
+          {/* Level badge with XP bar */}
+          <div style={{ marginBottom: 28 }}>
+            <LevelBadge compact={false} />
+          </div>
+
+          {/* Achievements grid */}
+          <h3 style={{ margin: '0 0 14px', fontSize: 'var(--text-base)', fontWeight: 600 }}>
+            Achievements{' '}
+            {gamification && (
+              <span style={{ color: 'var(--text-3)', fontWeight: 400, fontSize: 'var(--text-sm)' }}>
+                ({gamification.achievements.length} / {ACHIEVEMENTS.length})
+              </span>
+            )}
+          </h3>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+            gap: 10,
+          }}>
+            {ACHIEVEMENTS.map(ach => {
+              const earned = gamification?.achievements.includes(ach.id) ?? false;
+              return (
+                <div
+                  key={ach.id}
+                  title={earned ? ach.description : `Locked: ${ach.description}`}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '14px 10px',
+                    borderRadius: 10,
+                    border: `1px solid ${earned ? 'var(--accent, #4f86f7)' : 'var(--border, rgba(255,255,255,0.08))'}`,
+                    background: earned ? 'rgba(79,134,247,0.08)' : 'var(--bg-2, rgba(255,255,255,0.03))',
+                    opacity: earned ? 1 : 0.45,
+                    filter: earned ? 'none' : 'grayscale(1)',
+                    cursor: 'default',
+                    userSelect: 'none',
+                    transition: 'opacity 0.2s, filter 0.2s',
+                  }}
+                >
+                  <span style={{ fontSize: 28, lineHeight: 1 }}>{earned ? ach.icon : '🔒'}</span>
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    textAlign: 'center',
+                    lineHeight: 1.3,
+                  }}>
+                    {ach.title}
+                  </span>
+                  {earned && (
+                    <span style={{ fontSize: 10, color: '#f7c948', fontWeight: 700 }}>
+                      +{ach.xp} XP
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

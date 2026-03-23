@@ -108,6 +108,17 @@ async function extractDocx(blob: Blob): Promise<string> {
   return result.value.trim();
 }
 
+/**
+ * Convert a .docx blob to an HTML string for visual preview.
+ * Uses mammoth.convertToHtml — runs entirely client-side.
+ */
+export async function extractDocxHtml(blob: Blob): Promise<string> {
+  const mammoth = await import('mammoth');
+  const arrayBuffer = await blob.arrayBuffer();
+  const result = await mammoth.convertToHtml({ arrayBuffer });
+  return result.value || '';
+}
+
 // ── PowerPoint / other ────────────────────────────────────────────────────
 
 async function extractPptx(blob: Blob): Promise<string> {

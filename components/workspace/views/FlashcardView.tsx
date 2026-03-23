@@ -13,6 +13,7 @@ import { deckToContent, exportDeckApkg, exportDeckCsv, syncDeckToCloud } from '@
 import { useI18n } from '@/lib/i18n/useI18n';
 import { mdToHtml } from '@/lib/utils/md';
 import { idbStore } from '@/lib/idb';
+import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
 
 function stableDeckId(input: string) {
   const bytes = new TextEncoder().encode(input);
@@ -350,11 +351,13 @@ export function FlashcardView({
     : parseFlashcards(content);
 
   // Core SRS
-  const [deck,       setDeck]       = useState<SRSDeck | null>(null);
-  const [sessionIdx, setSessionIdx] = useState(0);
-  const [flip,       setFlip]       = useState(false);
-  const [phase,      setPhase]      = useState<Phase>('preview');
-  const [graded,     setGraded]     = useState<number[]>([]);
+  const [deck,         setDeck]         = useState<SRSDeck | null>(null);
+  const [sessionIdx,   setSessionIdx]   = useState(0);
+  const [sessionQueue, setSessionQueue] = useState<string[]>([]); // card IDs in review order
+  const [sessionBase,  setSessionBase]  = useState(0);            // original queue length (no re-queued Again cards)
+  const [flip,         setFlip]         = useState(false);
+  const [phase,        setPhase]        = useState<Phase>('preview');
+  const [graded,       setGraded]       = useState<number[]>([]);
   // Rename
   const [renaming,   setRenaming]   = useState(false);
   const [nameInput,  setNameInput]  = useState('');
@@ -495,7 +498,8 @@ export function FlashcardView({
   // Load images for current review card
   useEffect(() => {
     if (!deck || phase !== 'review') return;
-    const card = deck.cards[sessionIdx];
+    const cardId = sessionQueue[sessionIdx] ?? deck.cards[sessionIdx]?.id;
+    const card = deck.cards.find(c => c.id === cardId);
     if (!card) return;
     (async () => {
       if (card.frontImageKey) {
@@ -534,6 +538,7 @@ export function FlashcardView({
       });
       if (!libRes.ok) throw new Error();
       const libItem = await libRes.json();
+      broadcastInvalidate(LIBRARY_CHANNEL);
       const shareRes = await fetch('/api/share', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ libraryItemId: libItem.id, permission: 'view' }) });
       if (!shareRes.ok) throw new Error();
       const sd = await shareRes.json();
@@ -558,12 +563,20 @@ export function FlashcardView({
   const launchPhase = useCallback((nextPhase: Exclude<Phase, 'done' | 'edit-card' | 'preview'>) => {
     if (!deck) return;
     switch (nextPhase) {
-      case 'review':
+      case 'review': {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const dueCards = deck.cards.filter(c => c.nextReview <= todayStr && c.repetitions > 0);
+        const newCards  = deck.cards.filter(c => c.repetitions === 0);
+        const initial   = [...dueCards, ...newCards];
+        const queue     = (initial.length > 0 ? initial : deck.cards).map(c => c.id);
+        setSessionQueue(queue);
+        setSessionBase(queue.length);
         setSessionIdx(0);
         setFlip(false);
         setGraded([]);
         setPhase('review');
         break;
+      }
       case 'write': {
         const queue = [...deck.cards].sort(() => Math.random() - 0.5).map((card) => card.id);
         setWriteQueue(queue);
@@ -629,9 +642,14 @@ export function FlashcardView({
 
   const stats        = getDeckStats(deck);
   const today        = new Date().toISOString().split('T')[0];
-  const sessionCards = [...deck.cards.filter(c => c.nextReview <= today && c.repetitions > 0), ...deck.cards.filter(c => c.repetitions === 0)];
-  const allCards     = sessionCards.length > 0 ? sessionCards : deck.cards;
-  const totalSession = allCards.length;
+  // Use the stable session queue (built at review start). Falls back to all cards if queue not yet set.
+  const allCards: SRSCard[] = sessionQueue.length > 0
+    ? sessionQueue.map(id => deck.cards.find(c => c.id === id)).filter((c): c is SRSCard => !!c)
+    : (() => {
+        const sc = [...deck.cards.filter(c => c.nextReview <= today && c.repetitions > 0), ...deck.cards.filter(c => c.repetitions === 0)];
+        return sc.length > 0 ? sc : deck.cards;
+      })();
+  const totalSession = sessionBase > 0 ? sessionBase : allCards.length;
   const forecastPreview = getWorkloadForecast(deck, 7);
   const forecastPreviewMax = Math.max(...forecastPreview, 1);
   const retentionSummary = getDeckRetentionSummary(deck);
@@ -685,8 +703,14 @@ export function FlashcardView({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(reviewEvent),
     }).catch(() => {});
-    if (sessionIdx + 1 >= allCards.length) setTimeout(() => setPhase('done'), 100);
-    else setTimeout(() => setSessionIdx(i => i + 1), 120);
+    // "Again" → re-queue card at end of session so it appears again before the session ends
+    if (grade === 0) {
+      setSessionQueue(q => [...q, card.id]);
+    }
+    const nextIdx = sessionIdx + 1;
+    const nextQueue = grade === 0 ? [...sessionQueue, card.id] : sessionQueue;
+    if (nextIdx >= nextQueue.length) setTimeout(() => setPhase('done'), 100);
+    else setTimeout(() => setSessionIdx(nextIdx), 120);
   }
 
   function importParsedCards(cards: Array<{ front: string; back: string }>, name: string) {
@@ -766,6 +790,14 @@ export function FlashcardView({
     { grade: 2, label: 'Good',  hint: 'Recalled correctly',           color: '#4f86f7' },
     { grade: 3, label: 'Easy',  hint: 'Instant recall — longer gap',  color: '#52b788' },
   ];
+
+  function fmtInterval(days: number): string {
+    if (days <= 0) return '<1d';
+    if (days === 1) return '1d';
+    if (days < 7)  return `${days}d`;
+    if (days < 30) return `${Math.round(days / 7)}w`;
+    return `${Math.round(days / 30)}mo`;
+  }
 
   // Swipe handlers (review mode)
   function onTouchStart(e: React.TouchEvent) {
@@ -996,7 +1028,11 @@ export function FlashcardView({
             const col = { new:'#4f86f7', learning:'#f59e0b', mature:'#52b788' }[mat];
             return (
               <div key={c.id} style={{ background:'var(--surface)', border:`1px solid var(--border-2)`, borderRadius:8, padding:'8px 10px', fontSize:'var(--text-xs)', borderLeft:`3px solid ${col}`, position:'relative', cursor:'pointer' }}
-                onClick={() => { setSessionIdx(i); setFlip(false); setPhase('review'); }}>
+                onClick={() => {
+                  const q = deck.cards.map(c => c.id);
+                  setSessionQueue(q); setSessionBase(q.length);
+                  setSessionIdx(i); setFlip(false); setPhase('review');
+                }}>
                 <button className="btn-icon" style={{ position:'absolute', top:4, right:4, fontSize:10, opacity:0.5, color:'var(--text-3)' }}
                   onClick={e => { e.stopPropagation(); setEditCardId(c.id); setEditFront(c.front); setEditBack(c.back); setEditFrontImg(c.frontImageKey ?? null); setEditBackImg(c.backImageKey ?? null); setFrontImgUrl(null); setBackImgUrl(null); setPhase('edit-card'); }}>✏️</button>
                 <div style={{ fontWeight:600, marginBottom:3, paddingRight:16 }}>{c.front}</div>
@@ -1511,7 +1547,10 @@ export function FlashcardView({
 
   // ── Review mode ──────────────────────────────────────────────────────────────
   const card      = allCards[Math.min(sessionIdx, allCards.length - 1)];
-  const revPct    = Math.round(sessionIdx / totalSession * 100);
+  const revPct    = Math.round(Math.min(sessionIdx, totalSession) / Math.max(totalSession, 1) * 100);
+  const gradeIntervals = card
+    ? ([0,1,2,3] as const).map(g => g === 0 ? '~10m' : fmtInterval(gradeCard(card, g).interval))
+    : ['~10m', '?', '?', '?'];
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14, maxWidth:540, margin:'0 auto' }}>
@@ -1549,13 +1588,14 @@ export function FlashcardView({
 
       {flip ? (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
-          {GRADES.map(g => (
+          {GRADES.map((g, gi) => (
             <button key={g.grade} onClick={() => doGrade(g.grade)} title={t(g.hint)}
-              style={{ border:`1.5px solid ${g.color}40`, borderRadius:10, padding:'12px 4px 10px', cursor:'pointer', background:`${g.color}14`, color:g.color, fontWeight:700, fontSize:'var(--text-sm)', transition:'all 0.12s', lineHeight:1.2 }}
+              style={{ border:`1.5px solid ${g.color}40`, borderRadius:10, padding:'10px 4px 8px', cursor:'pointer', background:`${g.color}14`, color:g.color, fontWeight:700, fontSize:'var(--text-sm)', transition:'all 0.12s', lineHeight:1.2 }}
               onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${g.color}28`; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = `${g.color}14`; (e.currentTarget as HTMLButtonElement).style.transform = ''; }}
             >
-              {t(g.label)}<div style={{ fontWeight:400, fontSize:10, opacity:.75, marginTop:3, lineHeight:1.3 }}>{t(g.hint)}</div>
+              <div style={{ fontSize:11, fontWeight:700, opacity:0.65, marginBottom:2 }}>{gradeIntervals[gi]}</div>
+              {t(g.label)}
             </button>
           ))}
         </div>

@@ -31,7 +31,7 @@ export type LocalManifestModel = {
 export const MODEL_COPY: Record<string, { label: string; summary: string; bundled: boolean; fit: string }> = {
   mini: {
     label: 'Mini Model',
-    summary: 'Fastest local model for immediate offline use on lighter hardware.',
+    summary: 'Included in desktop builds for immediate offline use on lighter hardware.',
     bundled: true,
     fit: '8 GB RAM',
   },

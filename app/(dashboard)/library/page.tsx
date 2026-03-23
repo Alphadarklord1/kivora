@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useToast } from '@/providers/ToastProvider';
 import { useI18n } from '@/lib/i18n/useI18n';
+import { printContent, printMultiple } from '@/lib/utils/print';
+import { ShareDialog, useShareDialog } from '@/components/share';
+import { broadcastInvalidate, listenForInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
 
 interface LibItem {
   id: string;
@@ -38,22 +41,26 @@ const ALL_TYPE_KEYS = ['all', ...Object.keys(MODE_META)] as const;
 type TypeFilter = typeof ALL_TYPE_KEYS[number];
 
 const LOCAL_AR: Record<string, string> = {
-  'saved outputs':    'مخرجات محفوظة',
-  'Search library\u2026':  'ابحث في المكتبة...',
-  'All types':        'جميع الأنواع',
-  'Library is empty': 'المكتبة فارغة',
-  'No results for':   'لا نتائج لـ',
+  'saved outputs':    '\u0645\u062e\u0631\u062c\u0627\u062a \u0645\u062d\u0641\u0648\u0638\u0629',
+  'Search library\u2026':  '\u0627\u0628\u062d\u062b \u0641\u064a \u0627\u0644\u0645\u0643\u062a\u0628\u0629...',
+  'All types':        '\u062c\u0645\u064a\u0639 \u0627\u0644\u0623\u0646\u0648\u0627\u0639',
+  'Library is empty': '\u0627\u0644\u0645\u0643\u062a\u0628\u0629 \u0641\u0627\u0631\u063a\u0629',
+  'No results for':   '\u0644\u0627 \u0646\u062a\u0627\u0626\u062c \u0644\u0640',
   'Generate study content in the Workspace \u2014 summaries, quizzes, notes, and more.':
-    'أنشئ محتوى دراسيًا في مساحة العمل \u2014 ملخصات واختبارات وملاحظات والمزيد.',
-  'Go to Workspace':  'انتقل إلى مساحة العمل',
-  'Expand':           'توسيع',
-  'Collapse':         'طي',
-  'Copied!':          'تم النسخ!',
+    '\u0623\u0646\u0634\u0626 \u0645\u062d\u062a\u0648\u0649 \u062f\u0631\u0627\u0633\u064a\u064b\u0627 \u0641\u064a \u0645\u0633\u0627\u062d\u0629 \u0627\u0644\u0639\u0645\u0644 \u2014 \u0645\u0644\u062e\u0635\u0627\u062a \u0648\u0627\u062e\u062a\u0628\u0627\u0631\u0627\u062a \u0648\u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0648\u0627\u0644\u0645\u0632\u064a\u062f.',
+  'Go to Workspace':  '\u0627\u0646\u062a\u0642\u0644 \u0625\u0644\u0649 \u0645\u0633\u0627\u062d\u0629 \u0627\u0644\u0639\u0645\u0644',
+  'Expand':           '\u062a\u0648\u0633\u064a\u0639',
+  'Collapse':         '\u0637\u064a',
+  'Copied!':          '\u062a\u0645 \u0627\u0644\u0646\u0633\u062e!',
+  'Print':            '\u0637\u0628\u0627\u0639\u0629',
+  'Export all':       '\u062a\u0635\u062f\u064a\u0631 \u0627\u0644\u0643\u0644',
+  'Share':            '\u0645\u0634\u0627\u0631\u0643\u0629',
 };
 
 export default function LibraryPage() {
   const { toast } = useToast();
   const { t, formatDate, locale } = useI18n(LOCAL_AR);
+  const { isOpen: shareOpen, shareTarget, openShare, closeShare } = useShareDialog();
 
   const [items, setItems]     = useState<LibItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,9 +79,15 @@ export default function LibraryPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  // Re-fetch when another tab mutates library data
+  useEffect(() => {
+    return listenForInvalidate(LIBRARY_CHANNEL, () => { void load(); });
+  }, [load]);
+
   async function deleteItem(id: string) {
     await fetch(`/api/library/${id}`, { method: 'DELETE' }).catch(() => {});
     setItems(prev => prev.filter(i => i.id !== id));
+    broadcastInvalidate(LIBRARY_CHANNEL);
     toast(t('Deleted'), 'info');
   }
 
@@ -120,6 +133,18 @@ export default function LibraryPage() {
           {items.length > 0 && (
             <span className="lib-count">{items.length} {t('saved outputs')}</span>
           )}
+          {filtered.length > 0 && (
+            <button
+              className="lib-btn lib-btn-ghost lib-btn-sm lib-export-all-btn"
+              onClick={() => printMultiple(filtered.map(item => ({
+                title: item.metadata?.title || item.metadata?.problem || (MODE_META[item.mode]?.label ?? item.mode),
+                content: item.content,
+              })))}
+              title={t('Export all')}
+            >
+              {'\uD83D\uDDA8\uFE0F'} {t('Export all')}
+            </button>
+          )}
         </div>
         <input
           type="search"
@@ -164,7 +189,7 @@ export default function LibraryPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="lib-empty">
-          <div className="lib-empty-icon">\uD83D\uDDC2\uFE0F</div>
+          <div className="lib-empty-icon">{'\uD83D\uDDC2\uFE0F'}</div>
           {search ? (
             <>
               <h3 className="lib-empty-title">{t('No results for')} &ldquo;{search}&rdquo;</h3>
@@ -179,7 +204,7 @@ export default function LibraryPage() {
                 {t('Generate study content in the Workspace \u2014 summaries, quizzes, notes, and more.')}
               </p>
               <a href="/workspace" className="lib-btn lib-btn-primary" style={{ marginTop: 14, display: 'inline-block' }}>
-                {t('Go to Workspace')} \u2192
+                {t('Go to Workspace')} {'\u2192'}
               </a>
             </>
           )}
@@ -204,16 +229,21 @@ export default function LibraryPage() {
                   <span className="lib-card-date">
                     {formatDate(item.createdAt, { month: 'short', day: 'numeric', year: 'numeric' })}
                   </span>
-                  <button className="lib-icon-btn" onClick={() => void deleteItem(item.id)} title={t('Delete')}>\u2715</button>
+                  <button
+                    className="lib-icon-btn lib-icon-btn-print"
+                    title={t('Print')}
+                    onClick={() => printContent(title, item.content)}
+                  >{'\uD83D\uDDA8\uFE0F'}</button>
+                  <button className="lib-icon-btn" onClick={() => void deleteItem(item.id)} title={t('Delete')}>{'\u2715'}</button>
                 </div>
 
                 {/* Tags */}
                 {item.metadata && (
                   <div className="lib-card-tags">
                     {item.metadata.category      && <span className="lib-tag lib-tag-accent">{item.metadata.category}</span>}
-                    {item.metadata.sourceFileName && <span className="lib-tag">\uD83D\uDCC4 {item.metadata.sourceFileName}</span>}
-                    {item.metadata.sourceDeckName && <span className="lib-tag">\uD83C\uDCCF {item.metadata.sourceDeckName}</span>}
-                    {item.metadata.graphExpr      && <span className="lib-tag">\uD83D\uDCC8 Graph</span>}
+                    {item.metadata.sourceFileName && <span className="lib-tag">{'\uD83D\uDCC4'} {item.metadata.sourceFileName}</span>}
+                    {item.metadata.sourceDeckName && <span className="lib-tag">{'\uD83C\uDCCF'} {item.metadata.sourceDeckName}</span>}
+                    {item.metadata.graphExpr      && <span className="lib-tag">{'\uD83D\uDCC8'} Graph</span>}
                     {item.metadata.savedFrom      && <span className="lib-tag">{item.metadata.savedFrom}</span>}
                   </div>
                 )}
@@ -238,10 +268,16 @@ export default function LibraryPage() {
                     {isExp ? t('Collapse') : t('Expand')}
                   </button>
                   <button className="lib-btn lib-btn-ghost lib-btn-sm" onClick={() => copyItem(item.content)}>
-                    \uD83D\uDCCB {t('Copy')}
+                    {'\uD83D\uDCCB'} {t('Copy')}
                   </button>
                   <button className="lib-btn lib-btn-ghost lib-btn-sm" onClick={() => exportItem(item)}>
-                    \u2B07 {t('Export')}
+                    {'\u2B07'} {t('Export')}
+                  </button>
+                  <button
+                    className="lib-btn lib-btn-ghost lib-btn-sm lib-btn-share"
+                    onClick={() => openShare('library', item.id, title)}
+                  >
+                    {'\uD83D\uDD17'} {t('Share')}
                   </button>
                 </div>
               </div>
@@ -250,10 +286,21 @@ export default function LibraryPage() {
         </div>
       )}
 
+      {/* ShareDialog — mounted once, driven by useShareDialog hook */}
+      {shareTarget && (
+        <ShareDialog
+          isOpen={shareOpen}
+          onClose={closeShare}
+          resourceType={shareTarget.resourceType}
+          resourceId={shareTarget.resourceId}
+          resourceName={shareTarget.resourceName}
+        />
+      )}
+
       <style jsx>{`
         .lib-page { max-width: 860px; margin: 0 auto; padding: 0 0 60px; }
         .lib-header { margin-bottom: 16px; }
-        .lib-title-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+        .lib-title-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
         .lib-title { font-size: var(--text-3xl, 1.75rem); font-weight: 700; margin: 0; }
         .lib-count { font-size: var(--text-sm); color: var(--text-3); }
         .lib-search {
@@ -305,6 +352,7 @@ export default function LibraryPage() {
           font-size: 13px; padding: 2px 5px; border-radius: 4px; transition: all 0.15s;
         }
         .lib-icon-btn:hover { color: var(--danger, #ef4444); background: color-mix(in srgb, var(--danger, #ef4444) 10%, transparent); }
+        .lib-icon-btn-print:hover { color: var(--text-1) !important; background: var(--bg-inset) !important; }
         .lib-card-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
         .lib-tag {
           padding: 2px 8px; border-radius: 5px; font-size: 11px;
@@ -319,6 +367,7 @@ export default function LibraryPage() {
         .lib-btn-ghost { padding: 5px 10px; background: transparent; border: 1px solid var(--border-2); color: var(--text-2); font-size: 12px; }
         .lib-btn-ghost:hover { background: var(--bg-inset); color: var(--text-1); }
         .lib-btn-sm { font-size: 12px; }
+        .lib-btn-share:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
       `}</style>
     </div>
   );

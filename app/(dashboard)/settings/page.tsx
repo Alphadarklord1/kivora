@@ -1,13 +1,15 @@
 'use client';
 
 import type { CSSProperties, FormEvent, ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { requestNotificationPermission, getNotificationPermission } from '@/lib/notifications/scheduler';
 import { signOut, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
 import { useSettings, type Density, type Theme } from '@/providers/SettingsProvider';
 import { AiRuntimeControls } from '@/components/models/AiRuntimeControls';
 import { ReportIssuePanel } from '@/components/settings/ReportIssuePanel';
+import { OllamaSetupPanel } from '@/components/settings/OllamaSetupPanel';
 import styles from './page.module.css';
 import {
   crashReportsEnabledClient,
@@ -110,6 +112,7 @@ type SettingsSectionId =
   | 'account'
   | 'security'
   | 'appearance'
+  | 'notifications'
   | 'runtime'
   | 'ai-models'
   | 'utilities'
@@ -118,18 +121,20 @@ type SettingsSectionId =
 
 const SETTINGS_SECTIONS: Array<{
   id: SettingsSectionId;
+  icon: string;
   label: string;
   title: string;
   description: string;
 }> = [
-  { id: 'account', label: 'Account', title: 'Profile and account basics', description: 'Name, image, bio, and sign-in details.' },
-  { id: 'security', label: 'Security', title: 'Password and 2-step verification', description: 'Protect the account before you rely on it.' },
-  { id: 'appearance', label: 'Appearance', title: 'Theme, language, and readability', description: 'Keep the app readable without oversized defaults.' },
-  { id: 'runtime', label: 'Runtime', title: 'What works in this runtime', description: 'Check cloud, auth, and storage readiness.' },
-  { id: 'ai-models', label: 'AI & Downloads', title: 'AI routing and desktop downloads', description: 'One place for model mode and releases.' },
-  { id: 'utilities', label: 'Utilities', title: 'Secondary tools', description: 'Analytics, sharing, and status live here.' },
-  { id: 'reporting', label: 'Report Issue', title: 'Diagnostics and issue reporting', description: 'File bugs without leaving settings.' },
-  { id: 'privacy', label: 'Privacy', title: 'Privacy and data control', description: 'Choose how much Kivora stores and sends.' },
+  { id: 'account', icon: '👤', label: 'Account', title: 'Profile and account basics', description: 'Name, image, bio, and sign-in details.' },
+  { id: 'security', icon: '🔒', label: 'Security', title: 'Password and 2-step verification', description: 'Protect the account before you rely on it.' },
+  { id: 'appearance', icon: '🎨', label: 'Appearance', title: 'Theme, language, and readability', description: 'Keep the app readable without oversized defaults.' },
+  { id: 'notifications', icon: '🔔', label: 'Notifications', title: 'Notification preferences', description: 'Control reminders, review alerts, and system messages.' },
+  { id: 'runtime', icon: '⚙️', label: 'Runtime', title: 'What works in this runtime', description: 'Check cloud, auth, and storage readiness.' },
+  { id: 'ai-models', icon: '🤖', label: 'AI & Downloads', title: 'AI routing and desktop downloads', description: 'One place for model mode and releases.' },
+  { id: 'utilities', icon: '🧰', label: 'Utilities', title: 'Secondary tools', description: 'Analytics, sharing, and status live here.' },
+  { id: 'reporting', icon: '🐛', label: 'Report Issue', title: 'Diagnostics and issue reporting', description: 'File bugs without leaving settings.' },
+  { id: 'privacy', icon: '🛡️', label: 'Privacy', title: 'Privacy and data control', description: 'Choose how much Kivora stores and sends.' },
 ];
 
 const fieldStyle: CSSProperties = {
@@ -303,7 +308,10 @@ function SettingsRail({
             className={`${styles.railButton} ${activeSection === section.id ? styles.railButtonActive : ''}`}
             onClick={() => onSelect(section.id)}
           >
-            <strong>{section.label}</strong>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{section.icon}</span>
+              <strong>{section.label}</strong>
+            </div>
             <span>{section.description}</span>
           </button>
         ))}
@@ -660,12 +668,12 @@ export default function SettingsPage() {
         <div>
           <h1 className={styles.heroTitle}>Settings</h1>
           <p className={styles.heroCopy}>
-            Split into focused sections so account, privacy, downloads, and appearance no longer fight for the same page.
+            Manage your profile, security, appearance, and privacy from one place. Changes save automatically where noted.
           </p>
         </div>
         <div className={styles.heroBadges}>
-          <span className="badge">Workspace + Scholar Hub + Math</span>
-          <span className="badge">Downloads live here now</span>
+          {account && !account.isGuest ? <span className="badge badge-success">{account.email}</span> : null}
+          {session?.user && !account?.isGuest ? null : <span className="badge">Guest mode</span>}
           {saved ? <span className="badge badge-success">Saved ✓</span> : null}
         </div>
       </div>
@@ -993,6 +1001,12 @@ export default function SettingsPage() {
       </div>
       )}
 
+      {activeSection === 'notifications' && (
+      <div id="notifications">
+        <NotificationsSection />
+      </div>
+      )}
+
       {activeSection === 'runtime' && (
       <div id="runtime">
       <Section title="Runtime readiness" subtitle="Check what works in this runtime before you rely on cloud sync, sign-in, or hosted AI.">
@@ -1091,14 +1105,31 @@ export default function SettingsPage() {
         </div>
 
         <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Preview</div>
-          <p style={{ marginBottom: 10 }}>
-            This preview uses your live font size, line spacing, and density settings so you can feel whether the interface reads as normal, too tight, or too large.
-          </p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <span className="badge">Normal text size</span>
-            <span className="badge">Cleaner spacing</span>
-            <span className="badge">Better contrast</span>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Live preview</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: 8, marginBottom: 14 }}>
+            {[
+              { label: 'Accent', bg: 'var(--primary, var(--accent))' },
+              { label: 'Surface', bg: 'var(--surface)' },
+              { label: 'Surface 2', bg: 'var(--surface-2)' },
+              { label: 'Background', bg: 'var(--bg)' },
+              { label: 'Border', bg: 'var(--border-2)' },
+            ].map(swatch => (
+              <div key={swatch.label} style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
+                <div style={{ width: '100%', height: 36, borderRadius: 8, background: swatch.bg, border: '1px solid var(--border-2)' }} />
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', textAlign: 'center' }}>{swatch.label}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gap: 6 }}>
+            <p style={{ margin: 0 }}>
+              The quick brown fox jumps over the lazy dog. This sentence uses your current font size and line spacing.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn btn-primary btn-sm" type="button" style={{ pointerEvents: 'none' }}>Primary button</button>
+              <button className="btn btn-ghost btn-sm" type="button" style={{ pointerEvents: 'none' }}>Ghost button</button>
+              <span className="badge">Badge</span>
+              <span className="badge badge-success">Success</span>
+            </div>
           </div>
         </div>
       </Section>
@@ -1119,7 +1150,7 @@ export default function SettingsPage() {
           <div className={styles.downloadPanel}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>AI routing</div>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginBottom: 14 }}>
-              Choose whether Kivora should prefer local privacy, cloud convenience, or automatic fallback. This replaces the separate models sidebar destination.
+              Choose whether Kivora should prefer local privacy, cloud convenience, or automatic fallback. Desktop downloads are designed to include Mini locally by default, even before any optional model installs.
             </p>
             <AiRuntimeControls compact />
           </div>
@@ -1145,12 +1176,12 @@ export default function SettingsPage() {
               <div className={styles.downloadGrid}>
                 <DownloadCard
                   title="macOS Apple Silicon"
-                  hint="Primary desktop download with offline-first local AI support."
+                  hint="Primary desktop download. Mini is meant to be bundled for immediate offline-first local AI."
                   primary={downloads?.macAsset ? { label: 'Download DMG', href: downloads.macAsset.browser_download_url } : null}
                 />
                 <DownloadCard
                   title="Windows x64"
-                  hint="Installer first, with portable build when attached to the release."
+                  hint="Installer first. Mini is meant to be bundled so local AI works from first launch."
                   primary={downloads?.windowsInstaller ? { label: 'Download installer', href: downloads.windowsInstaller.browser_download_url } : null}
                   secondary={downloads?.windowsPortable ? { label: 'Portable EXE', href: downloads.windowsPortable.browser_download_url } : null}
                 />
@@ -1169,6 +1200,15 @@ export default function SettingsPage() {
               <span className="badge">Offline fallback always available</span>
               {downloads?.hasPublishedModelAssets ? <span className="badge badge-success">Optional model assets published</span> : null}
             </div>
+          </div>
+
+          {/* ── Ollama / Qwen local AI setup ────────────────────────────── */}
+          <div className={styles.downloadPanel}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Local AI (Ollama + Qwen)</div>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginBottom: 14, margin: '0 0 14px' }}>
+              Run Qwen 2.5 fully on-device via Ollama for private, offline AI generation. No API key or cloud account required.
+            </p>
+            <OllamaSetupPanel />
           </div>
         </div>
       </Section>
@@ -1273,6 +1313,315 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Notifications panel ──────────────────────────────────────────────────────
+
+const NOTIFICATION_PREFS = [
+  {
+    key: 'kivora_notif_reminders',
+    label: 'Daily study reminders',
+    hint: 'Get nudged at your chosen time if you have not opened Kivora that day.',
+    defaultOn: true,
+  },
+  {
+    key: 'kivora_notif_review',
+    label: 'Flashcard review alerts',
+    hint: 'Alert when you have cards due for review so your SRS schedule stays on track.',
+    defaultOn: true,
+  },
+  {
+    key: 'kivora_notif_uploads',
+    label: 'File upload confirmations',
+    hint: 'Show a brief success message after each file is saved to the workspace.',
+    defaultOn: true,
+  },
+  {
+    key: 'kivora_notif_ai',
+    label: 'AI generation updates',
+    hint: 'Notify when a long AI generation finishes so you can switch to another tab.',
+    defaultOn: false,
+  },
+  {
+    key: 'kivora_notif_system',
+    label: 'System and error alerts',
+    hint: 'Surface connectivity issues, failed saves, and runtime warnings inline.',
+    defaultOn: true,
+  },
+] as const;
+
+function readNotifPref(key: string, defaultOn: boolean): boolean {
+  if (typeof window === 'undefined') return defaultOn;
+  const stored = localStorage.getItem(key);
+  return stored === null ? defaultOn : stored === '1';
+}
+
+// ── Reusable toggle row used in NotificationsSection ─────────────────────────
+function NotifToggleRow({
+  checked,
+  label,
+  hint,
+  onToggle,
+  disabled,
+}: {
+  checked: boolean;
+  label: string;
+  hint: string;
+  onToggle: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 14, padding: '12px 14px', borderRadius: 12,
+        border: `1.5px solid ${checked ? 'color-mix(in srgb, var(--primary) 28%, var(--border-2))' : 'var(--border-2)'}`,
+        background: checked ? 'color-mix(in srgb, var(--primary) 5%, var(--surface-2))' : 'var(--surface-2)',
+        transition: 'border-color 0.14s, background 0.14s',
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>{label}</div>
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>{hint}</div>
+      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={disabled}
+        aria-label={`${checked ? 'Disable' : 'Enable'} ${label}`}
+        style={{
+          width: 44, height: 24, borderRadius: 12, border: 'none',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          background: checked ? 'var(--primary, var(--accent))' : 'var(--border-2)',
+          position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+        }}
+      >
+        <span style={{
+          position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%',
+          background: '#fff', transition: 'left 0.2s',
+          left: checked ? 22 : 2,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.22)',
+        }} />
+      </button>
+    </div>
+  );
+}
+
+function NotificationsSection() {
+  const { toast } = useToast();
+  const [prefs, setPrefs] = useState<Record<string, boolean>>(() => {
+    return Object.fromEntries(
+      NOTIFICATION_PREFS.map(p => [p.key, readNotifPref(p.key, p.defaultOn)]),
+    );
+  });
+
+  // Browser notification permission state
+  const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'unsupported'>('default');
+  const [requestingPermission, setRequestingPermission] = useState(false);
+
+  // Browser-scheduled notification preferences
+  const [examNotifEnabled, setExamNotifEnabled] = useState(true);
+  const [streakNotifEnabled, setStreakNotifEnabled] = useState(true);
+
+  useEffect(() => {
+    setBrowserPermission(getNotificationPermission());
+    if (typeof window !== 'undefined') {
+      setExamNotifEnabled(localStorage.getItem('kivora-notif-exams') !== 'false');
+      setStreakNotifEnabled(localStorage.getItem('kivora-notif-streak') !== 'false');
+    }
+  }, []);
+
+  const handleRequestPermission = useCallback(async () => {
+    setRequestingPermission(true);
+    try {
+      const granted = await requestNotificationPermission();
+      setBrowserPermission(getNotificationPermission());
+      if (granted) {
+        toast('Browser notifications enabled', 'success');
+      } else {
+        toast('Permission was not granted. Check your browser settings.', 'warning');
+      }
+    } finally {
+      setRequestingPermission(false);
+    }
+  }, [toast]);
+
+  function toggleExamNotif() {
+    const next = !examNotifEnabled;
+    setExamNotifEnabled(next);
+    localStorage.setItem('kivora-notif-exams', next ? 'true' : 'false');
+    toast('Exam reminder preference saved', 'success');
+  }
+
+  function toggleStreakNotif() {
+    const next = !streakNotifEnabled;
+    setStreakNotifEnabled(next);
+    localStorage.setItem('kivora-notif-streak', next ? 'true' : 'false');
+    toast('Streak alert preference saved', 'success');
+  }
+
+  function toggle(key: string) {
+    setPrefs(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem(key, next[key] ? '1' : '0');
+      return next;
+    });
+    toast('Notification preference saved', 'success');
+  }
+
+  function enableAll() {
+    const next: Record<string, boolean> = {};
+    for (const p of NOTIFICATION_PREFS) {
+      next[p.key] = true;
+      localStorage.setItem(p.key, '1');
+    }
+    setPrefs(next);
+    toast('All notifications enabled', 'success');
+  }
+
+  function disableAll() {
+    const next: Record<string, boolean> = {};
+    for (const p of NOTIFICATION_PREFS) {
+      next[p.key] = false;
+      localStorage.setItem(p.key, '0');
+    }
+    setPrefs(next);
+    toast('All notifications disabled', 'warning');
+  }
+
+  const enabledCount = Object.values(prefs).filter(Boolean).length;
+
+  const permissionLabel: Record<NotificationPermission | 'unsupported', string> = {
+    granted: 'Granted',
+    denied: 'Denied',
+    default: 'Not yet granted',
+    unsupported: 'Not supported in this browser',
+  };
+
+  const permissionColor: Record<NotificationPermission | 'unsupported', string> = {
+    granted: 'var(--success, #22c55e)',
+    denied: 'var(--danger, #ef4444)',
+    default: 'var(--text-3)',
+    unsupported: 'var(--text-3)',
+  };
+
+  return (
+    <>
+      <Section
+        title="Notifications"
+        subtitle="Control which reminders and alerts Kivora surfaces during your study sessions."
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
+            {enabledCount} of {NOTIFICATION_PREFS.length} notification types active
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-ghost btn-sm" onClick={enableAll} type="button">Enable all</button>
+            <button className="btn btn-ghost btn-sm" onClick={disableAll} type="button">Disable all</button>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gap: 10 }}>
+          {NOTIFICATION_PREFS.map(item => (
+            <div
+              key={item.key}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: 14, padding: '12px 14px', borderRadius: 12,
+                border: `1.5px solid ${prefs[item.key] ? 'color-mix(in srgb, var(--primary) 28%, var(--border-2))' : 'var(--border-2)'}`,
+                background: prefs[item.key] ? 'color-mix(in srgb, var(--primary) 5%, var(--surface-2))' : 'var(--surface-2)',
+                transition: 'border-color 0.14s, background 0.14s',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>{item.label}</div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>{item.hint}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggle(item.key)}
+                aria-label={`${prefs[item.key] ? 'Disable' : 'Enable'} ${item.label}`}
+                style={{
+                  width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+                  background: prefs[item.key] ? 'var(--primary, var(--accent))' : 'var(--border-2)',
+                  position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%',
+                  background: '#fff', transition: 'left 0.2s',
+                  left: prefs[item.key] ? 22 : 2,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.22)',
+                }} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border-2)', fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+          Preferences are stored locally on this device and do not sync across browsers. Browser notification permission is separate — grant it when prompted by your browser.
+        </div>
+      </Section>
+
+      {/* ── Browser Notifications ─────────────────────────────────────────── */}
+      <Section
+        title="Browser Notifications"
+        subtitle="Allow Kivora to send timed OS-level alerts even when you are away from the tab."
+      >
+        {/* Permission status row */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: 12, padding: '14px 16px', borderRadius: 12,
+          border: '1px solid var(--border-2)', background: 'var(--surface-2)',
+        }}>
+          <div>
+            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Permission status</div>
+            <div style={{ fontSize: 'var(--text-xs)', marginTop: 2, color: permissionColor[browserPermission] }}>
+              {permissionLabel[browserPermission]}
+            </div>
+          </div>
+          {browserPermission !== 'granted' && browserPermission !== 'unsupported' && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={handleRequestPermission}
+              disabled={requestingPermission || browserPermission === 'denied'}
+            >
+              {browserPermission === 'denied' ? 'Blocked by browser' : requestingPermission ? 'Requesting…' : 'Enable notifications'}
+            </button>
+          )}
+          {browserPermission === 'denied' && (
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+              To re-enable, click the lock icon in your browser address bar and allow notifications.
+            </span>
+          )}
+        </div>
+
+        {/* Exam reminders toggle */}
+        <NotifToggleRow
+          checked={examNotifEnabled}
+          label="Exam reminders"
+          hint="Sends a reminder the evening before and the morning of any exam in your Planner. Requires browser notification permission."
+          onToggle={toggleExamNotif}
+          disabled={browserPermission !== 'granted'}
+        />
+
+        {/* Daily streak alerts toggle */}
+        <NotifToggleRow
+          checked={streakNotifEnabled}
+          label="Daily streak alerts"
+          hint="Notifies you at 8 pm if you have not studied any flashcards yet today, so you can keep your streak going."
+          onToggle={toggleStreakNotif}
+          disabled={browserPermission !== 'granted'}
+        />
+
+        <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border-2)', fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+          Scheduled alerts are set up when the app loads and require the browser tab to be open at the scheduled time. Reminders are deduplicated so you will not receive the same alert twice.
+        </div>
+      </Section>
+    </>
   );
 }
 

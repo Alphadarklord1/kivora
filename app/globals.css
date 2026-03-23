@@ -1415,33 +1415,94 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   z-index: 190;
 }
 
+/* ── Mobile drawer overlay (new pattern) ── */
+.mobile-drawer-overlay {
+  display: none;
+}
+.mobile-drawer-panel {
+  display: none;
+}
+.mobile-drawer-backdrop {
+  display: none;
+}
+
+/* ── Bottom navigation bar ── */
+.bottom-nav {
+  display: none;
+}
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex: 1;
+  min-height: 44px;
+  padding: 6px 4px;
+  text-decoration: none;
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 600;
+  transition: color var(--t-fast);
+  cursor: pointer;
+}
+.bottom-nav-item.active {
+  color: var(--accent);
+}
+.bottom-nav-item:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+.bottom-nav-icon {
+  font-size: 20px;
+  line-height: 1;
+  display: block;
+}
+.bottom-nav-label {
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 64px;
+}
+
 @media (max-width: 768px) {
   .app-shell { flex-direction: column; }
   .mobile-header { display: flex; }
 
-  /* Sidebar becomes a slide-in drawer */
-  .sidebar {
-    position: fixed !important;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    z-index: 200;
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
-    box-shadow: 4px 0 24px rgba(0,0,0,0.18);
+  /* Hide the desktop sidebar on mobile — use drawer instead */
+  .sidebar-desktop {
+    display: none !important;
+  }
+
+  /* Mobile drawer overlay */
+  .mobile-drawer-overlay {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+  }
+  .mobile-drawer-panel {
+    display: flex;
+    flex-direction: column;
+    width: 240px;
+    height: 100%;
+    background: var(--bg-surface);
     overflow-y: auto;
-    width: 220px !important;
+    flex-shrink: 0;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.35);
   }
-  .sidebar.mobile-open {
-    transform: translateX(0);
-  }
-  .mobile-overlay.visible {
+  .mobile-drawer-backdrop {
     display: block;
+    flex: 1;
+    background: rgba(0,0,0,0.4);
+    cursor: pointer;
   }
 
   /* Main content fills full width */
   .main-content { width: 100% !important; }
-  .page-scroll { padding: 0; }
+  /* Add bottom padding so content isn't hidden behind bottom nav */
+  .page-scroll { padding: 0 0 60px; }
   .tab-content { padding: var(--sp-3) var(--sp-4); }
   .auth-card { padding: var(--sp-6) var(--sp-5); border-radius: var(--r-xl); }
 
@@ -1477,6 +1538,27 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   /* Files tab: hide list when viewer is open */
   .file-list-panel--has-viewer { display: none; }
   .file-viewer-panel { width: 100% !important; }
+
+  /* Nav items: 44px min-height touch targets */
+  .nav-item {
+    min-height: 44px;
+    padding: var(--sp-3) var(--sp-3);
+  }
+
+  /* Bottom navigation bar */
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    justify-content: space-around;
+    align-items: center;
+    padding: 6px 0 env(safe-area-inset-bottom, 6px);
+  }
 }
 
 /* ── Streaming cursor ──────────────────────────────────────────────────── */
@@ -1713,4 +1795,11 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
     padding-top: max(0px, env(safe-area-inset-top));
     height: calc(52px + max(0px, env(safe-area-inset-top)));
   }
+}
+
+/* ── Print styles ── */
+@media print {
+  .sidebar, .mobile-header, .bottom-nav, .sidebar-desktop { display: none !important; }
+  .main-content { margin: 0 !important; padding: 0 !important; }
+  .page-scroll { overflow: visible !important; }
 }

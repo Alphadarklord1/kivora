@@ -3,9 +3,9 @@ import { auth } from '@/auth';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 import { apiError, createRequestId } from '@/lib/api/error-response';
 
-type AnalysisMode = 'describe' | 'explain' | 'extract-text' | 'solve-math';
+type AnalysisMode = 'describe' | 'explain' | 'extract-text' | 'solve-math' | 'scan-questions';
 
-const VALID_MODES: AnalysisMode[] = ['describe', 'explain', 'extract-text', 'solve-math'];
+const VALID_MODES: AnalysisMode[] = ['describe', 'explain', 'extract-text', 'solve-math', 'scan-questions'];
 
 const MODE_PROMPTS: Record<AnalysisMode, string> = {
   describe:
@@ -19,6 +19,9 @@ const MODE_PROMPTS: Record<AnalysisMode, string> = {
 
   'solve-math':
     'This image contains a math problem, equation, or mathematical expression. Identify the mathematical content and solve it step by step. Show your work clearly with each step explained. Use LaTeX-style notation for expressions (e.g., x^2 for x squared, sqrt() for square root). Format your response as:\n\nPROBLEM: [state the problem]\n\nSOLUTION:\nStep 1: ...\nStep 2: ...\n\nFINAL ANSWER: [answer]',
+
+  'scan-questions':
+    'Extract all study questions, math problems, exercises, and tasks visible in this image. Format your response as a numbered list where each item is one complete question or problem, exactly as written. Preserve mathematical notation. Output ONLY the numbered list, nothing else. Example format:\n1. Find the derivative of f(x) = x^2 + 3x\n2. Solve for x: 2x + 5 = 11\n3. What is the area of a circle with radius 7?',
 };
 
 // Max image size: 4MB (base64 data URLs can be large)
@@ -34,9 +37,11 @@ async function callVisionAI(imageDataUrl: string, mode: AnalysisMode): Promise<s
   }
 
   const systemPrompt =
-    mode === 'solve-math'
-      ? 'You are a mathematics expert and tutor. Analyze images of math problems and solve them with detailed step-by-step explanations.'
-      : 'You are a helpful study assistant that analyzes images from educational materials. Be accurate, thorough, and educational in your responses.';
+    mode === 'scan-questions'
+      ? 'You are an expert at reading educational materials and extracting study questions. Extract questions clearly and completely.'
+      : mode === 'solve-math'
+        ? 'You are a mathematics expert and tutor. Analyze images of math problems and solve them with detailed step-by-step explanations.'
+        : 'You are a helpful study assistant that analyzes images from educational materials. Be accurate, thorough, and educational in your responses.';
 
   const response = await fetch(`${apiBase}/chat/completions`, {
     method: 'POST',

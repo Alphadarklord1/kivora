@@ -269,7 +269,16 @@ export function FolderPanel({
   if (collapsed) {
     return (
       <div className="folder-sidebar collapsed" style={{ alignItems: 'center', padding: '10px 6px', gap: 6 }}>
-        <button className="btn-icon" onClick={onToggleCollapse} title="Expand sidebar">→</button>
+        <button
+          onClick={onToggleCollapse}
+          title="Expand sidebar"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 28, height: 28, borderRadius: 8, border: '1px solid var(--border-2)',
+            background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'pointer',
+            fontSize: 16, lineHeight: 1, flexShrink: 0,
+          }}
+        >›</button>
         <div className="divider" style={{ margin: '4px 0', width: '100%' }} />
         {folders.map(f => (
           <button
@@ -322,7 +331,7 @@ export function FolderPanel({
             setCreatingFolder(c => !c);
             setTimeout(() => folderInputRef.current?.focus(), 50);
           }}>＋</button>
-        <button className="btn-icon" title="Collapse sidebar" onClick={onToggleCollapse}>←</button>
+        <button className="btn-icon" title="Collapse" onClick={onToggleCollapse}>‹</button>
       </div>
 
       {/* Search — shows when 3+ folders exist */}
@@ -568,6 +577,7 @@ export function FolderPanel({
           {folders.reduce((n, f) => n + f.topics.length, 0)} topic{folders.reduce((n, f) => n + f.topics.length, 0) !== 1 ? 's' : ''}
         </div>
       )}
+
 
       {/* Hidden multi-file picker */}
       <input

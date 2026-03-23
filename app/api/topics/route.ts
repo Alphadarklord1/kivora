@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { folders, topics } from '@/lib/db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { betaReadFallback } from '@/lib/api/runtime-guards';
 
@@ -20,6 +20,14 @@ export async function GET(request: NextRequest) {
     const folderId = searchParams.get('folderId');
 
     if (folderId) {
+      // Verify the folder belongs to the authenticated user before returning its topics (IDOR fix)
+      const folder = await db.query.folders.findFirst({
+        where: and(eq(folders.id, folderId), eq(folders.userId, userId)),
+        columns: { id: true },
+      });
+      if (!folder) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      }
       const data = await db.query.topics.findMany({
         where: eq(topics.folderId, folderId),
         orderBy: [topics.sortOrder, topics.createdAt],

@@ -10,7 +10,32 @@ const DEFAULT_CLOUD_MODEL =
   process.env.GROQ_MODEL_DEFAULT ||
   process.env.GROK_MODEL_DEFAULT ||
   process.env.OPENAI_MODEL_DEFAULT ||
-  'openai/gpt-oss-20b';
+  'llama-3.3-70b-versatile';
+
+// Allowlist of models clients are permitted to request
+const ALLOWED_MODELS = new Set([
+  // Groq — primary
+  'llama-3.3-70b-versatile',
+  'llama-3.1-70b-versatile',
+  'llama-3.1-8b-instant',
+  'mixtral-8x7b-32768',
+  'gemma2-9b-it',
+  'llama-3.2-90b-vision-preview',
+  // Grok — secondary
+  'grok-3-fast',
+  'grok-3-mini',
+  'grok-3-mini-fast',
+  // OpenAI — backup
+  'gpt-4o-mini',
+  'gpt-4o',
+  'gpt-4.1-mini',
+  DEFAULT_CLOUD_MODEL,
+]);
+
+function resolveAllowedModel(model: unknown): string {
+  if (typeof model === 'string' && ALLOWED_MODELS.has(model)) return model;
+  return DEFAULT_CLOUD_MODEL;
+}
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -200,7 +225,7 @@ ${outputHints}
 
 Source text:
 ${text}`;
-    const requestedModel = model && typeof model === 'string' ? model : DEFAULT_CLOUD_MODEL;
+    const requestedModel = resolveAllowedModel(model);
     const rawResponse = await callCloud(requestedModel, prompt);
 
     if (!rawResponse.ok) {

@@ -66,6 +66,9 @@ export function ModelSetupWizard({ isArabic, onComplete }: ModelSetupWizardProps
     subtitle: isArabic
       ? 'يمكنك البدء فورًا بنموذج Mini بدون إنترنت، أو تثبيت نموذج أقوى لاحقًا.'
       : 'You can start immediately with Mini offline, or install a stronger model now.',
+    bundledReady: isArabic
+      ? 'نموذج Mini مضمن بالفعل في هذا التنزيل، لذا يمكنك البدء محليًا من أول تشغيل.'
+      : 'Mini is already included in this desktop download, so you can start locally from the first launch.',
     recommended: isArabic ? 'موصى به' : 'Recommended',
     installed: isArabic ? 'مثبّت' : 'Installed',
     installUse: isArabic ? 'تثبيت واستخدام' : 'Install & Use',
@@ -175,11 +178,13 @@ export function ModelSetupWizard({ isArabic, onComplete }: ModelSetupWizardProps
     );
   }
 
+  const bundledMiniInstalled = models.some((model) => model.key === 'mini' && model.isInstalled && model.installedSource === 'bundled');
+
   return (
     <div className="model-setup-overlay">
       <div className="model-setup-card" dir={isArabic ? 'rtl' : 'ltr'}>
         <h2>{dictionary.title}</h2>
-        <p>{dictionary.subtitle}</p>
+        <p>{bundledMiniInstalled ? dictionary.bundledReady : dictionary.subtitle}</p>
 
         <div className="model-grid">
           {models.map((model) => {

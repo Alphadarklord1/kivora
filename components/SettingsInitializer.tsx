@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
+import { DEFAULT_DESKTOP_LOCAL_MODEL } from '@/lib/ai/local-runtime';
+import { saveAiRuntimePreferences, loadAiRuntimePreferences } from '@/lib/ai/runtime';
 import { readCompatStorage, storageKeys } from '@/lib/storage/keys';
 import { isRtlLocale, sanitizeSupportedLocale } from '@/lib/i18n/locales';
 
@@ -47,6 +49,20 @@ export function SettingsInitializer() {
       document.documentElement.setAttribute('data-density', density);
     } else {
       document.documentElement.setAttribute('data-density', 'normal');
+    }
+
+    if (!readCompatStorage(localStorage, storageKeys.aiProvider) && window.electronAPI?.desktopAI) {
+      void window.electronAPI.desktopAI.modelInfo()
+        .then((info) => {
+          if (!info.models?.some((model) => model.isInstalled)) return;
+          const current = loadAiRuntimePreferences();
+          saveAiRuntimePreferences({
+            ...current,
+            mode: 'local',
+            localModel: DEFAULT_DESKTOP_LOCAL_MODEL,
+          });
+        })
+        .catch(() => {});
     }
 
     // Listen for system theme changes

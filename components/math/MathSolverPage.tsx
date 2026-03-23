@@ -9,6 +9,11 @@ import { readMathContext } from '@/lib/math/context';
 import { MathText } from '@/components/math/MathRenderer';
 import { MATH_CATEGORIES, MATH_CATEGORY_ORDER } from '@/lib/math/catalog';
 import type { MathCategoryId } from '@/lib/math/types';
+import { isCustomFuncDefinition, normalizeGraphExpression, buildSharedScope } from '@/lib/math/graph-utils';
+import type { NormalizedGraphExpression } from '@/lib/math/graph-utils';
+import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
+import { MatlabLab } from '@/components/tools/MatlabLab';
+import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -49,9 +54,6 @@ interface WorkflowStep {
   detail: string;
 }
 
-type NormalizedGraphExpression =
-  | { type: 'function'; value: string }
-  | { type: 'implicit'; value: string };
 
 // ── Topic catalogue ───────────────────────────────────────────────────────────
 
@@ -80,7 +82,7 @@ const TOPICS: Array<{ id: MathCategoryId; label: string; icon: string; color: st
   }));
 
 type TopicId = MathCategoryId;
-type SpecialView = 'formulas' | 'graph' | 'units' | 'scan';
+type SpecialView = 'formulas' | 'graph' | 'units' | 'scan' | 'visual' | 'matlab';
 type ActiveView = TopicId | SpecialView;
 
 const DEFAULT_ACCENT = 'var(--primary)';
@@ -100,15 +102,15 @@ const SPECIAL_VIEW_META: Record<SpecialView, { title: string; subtitle: string; 
   },
   graph: {
     title: 'Graph Plotter',
-    subtitle: 'Plot functions, analytic-geometry lines, circles, and implicit relations without the old graph-runtime crashes.',
+    subtitle: 'Plot functions, parametric curves, implicit relations, and reusable custom functions.',
     icon: '📈',
     accent: '#22c55e',
     workflowTitle: 'Graph workflow',
     workflow: [
-      { label: 'Enter a relation', detail: 'Use forms like y = x^2, x = 2, or x^2 + y^2 = 25.' },
-      { label: 'Plot it', detail: 'Hit Plot to render explicit functions and implicit relations in the same graph area.' },
-      { label: 'Adjust the window', detail: 'Use Home and zoom controls to inspect shape, intercepts, and symmetry.' },
-      { label: 'Compare multiple expressions', detail: 'Add extra rows to see how lines, curves, and relations interact.' },
+      { label: 'Enter a relation', detail: 'Use forms like y = x^2, x = 2, x^2 + y^2 = 25, or parametric x = cos(t), y = sin(t).' },
+      { label: 'Define custom functions', detail: 'Add a row like f(x) = x^2 + 1 — then use f(x) in any other expression row.' },
+      { label: 'Plot it', detail: 'Hit Plot to render everything together: functions, relations, and parametric curves.' },
+      { label: 'Compare expressions', detail: 'Add extra rows to overlay multiple curves and see how they interact.' },
     ],
   },
   units: {
@@ -135,6 +137,32 @@ const SPECIAL_VIEW_META: Record<SpecialView, { title: string; subtitle: string; 
       { label: 'Extract the question text', detail: 'Images use OCR and PDFs use text extraction so we can turn the file into solver-ready input, with OCR guided by the current interface language.' },
       { label: 'Review what was captured', detail: 'Check the extracted question before sending it into the solver.' },
       { label: 'Solve it step by step', detail: 'Use “Solve now” to move the extracted text straight into the Solver tab.' },
+    ],
+  },
+  visual: {
+    title: 'Visual Analyzer',
+    subtitle: 'Upload images or diagrams to extract and analyze visual math content with AI.',
+    icon: '🔬',
+    accent: '#a78bfa',
+    workflowTitle: 'Visual analyzer workflow',
+    workflow: [
+      { label: 'Upload an image or diagram', detail: 'Provide a photo, screenshot, or drawn diagram containing math or data.' },
+      { label: 'AI analyzes the content', detail: 'The visual analyzer identifies equations, graphs, tables, and other mathematical structures.' },
+      { label: 'Review the analysis', detail: 'Inspect the extracted information and see a structured breakdown of what was found.' },
+      { label: 'Send to solver', detail: 'Use any identified expression directly in the math solver for step-by-step working.' },
+    ],
+  },
+  matlab: {
+    title: 'MATLAB Lab',
+    subtitle: 'Run MATLAB-style numeric computations, matrix operations, and plotting — all in the browser.',
+    icon: '🧮',
+    accent: '#f97316',
+    workflowTitle: 'MATLAB Lab workflow',
+    workflow: [
+      { label: 'Write MATLAB-style code', detail: 'Use familiar MATLAB syntax for matrices, loops, functions, and numeric operations.' },
+      { label: 'Run the script', detail: 'Execute the code in the browser-based engine and see results instantly.' },
+      { label: 'Inspect outputs', detail: 'View numeric results, matrices, and generated plots side by side.' },
+      { label: 'Send a graph expression', detail: 'Route any expression from the output to the Graph Plotter for visualization.' },
     ],
   },
 };
@@ -242,30 +270,11 @@ const GRAPH_PRESETS = [
   { label: 'Shifted circle', expr: '(x - 2)^2 + (y + 3)^2 = 25' },
   { label: 'y = tan(x)', expr: 'y = tan(x)' },
   { label: 'x = 2',      expr: 'x = 2' },
+  { label: 'Parametric circle', expr: 'x = cos(t), y = sin(t)' },
+  { label: 'Spiral',            expr: 'x = t*cos(t), y = t*sin(t)' },
+  { label: 'Custom f(x)',       expr: 'f(x) = x^2 - 3' },
 ];
 
-function normalizeGraphExpression(expr: string): NormalizedGraphExpression | null {
-  const trimmed = expr.trim();
-  if (!trimmed) return null;
-
-  const explicit = trimmed.match(/^y\s*=\s*(.+)$/i);
-  if (explicit) {
-    return { type: 'function', value: explicit[1].trim() };
-  }
-
-  const vertical = trimmed.match(/^x\s*=\s*(.+)$/i);
-  if (vertical) {
-    return { type: 'implicit', value: `x - (${vertical[1].trim()})` };
-  }
-
-  if (trimmed.includes('=')) {
-    const [lhs, rhs] = trimmed.split('=').map(part => part.trim());
-    if (!lhs || !rhs) return null;
-    return { type: 'implicit', value: `(${lhs}) - (${rhs})` };
-  }
-
-  return { type: 'function', value: trimmed };
-}
 
 function getGraphTheme() {
   const theme = document.documentElement.getAttribute('data-theme');
@@ -294,8 +303,12 @@ function buildGraphSvg(
 
   const toSvgX = (x: number) => padding + ((x - xDomain[0]) / xRange) * innerWidth;
   const toSvgY = (y: number) => height - padding - ((y - yDomain[0]) / yRange) * innerHeight;
+
+  const sharedScope = buildSharedScope(expressions, math.evaluate);
+
   const evaluate = (expr: string, scope: Record<string, number>) => {
-    const result = math.evaluate(expr, scope);
+    const fullScope = Object.assign({}, sharedScope, scope);
+    const result = math.evaluate(expr, fullScope);
     return typeof result === 'number' ? result : Number(result);
   };
 
@@ -464,27 +477,101 @@ function buildGraphSvg(
         return pathStr + curveDots;
       }
 
-      const threshold = Math.max((xRange + yRange) / 220, 0.08);
-      const cols = 110;
-      const rows = 80;
-      const dots: string[] = [];
-
-      for (let row = 0; row <= rows; row += 1) {
-        for (let col = 0; col <= cols; col += 1) {
-          const x = xDomain[0] + (xRange * col) / cols;
-          const y = yDomain[0] + (yRange * row) / rows;
+      if (normalized.type === 'parametric') {
+        const tSamples = 600;
+        const segments: string[] = [];
+        let current = '';
+        for (let i = 0; i <= tSamples; i++) {
+          const t = normalized.tMin + (normalized.tMax - normalized.tMin) * i / tSamples;
           try {
-            const value = evaluate(normalized.value, { x, y });
-            if (Number.isFinite(value) && Math.abs(value) <= threshold) {
-              dots.push(`<circle cx="${toSvgX(x).toFixed(2)}" cy="${toSvgY(y).toFixed(2)}" r="1.3" fill="${expr.color}" opacity="0.82" />`);
+            const x = evaluate(normalized.valueX, { t });
+            const y = evaluate(normalized.valueY, { t });
+            if (!Number.isFinite(x) || !Number.isFinite(y)) {
+              if (current) { segments.push(current); current = ''; }
+              continue;
             }
+            const sx = toSvgX(x).toFixed(2), sy = toSvgY(y).toFixed(2);
+            current = current ? `${current} L ${sx} ${sy}` : `M ${sx} ${sy}`;
           } catch {
-            // Ignore sample points that fail evaluation.
+            if (current) { segments.push(current); current = ''; }
+          }
+        }
+        if (current) segments.push(current);
+        return segments.map(s => `<path d="${s}" fill="none" stroke="${expr.color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />`).join('');
+      }
+
+      // Marching squares — produces clean line segments instead of sparse dots
+      const MS_COLS = 160;
+      const MS_ROWS = 110;
+
+      // Step 1: sample f(x,y) at every grid point
+      const grid: number[][] = [];
+      for (let row = 0; row <= MS_ROWS; row++) {
+        grid[row] = [];
+        for (let col = 0; col <= MS_COLS; col++) {
+          const x = xDomain[0] + (xRange * col) / MS_COLS;
+          const y = yDomain[0] + (yRange * row) / MS_ROWS;
+          try {
+            const v = evaluate(normalized.value, { x, y });
+            grid[row][col] = Number.isFinite(v) ? v : NaN;
+          } catch {
+            grid[row][col] = NaN;
           }
         }
       }
 
-      return dots.join('');
+      // Step 2: walk each cell, interpolate zero-crossings on edges → draw segments
+      function lerpCross(v0: number, v1: number): number {
+        // t in [0,1] where linear blend of v0→v1 equals 0
+        return Math.abs(v0 - v1) < 1e-12 ? 0.5 : v0 / (v0 - v1);
+      }
+
+      const msSegs: string[] = [];
+      for (let row = 0; row < MS_ROWS; row++) {
+        for (let col = 0; col < MS_COLS; col++) {
+          const v00 = grid[row][col];
+          const v10 = grid[row][col + 1];
+          const v01 = grid[row + 1][col];
+          const v11 = grid[row + 1][col + 1];
+          if (isNaN(v00) || isNaN(v10) || isNaN(v01) || isNaN(v11)) continue;
+
+          const xL = xDomain[0] + (xRange * col) / MS_COLS;
+          const xR = xDomain[0] + (xRange * (col + 1)) / MS_COLS;
+          const yB = yDomain[0] + (yRange * row) / MS_ROWS;
+          const yT = yDomain[0] + (yRange * (row + 1)) / MS_ROWS;
+
+          const pts: { x: number; y: number }[] = [];
+          // Bottom edge (y=yB)
+          if ((v00 > 0) !== (v10 > 0)) {
+            const t = lerpCross(v00, v10);
+            pts.push({ x: xL + t * (xR - xL), y: yB });
+          }
+          // Right edge (x=xR)
+          if ((v10 > 0) !== (v11 > 0)) {
+            const t = lerpCross(v10, v11);
+            pts.push({ x: xR, y: yB + t * (yT - yB) });
+          }
+          // Top edge (y=yT)
+          if ((v01 > 0) !== (v11 > 0)) {
+            const t = lerpCross(v01, v11);
+            pts.push({ x: xL + t * (xR - xL), y: yT });
+          }
+          // Left edge (x=xL)
+          if ((v00 > 0) !== (v01 > 0)) {
+            const t = lerpCross(v00, v01);
+            pts.push({ x: xL, y: yB + t * (yT - yB) });
+          }
+
+          if (pts.length === 2) {
+            const sx0 = toSvgX(pts[0].x).toFixed(2);
+            const sy0 = toSvgY(pts[0].y).toFixed(2);
+            const sx1 = toSvgX(pts[1].x).toFixed(2);
+            const sy1 = toSvgY(pts[1].y).toFixed(2);
+            msSegs.push(`<line x1="${sx0}" y1="${sy0}" x2="${sx1}" y2="${sy1}" stroke="${expr.color}" stroke-width="2.2" stroke-linecap="round" />`);
+          }
+        }
+      }
+      return msSegs.join('');
     })
     .join('');
 
@@ -1736,6 +1823,7 @@ export function MathSolverPage() {
   const [scanMode,   setScanMode]   = useState<'upload' | 'type'>('upload');
   const [typeInput,  setTypeInput]  = useState('');
 
+
   // Unit converter state
   const [unitCatIdx, setUnitCatIdx] = useState(0);
   const [fromUnit, setFromUnit] = useState(0);
@@ -1746,7 +1834,21 @@ export function MathSolverPage() {
   const [structFormType, setStructFormType] = useState('quadratic'); // first algebra form
   const [structFormParams, setStructFormParams] = useState<Record<string, string>>({});
 
+  // Step-by-step reveal animation
+  const [revealedSteps, setRevealedSteps] = useState<number>(0);
+
+  // Flashcard save feedback
+  const [flashcardToast, setFlashcardToast] = useState<string>('');
+
   useEffect(() => { setHistory(loadHistory()); }, []);
+
+  useEffect(() => {
+    const pending = localStorage.getItem('math_pending_problem');
+    if (pending) {
+      setInput(pending);
+      localStorage.removeItem('math_pending_problem');
+    }
+  }, []);
 
   // Reset structured form when switching to a different solver category
   useEffect(() => {
@@ -1836,6 +1938,15 @@ export function MathSolverPage() {
       });
       const data = await res.json() as SolveResult;
       setResult(data);
+      // Reveal steps one-by-one with animation
+      setRevealedSteps(0);
+      const total = data.steps?.length ?? 0;
+      let i = 0;
+      const iv = setInterval(() => {
+        i++;
+        setRevealedSteps(i);
+        if (i >= total) clearInterval(iv);
+      }, 280);
       // Add to history
       if (data.answer && !data.error) {
         const item: HistoryItem = { id: crypto.randomUUID(), problem: p, answer: data.answer, category: data.category ?? String(active), ts: Date.now() };
@@ -1997,6 +2108,8 @@ export function MathSolverPage() {
           <NavItem id="graph"     icon="📈" label="Graph Plotter"  color="#22c55e" />
           <NavItem id="units"     icon="⚖" label="Unit Converter" color="#f59e0b" />
           <NavItem id="scan"      icon="🧾" label="Question Scan"  color="#38bdf8" />
+          <NavItem id="visual"    icon="🔬" label="Visual Analyzer"  color="#a78bfa" />
+          <NavItem id="matlab"    icon="🧮" label="MATLAB Lab"       color="#f97316" />
         </div>
       </aside>
 
@@ -2088,7 +2201,7 @@ export function MathSolverPage() {
         )}
 
         {/* ── SOLVER PHASE ── */}
-        {active !== 'formulas' && active !== 'graph' && active !== 'units' && active !== 'scan' && (
+        {active !== 'formulas' && active !== 'graph' && active !== 'units' && active !== 'scan' && active !== 'visual' && active !== 'matlab' && (
           <div style={{ padding: '18px 24px 24px', display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
 
             {/* Quick examples — hidden for categories that use the structured form */}
@@ -2414,7 +2527,12 @@ export function MathSolverPage() {
                             try { exprLatex = math.parse(expr).toTex({ parenthesis: 'keep' }); } catch { /* keep raw */ }
                           }
                           return (
-                            <div key={i} style={{ borderRadius: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
+                            <div key={i} style={{
+                              borderRadius: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', overflow: 'hidden',
+                              transition: 'opacity 0.25s ease, transform 0.25s ease',
+                              opacity: i < revealedSteps ? 1 : 0,
+                              transform: i < revealedSteps ? 'translateY(0)' : 'translateY(6px)',
+                            }}>
                               {/* Step header */}
                               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: (exprLatex || step.explanation) ? '1px solid var(--border-subtle)' : 'none', background: `${currentAccent}06` }}>
                                 <div style={{ width: 22, height: 22, borderRadius: '50%', background: currentAccent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, flexShrink: 0 }}>{step.step ?? i + 1}</div>
@@ -2452,6 +2570,40 @@ export function MathSolverPage() {
                         📈 Plot this in Graph Plotter
                       </button>
                     )}
+
+                    {/* Save as flashcard */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={async () => {
+                          const problem = input.trim();
+                          const answer = result.answer ?? '';
+                          if (!problem || !answer) return;
+                          try {
+                            await fetch('/api/library', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                mode: 'flashcards',
+                                content: `Q: ${problem}\nA: ${answer}`,
+                                title: problem.length > 60 ? problem.slice(0, 60) + '…' : problem,
+                              }),
+                            });
+                            broadcastInvalidate(LIBRARY_CHANNEL);
+                            setFlashcardToast('Saved to flashcards!');
+                            setTimeout(() => setFlashcardToast(''), 2800);
+                          } catch {
+                            setFlashcardToast('Could not save — try again.');
+                            setTimeout(() => setFlashcardToast(''), 2800);
+                          }
+                        }}
+                        style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        📇 Save as flashcard
+                      </button>
+                      {flashcardToast && (
+                        <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>{flashcardToast}</span>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -2659,8 +2811,12 @@ export function MathSolverPage() {
                       />
                       <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 58, textAlign: 'right' }}>
                         {(() => {
+                          if (!ge.expr.trim()) return 'Empty';
+                          if (isCustomFuncDefinition(ge.expr)) return 'Definition';
                           const normalized = normalizeGraphExpression(ge.expr);
-                          return normalized ? (normalized.type === 'function' ? 'Function' : 'Relation') : 'Empty';
+                          if (!normalized) return 'Empty';
+                          if (normalized.type === 'parametric') return 'Parametric';
+                          return normalized.type === 'function' ? 'Function' : 'Relation';
                         })()}
                       </span>
                       {graphExprs.length > 1 && (
@@ -2802,6 +2958,21 @@ export function MathSolverPage() {
             )}
           </div>
         )}
+
+        {/* ── VISUAL ANALYZER ── */}
+        {active === 'visual' && (
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            <VisualAnalyzer />
+          </div>
+        )}
+
+        {/* ── MATLAB LAB ── */}
+        {active === 'matlab' && (
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            <MatlabLab onGraphExpression={(expr) => { replaceGraphWith(expr); setActive('graph'); }} />
+          </div>
+        )}
+
       </div>
     </div>
   );
