@@ -345,6 +345,12 @@ export function FlashcardView({
     'Deck settings': 'إعدادات المجموعة',
     'Show settings': 'إظهار الإعدادات',
     'Hide settings': 'إخفاء الإعدادات',
+    // Add card
+    'Add card': 'إضافة بطاقة',
+    'Save card': 'حفظ البطاقة',
+    'Term or question…': 'المصطلح أو السؤال…',
+    'Definition or answer…': 'التعريف أو الإجابة…',
+    '⌘↵ to save': '⌘↵ للحفظ',
   });
   const rawCards = initialDeck
     ? initialDeck.cards.map((card) => ({ front: card.front, back: card.back }))
@@ -418,6 +424,10 @@ export function FlashcardView({
   // Image rendering for review card
   const [reviewFrontUrl, setReviewFrontUrl] = useState<string | null>(null);
   const [reviewBackUrl,  setReviewBackUrl]  = useState<string | null>(null);
+  // Add-card inline form
+  const [showAddCard, setShowAddCard] = useState(false);
+  const [addFront,    setAddFront]    = useState('');
+  const [addBack,     setAddBack]     = useState('');
   // Swipe
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -637,6 +647,41 @@ export function FlashcardView({
     onRequestedPhaseHandled?.();
   }, [deck, launchPhase, onRequestedPhaseHandled, requestedPhase]);
 
+  // ── Keyboard shortcuts ref — updated each render so the effect always has current values ─────
+  const reviewKeyRef = useRef<{ flip: boolean; grade: (g: 0|1|2|3) => void; ttsBack: string }>({ flip: false, grade: () => {}, ttsBack: '' });
+
+  useEffect(() => {
+    if (phase !== 'review') return;
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        setFlip(f => {
+          if (!f && ttsEnabled) speak(reviewKeyRef.current.ttsBack);
+          return true;
+        });
+      }
+      if (!reviewKeyRef.current.flip) return;
+      if (e.key === '1') reviewKeyRef.current.grade(0);
+      else if (e.key === '2') reviewKeyRef.current.grade(1);
+      else if (e.key === '3') reviewKeyRef.current.grade(2);
+      else if (e.key === '4') reviewKeyRef.current.grade(3);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [phase, ttsEnabled]);
+
+  // ── Add card handler ─────────────────────────────────────────────────────────
+  function handleAddCard() {
+    if (!deck || !addFront.trim() || !addBack.trim()) return;
+    const newCard = createCard(`manual-${crypto.randomUUID().slice(0, 12)}`, addFront.trim(), addBack.trim());
+    saveDeckState({ ...deck, cards: [...deck.cards, newCard] });
+    setAddFront('');
+    setAddBack('');
+    setShowAddCard(false);
+  }
+
   if (!initialDeck && rawCards.length === 0) return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
   if (!deck) return null;
 
@@ -712,6 +757,9 @@ export function FlashcardView({
     if (nextIdx >= nextQueue.length) setTimeout(() => setPhase('done'), 100);
     else setTimeout(() => setSessionIdx(nextIdx), 120);
   }
+
+  // Update ref each render so the keyboard handler has current values
+  reviewKeyRef.current = { flip, grade: doGrade, ttsBack: allCards[sessionIdx]?.back ?? '' };
 
   function importParsedCards(cards: Array<{ front: string; back: string }>, name: string) {
     const importedDeck: SRSDeck = {
@@ -1042,6 +1090,42 @@ export function FlashcardView({
               </div>
             );
           })}
+        </div>
+
+        {/* ── Add card ─── */}
+        <div style={{ marginTop: 14 }}>
+          {!showAddCard ? (
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ width: '100%', borderStyle: 'dashed', color: 'var(--text-3)', justifyContent: 'center', gap: 6 }}
+              onClick={() => setShowAddCard(true)}
+            >
+              + {t('Add card')}
+            </button>
+          ) : (
+            <div style={{ background: 'var(--surface)', border: '1.5px solid var(--accent)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1 }}>✨ {t('Add card')}</div>
+              {(['Front', 'Back'] as const).map(face => (
+                <div key={face}>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>{t(face)}</div>
+                  <textarea
+                    value={face === 'Front' ? addFront : addBack}
+                    onChange={e => face === 'Front' ? setAddFront(e.target.value) : setAddBack(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) handleAddCard(); }}
+                    placeholder={face === 'Front' ? t('Term or question…') : t('Definition or answer…')}
+                    style={{ width: '100%', minHeight: 56, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface)', color: 'var(--text)', fontSize: 'var(--text-sm)', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', outline: 'none', display: 'block' }}
+                  />
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => { setShowAddCard(false); setAddFront(''); setAddBack(''); }}>{t('Cancel')}</button>
+                <button className="btn btn-primary btn-sm" disabled={!addFront.trim() || !addBack.trim()} onClick={handleAddCard}>
+                  {t('Save card')}
+                </button>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', textAlign: 'right' }}>{t('⌘↵ to save')}</div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1562,7 +1646,7 @@ export function FlashcardView({
 
       {/* Swipe hints */}
       {flip && <div style={{ display:'flex', justifyContent:'center', gap:16, fontSize:10, color:'var(--text-3)' }}>
-        <span>← {t('Again')}</span><span>↑ {t('Easy')}</span><span>↓ {t('Hard')}</span><span>{t('Good')} →</span>
+        <span>← / 1 {t('Again')}</span><span>2 {t('Hard')}</span><span>3 {t('Good')}</span><span>4 / ↑ {t('Easy')}</span>
       </div>}
 
       <div className="flashcard-wrap" style={{ minHeight:200, userSelect:'none' }}
