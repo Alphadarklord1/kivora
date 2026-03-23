@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { shares, libraryItems, users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { checkShareLimit } from '@/lib/api/auth-rate-limit';
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  const rateLimitRes = checkShareLimit(req);
+  if (rateLimitRes) return rateLimitRes;
+
   const { token } = await params;
   if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 400 });
 

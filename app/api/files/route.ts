@@ -6,6 +6,35 @@ import { files } from '@/lib/db/schema';
 import { getUserId } from '@/lib/auth/session';
 import { uploadFileToSupabaseStorage } from '@/lib/supabase/storage';
 
+// Allowed mime types for uploaded study materials
+const ALLOWED_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+  'text/markdown',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+]);
+
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+
+/** Strip path traversal and null bytes from a filename */
+function sanitizeFilename(name: string): string {
+  return name
+    .replace(/[/\\]/g, '_')   // no path separators
+    .replace(/\.\./g, '_')    // no parent-dir traversal
+    .replace(/\0/g, '')       // no null bytes
+    .trim()
+    .slice(0, 255);           // max 255 chars
+}
+
 async function parseCreateBody(req: NextRequest) {
   const contentType = req.headers.get('content-type') || '';
 
@@ -84,13 +113,25 @@ export async function POST(req: NextRequest) {
   let storagePath: string | null = null;
 
   if (body.upload) {
+    // Validate file size
+    if (body.upload.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: 'File too large. Maximum allowed size is 100 MB.' }, { status: 413 });
+    }
+    // Validate mime type
+    const mimeType = body.upload.type || body.mimeType || '';
+    if (mimeType && !ALLOWED_MIME_TYPES.has(mimeType)) {
+      return NextResponse.json({ error: `File type "${mimeType}" is not supported.` }, { status: 415 });
+    }
+    // Sanitize filename
+    const safeFileName = sanitizeFilename(body.upload.name || body.name || 'upload');
+
     try {
       const stored = await uploadFileToSupabaseStorage({
         userId,
         fileId: body.id,
-        fileName: body.upload.name || body.name,
+        fileName: safeFileName,
         fileData: await body.upload.arrayBuffer(),
-        mimeType: body.upload.type || body.mimeType || undefined,
+        mimeType: mimeType || undefined,
       });
       storageBucket = stored?.bucket ?? null;
       storagePath = stored?.path ?? null;
@@ -104,7 +145,7 @@ export async function POST(req: NextRequest) {
     userId,
     folderId: body.folderId,
     topicId: body.topicId,
-    name: body.name.trim(),
+    name: sanitizeFilename(body.name.trim()),
     type: body.type,
     content: body.content,
     localBlobId: body.localBlobId,

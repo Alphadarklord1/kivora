@@ -5,8 +5,12 @@ import { users, userSettings } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { syncSupabaseAuthUser } from '@/lib/supabase/auth-admin';
+import { checkRegisterLimit } from '@/lib/api/auth-rate-limit';
 
 export async function POST(req: NextRequest) {
+  const rateLimitRes = checkRegisterLimit(req);
+  if (rateLimitRes) return rateLimitRes;
+
   if (!isDatabaseConfigured) {
     return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
   }

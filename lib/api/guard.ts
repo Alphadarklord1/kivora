@@ -14,6 +14,7 @@
  * locks down when AUTH_REQUIRED=1 is explicitly set in the environment.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { timingSafeEqual } from 'crypto';
 import { auth } from '@/auth';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 
@@ -27,10 +28,15 @@ export async function requireAppAccess(req: NextRequest): Promise<NextResponse |
   // Guest / local / desktop mode — always allow
   if (isGuestModeEnabled()) return null;
 
-  // Desktop app internal token
+  // Desktop app internal token — timing-safe comparison to prevent oracle attacks
   const desktopToken = req.headers.get(DESKTOP_TOKEN_HEADER);
-  if (desktopToken && desktopToken === process.env.STUDYPILOT_DESKTOP_AUTH_TOKEN) {
-    return null;
+  const envToken = process.env.STUDYPILOT_DESKTOP_AUTH_TOKEN;
+  if (desktopToken && envToken) {
+    try {
+      const a = Buffer.from(desktopToken);
+      const b = Buffer.from(envToken);
+      if (a.length === b.length && timingSafeEqual(a, b)) return null;
+    } catch { /* length mismatch — fall through */ }
   }
 
   // NextAuth session — check for authenticated user

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 import { apiError, createRequestId } from '@/lib/api/error-response';
+import { resolveAiDataMode } from '@/lib/privacy/ai-data';
 
 type AnalysisMode = 'describe' | 'explain' | 'extract-text' | 'solve-math' | 'scan-questions';
 
@@ -96,6 +97,16 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { imageDataUrl, mode } = body;
+
+    // Honour privacy/offline mode — never send images to cloud AI in offline mode
+    const privacyMode = resolveAiDataMode(body);
+    if (privacyMode === 'offline') {
+      return apiError(403, {
+        errorCode: 'OFFLINE_MODE',
+        reason: 'Vision analysis is unavailable in offline/privacy-only mode.',
+        requestId,
+      });
+    }
 
     if (!mode || !VALID_MODES.includes(mode)) {
       return apiError(400, {

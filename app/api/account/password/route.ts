@@ -6,9 +6,13 @@ import bcrypt from 'bcryptjs';
 import { getUserId, isDemoGuestEmail } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
 import { syncSupabaseAuthUser } from '@/lib/supabase/auth-admin';
+import { checkPasswordLimit } from '@/lib/api/auth-rate-limit';
 
 // PUT change password
 export async function PUT(request: NextRequest) {
+  const rateLimitRes = checkPasswordLimit(request);
+  if (rateLimitRes) return rateLimitRes;
+
   const requestId = createRequestId(request);
   try {
     const userId = await getUserId(request);
@@ -24,10 +28,10 @@ export async function PUT(request: NextRequest) {
     const { currentPassword, newPassword } = body;
 
     // Validate new password
-    if (!newPassword || newPassword.length < 6) {
+    if (!newPassword || newPassword.length < 8) {
       return apiError(400, {
         errorCode: 'INVALID_PASSWORD',
-        reason: 'New password must be at least 6 characters',
+        reason: 'New password must be at least 8 characters',
         requestId,
       });
     }
