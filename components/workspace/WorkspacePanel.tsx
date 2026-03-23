@@ -93,12 +93,13 @@ const GENERATE_TAB_GROUPS = [
   { label: 'Exam',     ids: ['exam'] },
 ] as const;
 
-const WORKSPACE_TABS: Array<{ id: MainTab; icon: string; label: string; getMeta?: (ctx: { filesCount: number; libraryCount: number }) => string }> = [
-  { id: 'files',    icon: '📁', label: 'Files',   getMeta: ({ filesCount })   => (filesCount   ? `(${filesCount})`   : '') },
-  { id: 'generate', icon: '⚡', label: 'Tools' },
-  { id: 'chat',     icon: '💬', label: 'Chat' },
-  { id: 'notes',    icon: '📓', label: 'Notes' },
-  { id: 'focus',    icon: '🍅', label: 'Focus' },
+const WORKSPACE_TABS: Array<{ id: MainTab; icon: string; label: string; getMeta?: (ctx: { filesCount: number; libraryCount: number; decksCount: number }) => string }> = [
+  { id: 'files',      icon: '📁', label: 'Files',      getMeta: ({ filesCount })  => (filesCount  ? `(${filesCount})`  : '') },
+  { id: 'generate',   icon: '⚡', label: 'Tools' },
+  { id: 'flashcards', icon: '🃏', label: 'Flashcards', getMeta: ({ decksCount })  => (decksCount  ? `(${decksCount})`  : '') },
+  { id: 'chat',       icon: '💬', label: 'Chat' },
+  { id: 'notes',      icon: '📓', label: 'Notes' },
+  { id: 'focus',      icon: '🍅', label: 'Focus' },
 ];
 
 const GENERATE_SHORTCUTS = [
@@ -109,7 +110,7 @@ const GENERATE_SHORTCUTS = [
 ] as const;
 
 type GenMode    = (typeof GENERATE_TABS)[number]['id'];
-type MainTab    = 'files' | 'generate' | 'chat' | 'notes' | 'focus' | 'planner' | 'analytics';
+type MainTab    = 'files' | 'generate' | 'flashcards' | 'chat' | 'notes' | 'focus' | 'planner' | 'analytics';
 type ReviewSetPhase = 'review' | 'import';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -415,8 +416,8 @@ export function WorkspacePanel({
 
     saveDeck(draft);
     setSrsDecks((current) => [draft, ...current.filter((deck) => deck.id !== draft.id)]);
-    router.push('/library');
     setActiveReviewSetId(draft.id);
+    setMainTab('flashcards');
     setRequestedReviewPhase(options?.phase ?? null);
     setPendingReviewImportUrl(options?.importUrl ?? null);
 
@@ -759,11 +760,11 @@ export function WorkspacePanel({
 
     if ((handoff.type === 'review-set' || handoff.type === 'import-success') && handoff.setId) {
       clearCoachHandoff();
-      router.push('/library');
       setActiveReviewSetId(handoff.setId);
       setRequestedReviewPhase(handoff.panel === 'review' ? 'review' : null);
       setPendingReviewImportUrl(null);
-      toast('Review set opened in Workspace', 'success');
+      setMainTab('flashcards');
+      toast('Review set opened in Flashcards', 'success');
       return;
     }
 
@@ -1038,7 +1039,7 @@ export function WorkspacePanel({
   const breadcrumb = [selectedFolderName, selectedTopicName].filter(Boolean).join(' › ');
   const currentGen = GENERATE_TABS.find(t => t.id === genMode)!;
   const currentSourceLabel = pasteMode ? 'Pasted text' : selFile?.name ?? null;
-  const workspaceTabMeta = { filesCount: files.length, libraryCount: libItems.length };
+  const workspaceTabMeta = { filesCount: files.length, libraryCount: libItems.length, decksCount: srsDecks.length };
 
   // ── Render ────────────────────────────────────────────────────────────
 
@@ -1660,6 +1661,21 @@ export function WorkspacePanel({
               )}
             </div>
           </div>
+        )}
+
+        {/* ─────────────────── FLASHCARDS ────────────── */}
+        {mainTab === 'flashcards' && (
+          <FlashcardView
+            content={output}
+            title={selFile?.name}
+            initialDeck={activeReviewSet}
+            requestedPhase={requestedReviewPhase}
+            initialImportUrl={pendingReviewImportUrl}
+            onRequestedPhaseHandled={() => setRequestedReviewPhase(null)}
+            onDeckChange={(deck) => {
+              setSrsDecks(current => current.map(d => d.id === deck.id ? deck : d));
+            }}
+          />
         )}
 
         {/* ─────────────────── CHAT ──────────────────── */}
