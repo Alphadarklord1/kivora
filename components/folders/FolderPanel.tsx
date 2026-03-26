@@ -199,8 +199,17 @@ export function FolderPanel({
     };
     try {
       const res = await createFileUploadRequest({ ...local, file });
-      toast(res.ok ? `"${file.name}" uploaded` : `"${file.name}" saved locally`, res.ok ? 'success' : 'info');
-      if (!res.ok) upsertLocalFile(local);
+      if (res.ok) {
+        const json = await res.json().catch(() => null);
+        if (json?.storageWarning) {
+          toast(`"${file.name}" saved locally — cloud sync failed, will retry later`, 'warning');
+        } else {
+          toast(`"${file.name}" uploaded`, 'success');
+        }
+      } else {
+        toast(`"${file.name}" saved locally`, 'info');
+        upsertLocalFile(local);
+      }
     } catch {
       upsertLocalFile(local);
       toast(`"${file.name}" saved locally`, 'info');

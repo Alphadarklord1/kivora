@@ -79,9 +79,12 @@
         ]
       }
     ],
+    "afterPack": "scripts/after-pack-mac.js",
     "mac": {
       "category": "public.app-category.education",
       "icon": "public/icons/icon.png",
+      "identity": null,
+      "gatekeeperAssess": false,
       "target": [
         {
           "target": "dmg",
@@ -96,6 +99,14 @@
           ]
         }
       ]
+    },
+    "dmg": {
+      "title": "Kivora",
+      "contents": [
+        { "x": 150, "y": 190, "type": "file" },
+        { "x": 400, "y": 190, "type": "link", "path": "/Applications" }
+      ],
+      "window": { "width": 550, "height": 400 }
     },
     "win": {
       "icon": "public/icons/icon.ico",

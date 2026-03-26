@@ -62,7 +62,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const trimmedText = text.trim();
+  // Cap input to ~40 000 chars (~10 000 tokens) to prevent token-burning abuse
+  const MAX_TEXT_LENGTH = 40_000;
+  if (text.length > MAX_TEXT_LENGTH) {
+    return NextResponse.json(
+      { error: `Text is too long. Maximum is ${MAX_TEXT_LENGTH} characters.` },
+      { status: 400 },
+    );
+  }
+
+  // Basic prompt injection defence — strip common injection patterns before
+  // the text reaches the AI. This doesn't need to be exhaustive; the system
+  // prompt and structured user-prompt wrapper already constrain the model.
+  const trimmedText = text
+    .trim()
+    .replace(/ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?)/gi, '[removed]')
+    .replace(/you\s+are\s+now\s+(?!a\s+study)/gi, '[removed]')
+    .replace(/system\s*:\s*/gi, '[removed]')
+    .replace(/<\|(?:im_start|im_end|system|user|assistant)\|>/gi, '');
   const baseSourceText = typeof deckContent === 'string' && deckContent.trim().length > 0
     ? `Deck title: ${deckTitle?.trim() || 'Untitled deck'}\n\n${deckContent.trim()}`
     : trimmedText;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useToast } from '@/providers/ToastProvider';
 import { useI18n } from '@/lib/i18n/useI18n';
 import { printContent, printMultiple } from '@/lib/utils/print';
@@ -39,6 +39,63 @@ const MODE_META: Record<string, { label: string; color: string; icon: string }> 
 
 const ALL_TYPE_KEYS = ['all', ...Object.keys(MODE_META)] as const;
 type TypeFilter = typeof ALL_TYPE_KEYS[number];
+
+// ── Search helpers ────────────────────────────────────────────────────────────
+
+/** Split a query into cleaned tokens, deduped, min 1 char */
+function tokenize(q: string): string[] {
+  return [...new Set(q.toLowerCase().trim().split(/\s+/).filter(t => t.length > 0))];
+}
+
+/** Score how well an item matches the query tokens. Higher = more relevant. */
+function scoreItem(item: LibItem, tokens: string[]): number {
+  if (tokens.length === 0) return 1;
+  const title    = (item.metadata?.title || item.metadata?.problem || '').toLowerCase();
+  const meta     = [item.metadata?.category, item.metadata?.sourceFileName, item.metadata?.sourceDeckName, item.mode]
+    .filter(Boolean).join(' ').toLowerCase();
+  const content  = item.content.toLowerCase();
+
+  let score = 0;
+  for (const t of tokens) {
+    if (title.includes(t))   score += 10;  // title match → highest weight
+    if (meta.includes(t))    score += 4;   // metadata match
+    if (content.includes(t)) score += 1;   // content match
+  }
+  // All tokens must match somewhere (AND logic)
+  const allMatch = tokens.every(t => title.includes(t) || meta.includes(t) || content.includes(t));
+  return allMatch ? score : 0;
+}
+
+/** Extract a ~160-char snippet from content centred on the first token match */
+function getSnippet(content: string, tokens: string[]): string {
+  const lower = content.toLowerCase();
+  let best = -1;
+  for (const t of tokens) {
+    const idx = lower.indexOf(t);
+    if (idx !== -1 && (best === -1 || idx < best)) best = idx;
+  }
+  if (best === -1) return content.slice(0, 160);
+  const start = Math.max(0, best - 60);
+  const end   = Math.min(content.length, best + 100);
+  return (start > 0 ? '…' : '') + content.slice(start, end) + (end < content.length ? '…' : '');
+}
+
+/** Wrap matched tokens in <mark> within a text string */
+function Highlight({ text, tokens }: { text: string; tokens: string[] }): ReactNode {
+  if (tokens.length === 0) return text;
+  // Build a regex that matches any token (case-insensitive)
+  const escaped = tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
+  return (
+    <>
+      {parts.map((part, i) =>
+        tokens.some(t => part.toLowerCase() === t)
+          ? <mark key={i} className="lib-highlight">{part}</mark>
+          : part
+      )}
+    </>
+  );
+}
 
 const LOCAL_AR: Record<string, string> = {
   'saved outputs':    '\u0645\u062e\u0631\u062c\u0627\u062a \u0645\u062d\u0641\u0648\u0638\u0629',
@@ -131,17 +188,18 @@ export default function LibraryPage() {
     return c;
   }, [items]);
 
+  const searchTokens = useMemo(() => tokenize(search), [search]);
+
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return items.filter(item => {
-      if (typeFilter !== 'all' && item.mode !== typeFilter) return false;
-      if (!q) return true;
-      const hay = [item.mode, item.content, item.metadata?.title, item.metadata?.category,
-                   item.metadata?.problem, item.metadata?.sourceFileName, item.metadata?.sourceDeckName]
-        .filter(Boolean).join(' ').toLowerCase();
-      return hay.includes(q);
-    });
-  }, [items, search, typeFilter]);
+    const typeOk = (item: LibItem) => typeFilter === 'all' || item.mode === typeFilter;
+    if (searchTokens.length === 0) return items.filter(typeOk);
+    return items
+      .filter(typeOk)
+      .map(item => ({ item, score: scoreItem(item, searchTokens) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map(({ item }) => item);
+  }, [items, searchTokens, typeFilter]);
 
   return (
     <div className="lib-page" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
@@ -220,6 +278,11 @@ export default function LibraryPage() {
           {search ? (
             <>
               <h3 className="lib-empty-title">{t('No results for')} &ldquo;{search}&rdquo;</h3>
+              {searchTokens.length > 1 && (
+                <p className="lib-empty-body" style={{ marginTop: 6 }}>
+                  Searching for all {searchTokens.length} words — try fewer terms
+                </p>
+              )}
               <button className="lib-btn lib-btn-ghost" style={{ marginTop: 10 }} onClick={() => setSearch('')}>
                 {t('Back')}
               </button>
@@ -239,9 +302,11 @@ export default function LibraryPage() {
       ) : (
         <div className="lib-list">
           {filtered.map(item => {
-            const meta  = MODE_META[item.mode] ?? { label: item.mode, color: 'var(--border-2)', icon: '\uD83D\uDCC4' };
-            const title = item.metadata?.title || item.metadata?.problem || meta.label;
-            const isExp = expanded === item.id;
+            const meta    = MODE_META[item.mode] ?? { label: item.mode, color: 'var(--border-2)', icon: '\uD83D\uDCC4' };
+            const title   = item.metadata?.title || item.metadata?.problem || meta.label;
+            const isExp   = expanded === item.id;
+            const isSearch = searchTokens.length > 0;
+            const snippet  = isSearch && !isExp ? getSnippet(item.content, searchTokens) : null;
             return (
               <div key={item.id} className="lib-card" style={{ borderLeft: `3px solid ${meta.color}` }}>
                 {/* Card header */}
@@ -252,7 +317,9 @@ export default function LibraryPage() {
                   }}>
                     {meta.icon} {meta.label}
                   </span>
-                  <strong className="lib-card-title">{title}</strong>
+                  <strong className="lib-card-title">
+                    <Highlight text={title} tokens={searchTokens} />
+                  </strong>
                   <span className="lib-card-date">
                     {formatDate(item.createdAt, { month: 'short', day: 'numeric', year: 'numeric' })}
                   </span>
@@ -276,18 +343,24 @@ export default function LibraryPage() {
                   </div>
                 )}
 
-                {/* Content */}
-                <div
-                  className="lib-card-content"
-                  style={isExp ? {} : {
-                    display: '-webkit-box',
-                    WebkitLineClamp: 5,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                  } as React.CSSProperties}
-                >
-                  {item.content}
-                </div>
+                {/* Content — snippet when searching, clamped preview otherwise */}
+                {snippet ? (
+                  <div className="lib-card-content lib-card-snippet">
+                    <Highlight text={snippet} tokens={searchTokens} />
+                  </div>
+                ) : (
+                  <div
+                    className="lib-card-content"
+                    style={isExp ? {} : {
+                      display: '-webkit-box',
+                      WebkitLineClamp: 5,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    } as React.CSSProperties}
+                  >
+                    {item.content}
+                  </div>
+                )}
 
                 {/* Actions */}
                 <div className="lib-card-actions">
@@ -334,8 +407,10 @@ export default function LibraryPage() {
         .lib-search {
           width: 100%; max-width: 420px; padding: 9px 14px;
           border: 1px solid var(--border-2); border-radius: 8px;
-          background: var(--bg-surface); color: var(--text-1); font-size: var(--text-sm);
+          background: var(--bg-surface); color: var(--text); font-size: var(--text-sm);
+          transition: border-color 0.15s;
         }
+        .lib-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
         .lib-search::placeholder { color: var(--text-3); }
         .lib-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
         .lib-pill {
@@ -343,8 +418,8 @@ export default function LibraryPage() {
           border: 1px solid var(--border-2); background: var(--bg-surface); color: var(--text-2);
           font-size: 12px; cursor: pointer; transition: all 0.15s;
         }
-        .lib-pill:hover { background: var(--bg-inset); }
-        .lib-pill.active { font-weight: 600; }
+        .lib-pill:hover { background: var(--bg-inset); border-color: var(--border-3); color: var(--text); }
+        .lib-pill.active { font-weight: 600; border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
         .lib-pill-count {
           display: inline-flex; align-items: center; justify-content: center;
           min-width: 18px; height: 18px; border-radius: 999px; padding: 0 4px;
@@ -357,7 +432,7 @@ export default function LibraryPage() {
           background-size: 200% 100%; animation: shimmer 1.2s infinite;
         }
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-        .lib-error-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; margin-bottom: 16px; border-radius: 10px; background: color-mix(in srgb, #ef4444 10%, var(--bg-surface)); border: 1px solid color-mix(in srgb, #ef4444 30%, transparent); color: #b91c1c; font-size: 13px; }
+        .lib-error-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; margin-bottom: 16px; border-radius: 10px; background: var(--danger-bg); border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent); color: var(--danger); font-size: 13px; }
         .lib-empty { text-align: center; padding: 60px 20px; border: 1.5px dashed var(--border-2); border-radius: 14px; }
         .lib-empty-icon { font-size: 52px; margin-bottom: 14px; }
         .lib-empty-title { font-size: var(--text-lg); font-weight: 600; margin: 0 0 8px; }
@@ -366,9 +441,9 @@ export default function LibraryPage() {
         .lib-card {
           padding: 14px 16px; background: var(--bg-surface);
           border-radius: 12px; border: 1px solid var(--border-2);
-          transition: box-shadow 0.15s, border-color 0.15s;
+          transition: box-shadow 0.18s, border-color 0.18s, transform 0.18s;
         }
-        .lib-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); border-color: var(--border-default); }
+        .lib-card:hover { box-shadow: 0 4px 18px rgba(0,0,0,0.14); border-color: var(--border-3); transform: translateY(-1px); }
         .lib-card-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
         .lib-card-badge {
           padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700;
@@ -380,8 +455,8 @@ export default function LibraryPage() {
           background: none; border: none; cursor: pointer; color: var(--text-3);
           font-size: 13px; padding: 2px 5px; border-radius: 4px; transition: all 0.15s;
         }
-        .lib-icon-btn:hover { color: var(--danger, #ef4444); background: color-mix(in srgb, var(--danger, #ef4444) 10%, transparent); }
-        .lib-icon-btn-print:hover { color: var(--text-1) !important; background: var(--bg-inset) !important; }
+        .lib-icon-btn:hover { color: var(--danger); background: var(--danger-bg); }
+        .lib-icon-btn-print:hover { color: var(--text) !important; background: var(--bg-inset) !important; }
         .lib-card-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
         .lib-tag {
           padding: 2px 8px; border-radius: 5px; font-size: 11px;
@@ -389,12 +464,14 @@ export default function LibraryPage() {
         }
         .lib-tag-accent { background: color-mix(in srgb, var(--accent) 12%, var(--bg-inset)); color: var(--accent); }
         .lib-card-content { font-size: var(--text-sm); color: var(--text-2); white-space: pre-wrap; line-height: 1.6; margin-bottom: 10px; }
+        .lib-card-snippet { white-space: normal; font-style: italic; color: var(--text-3); }
+        :global(.lib-highlight) { background: color-mix(in srgb, var(--warning) 22%, var(--surface-2)); color: var(--warning); border-radius: 3px; padding: 0 2px; font-style: normal; font-weight: 600; }
         .lib-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
         .lib-btn { display: inline-flex; align-items: center; gap: 5px; border-radius: 7px; font-weight: 500; cursor: pointer; text-decoration: none; transition: all 0.15s; }
         .lib-btn-primary { padding: 8px 16px; background: var(--accent); color: #fff; border: none; font-size: var(--text-sm); }
-        .lib-btn-primary:hover { opacity: 0.88; }
+        .lib-btn-primary:hover { background: var(--accent-h); }
         .lib-btn-ghost { padding: 5px 10px; background: transparent; border: 1px solid var(--border-2); color: var(--text-2); font-size: 12px; }
-        .lib-btn-ghost:hover { background: var(--bg-inset); color: var(--text-1); }
+        .lib-btn-ghost:hover { background: var(--bg-inset); color: var(--text); border-color: var(--border-3); }
         .lib-btn-sm { font-size: 12px; }
         .lib-btn-share:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
       `}</style>

@@ -1088,7 +1088,7 @@ export function WorkspacePanel({
             </span>
           )}
           {streak > 0 && (
-            <span title={`${streak}-day study streak`} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--text-xs)', color: 'var(--text-2)', background: 'color-mix(in srgb, #f59e0b 15%, var(--surface))', border: '1px solid color-mix(in srgb, #f59e0b 30%, transparent)', borderRadius: 20, padding: '2px 8px', cursor: 'default' }}>
+            <span title={`${streak}-day study streak`} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--text-xs)', color: 'var(--text-2)', background: 'var(--warning-bg)', border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)', borderRadius: 20, padding: '2px 8px', cursor: 'default' }}>
               🔥 {streak}d
             </span>
           )}
@@ -1318,16 +1318,16 @@ export function WorkspacePanel({
                             {isMissing && (
                               <div style={{
                                 marginTop: 6, padding: '6px 10px', borderRadius: 8,
-                                background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)',
+                                background: 'var(--warning-bg)', border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)',
                                 display: 'flex', alignItems: 'center', gap: 8,
                               }}
                                 onClick={e => e.stopPropagation()}>
-                                <span style={{ fontSize: 'var(--text-xs)', color: '#f59e0b', flex: 1 }}>
+                                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--warning)', flex: 1 }}>
                                   ⚠ File data missing — re-upload to restore
                                 </span>
                                 <button
                                   className="btn btn-sm"
-                                  style={{ fontSize: 11, padding: '2px 10px', background: '#f59e0b', color: '#000', border: 'none' }}
+                                  style={{ fontSize: 11, padding: '2px 10px', background: 'var(--warning)', color: 'var(--bg)', border: 'none' }}
                                   onClick={e => {
                                     e.stopPropagation();
                                     setReuploadTarget(file);
@@ -1764,7 +1764,7 @@ export function WorkspacePanel({
                 <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', marginBottom: 10 }}>⚠️ Weak Areas</div>
                 {analyticsData.weakAreas.map(area => {
                   const pct = Math.round(area.accuracy);
-                  const color = pct < 40 ? '#ef4444' : pct < 65 ? '#f97316' : '#22c55e';
+                  const color = pct < 40 ? 'var(--danger)' : pct < 65 ? 'var(--warning)' : 'var(--success)';
                   return (
                     <div key={area.topic} style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10, padding: '10px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>

@@ -49,7 +49,12 @@ function mergeSets(local: SRSDeck[], remote: SRSDeck[]): SRSDeck[] {
   });
 }
 
-export function RevisionCoachPage() {
+interface RevisionCoachPageProps {
+  drawerMode?: boolean;
+  onClose?: () => void;
+}
+
+export function RevisionCoachPage({ drawerMode = false, onClose }: RevisionCoachPageProps = {}) {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const { toast }    = useToast();
@@ -116,8 +121,12 @@ export function RevisionCoachPage() {
 
   const openPanel = useCallback((setId: string, nextPanel: CoachPanel, importedFlag: boolean | null = null) => {
     writeCoachHandoff({ type: importedFlag ? 'import-success' : 'review-set', setId, panel: nextPanel });
-    router.push('/workspace');
-  }, [router]);
+    if (drawerMode && onClose) {
+      onClose();
+    } else {
+      router.push('/workspace');
+    }
+  }, [drawerMode, onClose, router]);
 
   const closePanel = useCallback(() => {
     router.push(buildCoachUrl({ setId: null, panel: null, imported: null, importUrl: null }), { scroll: false });
@@ -245,7 +254,11 @@ export function RevisionCoachPage() {
   function launchWeakTopic(area: WeakArea, tool: 'quiz' | 'explain') {
     writeCoachHandoff({ type: 'weak-topic', topic: area.topic, preferredTool: tool });
     toast(`"${area.topic}" is ready in Workspace`, 'success');
-    router.push('/workspace');
+    if (drawerMode && onClose) {
+      onClose();
+    } else {
+      router.push('/workspace');
+    }
   }
 
   function startMission() {
@@ -270,10 +283,10 @@ export function RevisionCoachPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} style={drawerMode ? { minHeight: '100%', paddingTop: 0 } : undefined}>
 
-      {/* App header */}
-      <header className={styles.appHeader}>
+      {/* App header — hidden in drawer mode (drawer provides its own header) */}
+      <header className={styles.appHeader} style={drawerMode ? { display: 'none' } : undefined}>
         <div className={styles.brand}>
           <span className={styles.brandGlyph}>🎓</span>
           <div className={styles.brandText}>

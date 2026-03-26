@@ -47,9 +47,10 @@ export default function WorkspacePage() {
         onFilesChanged={handleFilesChanged}
       />
       <Suspense fallback={
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: 'var(--text-muted, #94a3b8)' }}>
-          <div style={{ fontSize: 28 }}>📚</div>
-          <p style={{ margin: 0, fontSize: 14 }}>Loading workspace…</p>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: 'var(--text-3)' }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid var(--border-2)', borderTopColor: 'var(--accent)', animation: 'spin 0.7s linear infinite' }} />
+          <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>Loading workspace…</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       }>
         <WorkspacePanel

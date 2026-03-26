@@ -205,8 +205,12 @@ export function extractSourceMetaFromText(rawText: string, rawTitle?: string): E
   }
 
   const paragraphs = pickMeaningfulParagraphs(extractedText);
-  const leadSentence = paragraphs[0]?.split(/(?<=[.!?])\s+/)[0]?.trim() ?? '';
-  const title = collapseWhitespace(rawTitle ?? '') || leadSentence.slice(0, 80) || 'Manual text';
+  // Try to find a short heading-like first line (< 80 chars, no sentence-ending punctuation mid-line)
+  const lines = extractedText.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  const headingLine = lines.find(l => l.length >= 4 && l.length <= 80 && !/[.!?]$/.test(l) && l === lines[0]);
+  // Derive a topic title from the first few meaningful words if no explicit title/heading
+  const leadWords = paragraphs[0]?.split(/\s+/).slice(0, 6).join(' ').replace(/[.!?,;:]+$/, '') ?? '';
+  const title = collapseWhitespace(rawTitle ?? '') || headingLine || (leadWords.length >= 4 ? leadWords : 'Manual text');
   const description = paragraphs[0]?.slice(0, 220) || undefined;
 
   return {

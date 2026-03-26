@@ -109,6 +109,9 @@ export async function POST(request: NextRequest) {
   if (!problem) {
     return NextResponse.json({ error: 'problem is required' }, { status: 400 });
   }
+  if (problem.length > 5000) {
+    return NextResponse.json({ error: 'Problem is too long. Maximum 5000 characters.' }, { status: 400 });
+  }
 
   const solved = solveMathProblem(problem, body?.category ?? null);
   if (solved.verified) {

@@ -17,11 +17,12 @@ import { QuickSearchPalette, QuickSearchItem } from '@/components/layout/QuickSe
 import { useSyncSubscription } from '@/hooks/useSyncSubscription';
 import { useNotificationScheduler } from '@/hooks/useNotificationScheduler';
 import { useRateLimitToast } from '@/hooks/useRateLimitToast';
+import { installGlobalErrorHandlers } from '@/lib/errors/global-handler';
 
 const CORE_NAV_ITEMS = [
-  { href: '/workspace', key: 'Workspace',          icon: '📚' },
-  { href: '/coach',     key: 'Scholar Hub',     icon: '🎓' },
-  { href: '/math',      key: 'Math',                icon: '∑'  },
+  { href: '/workspace', key: 'Workspace',  icon: '📚' },
+  { href: '/math',      key: 'Math',       icon: '∑'  },
+  { href: '/coach',     key: 'Scholar Hub', icon: '🎓' },
 ];
 
 const SUPPORT_NAV_ITEMS = [
@@ -31,12 +32,11 @@ const SUPPORT_NAV_ITEMS = [
   { href: '/sharing',   key: 'Sharing',   icon: '🔗' },
 ];
 
-// Bottom nav items shown on mobile (4 key destinations)
 const BOTTOM_NAV_ITEMS = [
-  { href: '/workspace', key: 'Workspace', icon: '📚' },
+  { href: '/workspace', key: 'Workspace',  icon: '📚' },
+  { href: '/math',      key: 'Math',       icon: '∑'  },
   { href: '/coach',     key: 'Scholar Hub', icon: '🎓' },
-  { href: '/math',      key: 'Math', icon: '∑' },
-  { href: '/planner',   key: 'Planner', icon: '📅' },
+  { href: '/planner',   key: 'Planner',    icon: '📅' },
 ];
 
 // ── Tiny inline avatar ────────────────────────────────────────────────────
@@ -83,6 +83,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { toastJsx: rateLimitToastJsx } = useRateLimitToast();
 
   useEffect(() => {
+    installGlobalErrorHandlers();
     // Read streak from localStorage on mount (client-side only, no external subscription)
     // eslint-disable-next-line react-hooks/set-state-in-effect
     try { setStreak(getStreak()); } catch { /* noop */ }
@@ -207,8 +208,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             margin: '8px 8px 4px',
             padding: collapsed ? '6px 0' : '6px 10px',
             borderRadius: 8,
-            background: 'linear-gradient(135deg,#ff6b35 0%,#f7931e 100%)',
-            color: '#fff',
+            background: 'linear-gradient(135deg, color-mix(in srgb, var(--warning) 90%, #ff4500) 0%, var(--warning) 100%)',
+            color: 'var(--bg)',
             fontWeight: 700,
             fontSize: 12,
             display: 'flex',
@@ -217,7 +218,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             gap: 6,
             cursor: 'default',
             userSelect: 'none',
-            boxShadow: '0 2px 6px rgba(255,107,53,0.35)',
+            boxShadow: '0 2px 8px color-mix(in srgb, var(--warning) 35%, transparent)',
           }}
         >
           <span style={{ fontSize: 16 }}>🔥</span>

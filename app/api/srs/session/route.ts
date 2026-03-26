@@ -11,7 +11,11 @@ export async function POST(req: NextRequest) {
   if (!isDatabaseConfigured) return NextResponse.json({ ok: true });
 
   const body = await req.json().catch(() => null);
-  const { cardsReviewed = 0, minutesStudied = 0 } = body ?? {};
+  const rawCards   = Number(body?.cardsReviewed ?? 0);
+  const rawMinutes = Number(body?.minutesStudied ?? 0);
+  // Clamp to non-negative integers to prevent stat corruption
+  const cardsReviewed  = Math.max(0, Math.floor(Number.isFinite(rawCards)   ? rawCards   : 0));
+  const minutesStudied = Math.max(0, Math.floor(Number.isFinite(rawMinutes) ? rawMinutes : 0));
   const today = new Date().toISOString().split('T')[0];
 
   try {

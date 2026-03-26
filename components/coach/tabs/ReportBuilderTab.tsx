@@ -113,6 +113,8 @@ interface Props {
 
 // ── Component ──────────────────────────────────────────────────────────────
 
+const REPORT_DRAFT_KEY = 'kivora_report_draft';
+
 export function ReportBuilderTab({ sourceBrief, researchResult, onNavigateToResearch }: Props) {
   const { toast }    = useToast();
   const privacyMode  = loadClientAiDataMode();
@@ -146,7 +148,42 @@ export function ReportBuilderTab({ sourceBrief, researchResult, onNavigateToRese
   const [sourcesLoading,  setSourcesLoading]  = useState(false);
   const [sourcesError,    setSourcesError]    = useState('');
   const [selectedUrls,    setSelectedUrls]    = useState<Set<string>>(new Set());
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftLoadedRef = useRef(false);
+  const draftSaveRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Draft: restore on mount ───────────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(REPORT_DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw) as Record<string, unknown>;
+        if (typeof d.reportTopic     === 'string') setReportTopic(d.reportTopic);
+        if (d.reportType === 'essay' || d.reportType === 'report' || d.reportType === 'literature_review') setReportType(d.reportType);
+        if (typeof d.reportWordCount === 'number') setReportWordCount(d.reportWordCount);
+        if (typeof d.reportKeyPoints === 'string') setReportKeyPoints(d.reportKeyPoints);
+        if (Array.isArray(d.outline))               setOutline(d.outline as OutlineSection[]);
+        if (typeof d.reportResult    === 'string') setReportResult(d.reportResult);
+        if (d.reportTopic || d.reportResult) toast('Draft restored', 'info');
+      }
+    } catch { /* ignore */ }
+    draftLoadedRef.current = true;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Draft: auto-save (debounced 1s) ──────────────────────────────────────
+  useEffect(() => {
+    if (!draftLoadedRef.current) return;
+    if (draftSaveRef.current) clearTimeout(draftSaveRef.current);
+    draftSaveRef.current = setTimeout(() => {
+      try {
+        if (!reportTopic && !reportResult) { localStorage.removeItem(REPORT_DRAFT_KEY); return; }
+        localStorage.setItem(REPORT_DRAFT_KEY, JSON.stringify({
+          reportTopic, reportType, reportWordCount, reportKeyPoints, outline, reportResult,
+        }));
+      } catch { /* storage full */ }
+    }, 1000);
+    return () => { if (draftSaveRef.current) clearTimeout(draftSaveRef.current); };
+  }, [reportTopic, reportType, reportWordCount, reportKeyPoints, outline, reportResult]);
 
   // ── Source discovery fetch (debounced on topic change) ──────────────────
 
@@ -409,7 +446,25 @@ export function ReportBuilderTab({ sourceBrief, researchResult, onNavigateToRese
     <div className={styles.reportLayout}>
 
       <div className={styles.panelHead}>
-        <h2>Report Builder</h2>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <h2 style={{ margin: 0 }}>Report Builder</h2>
+          {(reportTopic || reportResult) && (
+            <button
+              className={styles.btnSecondary}
+              style={{ fontSize: 11, padding: '2px 8px' }}
+              onClick={() => {
+                setReportTopic(''); setReportType('essay'); setReportWordCount(1000);
+                setReportKeyPoints(''); setOutline(null); setReportResult('');
+                setSavedToLib(false); setGradeResult(null);
+                localStorage.removeItem(REPORT_DRAFT_KEY);
+                toast('Draft cleared', 'info');
+              }}
+              title="Clear all work and start fresh"
+            >
+              🗑 Clear draft
+            </button>
+          )}
+        </div>
         <p>Find and verify sources, then generate a model report or essay to reference while you write your own.</p>
       </div>
 
@@ -672,7 +727,11 @@ export function ReportBuilderTab({ sourceBrief, researchResult, onNavigateToRese
                   📚 Save
                 </button>
               )}
-              <button className={styles.btnSecondary} onClick={() => { setReportResult(''); setSavedToLib(false); setGradeResult(null); }}>
+              <button className={styles.btnSecondary} onClick={() => {
+                setReportResult(''); setSavedToLib(false); setGradeResult(null);
+                setOutline(null);
+                try { localStorage.setItem(REPORT_DRAFT_KEY, JSON.stringify({ reportTopic, reportType, reportWordCount, reportKeyPoints, outline: null, reportResult: '' })); } catch { /* */ }
+              }}>
                 Clear
               </button>
             </div>
