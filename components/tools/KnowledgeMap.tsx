@@ -109,7 +109,7 @@ function buildTfidfGraph(items: LibraryItem[]): { nodes: Node[]; edges: Edge[] }
 
   const edges: Edge[] = [];
   for (const [key, count] of coCount) {
-    if (count < 2) continue;
+    if (count < 1) continue;
     const [a, b] = key.split('|');
     if (!topIds.has(a) || !topIds.has(b)) continue;
     edges.push({ from: a, to: b, coCount: count, isAiDerived: false });
@@ -287,19 +287,69 @@ function buildAiGraph(
 
 // ── Positions ─────────────────────────────────────────────────────────────────
 
-function computePositions(nodes: Node[]): Record<string, { x: number; y: number }> {
+function computePositions(
+  nodes: Node[],
+  edges: Edge[],
+): Record<string, { x: number; y: number }> {
   const tiers: Record<number, Node[]> = { 0: [], 1: [], 2: [] };
   for (const node of nodes) tiers[node.tier].push(node);
 
-  const pos: Record<string, { x: number; y: number }> = {};
-  for (const tierIdx of [0, 1, 2] as const) {
-    const group = tiers[tierIdx];
-    const r = TIER_RADIUS[tierIdx];
-    group.forEach((node, i) => {
-      const angle = (i / Math.max(group.length, 1)) * Math.PI * 2 - Math.PI / 2;
-      pos[node.id] = { x: 50 + Math.cos(angle) * r, y: 50 + Math.sin(angle) * r };
-    });
+  // Build adjacency: nodeId → set of connected nodeIds
+  const adj = new Map<string, Set<string>>();
+  for (const node of nodes) adj.set(node.id, new Set());
+  for (const edge of edges) {
+    adj.get(edge.from)?.add(edge.to);
+    adj.get(edge.to)?.add(edge.from);
   }
+
+  const pos: Record<string, { x: number; y: number }> = {};
+
+  // Place tier 0 first (inner ring)
+  const t0 = tiers[0];
+  const r0 = TIER_RADIUS[0];
+  t0.forEach((node, i) => {
+    const angle = (i / Math.max(t0.length, 1)) * Math.PI * 2 - Math.PI / 2;
+    pos[node.id] = { x: 50 + Math.cos(angle) * r0, y: 50 + Math.sin(angle) * r0 };
+  });
+
+  // Place tier 1: sort so nodes connected to the same tier-0 node cluster together
+  const t1 = [...tiers[1]].sort((a, b) => {
+    const aConn = [...(adj.get(a.id) ?? [])].find(id => tiers[0].some(n => n.id === id));
+    const bConn = [...(adj.get(b.id) ?? [])].find(id => tiers[0].some(n => n.id === id));
+    const aAngle = aConn && pos[aConn] ? Math.atan2(pos[aConn].y - 50, pos[aConn].x - 50) : 0;
+    const bAngle = bConn && pos[bConn] ? Math.atan2(pos[bConn].y - 50, pos[bConn].x - 50) : 0;
+    return aAngle - bAngle;
+  });
+  const r1 = TIER_RADIUS[1];
+  t1.forEach((node, i) => {
+    const angle = (i / Math.max(t1.length, 1)) * Math.PI * 2 - Math.PI / 2;
+    pos[node.id] = { x: 50 + Math.cos(angle) * r1, y: 50 + Math.sin(angle) * r1 };
+  });
+
+  // Place tier 2: position each sub-node near its parent's angle
+  const t2 = tiers[2];
+  const r2 = TIER_RADIUS[2];
+  t2.forEach((node, i) => {
+    const parentId = [...(adj.get(node.id) ?? [])].find(id =>
+      tiers[0].some(n => n.id === id) || tiers[1].some(n => n.id === id),
+    );
+    let baseAngle = (i / Math.max(t2.length, 1)) * Math.PI * 2 - Math.PI / 2;
+    if (parentId && pos[parentId]) {
+      baseAngle = Math.atan2(pos[parentId].y - 50, pos[parentId].x - 50);
+      // Spread siblings slightly
+      const siblings = t2.filter(n => {
+        const pId = [...(adj.get(n.id) ?? [])].find(id =>
+          tiers[0].some(x => x.id === id) || tiers[1].some(x => x.id === id),
+        );
+        return pId === parentId;
+      });
+      const sibIdx = siblings.findIndex(n => n.id === node.id);
+      const spread = (Math.PI / 5) * (sibIdx - (siblings.length - 1) / 2);
+      baseAngle += spread;
+    }
+    pos[node.id] = { x: 50 + Math.cos(baseAngle) * r2, y: 50 + Math.sin(baseAngle) * r2 };
+  });
+
   return pos;
 }
 
@@ -393,7 +443,7 @@ export function KnowledgeMap() {
     };
   }, []);
 
-  const positions = useMemo(() => computePositions(nodes), [nodes]);
+  const positions = useMemo(() => computePositions(nodes, edges), [nodes, edges]);
 
   const maxCoCount = useMemo(
     () => edges.reduce((m, e) => Math.max(m, e.coCount), 1),

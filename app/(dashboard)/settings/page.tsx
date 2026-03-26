@@ -10,6 +10,7 @@ import { useSettings, type Density, type Theme } from '@/providers/SettingsProvi
 import { AiRuntimeControls } from '@/components/models/AiRuntimeControls';
 import { ReportIssuePanel } from '@/components/settings/ReportIssuePanel';
 import { OllamaSetupPanel } from '@/components/settings/OllamaSetupPanel';
+import { DesktopModelPanel } from '@/components/settings/DesktopModelPanel';
 import styles from './page.module.css';
 import {
   crashReportsEnabledClient,
@@ -1202,11 +1203,17 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* ── Ollama / Qwen local AI setup ────────────────────────────── */}
+          {/* ── Desktop: in-app model upgrade ──────────────────────────── */}
           <div className={styles.downloadPanel}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Local AI (Ollama + Qwen)</div>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Offline AI model</div>
+            <DesktopModelPanel />
+          </div>
+
+          {/* ── Web/browser: Ollama + Qwen local AI setup ──────────────── */}
+          <div className={styles.downloadPanel} id="ollama-setup">
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Local AI (Ollama + Qwen) — browser only</div>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginBottom: 14, margin: '0 0 14px' }}>
-              Run Qwen 2.5 fully on-device via Ollama for private, offline AI generation. No API key or cloud account required.
+              If using the web version, run Qwen 2.5 on-device via Ollama for private offline AI. Not needed when using the desktop app.
             </p>
             <OllamaSetupPanel />
           </div>

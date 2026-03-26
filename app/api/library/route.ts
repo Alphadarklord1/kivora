@@ -13,13 +13,17 @@ export async function GET(req: NextRequest) {
 
   const limit = parseInt(new URL(req.url).searchParams.get('limit') ?? '0', 10) || undefined;
 
-  const items = await db.query.libraryItems.findMany({
-    where: eq(libraryItems.userId, userId),
-    orderBy: [desc(libraryItems.createdAt)],
-    limit,
-  });
-
-  return NextResponse.json(items);
+  try {
+    const items = await db.query.libraryItems.findMany({
+      where: eq(libraryItems.userId, userId),
+      orderBy: [desc(libraryItems.createdAt)],
+      limit,
+    });
+    return NextResponse.json(items);
+  } catch (err) {
+    console.error('[library] GET failed', err);
+    return NextResponse.json({ error: 'Failed to load library.' }, { status: 500 });
+  }
 }
 
 // POST /api/library
@@ -35,13 +39,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'mode and content are required.' }, { status: 400 });
   }
 
-  const [item] = await db.insert(libraryItems).values({
-    id: uuidv4(),
-    userId,
-    mode: mode as string,
-    content: content as string,
-    metadata: metadata ?? null,
-  }).returning();
-
-  return NextResponse.json(item, { status: 201 });
+  try {
+    const [item] = await db.insert(libraryItems).values({
+      id: uuidv4(),
+      userId,
+      mode: mode as string,
+      content: content as string,
+      metadata: metadata ?? null,
+    }).returning();
+    return NextResponse.json(item, { status: 201 });
+  } catch (err) {
+    console.error('[library] POST failed', err);
+    return NextResponse.json({ error: 'Failed to save item.' }, { status: 500 });
+  }
 }

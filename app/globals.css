@@ -670,8 +670,9 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   text-align: left;
 }
 .nav-item:hover { background: var(--surface); color: var(--text); text-decoration: none; }
-.nav-item.active { background: var(--accent-bg); color: var(--accent); }
-.nav-item .nav-icon { flex-shrink: 0; opacity: 0.8; }
+.nav-item.active { background: var(--accent-bg); color: var(--accent); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
+.nav-item .nav-icon { flex-shrink: 0; opacity: 0.8; transition: opacity var(--t-fast); }
+.nav-item:hover .nav-icon, .nav-item.active .nav-icon { opacity: 1; }
 .nav-item .nav-label { overflow: hidden; text-overflow: ellipsis; }
 
 .sidebar-footer {
@@ -802,7 +803,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   outline: none;
   min-width: 0;
 }
-.rename-input:focus { box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+.rename-input:focus { box-shadow: 0 0 0 3px var(--accent-glow); border-color: var(--accent); }
 
 /* ── Tool panel ── */
 .tool-panel {
@@ -949,13 +950,31 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ── Tool loading skeleton ── */
 .tool-loading {
-  min-height: 120px;
+  min-height: 200px;
   border-radius: var(--r-lg);
   background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+.tool-loading::before {
+  content: '';
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid var(--border-2);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
 }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes spin    { to  { transform: rotate(360deg); } }
 
 /* ── Tool output ── */
 .tool-output {

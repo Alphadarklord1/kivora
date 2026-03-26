@@ -18,12 +18,20 @@ import { resolveAiDataMode } from '@/lib/privacy/ai-data';
 
 const SYSTEM_PROMPT = 'You are a study assistant. Explain what a source is about clearly for students. Return concise plain text.';
 
-function parseKeyPoints(content: string) {
+function parseKeyPoints(content: string, summary?: string) {
+  const summaryNorm = summary?.toLowerCase().trim() ?? '';
   return Array.from(new Set(
     content
       .split(/\n+/)
       .map((line) => line.replace(/^[-*•\d.)\s]+/, '').trim())
-      .filter((line) => line.length >= 20),
+      .filter((line) => {
+        if (line.length < 20) return false;
+        // Skip header lines and the summary line
+        if (/^(summary|key\s*points?)[:\s]/i.test(line)) return false;
+        // Skip lines that substantially overlap with the summary
+        if (summaryNorm && line.toLowerCase().startsWith(summaryNorm.slice(0, 40))) return false;
+        return true;
+      }),
   )).slice(0, 4);
 }
 
@@ -247,8 +255,8 @@ export async function POST(req: NextRequest) {
   if (privacyMode === 'full') {
     try {
       const generated = await generateSourceBrief(brief, ai);
-      const keyPoints = parseKeyPoints(generated);
       const summary = parseSummary(generated).replace(/^summary:\s*/i, '').trim();
+      const keyPoints = parseKeyPoints(generated, summary);
       brief = {
         ...brief,
         summary: summary || brief.summary,

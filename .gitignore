@@ -40,6 +40,7 @@ yarn-error.log*
 # electron build output
 /dist-electron
 /electron/runtime/SHA256SUMS.txt
+/electron/runtime/models/*.gguf
 
 # certificates
 /certificates

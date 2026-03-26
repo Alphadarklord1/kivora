@@ -80,7 +80,11 @@ async function callVisionAI(imageDataUrl: string, mode: AnalysisMode): Promise<s
   }
 
   const data = await response.json();
-  return data.choices[0].message.content;
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content !== 'string') {
+    throw new Error('Unexpected response from vision API.');
+  }
+  return content;
 }
 
 export async function POST(request: NextRequest) {

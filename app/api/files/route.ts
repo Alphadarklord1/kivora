@@ -111,6 +111,7 @@ export async function POST(req: NextRequest) {
 
   let storageBucket: string | null = null;
   let storagePath: string | null = null;
+  let storageWarning = false;
 
   if (body.upload) {
     // Validate file size
@@ -125,6 +126,7 @@ export async function POST(req: NextRequest) {
     // Sanitize filename
     const safeFileName = sanitizeFilename(body.upload.name || body.name || 'upload');
 
+    let storageError = false;
     try {
       const stored = await uploadFileToSupabaseStorage({
         userId,
@@ -137,6 +139,7 @@ export async function POST(req: NextRequest) {
       storagePath = stored?.path ?? null;
     } catch (error) {
       console.error('[files] failed to upload to Supabase Storage', error);
+      storageWarning = true;
     }
   }
 
@@ -157,5 +160,9 @@ export async function POST(req: NextRequest) {
     storageUploadedAt: storagePath ? new Date() : null,
   }).returning();
 
-  return NextResponse.json({ ...file, storageBacked: Boolean(storagePath) }, { status: 201 });
+  return NextResponse.json({
+    ...file,
+    storageBacked: Boolean(storagePath),
+    storageWarning: storageWarning ? 'File saved locally but cloud sync failed. It will sync when connection is restored.' : undefined,
+  }, { status: 201 });
 }
