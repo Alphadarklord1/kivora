@@ -3,8 +3,10 @@ import { cloudAccessAllowed, type AiDataMode } from '@/lib/privacy/ai-data';
 import {
   buildStaticSuggestions,
   fetchWikiSummary,
+  searchSemanticScholar,
   searchWikipedia,
   type ArticleSuggestion,
+  type ArticleSourceType,
 } from '@/lib/coach/articles';
 import {
   buildFallbackSourceBrief,
@@ -14,26 +16,50 @@ import {
 } from '@/lib/coach/source-brief';
 
 export type ResearchMode = 'automatic' | 'manual' | 'hybrid';
+export type ResearchRanking = 'academic-first' | 'balanced' | 'broad-web';
+
+export interface ResearchCitation {
+  id: string;
+  label: string;
+  url: string;
+  source: string;
+  title: string;
+  type: ArticleSourceType;
+  confidenceLabel: ResearchSource['confidenceLabel'];
+  confidenceScore: number;
+  excerpt: string;
+  origin: ResearchSource['origin'];
+  readingMinutes: number;
+}
 
 export interface ResearchSource {
   id: string;
   title: string;
   url: string;
   source: string;
+  type: ArticleSourceType;
   excerpt: string;
   readingMinutes: number;
   origin: 'automatic' | 'manual';
   keyPoints: string[];
   wordCount?: number;
+  confidenceLabel: 'High' | 'Medium' | 'Baseline';
+  confidenceScore: number;
+  citationLabel: string;
 }
 
 export interface TopicResearchResult {
   topic: string;
   mode: ResearchMode;
+  ranking: ResearchRanking;
+  includeWeb: boolean;
   overview: string;
   keyIdeas: string[];
   sources: ResearchSource[];
+  citations: ResearchCitation[];
   relatedLinks: ArticleSuggestion[];
+  followUpPrompts: string[];
+  rankingSummary: string;
   provider: 'groq' | 'grok' | 'openai' | 'local' | 'offline';
 }
 
@@ -149,36 +175,126 @@ async function fetchManualSource(urlValue: string): Promise<ResearchSource> {
     title: brief.title,
     url: brief.url,
     source: brief.sourceLabel,
+    type: 'educational',
     excerpt: clampText(brief.summary, 220),
     readingMinutes: estimateReadingMinutes(brief.wordCount),
     origin: 'manual',
     keyPoints: brief.keyPoints.slice(0, 4),
     wordCount: brief.wordCount,
+    confidenceLabel: 'Medium',
+    confidenceScore: 72,
+    citationLabel: '',
   };
 }
 
-async function fetchAutomaticSources(topic: string): Promise<ResearchSource[]> {
-  const titles = await searchWikipedia(topic, 4);
-  const summaries = await Promise.all(titles.slice(0, 4).map((title) => fetchWikiSummary(title).catch(() => null)));
+async function fetchAutomaticSources(
+  topic: string,
+  options: { includeWeb: boolean; ranking: ResearchRanking },
+): Promise<ResearchSource[]> {
+  const academic = await searchSemanticScholar(topic, options.ranking === 'academic-first' ? 4 : 2).catch(() => []);
+  const wikiTitles = options.includeWeb || academic.length === 0
+    ? await searchWikipedia(topic, options.ranking === 'broad-web' ? 5 : 3).catch(() => [])
+    : [];
+  const wikiSummaries = await Promise.all(
+    wikiTitles.slice(0, options.ranking === 'broad-web' ? 4 : 2).map((title) => fetchWikiSummary(title).catch(() => null)),
+  );
 
-  return summaries
-    .filter((item): item is NonNullable<typeof item> => Boolean(item))
-    .slice(0, 3)
-    .map((item) => ({
+  const encyclopedia = wikiSummaries
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  const all = [
+    ...academic.map((item) => ({
       id: item.url,
       title: item.title,
       url: item.url,
       source: item.source,
+      type: item.type,
       excerpt: item.excerpt,
       readingMinutes: item.readingMinutes,
       origin: 'automatic' as const,
       keyPoints: [item.excerpt],
-    }));
+      confidenceLabel: 'High' as const,
+      confidenceScore: 90,
+      citationLabel: '',
+    })),
+    ...encyclopedia.map((item) => ({
+      id: item.url,
+      title: item.title,
+      url: item.url,
+      source: item.source,
+      type: item.type,
+      excerpt: item.excerpt,
+      readingMinutes: item.readingMinutes,
+      origin: 'automatic' as const,
+      keyPoints: [item.excerpt],
+      confidenceLabel: options.ranking === 'broad-web' ? 'Baseline' as const : 'Medium' as const,
+      confidenceScore: options.ranking === 'broad-web' ? 58 : 70,
+      citationLabel: '',
+    })),
+  ];
+
+  return rankSources(all, options.ranking).slice(0, options.ranking === 'broad-web' ? 5 : 4);
+}
+
+function rankSources(sources: ResearchSource[], ranking: ResearchRanking) {
+  const weights: Record<ArticleSourceType, number> =
+    ranking === 'academic-first'
+      ? { academic: 100, educational: 75, encyclopedia: 68, news: 50 }
+      : ranking === 'broad-web'
+        ? { academic: 86, educational: 82, encyclopedia: 74, news: 70 }
+        : { academic: 92, educational: 80, encyclopedia: 76, news: 58 };
+
+  return [...sources].sort((a, b) => {
+    const scoreA = weights[a.type] + a.confidenceScore;
+    const scoreB = weights[b.type] + b.confidenceScore;
+    return scoreB - scoreA;
+  });
+}
+
+function attachCitationLabels(sources: ResearchSource[]) {
+  return sources.map((source, index) => ({
+    ...source,
+    citationLabel: `S${index + 1}`,
+  }));
+}
+
+
+function buildFollowUpPrompts(topic: string, keyIdeas: string[]) {
+  const prompts = [
+    `What do the sources agree on most about ${topic}?`,
+    `What is the biggest misconception people have about ${topic}?`,
+    `Explain ${topic} in simpler terms for a student.`,
+  ];
+
+  for (const idea of keyIdeas.slice(0, 2)) {
+    prompts.push(`Why does this matter: ${idea}?`);
+  }
+
+  return dedupe(prompts.map((prompt) => clampText(prompt, 110))).slice(0, 5);
+}
+
+function buildRankingSummary(sources: ResearchSource[], ranking: ResearchRanking, includeWeb: boolean) {
+  const counts = sources.reduce<Record<string, number>>((acc, source) => {
+    acc[source.type] = (acc[source.type] ?? 0) + 1;
+    return acc;
+  }, {});
+  const parts = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, count]) => `${count} ${type}`);
+  const rankingLabel = ranking === 'academic-first'
+    ? 'Academic-first ranking pushes research papers and educational material higher.'
+    : ranking === 'broad-web'
+      ? 'Broad-web ranking keeps a wider spread of source types in play.'
+      : 'Balanced ranking mixes authority with readability.';
+  const webLabel = includeWeb ? 'Web search is enabled.' : 'Web search is limited to academic and local suggestions.';
+  return `${rankingLabel} ${webLabel} Source mix: ${parts.join(', ')}.`;
 }
 
 export async function researchTopic(args: {
   topic: string;
   mode: ResearchMode;
+  ranking: ResearchRanking;
+  includeWeb: boolean;
   manualUrls: string[];
   aiPrefs?: unknown;
   privacyMode: AiDataMode;
@@ -197,8 +313,10 @@ export async function researchTopic(args: {
   const manualSources = args.manualUrls.length
     ? await Promise.all(args.manualUrls.map((url) => fetchManualSource(url)))
     : [];
-  const automaticSources = args.mode === 'manual' ? [] : await fetchAutomaticSources(topic);
-  const sources = [...manualSources, ...automaticSources].slice(0, 6);
+  const automaticSources = args.mode === 'manual'
+    ? []
+    : await fetchAutomaticSources(topic, { includeWeb: args.includeWeb, ranking: args.ranking });
+  const sources = attachCitationLabels(rankSources([...manualSources, ...automaticSources], args.ranking).slice(0, 6));
 
   if (sources.length === 0) {
     throw new Error('No readable sources were found for this topic yet.');
@@ -224,6 +342,7 @@ export async function researchTopic(args: {
   ].join('\n\n');
 
   const fallback = buildResearchFallback(sources);
+  const rankingSummary = buildRankingSummary(sources, args.ranking, args.includeWeb);
   const { result, source } = await callAi({
     messages: [
       { role: 'system', content: 'You are a study research assistant. Compare multiple sources and extract the clearest shared ideas for a student.' },
@@ -240,10 +359,27 @@ export async function researchTopic(args: {
   return {
     topic,
     mode: args.mode,
+    ranking: args.ranking,
+    includeWeb: args.includeWeb,
     overview: parseOverview(result) || fallback.overview,
     keyIdeas: parseKeyIdeas(result).length ? parseKeyIdeas(result) : fallback.keyIdeas,
     sources,
+    citations: sources.map((source) => ({
+      id: source.id,
+      label: source.citationLabel,
+      url: source.url,
+      source: `${source.title} — ${source.source}`,
+      title: source.title,
+      type: source.type,
+      confidenceLabel: source.confidenceLabel,
+      confidenceScore: source.confidenceScore,
+      excerpt: source.excerpt,
+      origin: source.origin,
+      readingMinutes: source.readingMinutes,
+    })),
     relatedLinks,
+    followUpPrompts: buildFollowUpPrompts(topic, parseKeyIdeas(result).length ? parseKeyIdeas(result) : fallback.keyIdeas),
+    rankingSummary,
     provider: source,
   };
 }

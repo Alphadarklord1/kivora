@@ -10,7 +10,6 @@ import { MathText } from '@/components/math/MathRenderer';
 import { MATH_CATEGORIES, MATH_CATEGORY_ORDER } from '@/lib/math/catalog';
 import type { MathCategoryId } from '@/lib/math/types';
 import { isCustomFuncDefinition, normalizeGraphExpression, buildSharedScope } from '@/lib/math/graph-utils';
-import type { NormalizedGraphExpression } from '@/lib/math/graph-utils';
 import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
 import { MatlabLab } from '@/components/tools/MatlabLab';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
@@ -1418,6 +1417,41 @@ const CATEGORY_FORMS: Record<string, StructForm[]> = {
       params: [{ key: 'A_0', label: 'x', inputType: 'number', placeholder: '1' }, { key: 'A_1', label: 'y', inputType: 'number', placeholder: '2' }, { key: 'A_2', label: 'z', inputType: 'number', placeholder: '2' }],
       buildCommand: (p) => `norm([${p.A_0||'0'}, ${p.A_1||'0'}, ${p.A_2||'0'}])`,
     },
+    { id: 'vec-angle-2d', label: 'Angle Between  (2D)', latexFormula: '\\theta = \\cos^{-1}\\left(\\frac{\\mathbf{a}\\cdot\\mathbf{b}}{|\\mathbf{a}||\\mathbf{b}|}\\right)', note: 'Returns the angle in degrees.',
+      params: [
+        { key: 'A_0', label: 'a₁ (x)', inputType: 'number', placeholder: '1' },
+        { key: 'A_1', label: 'a₂ (y)', inputType: 'number', placeholder: '0' },
+        { key: 'B_0', label: 'b₁ (x)', inputType: 'number', placeholder: '0' },
+        { key: 'B_1', label: 'b₂ (y)', inputType: 'number', placeholder: '1' },
+      ],
+      buildCommand: (p) => `angle between [${p.A_0||'0'}, ${p.A_1||'0'}] [${p.B_0||'0'}, ${p.B_1||'0'}]`,
+    },
+    { id: 'vec-angle-3d', label: 'Angle Between  (3D)', latexFormula: '\\theta = \\cos^{-1}\\left(\\frac{\\mathbf{a}\\cdot\\mathbf{b}}{|\\mathbf{a}||\\mathbf{b}|}\\right)', note: 'Returns the angle in degrees.',
+      params: [
+        { key: 'A_0', label: 'a₁', inputType: 'number', placeholder: '1' },
+        { key: 'A_1', label: 'a₂', inputType: 'number', placeholder: '2' },
+        { key: 'A_2', label: 'a₃', inputType: 'number', placeholder: '3' },
+        { key: 'B_0', label: 'b₁', inputType: 'number', placeholder: '4' },
+        { key: 'B_1', label: 'b₂', inputType: 'number', placeholder: '5' },
+        { key: 'B_2', label: 'b₃', inputType: 'number', placeholder: '6' },
+      ],
+      buildCommand: (p) => `angle between [${p.A_0||'0'}, ${p.A_1||'0'}, ${p.A_2||'0'}] [${p.B_0||'0'}, ${p.B_1||'0'}, ${p.B_2||'0'}]`,
+    },
+    { id: 'vec-unit-2d', label: 'Unit Vector  (2D)', latexFormula: '\\hat{\\mathbf{a}} = \\frac{\\mathbf{a}}{|\\mathbf{a}|}', note: 'Normalizes the vector to length 1.',
+      params: [
+        { key: 'A_0', label: 'x', inputType: 'number', placeholder: '3' },
+        { key: 'A_1', label: 'y', inputType: 'number', placeholder: '4' },
+      ],
+      buildCommand: (p) => `unit vector [${p.A_0||'0'}, ${p.A_1||'0'}]`,
+    },
+    { id: 'vec-unit-3d', label: 'Unit Vector  (3D)', latexFormula: '\\hat{\\mathbf{a}} = \\frac{\\mathbf{a}}{|\\mathbf{a}|}', note: 'Normalizes the vector to length 1.',
+      params: [
+        { key: 'A_0', label: 'x', inputType: 'number', placeholder: '1' },
+        { key: 'A_1', label: 'y', inputType: 'number', placeholder: '2' },
+        { key: 'A_2', label: 'z', inputType: 'number', placeholder: '2' },
+      ],
+      buildCommand: (p) => `unit vector [${p.A_0||'0'}, ${p.A_1||'0'}, ${p.A_2||'0'}]`,
+    },
   ],
 
     /* ── Matrices ─────────────────────────────────────────────────────────────────── */
@@ -1795,6 +1829,7 @@ export function MathSolverPage() {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
     try { return localStorage.getItem(MATH_SIDEBAR_KEY) !== 'closed'; } catch { return true; }
   });
+  const [compactMathLayout, setCompactMathLayout] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SolveResult | null>(null);
@@ -1870,6 +1905,21 @@ export function MathSolverPage() {
     const observer = new MutationObserver(() => setThemeTick(v => v + 1));
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const syncLayout = () => {
+      const compact = window.innerWidth < 960;
+      setCompactMathLayout(compact);
+      setSidebarOpen((current) => {
+        if (compact) return false;
+        return current;
+      });
+    };
+    syncLayout();
+    window.addEventListener('resize', syncLayout);
+    return () => window.removeEventListener('resize', syncLayout);
   }, []);
 
   const replaceGraphWith = useCallback((expr: string) => {
@@ -2028,8 +2078,8 @@ export function MathSolverPage() {
   const S = {
     shell: { display: 'flex', height: '100%', overflow: 'hidden', background: 'var(--bg)', fontFamily: 'inherit' } as React.CSSProperties,
     sidebar: {
-      width: sidebarOpen ? 220 : 52,
-      minWidth: sidebarOpen ? 220 : 52,
+      width: sidebarOpen ? (compactMathLayout ? 188 : 220) : 52,
+      minWidth: sidebarOpen ? (compactMathLayout ? 188 : 220) : 52,
       transition: 'width 0.2s, min-width 0.2s',
       background: 'var(--bg-2)',
       borderRight: '1px solid var(--border-subtle)',
@@ -2150,6 +2200,66 @@ export function MathSolverPage() {
                 🕐 History
                 <span style={{ background: showHistory ? currentAccent : 'var(--border-mid, var(--border-subtle))', color: showHistory ? '#fff' : 'var(--text-muted)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, minWidth: 16, textAlign: 'center' }}>{history.length}</span>
               </button>
+            )}
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+            padding: '10px 24px',
+            borderBottom: '1px solid var(--border-subtle)',
+            background: 'linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 75%, transparent), var(--bg-base))',
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: 'grid', gap: 3, minWidth: 0 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+              Math focus
+            </span>
+            <strong style={{ color: 'var(--text-primary)', fontSize: 14 }}>
+              {currentTopic ? `${currentTopic.label} problem-solving` : `${specialMeta?.title ?? 'Math tools'} workspace`}
+            </strong>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, maxWidth: 760 }}>
+              {contextName
+                ? `Connected to ${contextName}. You can keep this file in context while solving, graphing, or exploring formulas.`
+                : currentTopic
+                  ? `Use structured forms, quick examples, and step-by-step solving without leaving the current topic.`
+                  : `Switch between graphing, scanning, formulas, units, visual analysis, and MATLAB-style work from the same space.`}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {compactMathLayout && (
+              <button
+                onClick={() => setSidebarOpen((value) => !value)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 999,
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-elevated)',
+                  color: 'var(--text-secondary)',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {sidebarOpen ? 'Hide topics' : 'Show topics'}
+              </button>
+            )}
+            <span style={{ padding: '4px 10px', borderRadius: 999, background: `${currentAccent}14`, color: currentAccent, fontSize: 11, fontWeight: 700 }}>
+              {currentTopic ? 'Solver mode' : specialMeta?.title ?? 'Tool mode'}
+            </span>
+            <span style={{ padding: '4px 10px', borderRadius: 999, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}>
+              {history.length} recent problem{history.length === 1 ? '' : 's'}
+            </span>
+            {currentCategoryConfig && (
+              <span style={{ padding: '4px 10px', borderRadius: 999, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}>
+                {currentCategoryConfig.supportedActions.length} supported actions
+              </span>
             )}
           </div>
         </div>

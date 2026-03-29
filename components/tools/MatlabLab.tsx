@@ -39,6 +39,31 @@ type MatlabHistoryItem = {
   timestamp: string;
 };
 
+const DEMO_SCRIPT = 'A = [1 0 2 1; 2 1 3 0; 0 1 1 2]\nB = [1 2; 0 1; 3 0; 2 1]\nC = A * B\nC';
+
+const CHIP_GROUPS = [
+  {
+    label: 'Matrices',
+    chips: ['A = [1 2; 3 4]', 'B = [5 6; 7 8]', 'A + B', 'A * B', 'transpose(A)', '3 * A'],
+  },
+  {
+    label: 'Linear Algebra',
+    chips: ['det(A)', 'inv(A)', 'eig(A)', 'eye(3)', 'zeros(3)', 'ones(2,3)'],
+  },
+  {
+    label: 'Rectangular',
+    chips: ['X = [1 0 2 1; 2 1 3 0; 0 1 1 2]', 'Y = [1 2; 0 1; 3 0; 2 1]', 'X * Y'],
+  },
+  {
+    label: 'Vectors',
+    chips: ['u = [3 4]', 'v = [1 2]', 'dot(u,v)', 'cross([1 0 0],[0 1 0])'],
+  },
+  {
+    label: 'Utilities',
+    chips: ['sum(A)', 'mean(A)', 'size(A)', 'linspace(0,1,5)', 'plot(sin(x))'],
+  },
+] as const;
+
 
 interface MatlabSession {
   variables: Record<string, MatlabValue>;
@@ -63,6 +88,7 @@ function loadStoredSession(): MatlabSession | null {
 function parseMatrix(input: string): Matrix | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
+  if (!(trimmed.startsWith('[') && trimmed.endsWith(']'))) return null;
 
   const content = trimmed.replace(/^\[/, '').replace(/\]$/, '');
   const rowParts = content.split(/;|\n/).map(r => r.trim()).filter(Boolean);
@@ -174,14 +200,6 @@ function matrixNormFro(matrix: Matrix): number {
     for (const v of row) sumSquares += v * v;
   }
   return Math.sqrt(sumSquares);
-}
-
-function parseVector(input: string): number[] | null {
-  const matrix = parseMatrix(input);
-  if (!matrix) return null;
-  if (matrix[0].length === 1) return matrix.map(row => row[0]);
-  if (matrix.length === 1) return [...matrix[0]];
-  return null;
 }
 
 function solveLinearSystem(matrix: Matrix, b: number[]): number[] | null {
@@ -332,6 +350,75 @@ function scalarFirstMatrixOp(scalar: number, matrix: Matrix, op: '+' | '-'): Mat
   return matrix.map(row => row.map(v => (op === '+' ? scalar + v : scalar - v)));
 }
 
+function explainMatrixFailure(expr: string, vars: Record<string, MatlabValue>): string | null {
+  const trimmed = expr.trim();
+
+  const transposeMatch = trimmed.match(/^transpose\((.+)\)$/i);
+  if (transposeMatch) {
+    const value = vars[transposeMatch[1].trim()] ?? evaluateCommandExpression(transposeMatch[1].trim(), vars);
+    if (!value || !isMatrix(value)) return 'transpose(...) needs a matrix input.';
+    return null;
+  }
+
+  const detMatch = trimmed.match(/^det\((.+)\)$/i);
+  if (detMatch) {
+    const value = vars[detMatch[1].trim()] ?? evaluateCommandExpression(detMatch[1].trim(), vars);
+    if (!value || !isMatrix(value)) return 'det(...) needs a matrix input.';
+    if (value.length !== value[0]?.length) return `Determinant needs a square matrix. You entered ${value.length}x${value[0]?.length ?? 0}.`;
+    return null;
+  }
+
+  const invMatch = trimmed.match(/^inv\((.+)\)$/i);
+  if (invMatch) {
+    const value = vars[invMatch[1].trim()] ?? evaluateCommandExpression(invMatch[1].trim(), vars);
+    if (!value || !isMatrix(value)) return 'inv(...) needs a matrix input.';
+    if (value.length !== value[0]?.length) return `Inverse needs a square matrix. You entered ${value.length}x${value[0]?.length ?? 0}.`;
+    if (determinant(value) === 0) return 'This matrix is singular, so it has no inverse.';
+    return null;
+  }
+
+  const binary = trimmed.match(/^(.+)\s*([+\-*])\s*(.+)$/);
+  if (!binary) return null;
+  const left = vars[binary[1].trim()] ?? evaluateCommandExpression(binary[1].trim(), vars);
+  const right = vars[binary[3].trim()] ?? evaluateCommandExpression(binary[3].trim(), vars);
+  const op = binary[2] as '+' | '-' | '*';
+  if (!left || !right || !isMatrix(left) || !isMatrix(right)) return null;
+
+  if ((op === '+' || op === '-') && (left.length !== right.length || left[0]?.length !== right[0]?.length)) {
+    return `${op === '+' ? 'Addition' : 'Subtraction'} needs matching shapes. You entered ${left.length}x${left[0]?.length ?? 0} and ${right.length}x${right[0]?.length ?? 0}.`;
+  }
+  if (op === '*' && left[0]?.length !== right.length) {
+    return `Multiplication needs columns(A) = rows(B). You entered ${left.length}x${left[0]?.length ?? 0} and ${right.length}x${right[0]?.length ?? 0}.`;
+  }
+  return null;
+}
+
+function explainVectorFailure(expr: string, vars: Record<string, MatlabValue>): string | null {
+  const dotMatch = expr.match(/^dot\((.+),\s*(.+)\)$/i);
+  if (dotMatch) {
+    const left = vars[dotMatch[1].trim()] ?? evaluateCommandExpression(dotMatch[1].trim(), vars);
+    const right = vars[dotMatch[2].trim()] ?? evaluateCommandExpression(dotMatch[2].trim(), vars);
+    if (!left || !right || !isMatrix(left) || !isMatrix(right)) return 'dot(...) needs two vector-style matrix inputs.';
+    const l = left.flat();
+    const r = right.flat();
+    if (l.length !== r.length) return `Dot product needs matching vector lengths. You entered ${l.length} and ${r.length}.`;
+    return null;
+  }
+
+  const crossMatch = expr.match(/^cross\((.+),\s*(.+)\)$/i);
+  if (crossMatch) {
+    const left = vars[crossMatch[1].trim()] ?? evaluateCommandExpression(crossMatch[1].trim(), vars);
+    const right = vars[crossMatch[2].trim()] ?? evaluateCommandExpression(crossMatch[2].trim(), vars);
+    if (!left || !right || !isMatrix(left) || !isMatrix(right)) return 'cross(...) needs two vector-style matrix inputs.';
+    const l = left.flat();
+    const r = right.flat();
+    if (l.length !== 3 || r.length !== 3) return 'Cross product needs exactly two 3D vectors.';
+    return null;
+  }
+
+  return null;
+}
+
 
 function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValue>): MatlabValue | null {
   const trimmed = expr.trim();
@@ -364,6 +451,9 @@ function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValu
   if (fnMatch) {
     const fn = fnMatch[1].toLowerCase();
     const argRaw = fnMatch[2].trim();
+    if (['zeros', 'ones', 'eye', 'linspace', 'mod', 'atan2', 'power', 'pow', 'cross', 'dot', 'diag'].includes(fn)) {
+      // handled below by the multi-argument path
+    } else {
     if (fn === 'solve') {
       const [leftRaw, rightRaw] = splitArguments(argRaw);
       if (!leftRaw || !rightRaw) return null;
@@ -433,6 +523,7 @@ function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValu
       if (fn === 'numel') return arg.length * (arg[0]?.length ?? 0);
     }
     return null;
+    }
   }
 
   // Multi-arg built-ins handled before the single-arg block above
@@ -566,7 +657,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
   const [fieldScale, setFieldScale] = useState(0.7);
   const [restoredSession] = useState<MatlabSession | null>(() => loadStoredSession());
   const [command, setCommand] = useState(restoredSession?.command || '');
-  const [scriptText, setScriptText] = useState(restoredSession?.script || 'A = [1 2; 3 4]\nB = A^2\ndet(B)');
+  const [scriptText, setScriptText] = useState(restoredSession?.script || DEMO_SCRIPT);
   const [runtimeVars, setRuntimeVars] = useState<Record<string, MatlabValue>>(
     restoredSession?.variables && typeof restoredSession.variables === 'object' ? restoredSession.variables : {}
   );
@@ -594,6 +685,17 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
         value,
       }));
   }, [runtimeVars]);
+
+  const workspaceSummary = useMemo(() => {
+    const matrixCount = variableRows.filter(row => row.type === 'matrix').length;
+    const scalarCount = variableRows.length - matrixCount;
+    return {
+      total: variableRows.length,
+      matrixCount,
+      scalarCount,
+      historyCount: history.length,
+    };
+  }, [history.length, variableRows]);
 
   // Keep vars ref in sync so runSingleCommand always sees the latest workspace
   useEffect(() => {
@@ -661,7 +763,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
         points.push({ x: i, y: j, u, v });
       }
     }
-    return { points, size };
+    return { points };
   }, [fieldU, fieldV, gridSize, evalField]);
 
   const pushHistory = useCallback((item: MatlabHistoryItem) => {
@@ -703,7 +805,13 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       const expr = assignMatch[2];
       const computed = evaluateCommandExpression(expr, runtimeVarsRef.current);
       if (computed === null) {
-        return { command: rawCommand, output: source === 'script' ? `Line failed: "${rawCommand}"` : `Cannot evaluate: ${expr}`, error: true, timestamp: new Date().toISOString() };
+        const detail = explainMatrixFailure(expr, runtimeVarsRef.current) ?? explainVectorFailure(expr, runtimeVarsRef.current);
+        return {
+          command: rawCommand,
+          output: detail ?? (source === 'script' ? `Line failed: "${rawCommand}"` : `Cannot evaluate: ${expr}`),
+          error: true,
+          timestamp: new Date().toISOString(),
+        };
       }
       runtimeVarsRef.current = { ...runtimeVarsRef.current, [varName]: computed };
       setRuntimeVars({ ...runtimeVarsRef.current });
@@ -712,7 +820,13 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
 
     const evaluated = evaluateCommandExpression(text, runtimeVarsRef.current);
     if (evaluated === null) {
-      return { command: rawCommand, output: source === 'script' ? `Line failed: "${rawCommand}"` : `Unknown command: ${text}`, error: true, timestamp: new Date().toISOString() };
+      const detail = explainMatrixFailure(text, runtimeVarsRef.current) ?? explainVectorFailure(text, runtimeVarsRef.current);
+      return {
+        command: rawCommand,
+        output: detail ?? (source === 'script' ? `Line failed: "${rawCommand}"` : `Unknown command: ${text}`),
+        error: true,
+        timestamp: new Date().toISOString(),
+      };
     }
     return { command: rawCommand, output: `ans =\n${formatValue(evaluated)}`, timestamp: new Date().toISOString() };
   }, [onGraphExpression]);
@@ -727,6 +841,23 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       setCommand('');
     }
   }, [command, pushHistory, runSingleCommand]);
+
+  const clearWorkspace = useCallback(() => {
+    runtimeVarsRef.current = {};
+    setRuntimeVars({});
+    setSelectedVar(null);
+  }, []);
+
+  const clearOutput = useCallback(() => {
+    setHistory([]);
+  }, []);
+
+  const loadDemo = useCallback(() => {
+    setShowScript(true);
+    setScriptText(DEMO_SCRIPT);
+    setCommand('X = [1 0 2 1; 2 1 3 0; 0 1 1 2]');
+    commandInputRef.current?.focus();
+  }, []);
 
 
   const runScript = useCallback(async () => {
@@ -787,26 +918,45 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       });
     }
   }, [history, runCommand]);
-
-
-  const CHIPS = [
-    'A = [1 2; 3 4]', 'B = [5 6; 7 8]', 'A * B', 'det(A)', 'inv(A)', 'eig(A)',
-    'transpose(A)', 'eye(3)', 'zeros(3)', 'ones(2,3)', 'linspace(0,1,5)',
-    'sum(A)', 'mean(A)', 'size(A)', 'dot(A,B)', 'plot(sin(x))',
-  ];
-
   return (
     <div className="ml-root" dir={isArabic ? 'rtl' : 'ltr'}>
-      {/* Quick-start chips */}
-      <div className="ml-chips">
-        {CHIPS.map(chip => (
-          <button
-            key={chip}
-            className="ml-chip"
-            onClick={() => { setCommand(chip); commandInputRef.current?.focus(); }}
-          >
-            {chip}
-          </button>
+      <div className="ml-hero">
+        <div className="ml-hero-copy">
+          <span className="ml-eyebrow">MathLab</span>
+          <h3>Matrix, vector, and script playground</h3>
+          <p>
+            Try commands inline, run short scripts, inspect the workspace, and send expressions straight to Graph.
+          </p>
+          <div className="ml-stats">
+            <span>{workspaceSummary.total} vars</span>
+            <span>{workspaceSummary.matrixCount} matrices</span>
+            <span>{workspaceSummary.scalarCount} scalars</span>
+            <span>{workspaceSummary.historyCount} outputs</span>
+          </div>
+        </div>
+        <div className="ml-hero-actions">
+          <button className="ml-secondary-btn" onClick={loadDemo}>Load demo</button>
+          <button className="ml-secondary-btn" onClick={clearWorkspace}>Clear workspace</button>
+          <button className="ml-secondary-btn" onClick={clearOutput}>Clear output</button>
+        </div>
+      </div>
+
+      <div className="ml-chip-groups">
+        {CHIP_GROUPS.map(group => (
+          <section key={group.label} className="ml-chip-group">
+            <div className="ml-chip-group-label">{group.label}</div>
+            <div className="ml-chips">
+              {group.chips.map(chip => (
+                <button
+                  key={chip}
+                  className="ml-chip"
+                  onClick={() => { setCommand(chip); commandInputRef.current?.focus(); }}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          </section>
         ))}
       </div>
 
@@ -819,7 +969,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
               {history.length === 0 ? (
                 <span className="ml-terminal-empty">
                   No output yet. Click a chip above or type a command below.
-                  <br />Try: <code>A = [1 2; 3 4]</code> then <code>det(A)</code>
+                  <br />Try: <code>X = [1 0 2 1; 2 1 3 0; 0 1 1 2]</code> then <code>Y = [1 2; 0 1; 3 0; 2 1]</code> then <code>X * Y</code>
                 </span>
               ) : (
                 history.map((item, idx) => (
@@ -844,12 +994,12 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
                 value={command}
                 onChange={e => setCommand(e.target.value)}
                 onKeyDown={onCommandKeyDown}
-                placeholder="e.g.  A = [1 2; 3 4]   or   det(A)   or   plot(sin(x))"
+                placeholder="e.g. A = [1 2; 3 4]  |  A + B  |  X * Y  |  det(A)"
                 spellCheck={false}
                 autoComplete="off"
               />
               <button className="ml-run-btn" onClick={runCommand}>Run</button>
-              <button className="ml-clr-btn" onClick={() => setHistory([])} title="Clear output">✕</button>
+              <button className="ml-clr-btn" onClick={clearOutput} title="Clear output">✕</button>
             </div>
             <div className="ml-hint-bar">↑/↓ recalls history · <code>clear</code> wipes workspace · <code>clc</code> clears output</div>
           </div>
@@ -871,7 +1021,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
                 <button className="ml-run-btn" onClick={runScript} disabled={runningScript}>
                   {runningScript ? '⏳ Running…' : '▶ Run Script'}
                 </button>
-                <span className="ml-dim">% comments · one command per line</span>
+            <span className="ml-dim">% comments · one command per line · matrix examples include 3x4 by 4x2 multiplication</span>
               </div>
             </div>
           )}
@@ -884,13 +1034,13 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
             <div className="ml-panel-hd">
               <span>Workspace</span>
               {Object.keys(runtimeVars).length > 0 && (
-                <button className="ml-clear-btn" onClick={() => { setRuntimeVars({}); setSelectedVar(null); }}>
+                <button className="ml-clear-btn" onClick={clearWorkspace}>
                   clear all
                 </button>
               )}
             </div>
             {variableRows.length === 0 ? (
-              <span className="ml-dim">No variables yet.</span>
+              <span className="ml-dim">No variables yet. Load the demo or run a matrix command to populate the workspace.</span>
             ) : (
               <table className="ml-ws-table">
                 <thead>
@@ -919,6 +1069,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
             <div className="ml-panel">
               <div className="ml-panel-hd">
                 <span>Heatmap — <code>{selectedHeatmap.name}</code></span>
+                <span className="ml-panel-meta">{selectedHeatmap.matrix.length}x{selectedHeatmap.matrix[0]?.length ?? 0}</span>
               </div>
               <div className="ml-heatmap">
                 {selectedHeatmap.matrix.map((row, i) => (
@@ -943,7 +1094,10 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
 
           {/* Vector field */}
           <div className="ml-panel">
-            <div className="ml-panel-hd"><span>Vector Field</span></div>
+            <div className="ml-panel-hd">
+              <span>Vector Field</span>
+              <span className="ml-panel-meta">{gridSize}x{gridSize} grid</span>
+            </div>
             <div className="ml-vf-grid">
               <label>u(x,y)<input value={fieldU} onChange={e => setFieldU(e.target.value)} /></label>
               <label>v(x,y)<input value={fieldV} onChange={e => setFieldV(e.target.value)} /></label>
@@ -974,19 +1128,61 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
 
       <style jsx>{`
         .ml-root {
-          display: flex; flex-direction: column; gap: 10px;
+          display: flex; flex-direction: column; gap: 14px;
           padding: 16px; height: 100%; box-sizing: border-box;
         }
 
+        .ml-hero {
+          display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+          padding: 16px 18px; border: 1px solid var(--border-subtle); border-radius: 16px;
+          background:
+            radial-gradient(circle at top right, rgba(249,115,22,0.12), transparent 34%),
+            linear-gradient(180deg, var(--bg-surface), var(--bg-inset));
+        }
+        .ml-hero-copy { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .ml-eyebrow {
+          font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+          color: #f97316;
+        }
+        .ml-hero-copy h3 {
+          margin: 0; font-size: 20px; line-height: 1.15; color: var(--text-primary);
+        }
+        .ml-hero-copy p {
+          margin: 0; max-width: 680px; font-size: 13px; line-height: 1.55; color: var(--text-secondary);
+        }
+        .ml-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+        .ml-stats span {
+          padding: 4px 10px; border-radius: 999px; background: var(--bg-2);
+          border: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-secondary);
+        }
+        .ml-hero-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+        .ml-secondary-btn {
+          padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border-subtle);
+          background: rgba(255,255,255,0.02); color: var(--text-secondary); cursor: pointer;
+          font-size: 12px; font-weight: 600; transition: border-color 0.12s, color 0.12s, transform 0.12s;
+        }
+        .ml-secondary-btn:hover { border-color: #f97316; color: #f97316; transform: translateY(-1px); }
+
         /* Chips */
-        .ml-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+        .ml-chip-groups {
+          display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+        }
+        .ml-chip-group {
+          display: flex; flex-direction: column; gap: 8px; padding: 12px;
+          border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--bg-surface);
+        }
+        .ml-chip-group-label {
+          font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+          color: var(--text-muted);
+        }
+        .ml-chips { display: flex; flex-wrap: wrap; gap: 6px; }
         .ml-chip {
-          padding: 3px 10px; border-radius: 20px; font-size: 11px;
+          padding: 5px 10px; border-radius: 999px; font-size: 11px;
           font-family: var(--font-mono, monospace); border: 1px solid var(--border-subtle);
           background: var(--bg-2); color: var(--text-secondary); cursor: pointer;
-          white-space: nowrap; transition: border-color 0.12s, color 0.12s;
+          white-space: nowrap; transition: border-color 0.12s, color 0.12s, transform 0.12s, background 0.12s;
         }
-        .ml-chip:hover { border-color: #f97316; color: #f97316; }
+        .ml-chip:hover { border-color: #f97316; color: #f97316; background: rgba(249,115,22,0.08); transform: translateY(-1px); }
 
         /* Body */
         .ml-body { display: flex; gap: 14px; flex: 1; min-height: 0; }
@@ -996,8 +1192,9 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
         /* Terminal */
         .ml-terminal {
           display: flex; flex-direction: column;
-          border: 1px solid var(--border-subtle); border-radius: 10px;
+          border: 1px solid var(--border-subtle); border-radius: 14px;
           overflow: hidden; background: var(--bg-inset); flex: 1; min-height: 280px;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
         }
         .ml-terminal-output {
           flex: 1; overflow-y: auto; padding: 12px 14px;
@@ -1075,7 +1272,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
         .ml-script-toggle:hover { color: #f97316; }
         .ml-script-wrap { display: flex; flex-direction: column; gap: 6px; }
         .ml-script-wrap textarea {
-          width: 100%; border: 1px solid var(--border-subtle); border-radius: 8px;
+          width: 100%; border: 1px solid var(--border-subtle); border-radius: 12px;
           padding: 10px 12px; font-family: var(--font-mono, monospace); font-size: 12px;
           background: var(--bg-inset); color: var(--text-primary);
           resize: vertical; outline: none; box-sizing: border-box; line-height: 1.6;
@@ -1086,7 +1283,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
 
         /* Right panels */
         .ml-panel {
-          border: 1px solid var(--border-subtle); border-radius: 10px;
+          border: 1px solid var(--border-subtle); border-radius: 14px;
           padding: 12px; background: var(--bg-surface);
           display: flex; flex-direction: column; gap: 8px;
         }
@@ -1094,6 +1291,10 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
           font-size: 10px; font-weight: 700; text-transform: uppercase;
           letter-spacing: 0.1em; color: var(--text-muted);
           display: flex; justify-content: space-between; align-items: center;
+        }
+        .ml-panel-meta {
+          font-size: 10px; font-weight: 500; text-transform: none; letter-spacing: 0;
+          color: var(--text-muted);
         }
         .ml-panel-hd code {
           font-size: 10px; background: var(--bg-2); padding: 1px 5px;
@@ -1149,6 +1350,9 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
         .ml-vf-canvas svg { width: 100%; height: 190px; color: var(--text-primary); display: block; }
 
         @media (max-width: 700px) {
+          .ml-hero { flex-direction: column; }
+          .ml-hero-actions { justify-content: flex-start; }
+          .ml-chip-groups { grid-template-columns: 1fr; }
           .ml-body { flex-direction: column; }
           .ml-right { width: 100%; }
           .ml-terminal { min-height: 240px; }

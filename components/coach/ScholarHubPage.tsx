@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * components/coach/RevisionCoachPage.tsx
+ * components/coach/ScholarHubPage.tsx
  *
  * Scholar Hub controller — owns shared state and SRS handlers.
  * All tab UI is delegated to sub-components in ./tabs/.
@@ -16,7 +16,7 @@ import { writeCoachHandoff } from '@/lib/coach/handoff';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
 import { buildCoachUrl } from '@/lib/coach/routes';
 import { loadDecks, type SRSDeck } from '@/lib/srs/sm2';
-import { buildDeckQuizContent, persistDeckLocally, syncDeckToCloud } from '@/lib/srs/deck-utils';
+import { persistDeckLocally, syncDeckToCloud } from '@/lib/srs/deck-utils';
 import type { GeneratedContent } from '@/lib/offline/generate';
 import type { SourceBrief } from '@/lib/coach/source-brief';
 import type { TopicResearchResult } from '@/lib/coach/research';
@@ -27,15 +27,15 @@ import { RecoveryTab }          from './tabs/RecoveryTab';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 
 type CoachPanel   = 'review' | 'manage';
-type CoachSection = 'brief' | 'write' | 'research' | 'recovery';
+type CoachSection = 'research' | 'brief' | 'write' | 'recovery';
 type CoachOutput  =
   | { kind: 'quiz';      title: string; content: string; quiz: GeneratedContent; setId: string }
   | { kind: 'generated'; title: string; content: string };
 
 const TAB_LABELS: Record<CoachSection, { label: string; icon: string }> = {
-  'brief':    { label: 'Source',               icon: '📄' },
-  'write':    { label: 'Assignment & Writing',  icon: '✍️'  },
   'research': { label: 'Research',              icon: '🔍' },
+  'brief':    { label: 'Source',               icon: '📄' },
+  'write':    { label: 'Writing Studio',       icon: '✍️'  },
   'recovery': { label: 'Recovery',              icon: '📊' },
 };
 
@@ -49,12 +49,12 @@ function mergeSets(local: SRSDeck[], remote: SRSDeck[]): SRSDeck[] {
   });
 }
 
-interface RevisionCoachPageProps {
+interface ScholarHubPageProps {
   drawerMode?: boolean;
   onClose?: () => void;
 }
 
-export function RevisionCoachPage({ drawerMode = false, onClose }: RevisionCoachPageProps = {}) {
+export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPageProps = {}) {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const { toast }    = useToast();
@@ -62,7 +62,7 @@ export function RevisionCoachPage({ drawerMode = false, onClose }: RevisionCoach
   const { data: analytics, loading: analyticsLoading, refresh: refreshAnalytics } = useAnalytics(30);
 
   const outputRef = useRef<HTMLDivElement | null>(null);
-  const [activeSection,   setActiveSection]   = useState<CoachSection>('brief');
+  const [activeSection,   setActiveSection]   = useState<CoachSection>('research');
   const [output,          setOutput]          = useState<CoachOutput | null>(null);
 
   // Shared cross-tab state
@@ -80,7 +80,6 @@ export function RevisionCoachPage({ drawerMode = false, onClose }: RevisionCoach
 
   const [reviewSets,     setReviewSets]     = useState<SRSDeck[]>([]);
   const [loadingSets,    setLoadingSets]    = useState(true);
-  const [generatingQuiz, setGeneratingQuiz] = useState(false);
 
   const selectedSetId = searchParams.get('set');
   const imported      = searchParams.get('imported') === '1';
@@ -155,28 +154,6 @@ export function RevisionCoachPage({ drawerMode = false, onClose }: RevisionCoach
 
   useEffect(() => { void refreshReviewSets(); }, [refreshReviewSets]);
 
-  async function quizSet(targetSet: SRSDeck) {
-    if (generatingQuiz) return;
-    setGeneratingQuiz(true);
-    try {
-      const quiz = buildDeckQuizContent(targetSet, 10);
-      openPanel(targetSet.id, 'manage');
-      try {
-        await fetch('/api/library', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mode: 'quiz', content: quiz.displayText,
-            metadata: { title: `Quiz — ${targetSet.name}`, sourceDeckId: targetSet.id },
-          }),
-        });
-        broadcastInvalidate(LIBRARY_CHANNEL);
-      } catch { toast('Quiz generated, but Library sync failed', 'warning'); }
-      setOutput({ kind: 'quiz', title: `Quiz — ${targetSet.name}`, content: quiz.displayText, quiz, setId: targetSet.id });
-      outputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } finally { setGeneratingQuiz(false); }
-  }
-
   // ── Source actions (shared between Source + Writer tabs) ───────────────────
 
   async function handleSourceAction(mode: 'notes' | 'quiz' | 'flashcards') {
@@ -230,6 +207,62 @@ export function RevisionCoachPage({ drawerMode = false, onClose }: RevisionCoach
   // ── Today's Mission ────────────────────────────────────────────────────────
 
   const topWeakAreas = useMemo(() => analytics?.weakAreas?.slice(0, 3) ?? [], [analytics?.weakAreas]);
+  const contextStats = useMemo(() => {
+    const activeSource = sourceBrief?.title ?? researchResult?.topic ?? null;
+    const sourceCount = researchResult?.sources.length ?? 0;
+    const citationCount = researchResult?.citations.length ?? 0;
+    const dueCount = dueReviewSets.reduce((sum, set) => sum + getSetDue(set), 0);
+    return { activeSource, sourceCount, citationCount, dueCount };
+  }, [sourceBrief?.title, researchResult?.topic, researchResult?.sources.length, researchResult?.citations.length, dueReviewSets, getSetDue]);
+
+  const activeSectionSummary = useMemo(() => {
+    if (activeSection === 'research') {
+      return {
+        title: 'Multi-source research workspace',
+        description: researchResult
+          ? `Your current brief compares ${researchResult.sources.length} ranked sources and keeps ${researchResult.citations.length} citations visible.`
+          : 'Search automatically, compare manual links, and keep your evidence trail visible.',
+        pills: [
+          researchResult ? `Provider: ${researchResult.provider}` : 'Ready for topic search',
+          researchResult ? `Ranking: ${researchResult.ranking}` : 'Auto / manual / hybrid',
+        ],
+      };
+    }
+    if (activeSection === 'brief') {
+      return {
+        title: 'Source breakdown',
+        description: sourceBrief
+          ? `You are working from ${sourceBrief.sourceLabel} and can turn it into notes, quiz material, or a review set handoff.`
+          : 'Paste text, analyze a URL, or upload a file to extract key ideas and get a grounded source brief.',
+        pills: [
+          sourceBrief ? `${sourceBrief.wordCount.toLocaleString()} words` : 'URL / text / file',
+          sourceBrief ? `${sourceBrief.keyPoints.length} key points` : 'Source-first workflow',
+        ],
+      };
+    }
+    if (activeSection === 'write') {
+      return {
+        title: 'Writing studio',
+        description: researchResult || sourceBrief
+          ? 'Use your current source and research context to build stronger drafts, outlines, and revisions.'
+          : 'Bring in a source first, then turn it into a report structure, draft, or checked paragraph.',
+        pills: [
+          researchResult ? 'Research context connected' : 'Works from source context',
+          'Draft · report · check',
+        ],
+      };
+    }
+    return {
+      title: 'Recovery and review',
+      description: dueReviewSets.length
+        ? `You have ${dueReviewSets.length} review set${dueReviewSets.length === 1 ? '' : 's'} with due work ready to continue in Workspace.`
+        : 'See what is due, where you are weak, and what to practice next.',
+      pills: [
+        `${contextStats.dueCount} due cards`,
+        topWeakAreas[0] ? `Top weak area: ${topWeakAreas[0].topic}` : 'Weak-area insights ready',
+      ],
+    };
+  }, [activeSection, contextStats.dueCount, dueReviewSets.length, researchResult, sourceBrief, topWeakAreas]);
 
   const mission = useMemo(() => {
     if (dueReviewSets[0]) {
@@ -299,7 +332,7 @@ export function RevisionCoachPage({ drawerMode = false, onClose }: RevisionCoach
           </div>
         </div>
         <nav className={styles.tabNav}>
-          {(['brief', 'write', 'research', 'recovery'] as CoachSection[]).map(id => (
+          {(['research', 'brief', 'write', 'recovery'] as CoachSection[]).map(id => (
             <button
               key={id}
               className={`${styles.tabBtn} ${activeSection === id ? styles.tabBtnActive : ''}`}
@@ -328,6 +361,32 @@ export function RevisionCoachPage({ drawerMode = false, onClose }: RevisionCoach
           </button>
         </div>
       </header>
+
+      <div className={styles.contextStrip} style={drawerMode ? { marginTop: 0 } : undefined}>
+        <div className={styles.contextStripGroup}>
+          <span className={styles.contextStripLabel}>Focus</span>
+          <strong>{contextStats.activeSource ?? 'Start with a topic or source'}</strong>
+        </div>
+        <div className={styles.contextStripMeta}>
+          <span className={styles.metaTag}>{contextStats.sourceCount} compared sources</span>
+          <span className={styles.metaTag}>{contextStats.citationCount} citations</span>
+          <span className={styles.metaTag}>{contextStats.dueCount} due review cards</span>
+          {topWeakAreas[0] && <span className={styles.metaTag}>Weak area: {topWeakAreas[0].topic}</span>}
+        </div>
+      </div>
+
+      <div className={styles.sectionStrip}>
+        <div className={styles.sectionStripCopy}>
+          <span className={styles.contextStripLabel}>{TAB_LABELS[activeSection].label}</span>
+          <strong>{activeSectionSummary.title}</strong>
+          <p>{activeSectionSummary.description}</p>
+        </div>
+        <div className={styles.sectionStripMeta}>
+          {activeSectionSummary.pills.map((pill) => (
+            <span key={pill} className={styles.metaTag}>{pill}</span>
+          ))}
+        </div>
+      </div>
 
       {/* Panel overlay banner */}
       {panel && selectedSet && (

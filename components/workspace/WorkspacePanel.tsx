@@ -15,12 +15,13 @@ import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteLocalFile, listLocalFiles, upsertLocalFile } from '@/lib/files/local-files';
 import { createFileReplaceRequest, createFileUploadRequest, resolveStoredFileBlob } from '@/lib/files/client-storage';
-import { getDeckStats, loadDecks, deleteDeck, saveDeck, type SRSDeck } from '@/lib/srs/sm2';
+import { loadDecks, saveDeck, type SRSDeck } from '@/lib/srs/sm2';
 import { mdToHtml } from '@/lib/utils/md';
 import { writeMathContext } from '@/lib/math/context';
 import { clearCoachHandoff, readCoachHandoff } from '@/lib/coach/handoff';
 import { clearScholarContext, readScholarContext, writeScholarContext, type ScholarContext } from '@/lib/coach/scholar-context';
 import { broadcastInvalidate, listenForInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
+import type { NoteStyle } from '@/components/workspace/NotesPanel';
 
 // ── Lazy-loaded tool panels (split into separate JS chunks) ────────────────────
 const ChatPanel      = dynamic(() => import('@/components/workspace/ChatPanel').then(m => ({ default: m.ChatPanel })), { ssr: false, loading: () => <div className="tool-loading" /> });
@@ -147,6 +148,20 @@ function wordCount(text: string) {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
+function describeNoteStyle(style: NoteStyle): string {
+  switch (style) {
+    case 'summary':
+      return 'Create a concise summary sheet with a short overview, key bullets, and final takeaways.';
+    case 'revision':
+      return 'Create a revision sheet with key ideas, definitions, likely exam cues, and quick recall prompts.';
+    case 'cornell':
+      return 'Create Cornell-style notes with cue questions, detailed notes, and a short summary section.';
+    case 'study':
+    default:
+      return 'Create structured study notes with headings, key bullets, definitions, and memorable takeaways.';
+  }
+}
+
 
 // ── View components (extracted to views/) ──────────────────────────────────
 // MCQView, PracticeView, FlashcardView, ExamView, and FocusPanel
@@ -155,12 +170,13 @@ function wordCount(text: string) {
 // ── Inline file viewer ─────────────────────────────────────────────────────
 
 function FileViewer({
-  file, onClose, onUseForTools, onUseForChat, onUseInMath,
+  file, onClose, onUseForTools, onUseForChat, onUseForNotes, onUseInMath,
 }: {
   file: FileRecord;
   onClose: () => void;
   onUseForTools: (file: FileRecord, text: string) => void;
   onUseForChat: (file: FileRecord, text: string) => void;
+  onUseForNotes: (file: FileRecord, text: string) => void;
   onUseInMath: (file: FileRecord, text: string) => void;
 }) {
   const { toast } = useToast();
@@ -173,6 +189,7 @@ function FileViewer({
   const canPreview = isDocxOrPptx(file);
   type ViewTab = 'text' | 'preview';
   const [viewTab, setViewTab] = useState<ViewTab>('text');
+  const previewWordCount = textContent ? wordCount(textContent) : 0;
 
   useEffect(() => {
     let url: string | null = null;
@@ -229,6 +246,11 @@ function FileViewer({
     if (text) onUseForChat(file, text);
   }
 
+  async function useForNotes() {
+    const text = await resolveFileText('Notes');
+    if (text) onUseForNotes(file, text);
+  }
+
   async function useInMath() {
     if (textContent) {
       onUseInMath(file, textContent);
@@ -245,20 +267,38 @@ function FileViewer({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', borderLeft: '1px solid var(--border)', background: 'var(--bg)', animation: 'slideInRight 0.18s ease' }}>
       {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0, minWidth: 0 }}>
-        <span style={{ fontSize: 18, flexShrink: 0 }}>{fileIcon(file)}</span>
-        <span style={{ flex: 1, fontSize: 'var(--text-sm)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{file.name}</span>
-        {fmt(file.fileSize) && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', flexShrink: 0 }}>{fmt(file.fileSize)}</span>}
-        <button className="btn btn-primary btn-sm" onClick={useForTools} title="Load into Generate tab" style={{ flexShrink: 0 }}>
-          ⚡ Use for Generate
-        </button>
-        <button className="btn btn-secondary btn-sm" onClick={useForChat} title="Load into Chat tab" style={{ flexShrink: 0 }}>
-          💬 Use for Chat
-        </button>
-        <button className="btn btn-secondary btn-sm" onClick={useInMath} title="Send this file into Math" style={{ flexShrink: 0 }}>
-          ∑ Use in Math
-        </button>
-        <button className="btn-icon" onClick={onClose} title="Close" style={{ flexShrink: 0 }}>✕</button>
+      <div style={{ display: 'grid', gap: 10, padding: '12px 14px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, var(--surface)), var(--surface))', flexShrink: 0, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0 }}>
+          <span style={{ fontSize: 18, flexShrink: 0, marginTop: 2 }}>{fileIcon(file)}</span>
+          <div style={{ display: 'grid', gap: 4, minWidth: 0, flex: 1 }}>
+            <strong style={{ fontSize: 'var(--text-sm)', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {file.name}
+            </strong>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              {fmt(file.fileSize) && <span className="badge">{fmt(file.fileSize)}</span>}
+              {previewWordCount > 0 && <span className="badge badge-accent">{previewWordCount.toLocaleString()} words</span>}
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                Route this file straight into the tool you want to continue in.
+              </span>
+            </div>
+          </div>
+          <button className="btn-icon" onClick={onClose} title="Close" style={{ flexShrink: 0 }}>✕</button>
+        </div>
+
+        <div className="workspace-file-actions" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button className="btn btn-primary btn-sm" onClick={useForTools} title="Load into Generate tab">
+            ⚡ Tools
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={useForNotes} title="Load into Notes tab">
+            📓 Notes
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={useForChat} title="Load into Chat tab">
+            💬 Chat
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={useInMath} title="Send this file into Math">
+            ∑ Math
+          </button>
+        </div>
       </div>
 
       {/* ── Tab switcher (only for .docx / .pptx) ── */}
@@ -370,7 +410,6 @@ export function WorkspacePanel({
   const [count,         setCount]         = useState(5);
   const [libItems,      setLibItems]      = useState<LibraryItemRecord[]>([]);
   const [libLoad,       setLibLoad]       = useState(false);
-  const [libExpanded,   setLibExpanded]   = useState<Record<string, boolean>>({});
   const [srsDecks,      setSrsDecks]      = useState<SRSDeck[]>([]);
   const [activeReviewSetId, setActiveReviewSetId] = useState<string | null>(null);
   const [requestedReviewPhase, setRequestedReviewPhase] = useState<ReviewSetPhase | null>(null);
@@ -391,7 +430,9 @@ export function WorkspacePanel({
     avgScore: number;
   } | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [showKnowledgeMap, setShowKnowledgeMap] = useState(false);
   const [notesInject,   setNotesInject]   = useState<string | undefined>(undefined);
+  const [noteStyle,     setNoteStyle]     = useState<NoteStyle>('study');
   const abortRef    = useRef<AbortController | null>(null);
   const pasteRef    = useRef<HTMLTextAreaElement>(null);
   const handledReviewImportRef = useRef<string | null>(null);
@@ -766,6 +807,63 @@ export function WorkspacePanel({
     }
   }
 
+  async function generateNotesForWorkspace() {
+    let src = extractedText.trim();
+    if (!src && selFile) src = (await extractFromFile(selFile))?.trim() ?? '';
+    if (!src) {
+      toast('Choose a PDF or document first, then generate notes from it.', 'warning');
+      return;
+    }
+
+    const ai = loadAiRuntimePreferences();
+    const privacyMode = loadClientAiDataMode();
+    const aiDataMode = (typeof window !== 'undefined'
+      ? localStorage.getItem('kivora_ai_mode')
+      : null) as 'full' | 'metadata-only' | 'offline' | null ?? 'full';
+
+    const textForAI = aiDataMode === 'metadata-only'
+      ? `[Content withheld for privacy. File: "${selFile?.name ?? 'selected document'}", ${wordCount(src).toLocaleString()} words. Generate ${noteStyle} notes from this description only.]`
+      : `${describeNoteStyle(noteStyle)}\n\nSource file: ${selFile?.name ?? 'selected document'}\n\n${src}`;
+
+    try {
+      let generated = '';
+
+      if (aiDataMode === 'offline') {
+        const { offlineGenerate } = await import('@/lib/offline/generate');
+        generated = offlineGenerate('notes', src, { count: 8, noteStyle });
+      } else if (ai.mode === 'local' && typeof window !== 'undefined' && window.electronAPI?.desktopAI) {
+        const result = await window.electronAPI.desktopAI.generate({ mode: 'notes', text: textForAI });
+        if (result.ok) generated = result.content.displayText;
+        else {
+          const { offlineGenerate } = await import('@/lib/offline/generate');
+          generated = offlineGenerate('notes', src, { count: 8, noteStyle });
+        }
+      } else {
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'notes',
+            text: textForAI,
+            fileId: selFile?.id ?? null,
+            options: { count: 8, noteStyle },
+            ai,
+            privacyMode,
+          }),
+        });
+        const data = await res.json() as { content?: string; result?: string; error?: string };
+        generated = data.content ?? data.result ?? '';
+        if (!generated) throw new Error(data.error ?? 'Could not generate notes');
+      }
+
+      setNotesInject(generated);
+      setMainTab('notes');
+      toast('Structured notes are ready in Notes', 'success');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not generate notes', 'error');
+    }
+  }
+
   useEffect(() => {
     const handoff = readCoachHandoff();
     if (!handoff) return;
@@ -833,6 +931,13 @@ export function WorkspacePanel({
     () => srsDecks.find((deck) => deck.id === activeReviewSetId) ?? null,
     [activeReviewSetId, srsDecks],
   );
+  const activeReviewDueCount = useMemo(() => {
+    if (!activeReviewSet) return 0;
+    const dueToday = new Date().toISOString().slice(0, 10);
+    return activeReviewSet.cards.filter((card) => {
+      return Boolean(card.nextReview && card.nextReview <= dueToday);
+    }).length;
+  }, [activeReviewSet]);
 
   // ── Export generated content ───────────────────────────────────────────
 
@@ -898,68 +1003,6 @@ export function WorkspacePanel({
     }
   }
 
-  async function toggleProfileShare(item: LibraryItemRecord) {
-    const currentMeta = item.metadata ?? {};
-    const isPublished = Boolean(currentMeta.publicProfile);
-
-    try {
-      let nextMeta: Record<string, unknown> = { ...currentMeta };
-
-      if (isPublished) {
-        if (currentMeta.publicShareId) {
-          await fetch(`/api/share?id=${currentMeta.publicShareId}`, { method: 'DELETE', credentials: 'include' }).catch(() => null);
-        }
-        nextMeta = {
-          ...currentMeta,
-          publicProfile: false,
-          publicShareId: null,
-          publicShareUrl: null,
-          publicShareToken: null,
-        };
-      } else {
-        let shareId = currentMeta.publicShareId ?? null;
-        let shareUrl = currentMeta.publicShareUrl ?? null;
-        let shareToken = currentMeta.publicShareToken ?? null;
-
-        if (!shareId || !shareUrl) {
-          const shareRes = await fetch('/api/share', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ libraryItemId: item.id, permission: 'view' }),
-          });
-          if (!shareRes.ok) throw new Error('share-create-failed');
-          const shareData = await shareRes.json();
-          shareId = shareData.id ?? null;
-          shareToken = shareData.shareToken ?? null;
-          shareUrl = shareData.shareUrl ?? (shareToken ? `${window.location.origin}/share/${shareToken}` : null);
-        }
-
-        nextMeta = {
-          ...currentMeta,
-          publicProfile: true,
-          publicShareId: shareId,
-          publicShareUrl: shareUrl,
-          publicShareToken: shareToken,
-        };
-      }
-
-      const patchRes = await fetch(`/api/library/${item.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ metadata: nextMeta }),
-      });
-      if (!patchRes.ok) throw new Error('library-update-failed');
-      const updated = await patchRes.json();
-      setLibItems((prev) => prev.map((entry) => (entry.id === item.id ? updated : entry)));
-      broadcastInvalidate(LIBRARY_CHANNEL);
-      toast(isPublished ? 'Removed from public profile' : 'Published to public profile', 'success');
-    } catch {
-      toast(isPublished ? 'Could not remove this item from your public profile' : 'Could not publish this item to your public profile', 'error');
-    }
-  }
-
   function applyFileContext(file: FileRecord, text: string, nextTab: MainTab, successMessage: string) {
     setExtractedText(text);
     setSelFile(file);
@@ -975,6 +1018,10 @@ export function WorkspacePanel({
 
   function handleUseForChat(file: FileRecord, text: string) {
     applyFileContext(file, text, 'chat', 'File loaded — ask a question in Chat');
+  }
+
+  function handleUseForNotes(file: FileRecord, text: string) {
+    applyFileContext(file, text, 'notes', 'File loaded — generate notes from the selected document');
   }
 
   async function loadSelectedFileIntoChat() {
@@ -1099,7 +1146,7 @@ export function WorkspacePanel({
             title="Open review sets and saved outputs"
             style={{ fontSize: 12, padding: '3px 8px' }}
           >
-            📇 {srsDecks.length}
+            📇 Review sets {srsDecks.length ? `(${srsDecks.length})` : ''}
           </button>
           {onToggleReports && (
             <button
@@ -1233,6 +1280,19 @@ export function WorkspacePanel({
                     </div>
                   </div>
 
+                  <div className="workspace-focus-strip" style={{ margin: '10px 10px 0', flexShrink: 0 }}>
+                    <div className="workspace-focus-card">
+                      <span className="workspace-focus-eyebrow">Files</span>
+                      <strong>{files.length ? `${files.length} study file${files.length !== 1 ? 's' : ''}` : 'Build your study source library'}</strong>
+                      <span>{viewFile ? `Previewing ${viewFile.name}` : selFile ? `Current source: ${selFile.name}` : 'Upload once, then send a file into Tools, Notes, Chat, or Math.'}</span>
+                    </div>
+                    <div className="workspace-focus-card">
+                      <span className="workspace-focus-eyebrow">Best next step</span>
+                      <strong>{selFile ? 'Turn this file into notes or questions' : 'Open a file and route it anywhere'}</strong>
+                      <span>{selFile ? 'Use the quick actions on the file card or preview to move faster.' : 'Every file card now has one-click actions for Generate, Chat, Notes, and Math.'}</span>
+                    </div>
+                  </div>
+
                   {/* File list */}
                   <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px 12px' }}>
                     {filesLoad ? (
@@ -1248,7 +1308,7 @@ export function WorkspacePanel({
                         return (
                           <div key={file.id}
                             className={`file-card${viewFile?.id === file.id ? ' selected' : ''}${isMissing ? ' file-card-missing' : ''}`}
-                            style={{ cursor: 'pointer', marginBottom: 6, flexDirection: 'column', alignItems: 'stretch' }}
+                            style={{ cursor: 'pointer', marginBottom: 6, flexDirection: 'column', alignItems: 'stretch', gap: 10 }}
                             onClick={() => {
                               if (isMissing) return;
                               void markRecentFile(file.id);
@@ -1260,7 +1320,7 @@ export function WorkspacePanel({
                                 <div className="file-name" title={file.name}>{file.name}</div>
                                 <div className="file-meta">{fmt(file.fileSize)}{file.fileSize ? ' · ' : ''}{fmtDate(file.createdAt)}</div>
                               </div>
-                              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                              <div className="workspace-file-actions" style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                                 {!isMissing && (
                                   <>
                                     <button
@@ -1288,6 +1348,18 @@ export function WorkspacePanel({
                                         }
                                       }}>
                                       💬 Chat
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary btn-sm"
+                                      style={{ fontSize: 11, padding: '2px 8px' }}
+                                      title="Extract text and open PDF to Notes"
+                                      onClick={async () => {
+                                        const text = await extractFromFile(file);
+                                        if (text) {
+                                          handleUseForNotes(file, text);
+                                        }
+                                      }}>
+                                      📓 Notes
                                     </button>
                                     <button
                                       className="btn btn-secondary btn-sm"
@@ -1364,6 +1436,7 @@ export function WorkspacePanel({
                   onClose={() => setViewFile(null)}
                   onUseForTools={handleUseForTools}
                   onUseForChat={handleUseForChat}
+                  onUseForNotes={handleUseForNotes}
                   onUseInMath={sendFileToMath}
                 />
               </div>
@@ -1401,6 +1474,25 @@ export function WorkspacePanel({
                 </button>
               </div>
             )}
+
+            <div className="workspace-focus-strip" style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <div className="workspace-focus-card">
+                <span className="workspace-focus-eyebrow">Tools</span>
+                <strong>{currentGen.label}</strong>
+                <span>
+                  {selFile
+                    ? `Working from ${selFile.name}${extractedText ? ` · ${wordCount(extractedText).toLocaleString()} words loaded` : ''}.`
+                    : pasteMode
+                      ? 'Paste text directly, then generate notes, summaries, quizzes, or exam prep.'
+                      : 'Pick a file from Workspace or switch to Paste text to start generating study material.'}
+                </span>
+              </div>
+              <div className="workspace-focus-card">
+                <span className="workspace-focus-eyebrow">Best fit</span>
+                <strong>{genMode === 'notes' ? 'Turn sources into notes' : genMode === 'exam' ? 'Simulate exam prep' : genMode === 'practice' ? 'Build guided practice' : 'Create a quick study output'}</strong>
+                <span>{pasteMode ? 'Text mode stays fast for quick experiments.' : 'File mode is best when you want grounded output from a real document.'}</span>
+              </div>
+            </div>
 
             {/* Tool mode pills — grouped */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
@@ -1677,17 +1769,33 @@ export function WorkspacePanel({
 
         {/* ─────────────────── FLASHCARDS ────────────── */}
         {mainTab === 'flashcards' && (
-          <FlashcardView
-            content={output}
-            title={selFile?.name}
-            initialDeck={activeReviewSet}
-            requestedPhase={requestedReviewPhase}
-            initialImportUrl={pendingReviewImportUrl}
-            onRequestedPhaseHandled={() => setRequestedReviewPhase(null)}
-            onDeckChange={(deck) => {
-              setSrsDecks(current => current.map(d => d.id === deck.id ? deck : d));
-            }}
-          />
+          <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="workspace-focus-strip" style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <div className="workspace-focus-card">
+                <span className="workspace-focus-eyebrow">Flashcards</span>
+                <strong>{activeReviewSet ? activeReviewSet.name : 'Review Sets live here'}</strong>
+                <span>{activeReviewSet ? `${activeReviewDueCount} due now · ${activeReviewSet.cards.length} cards in this set` : 'Import, review, edit, and export your sets from one place in Workspace.'}</span>
+              </div>
+              <div className="workspace-focus-card workspace-focus-card--actions">
+                <button className="btn btn-secondary btn-sm" onClick={() => setRequestedReviewPhase('review')}>Review now</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setRequestedReviewPhase('import')}>Import set</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => router.push('/library')}>Open Library</button>
+              </div>
+            </div>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <FlashcardView
+                content={output}
+                title={selFile?.name}
+                initialDeck={activeReviewSet}
+                requestedPhase={requestedReviewPhase}
+                initialImportUrl={pendingReviewImportUrl}
+                onRequestedPhaseHandled={() => setRequestedReviewPhase(null)}
+                onDeckChange={(deck) => {
+                  setSrsDecks(current => current.map(d => d.id === deck.id ? deck : d));
+                }}
+              />
+            </div>
+          </div>
         )}
 
         {/* ─────────────────── CHAT ──────────────────── */}
@@ -1712,11 +1820,30 @@ export function WorkspacePanel({
 
         {/* ─────────────────── NOTES ─────────────────── */}
         {mainTab === 'notes' && (
-          <NotesPanel
-            folderId={selectedFolder}
-            injectContent={notesInject}
-            onInjectConsumed={() => setNotesInject(undefined)}
-          />
+          <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="workspace-focus-strip" style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <div className="workspace-focus-card">
+                <span className="workspace-focus-eyebrow">Notes workflow</span>
+                <strong>{selFile ? `Ready to convert ${selFile.name}` : 'Turn PDFs and documents into notes'}</strong>
+                <span>{selFile ? `${noteStyle[0].toUpperCase() + noteStyle.slice(1)} format selected${extractedText ? ` · ${wordCount(extractedText).toLocaleString()} words loaded` : ''}` : 'Choose a file in Workspace and generate study-ready notes without leaving the app.'}</span>
+              </div>
+              <div className="workspace-focus-card workspace-focus-card--actions">
+                <button className="btn btn-secondary btn-sm" onClick={() => setMainTab('files')}>Choose file</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setMainTab('generate')}>Open tools</button>
+              </div>
+            </div>
+            <NotesPanel
+              folderId={selectedFolder}
+              injectContent={notesInject}
+              onInjectConsumed={() => setNotesInject(undefined)}
+              sourceLabel={selFile?.name ?? null}
+              sourceWordCount={extractedText ? wordCount(extractedText) : undefined}
+              noteStyle={noteStyle}
+              onNoteStyleChange={setNoteStyle}
+              onGenerateFromSource={() => void generateNotesForWorkspace()}
+              onOpenFiles={() => setMainTab('files')}
+            />
+          </div>
         )}
 
         {/* ─────────────────── FOCUS ─────────────────── */}
@@ -1789,7 +1916,28 @@ export function WorkspacePanel({
 
             {/* Knowledge Map */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
-              <KnowledgeMap />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>Knowledge Map</div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>
+                    This visual can be heavy, so it now loads after the rest of Analytics is responsive.
+                  </div>
+                </div>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ fontSize: 11 }}
+                  onClick={() => setShowKnowledgeMap((value) => !value)}
+                >
+                  {showKnowledgeMap ? 'Hide map' : 'Show map'}
+                </button>
+              </div>
+              {showKnowledgeMap ? (
+                <KnowledgeMap />
+              ) : (
+                <div style={{ borderRadius: 12, border: '1px dashed var(--border-2)', padding: '18px 16px', color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>
+                  Loading the rest of Analytics first keeps this tab snappier. Open the map when you need the deeper visual view.
+                </div>
+              )}
             </div>
 
             {/* Library quick-access */}

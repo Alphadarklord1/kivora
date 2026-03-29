@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { RevisionCoachPage } from '@/components/coach/RevisionCoachPage';
+import { ScholarHubPage } from '@/components/coach/ScholarHubPage';
 
 export default function CoachPage() {
   return (
@@ -10,7 +10,7 @@ export default function CoachPage() {
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     }>
-      <RevisionCoachPage />
+      <ScholarHubPage />
     </Suspense>
   );
 }

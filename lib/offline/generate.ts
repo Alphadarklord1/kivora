@@ -219,7 +219,7 @@ function generateRephrase(text: string): string {
   return parts.join('\n');
 }
 
-function generateNotes(text: string): string {
+function generateNotes(text: string, style: 'study' | 'summary' | 'revision' | 'cornell' = 'study'): string {
   const paras = paragraphs(text);
   const sents = sentences(text);
   if (!sents.length) return 'No content to extract notes from.';
@@ -228,7 +228,23 @@ function generateNotes(text: string): string {
   const defs = extractDefinitions(text);
   const freq = termFrequency(text);
 
-  const parts: string[] = ['## Study Notes\n'];
+  const parts: string[] = [
+    style === 'summary'
+      ? '## Summary Sheet\n'
+      : style === 'revision'
+        ? '## Revision Sheet\n'
+        : style === 'cornell'
+          ? '## Cornell Notes\n'
+          : '## Study Notes\n',
+  ];
+
+  if (style === 'cornell') {
+    parts.push('### Cue Questions\n');
+    for (const topic of kws.slice(0, 5)) {
+      parts.push(`- What does **${topic}** mean in this source?`);
+    }
+    parts.push('\n### Notes\n');
+  }
 
   if (paras.length >= 2) {
     // Organize by paragraph sections
@@ -255,7 +271,7 @@ function generateNotes(text: string): string {
 
   // Definitions section
   if (defs.length) {
-    parts.push('\n\n---\n### 📖 Definitions\n');
+    parts.push('\n\n---\n### Definitions\n');
     for (const d of defs.slice(0, 6)) {
       parts.push(`- **${d.term}**: ${d.definition}`);
     }
@@ -264,6 +280,24 @@ function generateNotes(text: string): string {
   // Key terms
   if (kws.length) {
     parts.push(`\n\n---\n**Key Terms:** ${kws.map(k => `_${k}_`).join(', ')}`);
+  }
+
+  if (style === 'revision') {
+    parts.push('\n\n---\n### Quick Recall\n');
+    for (const topic of kws.slice(0, 5)) {
+      parts.push(`- Explain **${topic}** in one sentence.`);
+    }
+  }
+
+  if (style === 'summary') {
+    const key = extractKeySentences(text, 3);
+    parts.push('\n\n---\n### Final Takeaway\n');
+    parts.push(key.join(' '));
+  }
+
+  if (style === 'cornell') {
+    parts.push('\n\n---\n### Summary\n');
+    parts.push(extractKeySentences(text, 2).join(' '));
   }
 
   return parts.join('\n');
@@ -573,12 +607,13 @@ export function offlineGenerate(
   options?: Record<string, unknown>,
 ): string {
   const count = (options?.count as number | undefined) ?? 5;
+  const noteStyle = (options?.noteStyle as 'study' | 'summary' | 'revision' | 'cornell' | undefined) ?? 'study';
 
   switch (mode) {
     case 'summarize':  return generateSummary(text);
     case 'rephrase':   return generateRephrase(text);
     case 'explain':    return generateSummary(text); // offline: best-effort via summary
-    case 'notes':      return generateNotes(text);
+    case 'notes':      return generateNotes(text, noteStyle);
     case 'quiz':       return generateQuiz(text, count);
     case 'mcq':        return generateMCQ(text, count);
     case 'flashcards': return generateFlashcards(text, count);
