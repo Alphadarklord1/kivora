@@ -5,6 +5,12 @@ import { useToast } from '@/providers/ToastProvider';
 import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
 import { loadClientAiDataMode } from '@/lib/privacy/ai-data';
 import type { SourceBrief } from '@/lib/coach/source-brief';
+import {
+  applyWritingSuggestionToText,
+  applyWritingSuggestionsToText,
+  buildWriterLibraryContent,
+  countWords,
+} from '@/lib/coach/writing';
 import type { CheckResult, WritingSuggestion } from '@/app/api/coach/check/route';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
@@ -33,10 +39,6 @@ function scoreLabel(score: number): string {
   if (score >= 75) return 'Good';
   if (score >= 60) return 'Fair';
   return 'Needs work';
-}
-
-function countWords(text: string) {
-  return text.trim() ? text.trim().split(/\s+/).length : 0;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -141,30 +143,22 @@ export function WriterTab({ sourceBrief, sourceActionLoading, onSourceAction }: 
   }
 
   function applySuggestion(sug: WritingSuggestion) {
-    const idx = checkText.indexOf(sug.original);
-    if (idx === -1) {
+    const result = applyWritingSuggestionToText(checkText, sug);
+    if (!result.applied) {
       toast('Original text not found — it may have been edited', 'warning');
       setDismissed(prev => new Set([...prev, sug.id]));
       return;
     }
-    setCheckText(prev => prev.slice(0, idx) + sug.suggestion + prev.slice(idx + sug.original.length));
+    setCheckText(result.text);
     setDismissed(prev => new Set([...prev, sug.id]));
     toast('Applied', 'success');
   }
 
   function applyAll() {
-    let text = checkText;
-    let applied = 0;
-    for (const sug of activeSuggs) {
-      const idx = text.indexOf(sug.original);
-      if (idx !== -1) {
-        text = text.slice(0, idx) + sug.suggestion + text.slice(idx + sug.original.length);
-        applied++;
-      }
-    }
-    setCheckText(text);
+    const result = applyWritingSuggestionsToText(checkText, activeSuggs);
+    setCheckText(result.text);
     setDismissed(new Set(activeSuggs.map(s => s.id)));
-    toast(`Applied ${applied} suggestion${applied !== 1 ? 's' : ''}`, 'success');
+    toast(`Applied ${result.applied} suggestion${result.applied !== 1 ? 's' : ''}`, 'success');
   }
 
   function dismissSuggestion(id: string) {
@@ -180,16 +174,18 @@ export function WriterTab({ sourceBrief, sourceActionLoading, onSourceAction }: 
   async function handleSaveToLibrary() {
     if (!hasResult) return;
     try {
-      const feedback = legacyResult || [
-        summary,
-        ...suggestions.map(s => `[${s.type.toUpperCase()}] "${s.original}" → "${s.suggestion}" — ${s.reason}`),
-      ].join('\n\n');
       await fetch('/api/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: 'notes',
-          content: `Draft:\n\n${checkText}\n\n---\n\nWriting Feedback (Score: ${score ?? 'N/A'}):\n\n${feedback}`,
+          content: buildWriterLibraryContent({
+            draft: checkText,
+            score,
+            summary,
+            suggestions,
+            legacyResult,
+          }),
           metadata: { title: 'Writer feedback', savedFrom: '/coach' },
         }),
       });

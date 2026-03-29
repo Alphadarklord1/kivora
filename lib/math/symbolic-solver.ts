@@ -80,6 +80,14 @@ function vectorToLatex(vector: number[]) {
   return `\\begin{bmatrix}${vector.map((cell) => formatNumber(cell)).join(' \\\\ ')}\\end{bmatrix}`;
 }
 
+function matrixShape(matrixValue: number[][]) {
+  return `${matrixValue.length}×${matrixValue[0]?.length ?? 0}`;
+}
+
+function matrixToAnswerString(matrixValue: number[][]) {
+  return matrixValue.map((row) => `[${row.map((v) => formatNumber(v)).join(', ')}]`).join(' | ');
+}
+
 function formatNumber(value: number) {
   if (!Number.isFinite(value)) return value > 0 ? '∞' : '-∞';
   if (Number.isInteger(value)) return String(value);
@@ -114,6 +122,11 @@ function parseMatrix(text: string) {
   } catch {
     return null;
   }
+}
+
+function parseScalar(text: string) {
+  const value = Number(text.trim());
+  return Number.isFinite(value) ? value : null;
 }
 
 function extractQuadraticCoefficients(expression: string) {
@@ -198,8 +211,8 @@ function categoryFromProblem(normalizedInput: string): MathCategoryId {
   if (/\bgcd\(|\blcm\(|\bfibonacci\(|\bfib\(|combinations?\(|permutations?\(|ncr\(|npr\(|\bmod\b/.test(lower)) return 'discrete';
   // Physics
   if (/\bohm\b|kinetic.energy|\bke\b|projectile|\bwave\b|wave\s*speed|wavelength|\bf\s*=\s*m\s*a\b|\bforce\b|potential.energy|\bpe\b|newton/.test(lower)) return 'physics';
-  if (/dot product|magnitude|angle between|\[[^\]]+\]\s*\[[^\]]+\]/i.test(normalizedInput)) return 'vectors';
-  if (/\[\[[^\]]+\]\]/.test(normalizedInput) || /\bdet\(|\binv\(/.test(lower)) return 'matrices';
+  if (/dot product|magnitude|angle between|unit vector|normalize|^dot\(|^cross\(|^norm\(|\[[^\]]+\]\s*(?:\+|\-)?\s*\[[^\]]+\]/i.test(normalizedInput)) return 'vectors';
+  if (/\[\[[^\]]+\]\]/.test(normalizedInput) || /\bdet\(|\binv\(|\btranspose\(/.test(lower)) return 'matrices';
   if (/mean\(|median\(|variance\(|std\(/.test(lower)) return 'statistics';
   if (/hypotenuse|distance\s*\(|distance between|midpoint of|line through|equation of circle|area circle|circumference circle|area triangle|area rectangle|volume of sphere|pythagorean/.test(lower)) return 'geometry';
   if (/derivative|integral|limit|d\/dx|\bint\b|\blim\b|differentiat|\bdiff\b/.test(lower)) return 'calculus';
@@ -516,14 +529,6 @@ function solveQuarticEquation(problem: string): SolverResult | null {
 
   // Normalize: divide by a
   const B = b / a, C = c / a, D = d / a, E = e / a;
-
-  // Depressed quartic: u = x + B/4
-  const p2 = C - (3 * B * B) / 8;
-  const q2 = B * B * B / 8 - B * C / 2 + D;
-  const r2 = -(3 * B * B * B * B) / 256 + (B * B * C) / 16 - (B * D) / 4 + E;
-
-  // Suppress unused variable warnings — retained for documentation of the depressed form
-  void p2; void q2; void r2;
 
   try {
     // Use numerical Newton's method to find roots
@@ -1340,9 +1345,43 @@ function solveLimit(normalizedInput: string): SolverResult {
 
 function solveVectorProblem(normalizedInput: string): SolverResult {
   const result = baseResult('vectors', normalizedInput, 'mathjs');
-  const dotMatch = normalizedInput.match(/dot product\s*(\[[^\]]+\])\s*(?:and\s*)?(\[[^\]]+\])/i) || normalizedInput.match(/^(\[[^\]]+\])\s*(\[[^\]]+\])$/);
-  const magnitudeMatch = normalizedInput.match(/^magnitude\s*(\[[^\]]+\])$/i);
+  const dotMatch =
+    normalizedInput.match(/dot product\s*(\[[^\]]+\])\s*(?:and\s*)?(\[[^\]]+\])/i) ||
+    normalizedInput.match(/^dot\((\[[^\]]+\]),\s*(\[[^\]]+\])\)$/i) ||
+    normalizedInput.match(/^(\[[^\]]+\])\s*(\[[^\]]+\])$/);
+  const magnitudeMatch =
+    normalizedInput.match(/^magnitude\s*(\[[^\]]+\])$/i) ||
+    normalizedInput.match(/^norm\((\[[^\]]+\])\)$/i);
   const angleMatch = normalizedInput.match(/^angle between\s*(\[[^\]]+\])\s*(\[[^\]]+\])$/i);
+  const crossMatch = normalizedInput.match(/^cross\((\[[^\]]+\]),\s*(\[[^\]]+\])\)$/i) || normalizedInput.match(/^cross product\s*(\[[^\]]+\])\s*(?:and\s*)?(\[[^\]]+\])$/i);
+  const unitMatch = normalizedInput.match(/^(?:unit vector|normalize)\s*(\[[^\]]+\])$/i);
+  const addSubtractMatch = normalizedInput.match(/^(\[[^\]]+\])\s*([+\-])\s*(\[[^\]]+\])$/);
+
+  if (addSubtractMatch) {
+    const left = parseVector(addSubtractMatch[1]);
+    const right = parseVector(addSubtractMatch[3]);
+    const op = addSubtractMatch[2];
+    if (!left || !right || left.length !== right.length) {
+      return { ...result, verified: false, answer: 'Vector dimensions do not match', answerLatex: '\\text{Vector dimensions do not match}', explanation: 'Vector addition and subtraction require the same number of components.' };
+    }
+    const combined = left.map((value, index) => op === '+' ? value + right[index] : value - right[index]);
+    result.steps.push({
+      step: 1,
+      description: 'Write the vectors componentwise',
+      expression: `${vectorToLatex(left)} ${op} ${vectorToLatex(right)}`,
+      explanation: `Both vectors are ${left.length}D, so we can combine matching entries.`,
+    });
+    result.steps.push({
+      step: 2,
+      description: op === '+' ? 'Add matching components' : 'Subtract matching components',
+      expression: combined.map((value, index) => `${formatNumber(left[index])} ${op} ${formatNumber(right[index])} = ${formatNumber(value)}`).join(', \\quad '),
+      explanation: 'Work entry by entry across the vectors.',
+    });
+    result.answer = `[${combined.map((value) => formatNumber(value)).join(', ')}]`;
+    result.answerLatex = vectorToLatex(combined);
+    result.explanation = `Computed the vector ${op === '+' ? 'sum' : 'difference'} component by component.`;
+    return result;
+  }
 
   if (dotMatch) {
     const left = parseVector(dotMatch[1]);
@@ -1379,6 +1418,35 @@ function solveVectorProblem(normalizedInput: string): SolverResult {
     return result;
   }
 
+  if (crossMatch) {
+    const left = parseVector(crossMatch[1]);
+    const right = parseVector(crossMatch[2]);
+    if (!left || !right || left.length !== 3 || right.length !== 3) {
+      return { ...result, verified: false, answer: 'Cross product needs 3D vectors', answerLatex: '\\text{Cross product needs 3D vectors}', explanation: 'Use format: cross([a,b,c], [d,e,f]) with exactly three components in each vector.' };
+    }
+    const cross = [
+      left[1] * right[2] - left[2] * right[1],
+      left[2] * right[0] - left[0] * right[2],
+      left[0] * right[1] - left[1] * right[0],
+    ];
+    result.steps.push({
+      step: 1,
+      description: 'Write the 3D vectors',
+      expression: `${vectorToLatex(left)} \\times ${vectorToLatex(right)}`,
+      explanation: 'Cross product is defined for 3D vectors and returns a perpendicular vector.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Compute the determinant-style components',
+      expression: `\\left(${formatNumber(cross[0])},\\ ${formatNumber(cross[1])},\\ ${formatNumber(cross[2])}\\right)`,
+      explanation: 'Use the standard 3D cross-product formula component by component.',
+    });
+    result.answer = `[${cross.map((value) => formatNumber(value)).join(', ')}]`;
+    result.answerLatex = vectorToLatex(cross);
+    result.explanation = 'Computed the cross product of the two 3D vectors.';
+    return result;
+  }
+
   if (magnitudeMatch) {
     const vector = parseVector(magnitudeMatch[1]);
     if (!vector) {
@@ -1404,6 +1472,34 @@ function solveVectorProblem(normalizedInput: string): SolverResult {
     return result;
   }
 
+  if (unitMatch) {
+    const vector = parseVector(unitMatch[1]);
+    if (!vector) {
+      return { ...result, verified: false, answer: 'Invalid vector', answerLatex: '\\text{Invalid vector}', explanation: 'Use format: unit vector [3,4]' };
+    }
+    const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
+    if (isNearlyZero(magnitude)) {
+      return { ...result, verified: false, answer: 'Zero vector has no unit vector', answerLatex: '\\text{Zero vector has no unit vector}', explanation: 'You cannot normalize the zero vector because its magnitude is 0.' };
+    }
+    const normalized = vector.map((value) => value / magnitude);
+    result.steps.push({
+      step: 1,
+      description: 'Find the magnitude first',
+      expression: `|\\mathbf{v}| = ${expressionToLatex(formatNumber(magnitude))}`,
+      explanation: 'A unit vector divides each component by the original vector length.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Divide each component by the magnitude',
+      expression: `\\hat{\\mathbf{v}} = ${vectorToLatex(vector)} \\cdot \\frac{1}{${expressionToLatex(formatNumber(magnitude))}} = ${vectorToLatex(normalized)}`,
+      explanation: 'This rescales the vector to length 1 while keeping the same direction.',
+    });
+    result.answer = `[${normalized.map((value) => formatNumber(value)).join(', ')}]`;
+    result.answerLatex = vectorToLatex(normalized);
+    result.explanation = 'Computed the unit vector by normalizing the original vector.';
+    return result;
+  }
+
   if (angleMatch) {
     const left = parseVector(angleMatch[1]);
     const right = parseVector(angleMatch[2]);
@@ -1413,7 +1509,11 @@ function solveVectorProblem(normalizedInput: string): SolverResult {
     const dot = left.reduce((sum, value, index) => sum + value * right[index], 0);
     const leftMagnitude = Math.sqrt(left.reduce((sum, value) => sum + value * value, 0));
     const rightMagnitude = Math.sqrt(right.reduce((sum, value) => sum + value * value, 0));
-    const radians = Math.acos(dot / (leftMagnitude * rightMagnitude));
+    if (isNearlyZero(leftMagnitude) || isNearlyZero(rightMagnitude)) {
+      return { ...result, verified: false, answer: 'Angle undefined for zero vector', answerLatex: '\\text{Angle undefined for zero vector}', explanation: 'At least one vector has magnitude 0, so the angle is undefined.' };
+    }
+    const cosine = Math.max(-1, Math.min(1, dot / (leftMagnitude * rightMagnitude)));
+    const radians = Math.acos(cosine);
     const degrees = radians * (180 / Math.PI);
     result.steps.push({
       step: 1,
@@ -1424,7 +1524,7 @@ function solveVectorProblem(normalizedInput: string): SolverResult {
     result.steps.push({
       step: 2,
       description: 'Substitute the values',
-      expression: `\\cos(\\theta) = \\frac{${formatNumber(dot)}}{${formatNumber(leftMagnitude)} \\cdot ${formatNumber(rightMagnitude)}}`,
+      expression: `\\cos(\\theta) = \\frac{${formatNumber(dot)}}{${formatNumber(leftMagnitude)} \\cdot ${formatNumber(rightMagnitude)}} = ${expressionToLatex(formatNumber(cosine))}`,
       explanation: 'Now evaluate the inverse cosine.',
     });
     result.answer = `${formatNumber(degrees)}°`;
@@ -1433,7 +1533,7 @@ function solveVectorProblem(normalizedInput: string): SolverResult {
     return result;
   }
 
-  return { ...result, verified: false, answer: 'Unsupported vector problem', answerLatex: '\\text{Unsupported vector problem}', explanation: 'Try dot product [a,b] [c,d], magnitude [a,b], or angle between [a,b] [c,d].' };
+  return { ...result, verified: false, answer: 'Unsupported vector problem', answerLatex: '\\text{Unsupported vector problem}', explanation: 'Try vector addition/subtraction, dot(...), cross(...), norm(...), unit vector [...], or angle between [a,b] [c,d].' };
 }
 
 function solveMatrixProblem(normalizedInput: string, category: MathCategoryId): SolverResult {
@@ -1444,6 +1544,9 @@ function solveMatrixProblem(normalizedInput: string, category: MathCategoryId): 
     const matrix = parseMatrix(matrixText);
     if (!matrix) {
       return { ...result, verified: false, answer: 'Invalid matrix', answerLatex: '\\text{Invalid matrix}', explanation: 'Use format: det([[1,2],[3,4]])' };
+    }
+    if (matrix.length !== matrix[0]?.length) {
+      return { ...result, verified: false, answer: 'Square matrix required', answerLatex: '\\text{Square matrix required}', explanation: `Determinants only exist for square matrices. You entered ${matrixShape(matrix)}.` };
     }
     const determinant = Number(math.det(matrix));
     result.steps.push({
@@ -1470,6 +1573,13 @@ function solveMatrixProblem(normalizedInput: string, category: MathCategoryId): 
     if (!matrix) {
       return { ...result, verified: false, answer: 'Invalid matrix', answerLatex: '\\text{Invalid matrix}', explanation: 'Use format: inv([[1,2],[3,4]])' };
     }
+    if (matrix.length !== matrix[0]?.length) {
+      return { ...result, verified: false, answer: 'Square matrix required', answerLatex: '\\text{Square matrix required}', explanation: `Only square matrices can have inverses. You entered ${matrixShape(matrix)}.` };
+    }
+    const determinantValue = Number(math.det(matrix));
+    if (isNearlyZero(determinantValue)) {
+      return { ...result, verified: false, answer: 'Matrix is singular', answerLatex: '\\text{Matrix is singular}', explanation: 'This matrix has determinant 0, so it is not invertible.' };
+    }
     const inverse = math.inv(matrix) as math.MathCollection;
     const inverseArray = Array.isArray(inverse) ? inverse as number[][] : (inverse as math.Matrix).toArray() as number[][];
     result.steps.push({
@@ -1484,40 +1594,119 @@ function solveMatrixProblem(normalizedInput: string, category: MathCategoryId): 
       expression: `A^{-1} = ${matrixToLatex(inverseArray)}`,
       explanation: 'The inverse matrix reverses the original linear transformation.',
     });
-    result.answer = inverseArray.map((row) => '[' + row.map((v) => formatNumber(v)).join(', ') + ']').join(' | ');
+    result.answer = matrixToAnswerString(inverseArray);
     result.answerLatex = matrixToLatex(inverseArray);
     result.explanation = 'Computed the matrix inverse exactly with mathjs.';
     return result;
   }
 
-  const parts = normalizedInput.split('*').map((part) => part.trim());
-  if (parts.length === 2 && parts.every((part) => part.startsWith('[['))) {
-    const left = parseMatrix(parts[0]);
-    const right = parseMatrix(parts[1]);
-    if (!left || !right) {
-      return { ...result, verified: false, answer: 'Invalid matrix format', answerLatex: '\\text{Invalid matrix format}', explanation: 'Use format like [[1,2],[3,4]] * [[5,6],[7,8]].' };
+  if (/^transpose\(/i.test(normalizedInput)) {
+    const matrixText = normalizedInput.replace(/^transpose\(/i, '').replace(/\)$/,'');
+    const matrix = parseMatrix(matrixText);
+    if (!matrix) {
+      return { ...result, verified: false, answer: 'Invalid matrix', answerLatex: '\\text{Invalid matrix}', explanation: 'Use format: transpose([[1,2,3],[4,5,6]])' };
     }
-    const product = math.multiply(left, right) as math.MathCollection;
-    const productArray = Array.isArray(product) ? product as number[][] : (product as math.Matrix).toArray() as number[][];
+    const transposed = math.transpose(matrix) as math.MathCollection;
+    const transposedArray = Array.isArray(transposed) ? transposed as number[][] : (transposed as math.Matrix).toArray() as number[][];
     result.steps.push({
       step: 1,
-      description: 'Align both matrices',
-      expression: `${matrixToLatex(left)} \\cdot ${matrixToLatex(right)}`,
-      explanation: 'Matrix multiplication combines rows from the first matrix with columns from the second.',
+      description: 'Write the matrix',
+      expression: `A = ${matrixToLatex(matrix)}`,
+      explanation: `The original matrix has shape ${matrixShape(matrix)}.`,
     });
     result.steps.push({
       step: 2,
-      description: 'Multiply rows by columns',
-      expression: matrixToLatex(productArray),
-      explanation: 'Each output entry is a row-column dot product.',
+      description: 'Swap rows and columns',
+      expression: `A^{T} = ${matrixToLatex(transposedArray)}`,
+      explanation: `Transpose flips the matrix to shape ${matrixShape(transposedArray)}.`,
     });
-    result.answer = productArray.map((row) => '[' + row.map((v) => formatNumber(v)).join(', ') + ']').join(' | ');
-    result.answerLatex = matrixToLatex(productArray);
-    result.explanation = 'Computed the matrix product using mathjs matrix multiplication.';
+    result.answer = matrixToAnswerString(transposedArray);
+    result.answerLatex = matrixToLatex(transposedArray);
+    result.explanation = 'Computed the transpose by swapping rows and columns.';
     return result;
   }
 
-  return { ...result, verified: false, answer: 'Unsupported matrix problem', answerLatex: '\\text{Unsupported matrix problem}', explanation: 'Try determinant, inverse, or multiplying two matrices.' };
+  const scalarLeftMatch = normalizedInput.match(/^(-?\d+(?:\.\d+)?)\s*\*\s*(\[\[.*\]\])$/);
+  if (scalarLeftMatch) {
+    const scalar = parseScalar(scalarLeftMatch[1]);
+    const matrix = parseMatrix(scalarLeftMatch[2]);
+    if (scalar === null || !matrix) {
+      return { ...result, verified: false, answer: 'Invalid scalar multiply format', answerLatex: '\\text{Invalid scalar multiply format}', explanation: 'Use format like 3 * [[1,2],[3,4]].' };
+    }
+    const scaled = matrix.map((row) => row.map((value) => value * scalar));
+    result.steps.push({
+      step: 1,
+      description: 'Write the scalar and matrix',
+      expression: `${expressionToLatex(formatNumber(scalar))} \\cdot ${matrixToLatex(matrix)}`,
+      explanation: `Multiply each entry in the ${matrixShape(matrix)} matrix by the scalar.`,
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Scale every entry',
+      expression: matrixToLatex(scaled),
+      explanation: 'Scalar multiplication changes every matrix entry by the same factor.',
+    });
+    result.answer = matrixToAnswerString(scaled);
+    result.answerLatex = matrixToLatex(scaled);
+    result.explanation = 'Computed the scalar multiple of the matrix.';
+    return result;
+  }
+
+  const scalarRightMatch = normalizedInput.match(/^(\[\[.*\]\])\s*\*\s*(-?\d+(?:\.\d+)?)$/);
+  if (scalarRightMatch) {
+    return solveMatrixProblem(`${scalarRightMatch[2]} * ${scalarRightMatch[1]}`, category);
+  }
+
+  const matrixBinaryMatch = normalizedInput.match(/^(\[\[.*\]\])\s*([+\-*])\s*(\[\[.*\]\])$/);
+  if (matrixBinaryMatch) {
+    const left = parseMatrix(matrixBinaryMatch[1]);
+    const op = matrixBinaryMatch[2];
+    const right = parseMatrix(matrixBinaryMatch[3]);
+    if (!left || !right) {
+      return { ...result, verified: false, answer: 'Invalid matrix format', answerLatex: '\\text{Invalid matrix format}', explanation: 'Use format like [[1,2],[3,4]] + [[5,6],[7,8]].' };
+    }
+
+    if ((op === '+' || op === '-') && (left.length !== right.length || left[0]?.length !== right[0]?.length)) {
+      return { ...result, verified: false, answer: 'Matrix sizes must match', answerLatex: '\\text{Matrix sizes must match}', explanation: `For ${op === '+' ? 'addition' : 'subtraction'}, both matrices must have the same shape. You entered ${matrixShape(left)} and ${matrixShape(right)}.` };
+    }
+
+    if (op === '*' && left[0]?.length !== right.length) {
+      return { ...result, verified: false, answer: 'Inner dimensions do not match', answerLatex: '\\text{Inner dimensions do not match}', explanation: `Matrix multiplication needs columns(A) = rows(B). You entered ${matrixShape(left)} and ${matrixShape(right)}.` };
+    }
+
+    const computed = op === '+'
+      ? math.add(left, right)
+      : op === '-'
+        ? math.subtract(left, right)
+        : math.multiply(left, right);
+    const computedArray = Array.isArray(computed) ? computed as number[][] : (computed as math.Matrix).toArray() as number[][];
+    result.steps.push({
+      step: 1,
+      description: 'Align both matrices',
+      expression: `${matrixToLatex(left)} ${op === '*' ? '\\cdot' : op} ${matrixToLatex(right)}`,
+      explanation: op === '*'
+        ? `A is ${matrixShape(left)} and B is ${matrixShape(right)}, so the shared inner dimension is ${left[0]?.length}.`
+        : `Both matrices have shape ${matrixShape(left)}, so entrywise ${op === '+' ? 'addition' : 'subtraction'} is valid.`,
+    });
+    result.steps.push({
+      step: 2,
+      description: op === '*'
+        ? 'Multiply rows by columns'
+        : `${op === '+' ? 'Add' : 'Subtract'} matching entries`,
+      expression: matrixToLatex(computedArray),
+      explanation: op === '*'
+        ? 'Each output entry is a row-column dot product.'
+        : 'Combine each pair of corresponding entries to get the result matrix.',
+    });
+    result.answer = matrixToAnswerString(computedArray);
+    result.answerLatex = matrixToLatex(computedArray);
+    result.explanation = op === '*'
+      ? 'Computed the matrix product using compatible dimensions.'
+      : `Computed the matrix ${op === '+' ? 'sum' : 'difference'} entry by entry.`;
+    return result;
+  }
+
+  return { ...result, verified: false, answer: 'Unsupported matrix problem', answerLatex: '\\text{Unsupported matrix problem}', explanation: 'Try add/subtract, multiply, scalar multiply, transpose, determinant, or inverse.' };
 }
 
 function solveTrigonometry(normalizedInput: string): SolverResult {
@@ -2479,8 +2668,18 @@ export function solveMathProblem(problem: string, requestedCategory?: string | n
     if (/hypotenuse|distance\s*\(|distance between|midpoint of|line through|equation of circle|area circle|circumference circle|area triangle|area rectangle|volume of sphere|pythagorean/.test(lower)) return solveGeometryProblem(normalizedInput);
     if (/arithmetic (?:nth|sum)|geometric (?:nth|sum)|sequence|series/.test(lower)) return solveSequenceSeries(normalizedInput);
     if (lower.startsWith('system ') || lower.startsWith('solve system ') || (normalizedInput.includes(';') && normalizedInput.includes('='))) return solveSystem(normalizedInput);
-    if (/dot product|magnitude|angle between|^\[[^\]]+\]\s*\[[^\]]+\]$/i.test(normalizedInput)) return solveVectorProblem(normalizedInput);
-    if (/^det\(|^inv\(|^\[\[/.test(normalizedInput)) return solveMatrixProblem(normalizedInput, category === 'linear-algebra' ? 'linear-algebra' : 'matrices');
+    if (
+      category === 'vectors' ||
+      /dot product|magnitude|angle between|unit vector|normalize|^dot\(|^cross\(|^norm\(|^\[[^\]]+\]\s*[\+\-]\s*\[[^\]]+\]|^\[[^\]]+\]\s*\[[^\]]+\]$/i.test(normalizedInput)
+    ) return solveVectorProblem(normalizedInput);
+    if (
+      category === 'matrices' ||
+      category === 'linear-algebra' ||
+      /^det\(|^inv\(|^transpose\(|^\[\[/.test(normalizedInput) ||
+      /^-?\d+(?:\.\d+)?\s*\*\s*\[\[/.test(normalizedInput)
+    ) {
+      return solveMatrixProblem(normalizedInput, category === 'linear-algebra' ? 'linear-algebra' : 'matrices');
+    }
     if (/mean\(|median\(|variance\(|std\(|combinations\(|permutations\(/.test(lower)) return solveStatisticsProblem(normalizedInput);
     if (category === 'trigonometry' || /\bsin\(|\bcos\(|\btan\(|\bcot\(|\bsec\(|\bcsc\(/.test(lower)) return solveTrigonometry(normalizedInput);
     if (/^complete.*square|^completing.*square/i.test(lower)) return solveCompleteSquare(normalizedInput);

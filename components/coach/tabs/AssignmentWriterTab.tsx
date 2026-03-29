@@ -23,8 +23,16 @@ import { idbStore } from '@/lib/idb';
 import type { SourceBrief } from '@/lib/coach/source-brief';
 import type { TopicResearchResult } from '@/lib/coach/research';
 import type { ArticleSuggestion } from '@/lib/coach/articles';
+import {
+  applyWritingSuggestionToText,
+  applyWritingSuggestionsToText,
+  buildWriterLibraryContent,
+  countWords,
+} from '@/lib/coach/writing';
 import type { OutlineSection } from '@/app/api/coach/report/route';
 import type { CheckResult, WritingSuggestion } from '@/app/api/coach/check/route';
+import { AssignmentFileBanner } from './assignment/AssignmentFileBanner';
+import { WriteCheckPanel } from './assignment/WriteCheckPanel';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
 
@@ -102,8 +110,6 @@ function buildContextText(
   return parts.filter(Boolean).join('\n\n');
 }
 
-function countWords(text: string) { return text.trim() ? text.trim().split(/\s+/).length : 0; }
-
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -115,30 +121,7 @@ function safeFilename(topic: string) {
   return topic.slice(0, 40).replace(/[^a-z0-9]/gi, '_').toLowerCase();
 }
 
-// ── Grammarly-style helpers ────────────────────────────────────────────────────
-
-type SuggType = WritingSuggestion['type'];
-type FilterType = 'all' | SuggType;
-
-const SUGG_TYPE_META: Record<SuggType, { label: string; color: string; bg: string; icon: string }> = {
-  grammar:  { label: 'Grammar',  color: '#ef4444', bg: '#fef2f2', icon: '✏️' },
-  style:    { label: 'Style',    color: '#3b82f6', bg: '#eff6ff', icon: '💬' },
-  clarity:  { label: 'Clarity',  color: '#f59e0b', bg: '#fffbeb', icon: '💡' },
-  tone:     { label: 'Tone',     color: '#8b5cf6', bg: '#f5f3ff', icon: '🎯' },
-};
-
-function scoreColor(n: number) {
-  if (n >= 90) return '#10b981';
-  if (n >= 75) return '#3b82f6';
-  if (n >= 60) return '#f59e0b';
-  return '#ef4444';
-}
-function scoreLabel(n: number) {
-  if (n >= 90) return 'Excellent';
-  if (n >= 75) return 'Good';
-  if (n >= 60) return 'Fair';
-  return 'Needs work';
-}
+type FilterType = 'all' | WritingSuggestion['type'];
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -146,7 +129,7 @@ interface Props {
   sourceBrief: SourceBrief | null;
   researchResult: TopicResearchResult | null;
   onNavigateToResearch: (topic: string) => void;
-  sourceActionLoading: string | null;
+  sourceActionLoading: 'notes' | 'quiz' | 'flashcards' | null;
   onSourceAction: (mode: 'notes' | 'quiz' | 'flashcards') => void;
 }
 
@@ -363,7 +346,12 @@ export function AssignmentWriterTab({
     : null;
 
   function toggleSource(url: string) {
-    setSelectedUrls(prev => { const n = new Set(prev); n.has(url) ? n.delete(url) : n.add(url); return n; });
+    setSelectedUrls(prev => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
   }
 
   // ── Build handlers ────────────────────────────────────────────────────────
@@ -527,28 +515,23 @@ export function AssignmentWriterTab({
   }
 
   function applySuggestion(sug: WritingSuggestion) {
-    const idx = checkText.indexOf(sug.original);
-    if (idx === -1) {
+    const result = applyWritingSuggestionToText(checkText, sug);
+    if (!result.applied) {
       toast('Original text not found — it may have been edited', 'warning');
       setDismissed(prev => new Set([...prev, sug.id]));
       return;
     }
-    setCheckText(prev => prev.slice(0, idx) + sug.suggestion + prev.slice(idx + sug.original.length));
+    setCheckText(result.text);
     setDismissed(prev => new Set([...prev, sug.id]));
     toast('Applied', 'success');
   }
 
   function applyAllSuggs() {
     const active = checkSuggs.filter(s => !dismissed.has(s.id));
-    let text = checkText;
-    let applied = 0;
-    for (const sug of active) {
-      const idx = text.indexOf(sug.original);
-      if (idx !== -1) { text = text.slice(0, idx) + sug.suggestion + text.slice(idx + sug.original.length); applied++; }
-    }
-    setCheckText(text);
+    const result = applyWritingSuggestionsToText(checkText, active);
+    setCheckText(result.text);
     setDismissed(new Set(active.map(s => s.id)));
-    toast(`Applied ${applied} suggestion${applied !== 1 ? 's' : ''}`, 'success');
+    toast(`Applied ${result.applied} suggestion${result.applied !== 1 ? 's' : ''}`, 'success');
   }
 
   function sendDraftToBuild() {
@@ -564,16 +547,18 @@ export function AssignmentWriterTab({
     const hasResult = checkScore !== null || legacyResult.length > 0;
     if (!hasResult) return;
     try {
-      const feedback = legacyResult || [
-        checkSummary,
-        ...checkSuggs.map(s => `[${s.type.toUpperCase()}] "${s.original}" → "${s.suggestion}" — ${s.reason}`),
-      ].join('\n\n');
       await fetch('/api/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: 'notes',
-          content: `Draft:\n\n${checkText}\n\n---\n\nWriting Feedback (Score: ${checkScore ?? 'N/A'}):\n\n${feedback}`,
+          content: buildWriterLibraryContent({
+            draft: checkText,
+            score: checkScore,
+            summary: checkSummary,
+            suggestions: checkSuggs,
+            legacyResult,
+          }),
           metadata: { title: 'Writer feedback', savedFrom: '/coach' },
         }),
       });
@@ -590,12 +575,32 @@ export function AssignmentWriterTab({
   const sourceLabel     = (sourceBrief?.title ?? fileName) || '';
   const hasWriterResult = checkScore !== null || legacyResult.length > 0;
   const activeSuggs     = checkSuggs.filter(s => !dismissed.has(s.id));
-  const filteredSuggs   = suggFilter === 'all' ? activeSuggs : activeSuggs.filter(s => s.type === suggFilter);
-  const countByType     = (t: SuggType) => activeSuggs.filter(s => s.type === t).length;
+  const writingStudioStats = [
+    fileName ? `Source file: ${fileName}` : 'No source file loaded yet',
+    `${selectedSources.length} source${selectedSources.length === 1 ? '' : 's'} selected`,
+    `${outline?.length ?? 0} outline section${(outline?.length ?? 0) === 1 ? '' : 's'}`,
+    `${activeSuggs.length} active suggestion${activeSuggs.length === 1 ? '' : 's'}`,
+  ];
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className={styles.reportLayout}>
+
+      <div className={styles.studioHero}>
+        <div className={styles.studioHeroCopy}>
+          <span className={styles.studioEyebrow}>Writing Studio</span>
+          <h3>Build a source-grounded report, then tighten the writing like an editor.</h3>
+          <p>
+            Start with evidence and structure in Build Report, then switch to Write &amp; Check when you want grammar,
+            clarity, and tone feedback on the final draft.
+          </p>
+        </div>
+        <div className={styles.studioHeroMeta}>
+          {writingStudioStats.map((item) => (
+            <span key={item} className={styles.studioMetaPill}>{item}</span>
+          ))}
+        </div>
+      </div>
 
       {/* ── Panel header ── */}
       <div className={styles.panelHead}>
@@ -625,110 +630,43 @@ export function AssignmentWriterTab({
       </div>
 
       {/* ── File input banner ── */}
-      <div className={styles.fileInputBanner}>
-        <div className={styles.fileInputRow}>
-          <span className={styles.fileInputLabel}>📎 Load a file</span>
-          <div className={styles.fileInputBtns}>
-            <button
-              className={`${styles.btnSecondary} ${filePanelOpen === 'upload' ? styles.segBtnActive : ''}`}
-              onClick={() => setFilePanelOpen(p => p === 'upload' ? null : 'upload')}
-            >
-              📄 Upload PDF / Word
-            </button>
-            <button
-              className={`${styles.btnSecondary} ${filePanelOpen === 'workspace' ? styles.segBtnActive : ''}`}
-              onClick={() => setFilePanelOpen(p => p === 'workspace' ? null : 'workspace')}
-            >
-              🗂️ From Workspace
-            </button>
-          </div>
-          {fileName && (
-            <div className={styles.fileLoadedChip}>
-              <span>✓ {fileName}</span>
-              {fileWords > 0 && <span className={styles.wordCountPill}>{fileWords.toLocaleString()} words</span>}
-              <button className={styles.iconBtn} onClick={clearFile} title="Remove file">✕</button>
-            </div>
-          )}
-        </div>
-
-        {/* Upload drop zone */}
-        {filePanelOpen === 'upload' && (
-          <div
-            className={styles.fileDropZone}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={e => e.preventDefault()}
-            onDrop={e => { e.preventDefault(); void handleFileSelected(e.dataTransfer.files[0] ?? null); }}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.txt"
-              className={styles.hiddenInput}
-              onChange={e => void handleFileSelected(e.target.files?.[0] ?? null)}
-            />
-            {fileLoading
-              ? <span>⏳ Extracting text…</span>
-              : <span>Click to choose or drag a PDF / Word file here</span>
-            }
-          </div>
-        )}
-
-        {/* Workspace picker */}
-        {filePanelOpen === 'workspace' && (
-          <div className={styles.wsPicker}>
-            <input
-              className={styles.textInput}
-              placeholder="Search workspace files…"
-              value={wsSearch}
-              onChange={e => setWsSearch(e.target.value)}
-            />
-            {wsLoading
-              ? <p className={styles.wsPickerHint}>Loading workspace files…</p>
-              : filteredWsFiles.length === 0
-                ? <p className={styles.wsPickerHint}>No files with local content found in Workspace.</p>
-                : (
-                  <div className={styles.wsFileList}>
-                    {filteredWsFiles.map(f => (
-                      <button
-                        key={f.id}
-                        className={styles.wsFileRow}
-                        disabled={!!wsPicking}
-                        onClick={() => void handlePickWorkspaceFile(f)}
-                      >
-                        <span className={styles.wsFileName}>{f.name}</span>
-                        {wsPicking === f.id
-                          ? <span className={styles.wsFileLoading}>Loading…</span>
-                          : null}
-                      </button>
-                    ))}
-                  </div>
-                )
-            }
-          </div>
-        )}
-
-        {fileError && (
-          <div className={styles.errorNote} style={{ marginTop: '0.5rem' }}>⚠️ {fileError}</div>
-        )}
-      </div>
+      <AssignmentFileBanner
+        fileInputRef={fileInputRef}
+        filePanelOpen={filePanelOpen}
+        fileLoading={fileLoading}
+        fileName={fileName}
+        fileWords={fileWords}
+        fileError={fileError}
+        wsSearch={wsSearch}
+        wsLoading={wsLoading}
+        wsPicking={wsPicking}
+        filteredWsFiles={filteredWsFiles}
+        onTogglePanel={(panelName) => setFilePanelOpen((prev) => (prev === panelName ? null : panelName))}
+        onFileChange={(file) => handleFileSelected(file)}
+        onWsSearchChange={setWsSearch}
+        onPickWorkspaceFile={(file) => handlePickWorkspaceFile(file)}
+        onClearFile={clearFile}
+      />
 
       {/* ── Inner tab switcher ── */}
       <div className={styles.innerTabNav}>
         <button
-          className={`${styles.segBtn} ${innerTab === 'build' ? styles.segBtnActive : ''}`}
+          className={`${styles.studioTabBtn} ${innerTab === 'build' ? styles.studioTabBtnActive : ''}`}
           onClick={() => setInnerTab('build')}
         >
-          📋 Build Report
+          <span>📋 Build Report</span>
+          <small>Outline, cite, draft</small>
         </button>
         <button
-          className={`${styles.segBtn} ${innerTab === 'write' ? styles.segBtnActive : ''}`}
+          className={`${styles.studioTabBtn} ${innerTab === 'write' ? styles.studioTabBtnActive : ''}`}
           onClick={() => {
             setInnerTab('write');
             // Auto-fill editor from loaded file if it is empty
             if (fileText && !checkText) setCheckText(fileText.slice(0, 8000));
           }}
         >
-          ✍️ Write &amp; Check
+          <span>✍️ Write &amp; Check</span>
+          <small>Review, improve, export</small>
         </button>
       </div>
 
@@ -1012,233 +950,50 @@ export function AssignmentWriterTab({
       {/* Write & Check panel                                                  */}
       {/* ════════════════════════════════════════════════════════════════════ */}
       {innerTab === 'write' && (
-        <div className={styles.wordApp}>
-
-          {/* Ribbon */}
-          <div className={styles.wordRibbon}>
-            <div className={styles.ribbonGroup}>
-              <span className={styles.ribbonLabel}>REVIEW</span>
-              <button
-                className={`${styles.ribbonBtn} ${styles.ribbonBtnPrimary}`}
-                disabled={checkLoading || !checkText.trim()}
-                onClick={() => void handleCheckWork()}
-              >
-                {checkLoading
-                  ? <><span className={styles.ribbonIcon}>⏳</span>Checking…</>
-                  : <><span className={styles.ribbonIcon}>✔</span>Check Writing</>
-                }
-              </button>
-              {activeSuggs.length > 1 && (
-                <button className={styles.ribbonBtn} onClick={applyAllSuggs} title="Apply all suggestions">
-                  <span className={styles.ribbonIcon}>⚡</span>Apply All
-                </button>
-              )}
-            </div>
-            <div className={styles.ribbonDivider} />
-            <div className={styles.ribbonGroup}>
-              <span className={styles.ribbonLabel}>DOCUMENT</span>
-              <button className={styles.ribbonBtn} disabled={!checkText} onClick={() => void navigator.clipboard.writeText(checkText).then(() => toast('Copied!', 'success'))}>
-                <span className={styles.ribbonIcon}>📋</span>Copy
-              </button>
-              <button
-                className={styles.ribbonBtn}
-                disabled={!checkText}
-                onClick={() => {
-                  void (async () => {
-                    try {
-                      const firstLine = checkText.trim().split('\n').find(l => l.trim()) ?? 'Essay';
-                      const { generateDocx } = await import('@/lib/export/docx');
-                      const blob = await generateDocx({ title: firstLine.slice(0, 60), content: checkText });
-                      const url = URL.createObjectURL(blob);
-                      Object.assign(document.createElement('a'), { href: url, download: 'essay.docx' }).click();
-                      URL.revokeObjectURL(url);
-                      toast('Word document downloaded', 'success');
-                    } catch { toast('Could not export to Word', 'error'); }
-                  })();
-                }}
-                title="Download essay as Word document"
-              >
-                <span className={styles.ribbonIcon}>📄</span>Word
-              </button>
-              <button className={styles.ribbonBtn} disabled={!hasWriterResult || writerSavedLib} onClick={() => void handleSaveWriter()}>
-                <span className={styles.ribbonIcon}>📚</span>{writerSavedLib ? 'Saved' : 'Save'}
-              </button>
-              <button className={styles.ribbonBtn} disabled={!checkText} onClick={() => { setCheckText(''); clearWriterResults(); }}>
-                <span className={styles.ribbonIcon}>🗑️</span>Clear
-              </button>
-            </div>
-            <div className={styles.ribbonDivider} />
-            <div className={styles.ribbonGroup}>
-              <span className={styles.ribbonLabel}>BUILD</span>
-              <button
-                className={styles.ribbonBtn}
-                disabled={!checkText.trim()}
-                onClick={sendDraftToBuild}
-                title="Use this text as the basis for a report in Build Report"
-              >
-                <span className={styles.ribbonIcon}>📋</span>Send to Build
-              </button>
-            </div>
-            {sourceLabel && (
-              <>
-                <div className={styles.ribbonDivider} />
-                <div className={styles.ribbonGroup}>
-                  <span className={styles.ribbonLabel}>SOURCE</span>
-                  <span className={styles.ribbonContext}>
-                    📄 {sourceLabel.slice(0, 32)}{sourceLabel.length > 32 ? '…' : ''}
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Document body */}
-          <div className={styles.wordBody}>
-            <div className={styles.wordPageWrap}>
-              <div className={styles.wordPage}>
-                <textarea
-                  className={styles.wordEditor}
-                  value={checkText}
-                  onChange={e => setCheckText(e.target.value)}
-                  placeholder={`Paste or type your essay, report, or paragraph here…\n\nScholar Hub checks grammar, style, clarity and tone — like Grammarly.${fileText ? '\n\n(File loaded — auto-filled from your document.)' : ''}`}
-                  spellCheck
-                />
-              </div>
-            </div>
-
-            {/* Grammarly-style feedback panel */}
-            {hasWriterResult && (
-              <div className={styles.wordFeedback}>
-
-                {/* Score gauge */}
-                {checkScore !== null && (
-                  <div className={styles.wfScoreRow}>
-                    <div
-                      className={styles.wfScoreRing}
-                      style={{ background: `conic-gradient(${scoreColor(checkScore)} ${checkScore}%, var(--bg-inset, #f1f5f9) 0%)` }}
-                    >
-                      <div className={styles.wfScoreInner} style={{ color: scoreColor(checkScore) }}>
-                        {checkScore}
-                      </div>
-                    </div>
-                    <div className={styles.wfScoreMeta}>
-                      <strong style={{ color: scoreColor(checkScore) }}>{scoreLabel(checkScore)}</strong>
-                      <span className={styles.wfSummary}>{checkSummary}</span>
-                    </div>
-                    <button
-                      className={styles.iconBtn}
-                      style={{ marginLeft: 'auto', alignSelf: 'flex-start' }}
-                      onClick={clearWriterResults}
-                    >✕</button>
-                  </div>
-                )}
-
-                {/* Category filter tabs */}
-                {checkSuggs.length > 0 && (
-                  <div className={styles.wfFilterRow}>
-                    {(['all', 'grammar', 'style', 'clarity', 'tone'] as FilterType[]).map(f => {
-                      const cnt = f === 'all' ? activeSuggs.length : countByType(f as SuggType);
-                      if (f !== 'all' && cnt === 0) return null;
-                      const meta = f !== 'all' ? SUGG_TYPE_META[f as SuggType] : null;
-                      return (
-                        <button
-                          key={f}
-                          className={`${styles.wfFilterBtn} ${suggFilter === f ? styles.wfFilterBtnActive : ''}`}
-                          style={suggFilter === f && meta ? { borderColor: meta.color, color: meta.color, background: meta.bg } : {}}
-                          onClick={() => setSuggFilter(f)}
-                        >
-                          {meta?.icon ?? '📋'} {f === 'all' ? 'All' : meta?.label}
-                          {cnt > 0 && <span className={styles.wfFilterCount}>{cnt}</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Suggestion cards */}
-                {filteredSuggs.length > 0 ? (
-                  <div className={styles.wfSuggList}>
-                    {filteredSuggs.map(sug => {
-                      const meta = SUGG_TYPE_META[sug.type];
-                      return (
-                        <div key={sug.id} className={styles.wfSuggCard} style={{ borderLeft: `3px solid ${meta.color}` }}>
-                          <div className={styles.wfSuggHeader}>
-                            <span className={styles.wfSuggBadge} style={{ color: meta.color, background: meta.bg }}>
-                              {meta.icon} {meta.label}
-                            </span>
-                            <button className={styles.wfDismissBtn} onClick={() => setDismissed(p => new Set([...p, sug.id]))} title="Dismiss">✕</button>
-                          </div>
-                          <div className={styles.wfSuggBody}>
-                            <div className={styles.wfSuggDiff}>
-                              <span className={styles.wfSuggOriginal}>{sug.original}</span>
-                              <span className={styles.wfSuggArrow}>→</span>
-                              <span className={styles.wfSuggNew}>{sug.suggestion}</span>
-                            </div>
-                            <p className={styles.wfSuggReason}>{sug.reason}</p>
-                          </div>
-                          <button className={styles.wfApplyBtn} onClick={() => applySuggestion(sug)}>Apply</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : activeSuggs.length === 0 && checkSuggs.length > 0 ? (
-                  <div className={styles.wfAllClear}>
-                    <span>✅</span>
-                    <p>All suggestions applied or dismissed!</p>
-                    {!writerSavedLib && (
-                      <button className={styles.btnSecondary} onClick={() => void handleSaveWriter()}>📚 Save to Library</button>
-                    )}
-                  </div>
-                ) : null}
-
-                {/* Legacy fallback */}
-                {legacyResult && (
-                  <div className={styles.feedbackBody}>
-                    <pre className={styles.feedbackText}>{legacyResult}</pre>
-                  </div>
-                )}
-
-                {/* Source actions */}
-                {sourceBrief && (
-                  <div className={styles.feedbackFooter}>
-                    <span className={styles.sectionLabel}>Save from source</span>
-                    <div className={styles.chipRow}>
-                      <button className={styles.actionChip} disabled={sourceActionLoading !== null} onClick={() => onSourceAction('notes')}>📝 Notes</button>
-                      <button className={styles.actionChip} disabled={sourceActionLoading !== null} onClick={() => onSourceAction('quiz')}>🧪 Quiz</button>
-                      <button className={styles.actionChip} disabled={sourceActionLoading !== null} onClick={() => onSourceAction('flashcards')}>🗂️ Review Set</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Status bar */}
-          <div className={styles.wordStatusBar}>
-            <span className={styles.statusItem}>Words: <strong>{writerWordCount.toLocaleString()}</strong></span>
-            <span className={styles.statusPipe}>|</span>
-            <span className={styles.statusItem}>Characters: <strong>{writerCharCount.toLocaleString()}</strong></span>
-            <span className={styles.statusPipe}>|</span>
-            {checkScore !== null ? (
-              <span className={styles.statusItem} style={{ color: scoreColor(checkScore) }}>
-                ✔ Score: <strong>{checkScore}/100</strong> — {scoreLabel(checkScore)}
-                {activeSuggs.length > 0 && ` · ${activeSuggs.length} suggestion${activeSuggs.length !== 1 ? 's' : ''}`}
-              </span>
-            ) : (
-              <span className={`${styles.statusItem} ${hasWriterResult ? styles.statusGood : ''}`}>
-                {checkLoading ? '⏳ Checking…' : hasWriterResult ? '✔ Feedback ready' : '● Ready'}
-              </span>
-            )}
-            {sourceLabel && (
-              <>
-                <span className={styles.statusPipe}>|</span>
-                <span className={styles.statusItem}>
-                  Source: <strong>{sourceLabel.slice(0, 28)}{sourceLabel.length > 28 ? '…' : ''}</strong>
-                </span>
-              </>
-            )}
-          </div>
-        </div>
+        <WriteCheckPanel
+          checkLoading={checkLoading}
+          checkText={checkText}
+          hasWriterResult={hasWriterResult}
+          writerSavedLib={writerSavedLib}
+          activeSuggs={activeSuggs}
+          sourceLabel={sourceLabel}
+          writerWordCount={writerWordCount}
+          writerCharCount={writerCharCount}
+          checkScore={checkScore}
+          checkSummary={checkSummary}
+          checkSuggs={checkSuggs}
+          suggFilter={suggFilter}
+          legacyResult={legacyResult}
+          sourceBrief={sourceBrief}
+          sourceActionLoading={sourceActionLoading}
+          onCheckTextChange={setCheckText}
+          onCheckWork={() => void handleCheckWork()}
+          onApplyAllSuggs={applyAllSuggs}
+          onCopy={() => void navigator.clipboard.writeText(checkText).then(() => toast('Copied!', 'success'))}
+          onExportWord={() => {
+            void (async () => {
+              try {
+                const firstLine = checkText.trim().split('\n').find(l => l.trim()) ?? 'Essay';
+                const { generateDocx } = await import('@/lib/export/docx');
+                const blob = await generateDocx({ title: firstLine.slice(0, 60), content: checkText });
+                const url = URL.createObjectURL(blob);
+                Object.assign(document.createElement('a'), { href: url, download: 'essay.docx' }).click();
+                URL.revokeObjectURL(url);
+                toast('Word document downloaded', 'success');
+              } catch {
+                toast('Could not export to Word', 'error');
+              }
+            })();
+          }}
+          onSaveWriter={() => void handleSaveWriter()}
+          onClearWriter={() => { setCheckText(''); clearWriterResults(); }}
+          onSendDraftToBuild={sendDraftToBuild}
+          onClearWriterResults={clearWriterResults}
+          onDismissSuggestion={(id) => setDismissed(prev => new Set([...prev, id]))}
+          onApplySuggestion={applySuggestion}
+          onFilterChange={setSuggFilter}
+          onSourceAction={onSourceAction}
+        />
       )}
 
     </div>

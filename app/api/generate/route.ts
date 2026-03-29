@@ -186,12 +186,20 @@ function buildPrompt(mode: AllModes, text: string, options?: Record<string, unkn
 /** Just the user instruction (used for Ollama chat messages) */
 function buildUserPrompt(mode: AllModes, text: string, options?: Record<string, unknown>): string {
   const count = (options?.count as number | undefined) ?? 5;
+  const noteStyle = typeof options?.noteStyle === 'string' ? options.noteStyle : 'study';
+  const noteInstruction = noteStyle === 'summary'
+    ? 'Create a concise summary sheet with a short overview, key bullets, and a final takeaway section.'
+    : noteStyle === 'revision'
+      ? 'Create a revision sheet with definitions, quick-recall prompts, and likely exam cues.'
+      : noteStyle === 'cornell'
+        ? 'Create Cornell-style notes with cue questions, detailed notes, and a short summary.'
+        : 'Create structured study notes with headings, key bullets, and memorable takeaways.';
 
   const instructions: Record<AllModes, string> = {
     summarize:  `Summarize the following study material clearly and concisely:\n\n${text}`,
     explain:    `Explain the following concept or text clearly for a student, with a plain-language explanation and one practical example:\n\n${text}`,
     rephrase:   `Rephrase the following text in simpler, clearer language for a student:\n\n${text}`,
-    notes:      `Extract key study notes as bullet points from:\n\n${text}`,
+    notes:      `${noteInstruction}\n\nUse this study material:\n\n${text}`,
     quiz:       `Create ${count} short-answer quiz questions (with answers) from:\n\n${text}`,
     mcq:        `Create ${count} multiple-choice questions (4 options each, mark the correct one with ✓) from:\n\n${text}`,
     flashcards: `Create ${count} flashcard pairs formatted as "Front: <concept> | Back: <explanation>" from:\n\n${text}`,
