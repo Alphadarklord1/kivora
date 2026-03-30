@@ -4,10 +4,15 @@ import { studyPlans } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
-import { databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
+import { betaReadFallback, databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
+import { isGuestModeEnabled } from '@/lib/runtime/mode';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
+}
+
+function isEphemeralGuest(userId: string | null | undefined) {
+  return userId === 'guest' || userId === 'local-demo-user' || Boolean(userId?.startsWith('guest:'));
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -19,6 +24,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const userId = await getUserId(request);
   if (!userId) {
     return unauthorized(request, requestId);
+  }
+  if (isGuestModeEnabled() && isEphemeralGuest(userId)) {
+    return betaReadFallback(null, { 'x-kivora-fallback': 'study-plan-guest' });
   }
 
   const { id } = await params;

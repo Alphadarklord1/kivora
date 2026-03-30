@@ -1,7 +1,7 @@
 import localManifest from '@/electron/runtime/model-manifest.json';
 
 export const REPO_RELEASES_URL = 'https://github.com/Alphadarklord1/kivora/releases';
-export const FALLBACK_TAG = process.env.NEXT_PUBLIC_STUDYPILOT_RELEASE_TAG || 'v1.2.0-beta.1';
+export const FALLBACK_TAG = process.env.NEXT_PUBLIC_STUDYPILOT_RELEASE_TAG || 'v1.0.0';
 export const FALLBACK_RELEASE_URL = `https://github.com/Alphadarklord1/kivora/releases/tag/${FALLBACK_TAG}`;
 export const GITHUB_API_LATEST_RELEASE = 'https://api.github.com/repos/Alphadarklord1/kivora/releases/latest';
 
@@ -31,19 +31,19 @@ export type LocalManifestModel = {
 export const MODEL_COPY: Record<string, { label: string; summary: string; bundled: boolean; fit: string }> = {
   mini: {
     label: 'Mini Model',
-    summary: 'Included in desktop builds for immediate offline use on lighter hardware.',
+    summary: 'Bundled in the Mac 1.0 desktop path for immediate offline use on lighter hardware.',
     bundled: true,
     fit: '8 GB RAM',
   },
   balanced: {
     label: 'Balanced Model',
-    summary: 'Best default for stronger summaries, quizzes, and study planning on mainstream laptops.',
+    summary: 'Optional post-install download for stronger summaries, quizzes, and study planning on mainstream laptops.',
     bundled: false,
     fit: '16 GB RAM',
   },
   pro: {
     label: 'Pro Model',
-    summary: 'Largest optional model for users who want better quality on higher-memory machines.',
+    summary: 'Largest optional post-install model for users who want better quality on higher-memory machines.',
     bundled: false,
     fit: '24 GB RAM',
   },

@@ -6,6 +6,7 @@ import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
 import { normalizeTheme } from '@/lib/settings/theme';
 import { users } from '@/lib/db/schema';
+import { isGuestModeEnabled } from '@/lib/runtime/mode';
 
 function buildDefaultSettings(userId: string) {
   return {
@@ -20,6 +21,10 @@ function buildDefaultSettings(userId: string) {
   };
 }
 
+function isEphemeralGuest(userId: string) {
+  return userId === 'guest' || userId === 'local-demo-user' || userId.startsWith('guest:');
+}
+
 export async function GET(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
@@ -30,6 +35,10 @@ export async function GET(request: NextRequest) {
         reason: 'Authentication required',
         requestId,
       });
+    }
+
+    if (isGuestModeEnabled() && isEphemeralGuest(userId)) {
+      return NextResponse.json(buildDefaultSettings(userId));
     }
 
     const settings = await db
@@ -70,6 +79,9 @@ export async function GET(request: NextRequest) {
       });
   } catch (error) {
     console.error(`[Settings][${requestId}] GET failed`, error);
+    if (isGuestModeEnabled()) {
+      return NextResponse.json(buildDefaultSettings('local-demo-user'));
+    }
     return apiError(500, {
       errorCode: 'SETTINGS_FETCH_FAILED',
       reason: 'Failed to get settings',
@@ -81,6 +93,7 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   const requestId = createRequestId(request);
+  let bodyData: Record<string, unknown> = {};
   try {
     const userId = await getUserId(request);
 
@@ -92,7 +105,18 @@ export async function PUT(request: NextRequest) {
       });
     }
 
+    if (isGuestModeEnabled() && isEphemeralGuest(userId)) {
+      return NextResponse.json({
+        ...buildDefaultSettings(userId),
+        theme: 'light',
+        fontSize: '1',
+        lineHeight: '1.5',
+        density: 'normal',
+      });
+    }
+
     const body = await request.json();
+    bodyData = typeof body === 'object' && body ? body as Record<string, unknown> : {};
     const { theme, fontSize, lineHeight, density } = body;
     const normalizedTheme = theme === undefined ? undefined : normalizeTheme(theme);
 
@@ -169,6 +193,15 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(updated);
   } catch (error) {
     console.error(`[Settings][${requestId}] PUT failed`, error);
+    if (isGuestModeEnabled()) {
+      return NextResponse.json({
+        ...buildDefaultSettings('local-demo-user'),
+        theme: normalizeTheme(typeof bodyData.theme === 'string' ? bodyData.theme : 'light'),
+        fontSize: typeof bodyData.fontSize === 'string' ? bodyData.fontSize : '1',
+        lineHeight: typeof bodyData.lineHeight === 'string' ? bodyData.lineHeight : '1.5',
+        density: typeof bodyData.density === 'string' ? bodyData.density : 'normal',
+      });
+    }
     return apiError(500, {
       errorCode: 'SETTINGS_UPDATE_FAILED',
       reason: 'Failed to update settings',

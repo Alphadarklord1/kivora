@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import * as math from 'mathjs';
@@ -10,9 +11,16 @@ import { MathText } from '@/components/math/MathRenderer';
 import { MATH_CATEGORIES, MATH_CATEGORY_ORDER } from '@/lib/math/catalog';
 import type { MathCategoryId } from '@/lib/math/types';
 import { isCustomFuncDefinition, normalizeGraphExpression, buildSharedScope } from '@/lib/math/graph-utils';
-import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
-import { MatlabLab } from '@/components/tools/MatlabLab';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
+
+const VisualAnalyzer = dynamic(
+  () => import('@/components/tools/VisualAnalyzer').then((mod) => mod.VisualAnalyzer),
+  { ssr: false, loading: () => <div className="tool-loading">Loading visual analyzer…</div> },
+);
+const MatlabLab = dynamic(
+  () => import('@/components/tools/MatlabLab').then((mod) => mod.MatlabLab),
+  { ssr: false, loading: () => <div className="tool-loading">Loading MATLAB Lab…</div> },
+);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

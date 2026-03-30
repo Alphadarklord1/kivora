@@ -13,8 +13,8 @@ test('release consistency passes for matching tag and assets', () => {
     process.execPath,
     [
       scriptPath,
-      '--tag=v1.2.0-beta.1',
-      '--assets=Kivora-1.2.0-beta.1-arm64.dmg,Kivora-1.2.0-beta.1-arm64-mac.zip,model-manifest.json,SHA256SUMS.txt,qwen2.5-1.5b-instruct-q4_k_m.gguf,qwen2.5-3b-instruct-q4_k_m.gguf,qwen2.5-7b-instruct-q4_k_m.gguf',
+      '--tag=v1.0.0',
+      '--assets=Kivora-1.0.0-arm64.dmg,Kivora-1.0.0-arm64-mac.zip,model-manifest.json,SHA256SUMS.txt,qwen2.5-1.5b-instruct-q4_k_m.gguf,qwen2.5-3b-instruct-q4_k_m.gguf,qwen2.5-7b-instruct-q4_k_m.gguf',
     ],
     { encoding: 'utf8' }
   );

@@ -1,4 +1,4 @@
-Kivora is a desktop-primary AI study workspace with a supported web beta, guest-by-default access, offline-first generation, and optional cloud fallback.
+Kivora is a desktop-first AI study workspace built for stable offline Mac use, with a supported web beta companion, guest-by-default access, and optional cloud fallback.
 
 The final product is built around three pillars:
 
@@ -9,9 +9,9 @@ The final product is built around three pillars:
 ## Product Status
 
 - Desktop app is the primary supported runtime.
-- Web remains available as a supported beta.
+- Web remains available as a supported beta companion.
 - Guest mode is enabled by default unless `AUTH_REQUIRED=1`.
-- Encryption password flows are intentionally disabled for the current beta.
+- Encryption password flows are intentionally disabled for the current 1.0 cycle.
 
 ## Local Development
 
@@ -115,8 +115,8 @@ Use this guide for bundled local AI models and installer profiles:
 Quick commands:
 
 ```bash
-npm run models:prepare:balanced
-npm run electron:build:mac:balanced
+npm run models:prepare:laptop
+npm run electron:build:mac
 npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/kivora --models-dir=~/Kivora-model-store
 ```
 
@@ -151,11 +151,16 @@ npm run test:beta
 npm run build
 ```
 
-## Supported Stable-Beta Surfaces
+## 1.0 Product Surface
 
+- Primary pillars:
 - `/workspace`
 - `/coach`
 - `/math`
+
+- Supported secondary tools:
+- `/library`
+- `/planner`
 - `/analytics`
 - `/sharing`
 - `/settings`
@@ -164,16 +169,17 @@ npm run build
 
 Compatibility redirects still exist for older links such as `/tools`, `/study`, `/decks`, `/models`, `/report`, and `/downloads`.
 
-Standalone audio navigation and Office-to-PDF visual conversion are intentionally cut from the beta surface until their dependencies are stable.
+Standalone audio navigation and Office-to-PDF visual conversion are intentionally cut from the 1.0 surface until their dependencies are stable.
 
 ## Release Flow
 
 1. Run `npm run test:beta`
 2. Run `npm run build`
-3. Build desktop artifacts
-4. Publish desktop release assets
-5. Publish optional model assets with `model-manifest.json` and `SHA256SUMS.txt`
-6. Run release consistency validation before announcing the tag
+3. Stage bundled Mini with `npm run models:prepare:laptop`
+4. Build desktop artifacts
+5. Publish desktop release assets
+6. Publish optional model assets with `model-manifest.json` and `SHA256SUMS.txt`
+7. Run release consistency validation before announcing the tag
 
 Detailed runtime/model docs:
 

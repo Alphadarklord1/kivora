@@ -4,6 +4,24 @@ import { libraryItems } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/session';
 
+// GET /api/library/[itemId]
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
+  if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+
+  const { itemId } = await params;
+  const item = await db.query.libraryItems.findFirst({
+    where: and(eq(libraryItems.id, itemId), eq(libraryItems.userId, userId)),
+  });
+
+  if (!item) {
+    return NextResponse.json({ error: 'Library item not found.' }, { status: 404 });
+  }
+
+  return NextResponse.json(item);
+}
+
 // PATCH /api/library/[itemId]
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
   if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });

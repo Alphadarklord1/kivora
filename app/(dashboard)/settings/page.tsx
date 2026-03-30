@@ -1151,7 +1151,7 @@ export default function SettingsPage() {
           <div className={styles.downloadPanel}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>AI routing</div>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginBottom: 14 }}>
-              Choose whether Kivora should prefer local privacy, cloud convenience, or automatic fallback. Desktop downloads are designed to include Mini locally by default, even before any optional model installs.
+              Choose whether Kivora should prefer local privacy, cloud convenience, or automatic fallback. For the 1.0 Mac release, Mini must be bundled before we promise first-launch offline AI.
             </p>
             <AiRuntimeControls compact />
           </div>
@@ -1177,12 +1177,12 @@ export default function SettingsPage() {
               <div className={styles.downloadGrid}>
                 <DownloadCard
                   title="macOS Apple Silicon"
-                  hint="Primary desktop download. Mini is meant to be bundled for immediate offline-first local AI."
+                  hint="Primary 1.0 desktop download. Mini is required in the bundle before we claim first-launch offline AI."
                   primary={downloads?.macAsset ? { label: 'Download DMG', href: downloads.macAsset.browser_download_url } : null}
                 />
                 <DownloadCard
                   title="Windows x64"
-                  hint="Installer first. Mini is meant to be bundled so local AI works from first launch."
+                  hint="Same local-model system, with optional heavier models after install. First-launch offline AI is currently guaranteed on the Mac 1.0 path."
                   primary={downloads?.windowsInstaller ? { label: 'Download installer', href: downloads.windowsInstaller.browser_download_url } : null}
                   secondary={downloads?.windowsPortable ? { label: 'Portable EXE', href: downloads.windowsPortable.browser_download_url } : null}
                 />

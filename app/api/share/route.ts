@@ -5,6 +5,12 @@ import { eq, and, or, desc } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
+import { betaReadFallback } from '@/lib/api/runtime-guards';
+import { isGuestModeEnabled } from '@/lib/runtime/mode';
+
+function isEphemeralGuest(userId: string) {
+  return userId === 'guest' || userId === 'local-demo-user' || userId.startsWith('guest:');
+}
 
 function generateShareToken(): string {
   return randomBytes(16).toString('hex');
@@ -22,6 +28,9 @@ export async function GET(request: NextRequest) {
     // Guest / unauthenticated — return empty list gracefully (not an error)
     if (!userId) {
       return NextResponse.json([]);
+    }
+    if (isGuestModeEnabled() && isEphemeralGuest(userId)) {
+      return betaReadFallback([]);
     }
 
     const { searchParams } = new URL(request.url);
@@ -104,6 +113,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(enrichedShares);
   } catch (error) {
     console.error(`[Share][${requestId}] GET failed`, error);
+    if (isGuestModeEnabled()) return betaReadFallback([]);
     return apiError(500, {
       errorCode: 'SHARES_FETCH_FAILED',
       reason: 'Failed to fetch shares',

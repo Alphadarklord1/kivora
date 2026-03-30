@@ -1,6 +1,6 @@
-# Kivora Offline Model Bundle Guide
+# Kivora 1.0 Offline Model Bundle Guide
 
-This is the quickest reliable way to bundle offline AI models into the desktop app.
+This is the reliable 1.0 path for bundling offline AI models into the desktop app.
 
 ## 1) Keep source models in one place
 
@@ -21,7 +21,7 @@ You can also use another folder by setting:
 ## 2) Pick installer profile
 
 - `npm run models:prepare:laptop`
-  - Bundles `mini` model only (smallest installer).
+  - Bundles `mini` model only and is the required Mac 1.0 profile.
 - `npm run models:prepare:balanced`
   - Bundles `mini + 3B` (good default for most users).
 - `npm run models:prepare:pc`
@@ -33,10 +33,11 @@ These commands stage files into:
 
 ## 3) Build installer
 
-- Fast path (recommended):
-  - `npm run electron:build:mac:balanced`
-- Or explicit:
+- Fast path for 1.0 (recommended):
+  - `npm run models:prepare:laptop`
   - `npm run electron:build:mac`
+- Or explicit:
+  - `npm run electron:build:mac:laptop`
 
 Output:
 
@@ -46,13 +47,13 @@ Output:
 
 - On first launch, users see a model chooser wizard (installer-like flow in app).
 - Kivora auto-detects device profile (laptop/pc).
-- Mini works immediately offline.
+- Mini works immediately offline only when it has been bundled before packaging.
 - Balanced/Pro can be installed later from **Settings → AI Models**.
 - If a selected model is missing, Kivora falls back safely.
 
 ## 5) Release checklist for optional downloads
 
-For hybrid bundle mode (Mini bundled, bigger models optional):
+For the 1.0 desktop release story (Mini bundled, bigger models optional):
 
 1. Build and publish app installer.
 2. Publish model assets + manifest + checksums in one command:
@@ -70,7 +71,7 @@ For hybrid bundle mode (Mini bundled, bigger models optional):
    - `npm run models:checksums:validate -- --checksums=electron/runtime/SHA256SUMS.txt --manifest=electron/runtime/model-manifest.json --models-dir=<path-to-gguf-files>`
 5. Verify release naming consistency (includes required model assets/checksum files):
    - `npm run release:verify -- --tag=vX.Y.Z --assets='<comma-separated release asset list>'`
-6. Smoke test on clean machine: install app, open wizard/settings, install Balanced model.
+6. Smoke test on clean machine: install app, confirm bundled Mini is detected offline, then optionally install Balanced model.
 
 CI also enforces these checks in `.github/workflows/beta-ci.yml` and `.github/workflows/model-manifest.yml`.
 

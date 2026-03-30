@@ -24,6 +24,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, reason: 'Invalid guest session' }, { status: 400 });
   }
 
-  await deleteGuestSessionData(guestSessionId);
+  try {
+    await deleteGuestSessionData(guestSessionId);
+  } catch {
+    // Local guest cleanup should still succeed even if the remote DB is unavailable.
+  }
   return NextResponse.json({ ok: true });
 }

@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { useToast } from '@/providers/ToastProvider';
 import { useAnalytics, type WeakArea } from '@/hooks/useAnalytics';
 import { InteractiveQuiz } from '@/components/workspace/InteractiveQuiz';
@@ -20,11 +21,26 @@ import { persistDeckLocally, syncDeckToCloud } from '@/lib/srs/deck-utils';
 import type { GeneratedContent } from '@/lib/offline/generate';
 import type { SourceBrief } from '@/lib/coach/source-brief';
 import type { TopicResearchResult } from '@/lib/coach/research';
-import { SourceBriefTab }       from './tabs/SourceBriefTab';
-import { AssignmentWriterTab }  from './tabs/AssignmentWriterTab';
-import { ResearchTab }          from './tabs/ResearchTab';
-import { RecoveryTab }          from './tabs/RecoveryTab';
 import styles from '@/app/(dashboard)/coach/page.module.css';
+
+const tabLoadingFallback = <div className="tool-loading">Loading section…</div>;
+
+const SourceBriefTab = dynamic(
+  () => import('./tabs/SourceBriefTab').then((mod) => mod.SourceBriefTab),
+  { ssr: false, loading: () => tabLoadingFallback },
+);
+const AssignmentWriterTab = dynamic(
+  () => import('./tabs/AssignmentWriterTab').then((mod) => mod.AssignmentWriterTab),
+  { ssr: false, loading: () => tabLoadingFallback },
+);
+const ResearchTab = dynamic(
+  () => import('./tabs/ResearchTab').then((mod) => mod.ResearchTab),
+  { ssr: false, loading: () => tabLoadingFallback },
+);
+const RecoveryTab = dynamic(
+  () => import('./tabs/RecoveryTab').then((mod) => mod.RecoveryTab),
+  { ssr: false, loading: () => tabLoadingFallback },
+);
 
 type CoachPanel   = 'review' | 'manage';
 type CoachSection = 'research' | 'brief' | 'write' | 'recovery';

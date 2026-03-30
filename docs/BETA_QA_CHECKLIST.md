@@ -1,6 +1,6 @@
-# Kivora Stable Beta QA Checklist
+# Kivora 1.0 Desktop QA Checklist
 
-Run this checklist before creating a beta release tag.
+Run this checklist before creating a 1.0 desktop release tag.
 
 ## Core reliability
 
@@ -53,6 +53,8 @@ Run this checklist before creating a beta release tag.
 
 - [ ] `npm run build`
 - [ ] `npm run test:beta`
+- [ ] `npm run models:prepare:laptop`
+- [ ] `node scripts/verify-desktop-bundle.js --platform=mac`
 - [ ] `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/kivora --allow-placeholders=1`
 - [ ] `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/kivora --models-dir=~/Kivora-model-store`
 - [ ] `npm run release:verify -- --tag=vX.Y.Z --assets='<comma-separated asset names>'`

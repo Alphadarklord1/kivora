@@ -3,8 +3,9 @@ import { and, desc, eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { files } from '@/lib/db/schema';
-import { getUserId } from '@/lib/auth/session';
+import { getUserId, GUEST_USER_ID } from '@/lib/auth/session';
 import { uploadFileToSupabaseStorage } from '@/lib/supabase/storage';
+import { betaReadFallback } from '@/lib/api/runtime-guards';
 
 // Allowed mime types for uploaded study materials
 const ALLOWED_MIME_TYPES = new Set([
@@ -24,6 +25,10 @@ const ALLOWED_MIME_TYPES = new Set([
 ]);
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+
+function isEphemeralGuest(userId: string | null | undefined) {
+  return userId === GUEST_USER_ID || userId === 'local-demo-user' || Boolean(userId?.startsWith('guest:'));
+}
 
 /** Strip path traversal and null bytes from a filename */
 function sanitizeFilename(name: string): string {
@@ -72,9 +77,9 @@ async function parseCreateBody(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
+  if (!isDatabaseConfigured) return betaReadFallback([]);
   const userId = await getUserId();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+  if (!userId || isEphemeralGuest(userId)) return betaReadFallback([]);
 
   const { searchParams } = new URL(req.url);
   const folderId = searchParams.get('folderId');
@@ -91,18 +96,66 @@ export async function GET(req: NextRequest) {
         ...(topicId ? [eq(files.topicId, topicId)] : []),
       ];
 
-  const rows = await db.query.files.findMany({
-    where: and(...conditions),
-    orderBy: [desc(files.createdAt)],
-  });
+  try {
+    const rows = await db.query.files.findMany({
+      where: and(...conditions),
+      orderBy: [desc(files.createdAt)],
+    });
 
-  return NextResponse.json(rows);
+    return NextResponse.json(rows);
+  } catch (error) {
+    console.error('[files] GET failed', error);
+    return betaReadFallback([]);
+  }
 }
 
 export async function POST(req: NextRequest) {
-  if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
+  if (!isDatabaseConfigured) {
+    const body = await parseCreateBody(req);
+    if (!body.folderId || !body.name || !body.type) {
+      return NextResponse.json({ error: 'folderId, name, and type are required.' }, { status: 400 });
+    }
+    return NextResponse.json({
+      id: body.id,
+      userId: 'local-demo-user',
+      folderId: body.folderId,
+      topicId: body.topicId,
+      name: sanitizeFilename(body.name.trim()),
+      type: body.type,
+      content: body.content,
+      localBlobId: body.localBlobId,
+      mimeType: body.upload?.type || body.mimeType,
+      fileSize: body.upload?.size || body.fileSize,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      storageBacked: false,
+      localOnly: true,
+    }, { status: 201 });
+  }
   const userId = await getUserId();
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+  if (isEphemeralGuest(userId)) {
+    const body = await parseCreateBody(req);
+    if (!body.folderId || !body.name || !body.type) {
+      return NextResponse.json({ error: 'folderId, name, and type are required.' }, { status: 400 });
+    }
+    return NextResponse.json({
+      id: body.id,
+      userId,
+      folderId: body.folderId,
+      topicId: body.topicId,
+      name: sanitizeFilename(body.name.trim()),
+      type: body.type,
+      content: body.content,
+      localBlobId: body.localBlobId,
+      mimeType: body.upload?.type || body.mimeType,
+      fileSize: body.upload?.size || body.fileSize,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      storageBacked: false,
+      localOnly: true,
+    }, { status: 201 });
+  }
 
   const body = await parseCreateBody(req);
   if (!body.folderId || !body.name || !body.type) {
@@ -126,7 +179,6 @@ export async function POST(req: NextRequest) {
     // Sanitize filename
     const safeFileName = sanitizeFilename(body.upload.name || body.name || 'upload');
 
-    let storageError = false;
     try {
       const stored = await uploadFileToSupabaseStorage({
         userId,

@@ -1088,6 +1088,13 @@ function RetentionTab({ retentionByInterval, deckStats, activity }: {
   deckStats: DeckStats;
   activity: Activity | null;
 }) {
+  const overallRetention = Number.isFinite(deckStats?.overallRetention) ? deckStats.overallRetention : 0;
+  const cardsMastered = Number.isFinite(deckStats?.cardsMastered) ? deckStats.cardsMastered : 0;
+  const totalCards = Number.isFinite(deckStats?.totalCards) ? deckStats.totalCards : 0;
+  const dueCardsTotal = Number.isFinite(deckStats?.dueCardsTotal) ? deckStats.dueCardsTotal : 0;
+  const reviewedToday = Number.isFinite(deckStats?.reviewedToday) ? deckStats.reviewedToday : 0;
+  const dailyGoal = Number.isFinite(deckStats?.dailyGoal) ? deckStats.dailyGoal : 20;
+  const cardsStillLearning = Math.max(0, totalCards - cardsMastered);
   const hasData = retentionByInterval.some(b => b.cardCount > 0);
   const maxCards = Math.max(...retentionByInterval.map(b => b.cardCount), 1);
 
@@ -1169,42 +1176,42 @@ function RetentionTab({ retentionByInterval, deckStats, activity }: {
           <div className="rsum-row">
             <span className="rsum-label">Overall Retention</span>
             <span className="rsum-val" style={{
-              color: (deckStats.overallRetention ?? 0) >= 80 ? '#52b788'
-                : (deckStats.overallRetention ?? 0) >= 60 ? '#4f86f7' : '#e05252'
+              color: overallRetention >= 80 ? '#52b788'
+                : overallRetention >= 60 ? '#4f86f7' : '#e05252'
             }}>
-              {deckStats.overallRetention ?? 0}%
+              {overallRetention}%
             </span>
           </div>
           <div className="rsum-bar-bg">
             <div className="rsum-bar-fill" style={{
-              width: `${deckStats.overallRetention ?? 0}%`,
-              background: (deckStats.overallRetention ?? 0) >= 80 ? '#52b788'
-                : (deckStats.overallRetention ?? 0) >= 60 ? '#4f86f7' : '#e05252'
+              width: `${overallRetention}%`,
+              background: overallRetention >= 80 ? '#52b788'
+                : overallRetention >= 60 ? '#4f86f7' : '#e05252'
             }} />
           </div>
           <p className="rsum-note">
-            {(deckStats.overallRetention ?? 0) >= 85
+            {overallRetention >= 85
               ? 'Excellent! Your recall is above the 85% ideal threshold.'
-              : (deckStats.overallRetention ?? 0) >= 70
+              : overallRetention >= 70
                 ? 'Good retention. Review cards more frequently to reach 85%.'
                 : 'Focus on daily reviews to improve retention.'}
           </p>
 
           <div className="rsum-stats">
             <div className="rsum-stat">
-              <span className="rstat-num">{deckStats.cardsMastered}</span>
+              <span className="rstat-num">{cardsMastered}</span>
               <span className="rstat-desc">Cards mastered (21d+ interval)</span>
             </div>
             <div className="rsum-stat">
-              <span className="rstat-num">{deckStats.totalCards - deckStats.cardsMastered}</span>
+              <span className="rstat-num">{cardsStillLearning}</span>
               <span className="rstat-desc">Still learning</span>
             </div>
             <div className="rsum-stat">
-              <span className="rstat-num">{deckStats.dueCardsTotal}</span>
+              <span className="rstat-num">{dueCardsTotal}</span>
               <span className="rstat-desc">Due for review today</span>
             </div>
             <div className="rsum-stat">
-              <span className="rstat-num">{deckStats.reviewedToday}</span>
+              <span className="rstat-num">{reviewedToday}</span>
               <span className="rstat-desc">Reviewed today</span>
             </div>
           </div>
@@ -1214,12 +1221,12 @@ function RetentionTab({ retentionByInterval, deckStats, activity }: {
       {/* Mastery breakdown donut */}
       <div className="an-card">
         <h3 className="card-title">Card Mastery Breakdown</h3>
-        {deckStats.totalCards === 0 ? (
+        {totalCards === 0 ? (
           <p className="card-empty">No cards yet.</p>
         ) : (() => {
-          const mastered = deckStats.cardsMastered;
-          const total = deckStats.totalCards;
-          const learning = Math.max(0, total - mastered);
+          const mastered = cardsMastered;
+          const total = totalCards;
+          const learning = cardsStillLearning;
           const masteredPct = Math.round((mastered / total) * 100);
           const r = 60; const circ = 2 * Math.PI * r;
           const masteredOffset = circ - (masteredPct / 100) * circ;
@@ -1255,7 +1262,7 @@ function RetentionTab({ retentionByInterval, deckStats, activity }: {
         <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--primary) 6%, var(--bg-surface))' }}>
           <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
             Daily streak: <strong style={{ color: 'var(--text-primary)' }}>{activity?.currentStreak ?? 0} days</strong>
-            {' '}· Reviewed today: <strong style={{ color: 'var(--text-primary)' }}>{deckStats.reviewedToday}/{deckStats.dailyGoal}</strong> cards
+            {' '}· Reviewed today: <strong style={{ color: 'var(--text-primary)' }}>{reviewedToday}/{dailyGoal}</strong> cards
           </p>
         </div>
       </div>

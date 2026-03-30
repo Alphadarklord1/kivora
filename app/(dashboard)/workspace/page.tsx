@@ -1,9 +1,29 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { Suspense, useState, useCallback, useEffect } from 'react';
-import { FolderPanel } from '@/components/folders/FolderPanel';
-import { WorkspacePanel } from '@/components/workspace/WorkspacePanel';
-import { ReportsSidebar } from '@/components/workspace/ReportsSidebar';
+
+const FolderPanel = dynamic(
+  () => import('@/components/folders/FolderPanel').then((mod) => mod.FolderPanel),
+  { ssr: false, loading: () => <div style={{ width: 320, borderRight: '1px solid var(--border-1)', background: 'var(--panel)', minHeight: '100%' }} /> },
+);
+const WorkspacePanel = dynamic(
+  () => import('@/components/workspace/WorkspacePanel').then((mod) => mod.WorkspacePanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: 'var(--text-3)' }}>
+        <div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid var(--border-2)', borderTopColor: 'var(--accent)', animation: 'spin 0.7s linear infinite' }} />
+        <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>Loading workspace…</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    ),
+  },
+);
+const ReportsSidebar = dynamic(
+  () => import('@/components/workspace/ReportsSidebar').then((mod) => mod.ReportsSidebar),
+  { ssr: false },
+);
 
 export default function WorkspacePage() {
   useEffect(() => { document.title = 'Workspace — Kivora'; }, []);
@@ -46,13 +66,7 @@ export default function WorkspacePage() {
         onToggleCollapse={() => setFolderCollapsed(c => !c)}
         onFilesChanged={handleFilesChanged}
       />
-      <Suspense fallback={
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: 'var(--text-3)' }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid var(--border-2)', borderTopColor: 'var(--accent)', animation: 'spin 0.7s linear infinite' }} />
-          <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>Loading workspace…</p>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-      }>
+      <Suspense fallback={null}>
         <WorkspacePanel
           selectedFolder={selectedFolder}
           selectedTopic={selectedTopic}
@@ -64,7 +78,7 @@ export default function WorkspacePage() {
           reportsOpen={reportsOpen}
         />
       </Suspense>
-      <ReportsSidebar open={reportsOpen} onClose={() => setReportsOpen(false)} />
+      {reportsOpen ? <ReportsSidebar open={reportsOpen} onClose={() => setReportsOpen(false)} /> : null}
     </div>
   );
 }
