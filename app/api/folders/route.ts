@@ -4,6 +4,7 @@ import { folders, topics } from '@/lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
 import { getUserId, GUEST_USER_ID } from '@/lib/auth/session';
 import { v4 as uuidv4 } from 'uuid';
+import { betaReadFallback } from '@/lib/api/runtime-guards';
 
 function notReady() {
   return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
@@ -12,23 +13,33 @@ function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 }
 
+function isEphemeralGuest(userId: string | null | undefined) {
+  return userId === GUEST_USER_ID || userId === 'local-demo-user' || Boolean(userId?.startsWith('guest:'));
+}
+
 // GET /api/folders — list all folders (with topics) for the current user
 export async function GET() {
-  if (!isDatabaseConfigured) return notReady();
+  if (!isDatabaseConfigured) return betaReadFallback([]);
   const userId = await getUserId();
-  if (!userId) return unauthorized();
+  if (!userId) return betaReadFallback([]);
+  if (isEphemeralGuest(userId)) return betaReadFallback([]);
 
-  const rows = await db.query.folders.findMany({
-    where: eq(folders.userId, userId),
-    orderBy: [asc(folders.sortOrder), asc(folders.createdAt)],
-    with: {
-      topics: {
-        orderBy: [asc(topics.sortOrder), asc(topics.createdAt)],
+  try {
+    const rows = await db.query.folders.findMany({
+      where: eq(folders.userId, userId),
+      orderBy: [asc(folders.sortOrder), asc(folders.createdAt)],
+      with: {
+        topics: {
+          orderBy: [asc(topics.sortOrder), asc(topics.createdAt)],
+        },
       },
-    },
-  });
+    });
 
-  return NextResponse.json(rows);
+    return NextResponse.json(rows);
+  } catch (error) {
+    console.error('[folders] GET failed', error);
+    return betaReadFallback([]);
+  }
 }
 
 // POST /api/folders — create a new folder

@@ -3,9 +3,9 @@
 Kivora desktop mode expects bundled runtime assets in this directory:
 
 - `model-manifest.json` (tracked fallback metadata used by the app)
-- `models/qwen2.5-1.5b-instruct-q4_k_m.gguf` (Mini, laptop-friendly)
-- `models/qwen2.5-3b-instruct-q4_k_m.gguf` (Balanced default)
-- `models/qwen2.5-7b-instruct-q4_k_m.gguf` (Pro, desktop-class)
+- `models/qwen2.5-1.5b-instruct-q4_k_m.gguf` (Mini, required for the Mac 1.0 bundle)
+- `models/qwen2.5-3b-instruct-q4_k_m.gguf` (Balanced, optional post-install download)
+- `models/qwen2.5-7b-instruct-q4_k_m.gguf` (Pro, optional post-install download)
 - `bin/darwin-arm64/llama-server`
 - `bin/win32-x64/llama-server.exe`
 
@@ -22,6 +22,7 @@ These files are packaged into Electron `extraResources` as:
 - `resources/bin/*`
 
 The Electron installer bundles every model file present under `electron/runtime/models`.
+For the Mac 1.0 release contract, `Mini` must be present before packaging starts.
 If only one model is included, Kivora auto-falls back to that model.
 
 ## Recommended bundle flow
@@ -37,6 +38,7 @@ If only one model is included, Kivora auto-falls back to that model.
      - `npm run electron:build:mac:laptop`
      - `npm run electron:build:mac:balanced`
      - `npm run electron:build:mac:pc`
+   - `electron:build:mac` now fails if bundled `Mini` or the desktop runtime binary is missing.
 4. For release, upload optional models, `model-manifest.json`, and `SHA256SUMS.txt` under the same app version tag.
 5. Recommended one-command publish:
    - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/kivora --models-dir=~/Kivora-model-store`

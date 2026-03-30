@@ -6,6 +6,11 @@ import { getUserId, isDemoGuestEmail } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
 import { deleteSupabaseAuthUser, syncSupabaseAuthUser } from '@/lib/supabase/auth-admin';
 import { deleteFileFromSupabaseStorage } from '@/lib/supabase/storage';
+import { isGuestModeEnabled } from '@/lib/runtime/mode';
+
+function isEphemeralGuest(userId: string) {
+  return userId === 'guest' || userId === 'local-demo-user' || userId.startsWith('guest:');
+}
 
 // GET user account info
 export async function GET(request: NextRequest) {
@@ -17,6 +22,28 @@ export async function GET(request: NextRequest) {
         errorCode: 'UNAUTHORIZED',
         reason: 'Authentication required',
         requestId,
+      });
+    }
+
+    if (isGuestModeEnabled() && isEphemeralGuest(userId)) {
+      return NextResponse.json({
+        id: userId,
+        email: 'demo@local.kivora',
+        name: 'Guest Session',
+        image: null,
+        bio: '',
+        studyInterests: '',
+        createdAt: null,
+        hasPassword: false,
+        twoFactorEnabled: false,
+        supabaseLinked: false,
+        isGuest: true,
+        connectedAccounts: [],
+        stats: {
+          folders: 0,
+          files: 0,
+          libraryItems: 0,
+        },
       });
     }
 
@@ -92,6 +119,27 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error(`[Account][${requestId}] GET failed`, error);
+    if (isGuestModeEnabled()) {
+      return NextResponse.json({
+        id: 'local-demo-user',
+        email: 'demo@local.kivora',
+        name: 'Guest Session',
+        image: null,
+        bio: '',
+        studyInterests: '',
+        createdAt: null,
+        hasPassword: false,
+        twoFactorEnabled: false,
+        supabaseLinked: false,
+        isGuest: true,
+        connectedAccounts: [],
+        stats: {
+          folders: 0,
+          files: 0,
+          libraryItems: 0,
+        },
+      });
+    }
     return apiError(500, {
       errorCode: 'ACCOUNT_FETCH_FAILED',
       reason: 'Failed to get account',

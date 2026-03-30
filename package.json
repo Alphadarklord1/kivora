@@ -1,6 +1,6 @@
 {
   "name": "kivora",
-  "version": "1.2.0-beta.1",
+  "version": "1.0.0",
   "description": "Desktop-first AI study workspace",
   "private": true,
   "main": "electron/main.js",
@@ -28,7 +28,7 @@
     "electron:dev": "STUDYPILOT_DESKTOP_ONLY=1 AUTH_GUEST_MODE=1 concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "demo:local": "STUDYPILOT_DESKTOP_ONLY=1 LOCAL_DEMO_MODE=1 AUTH_GUEST_MODE=1 concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "electron:build": "STUDYPILOT_DESKTOP_ONLY=1 AUTH_GUEST_MODE=1 npm run build:stable && electron-builder",
-    "electron:build:mac": "STUDYPILOT_DESKTOP_ONLY=1 AUTH_GUEST_MODE=1 npm run build:stable && electron-builder --mac --arm64",
+    "electron:build:mac": "npm run desktop:verify:mac-bundle && STUDYPILOT_DESKTOP_ONLY=1 AUTH_GUEST_MODE=1 npm run build:stable && electron-builder --mac --arm64",
     "electron:build:win": "STUDYPILOT_DESKTOP_ONLY=1 AUTH_GUEST_MODE=1 npm run build:stable && electron-builder --win --x64",
     "electron:build:linux": "npm run build:stable && electron-builder --linux",
     "electron:build:all": "npm run build:stable && electron-builder -mwl",
@@ -47,7 +47,8 @@
     "mobile:init": "npx cap init",
     "mobile:sync": "npx cap sync",
     "mobile:android": "npx cap open android",
-    "mobile:ios": "npx cap open ios"
+    "mobile:ios": "npx cap open ios",
+    "desktop:verify:mac-bundle": "node scripts/verify-desktop-bundle.js --platform=mac"
   },
   "build": {
     "appId": "com.kivora.app",
@@ -103,10 +104,22 @@
     "dmg": {
       "title": "Kivora",
       "contents": [
-        { "x": 150, "y": 190, "type": "file" },
-        { "x": 400, "y": 190, "type": "link", "path": "/Applications" }
+        {
+          "x": 150,
+          "y": 190,
+          "type": "file"
+        },
+        {
+          "x": 400,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
       ],
-      "window": { "width": 550, "height": 400 }
+      "window": {
+        "width": 550,
+        "height": 400
+      }
     },
     "win": {
       "icon": "public/icons/icon.ico",

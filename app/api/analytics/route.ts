@@ -4,6 +4,7 @@ import { quizAttempts, files, libraryItems, srsDecks, srsPreferences, srsReviewH
 import { eq, count, avg, desc } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/session';
 import type { SRSDeck } from '@/lib/srs/sm2';
+import { isGuestModeEnabled } from '@/lib/runtime/mode';
 
 // ── Empty analytics scaffold (returned for guests + when DB is not configured) ──
 
@@ -44,6 +45,10 @@ function emptyAnalytics(period: number): Record<string, unknown> {
   };
 }
 
+function isEphemeralGuest(userId: string | null | undefined) {
+  return userId === 'guest' || userId === 'local-demo-user' || Boolean(userId?.startsWith('guest:'));
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const period = Math.min(Math.max(parseInt(searchParams.get('period') ?? '30', 10), 7), 365);
@@ -56,7 +61,7 @@ export async function GET(req: NextRequest) {
   const userId = await getUserId();
 
   // Guest / unauthenticated → return empty fallback (not an error)
-  if (!userId) {
+  if (!userId || isEphemeralGuest(userId)) {
     return NextResponse.json(emptyAnalytics(period));
   }
 
@@ -550,7 +555,9 @@ export async function GET(req: NextRequest) {
       deckStats,
     });
   } catch (err) {
-    console.error('[Analytics] GET failed:', err);
+    if (!isGuestModeEnabled()) {
+      console.error('[Analytics] GET failed:', err);
+    }
     return NextResponse.json(emptyAnalytics(period));
   }
 }

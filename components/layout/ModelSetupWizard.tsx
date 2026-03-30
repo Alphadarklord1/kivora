@@ -69,6 +69,9 @@ export function ModelSetupWizard({ isArabic, onComplete }: ModelSetupWizardProps
     bundledReady: isArabic
       ? 'نموذج Mini مضمن بالفعل في هذا التنزيل، لذا يمكنك البدء محليًا من أول تشغيل.'
       : 'Mini is already included in this desktop download, so you can start locally from the first launch.',
+    bundledMissing: isArabic
+      ? 'هذا التنزيل لا يحتوي حاليًا على نموذج Mini المضمن، لذلك لن يكون الذكاء الاصطناعي المحلي جاهزًا من أول تشغيل حتى يتم تثبيت نموذج.'
+      : 'This build does not currently include bundled Mini, so local AI will not be ready from first launch until a model is installed.',
     recommended: isArabic ? 'موصى به' : 'Recommended',
     installed: isArabic ? 'مثبّت' : 'Installed',
     installUse: isArabic ? 'تثبيت واستخدام' : 'Install & Use',
@@ -184,7 +187,7 @@ export function ModelSetupWizard({ isArabic, onComplete }: ModelSetupWizardProps
     <div className="model-setup-overlay">
       <div className="model-setup-card" dir={isArabic ? 'rtl' : 'ltr'}>
         <h2>{dictionary.title}</h2>
-        <p>{bundledMiniInstalled ? dictionary.bundledReady : dictionary.subtitle}</p>
+        <p>{bundledMiniInstalled ? dictionary.bundledReady : dictionary.bundledMissing}</p>
 
         <div className="model-grid">
           {models.map((model) => {

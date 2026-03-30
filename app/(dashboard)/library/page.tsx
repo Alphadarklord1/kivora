@@ -10,7 +10,9 @@ import { broadcastInvalidate, listenForInvalidate, LIBRARY_CHANNEL } from '@/lib
 interface LibItem {
   id: string;
   mode: string;
-  content: string;
+  content?: string;
+  contentPreview?: string;
+  contentLength?: number;
   createdAt: string;
   metadata?: {
     title?: string;
@@ -53,7 +55,7 @@ function scoreItem(item: LibItem, tokens: string[]): number {
   const title    = (item.metadata?.title || item.metadata?.problem || '').toLowerCase();
   const meta     = [item.metadata?.category, item.metadata?.sourceFileName, item.metadata?.sourceDeckName, item.mode]
     .filter(Boolean).join(' ').toLowerCase();
-  const content  = item.content.toLowerCase();
+  const content  = (item.content ?? item.contentPreview ?? '').toLowerCase();
 
   let score = 0;
   for (const t of tokens) {
@@ -132,7 +134,7 @@ export default function LibraryPage() {
     setLoading(true);
     setLoadError('');
     try {
-      const res = await fetch('/api/library');
+      const res = await fetch('/api/library?summary=1');
       if (!res.ok) throw new Error('Failed to load library');
       setItems(await res.json());
     } catch {
@@ -141,6 +143,15 @@ export default function LibraryPage() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const ensureFullItem = useCallback(async (item: LibItem) => {
+    if (typeof item.content === 'string') return item;
+    const res = await fetch(`/api/library/${item.id}`);
+    if (!res.ok) throw new Error('Failed to load item');
+    const fullItem = await res.json() as LibItem;
+    setItems((prev) => prev.map((entry) => (entry.id === fullItem.id ? fullItem : entry)));
+    return fullItem;
   }, []);
 
   useEffect(() => { void load(); }, [load]);
@@ -171,6 +182,13 @@ export default function LibraryPage() {
   }
 
   function exportItem(item: LibItem) {
+    if (typeof item.content !== 'string') {
+      toast('Loading the full item first…', 'info');
+      void ensureFullItem(item).then(exportItem).catch(() => {
+        toast('Could not load the full item for export.', 'error');
+      });
+      return;
+    }
     const meta = MODE_META[item.mode] ?? { label: item.mode, color: '', icon: '' };
     const name = (item.metadata?.title || item.metadata?.problem || meta.label)
       .replace(/[^a-z0-9_\-\s]/gi, '').trim().slice(0, 40).replace(/\s+/g, '_');
@@ -201,63 +219,118 @@ export default function LibraryPage() {
       .map(({ item }) => item);
   }, [items, searchTokens, typeFilter]);
 
+  const libraryStats = useMemo(() => {
+    const typeCount = new Set(items.map((item) => item.mode)).size;
+    const newest = items[0]?.createdAt ?? null;
+    const sourceBacked = items.filter((item) => item.metadata?.sourceFileName || item.metadata?.sourceDeckName).length;
+    return { total: items.length, typeCount, newest, sourceBacked };
+  }, [items]);
+
   return (
     <div className="lib-page" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
-      {/* Header */}
-      <div className="lib-header">
-        <div className="lib-title-row">
-          <h1 className="lib-title">{t('Library')}</h1>
-          {items.length > 0 && (
-            <span className="lib-count">{items.length} {t('saved outputs')}</span>
-          )}
-          {filtered.length > 0 && (
-            <button
-              className="lib-btn lib-btn-ghost lib-btn-sm lib-export-all-btn"
-              onClick={() => printMultiple(filtered.map(item => ({
-                title: item.metadata?.title || item.metadata?.problem || (MODE_META[item.mode]?.label ?? item.mode),
-                content: item.content,
-              })))}
-              title={t('Export all')}
-            >
-              {'\uD83D\uDDA8\uFE0F'} {t('Export all')}
-            </button>
-          )}
+      <div className="lib-shell">
+        <div className="lib-hero">
+          <div className="lib-title-block">
+            <span className="lib-eyebrow">Library</span>
+            <div className="lib-title-row">
+              <h1 className="lib-title">{t('Library')}</h1>
+              {items.length > 0 && (
+                <span className="lib-count">{items.length} {t('saved outputs')}</span>
+              )}
+            </div>
+            <p className="lib-subtitle">
+              Keep your notes, quizzes, summaries, and saved outputs in one place, then open, print, export, or share them when you need them.
+            </p>
+          </div>
+          <div className="lib-stat-grid">
+            <div className="lib-stat-card">
+              <span className="lib-stat-label">Saved items</span>
+              <strong>{libraryStats.total}</strong>
+            </div>
+            <div className="lib-stat-card">
+              <span className="lib-stat-label">Content types</span>
+              <strong>{libraryStats.typeCount}</strong>
+            </div>
+            <div className="lib-stat-card">
+              <span className="lib-stat-label">Source-backed</span>
+              <strong>{libraryStats.sourceBacked}</strong>
+            </div>
+            <div className="lib-stat-card">
+              <span className="lib-stat-label">Latest save</span>
+              <strong>{libraryStats.newest ? formatDate(libraryStats.newest, { month: 'short', day: 'numeric' }) : '—'}</strong>
+            </div>
+          </div>
         </div>
-        <input
-          type="search"
-          className="lib-search"
-          placeholder={t('Search library\u2026')}
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-      </div>
 
-      {/* Type filter pills */}
-      {items.length > 0 && (
-        <div className="lib-filters">
-          {ALL_TYPE_KEYS.filter(k => k === 'all' || countByType[k]).map(k => {
-            const meta = k === 'all' ? null : MODE_META[k];
-            return (
-              <button
-                key={k}
-                className={`lib-pill${typeFilter === k ? ' active' : ''}`}
-                style={typeFilter === k && meta ? {
-                  borderColor: meta.color,
-                  background: `color-mix(in srgb, ${meta.color} 14%, var(--bg-inset))`,
-                  color: meta.color,
-                } : {}}
-                onClick={() => setTypeFilter(k)}
-              >
-                {meta && <span>{meta.icon}</span>}
-                {k === 'all' ? t('All types') : meta?.label ?? k}
-                {countByType[k] != null && (
-                  <span className="lib-pill-count">{countByType[k]}</span>
-                )}
-              </button>
-            );
-          })}
+        <div className="lib-controls-grid">
+          <section className="lib-controls-card">
+            <div className="lib-controls-head">
+              <strong>Browse</strong>
+              {filtered.length > 0 && (
+                <button
+                  className="lib-btn lib-btn-ghost lib-btn-sm lib-export-all-btn"
+                  onClick={() => {
+                    const readyItems = filtered.filter((item) => typeof item.content === 'string');
+                    if (readyItems.length !== filtered.length) {
+                      toast('Expand an item first if you want it included in Export all.', 'info');
+                    }
+                    printMultiple(readyItems.map(item => ({
+                      title: item.metadata?.title || item.metadata?.problem || (MODE_META[item.mode]?.label ?? item.mode),
+                      content: item.content ?? item.contentPreview ?? '',
+                    })));
+                  }}
+                  title={t('Export all')}
+                >
+                  {'\uD83D\uDDA8\uFE0F'} {t('Export all')}
+                </button>
+              )}
+            </div>
+            <input
+              type="search"
+              className="lib-search"
+              placeholder={t('Search library\u2026')}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            <p className="lib-controls-note">
+              Search titles, source names, modes, and saved content.
+            </p>
+          </section>
+
+          <section className="lib-controls-card">
+            <div className="lib-controls-head">
+              <strong>Filter by type</strong>
+              <span className="lib-controls-note">{filtered.length} visible</span>
+            </div>
+            {/* Type filter pills */}
+            {items.length > 0 && (
+              <div className="lib-filters">
+                {ALL_TYPE_KEYS.filter(k => k === 'all' || countByType[k]).map(k => {
+                  const meta = k === 'all' ? null : MODE_META[k];
+                  return (
+                    <button
+                      key={k}
+                      className={`lib-pill${typeFilter === k ? ' active' : ''}`}
+                      style={typeFilter === k && meta ? {
+                        borderColor: meta.color,
+                        background: `color-mix(in srgb, ${meta.color} 14%, var(--bg-inset))`,
+                        color: meta.color,
+                      } : {}}
+                      onClick={() => setTypeFilter(k)}
+                    >
+                      {meta && <span>{meta.icon}</span>}
+                      {k === 'all' ? t('All types') : meta?.label ?? k}
+                      {countByType[k] != null && (
+                        <span className="lib-pill-count">{countByType[k]}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </div>
-      )}
+      </div>
 
       {/* Load error */}
       {loadError && !loading && (
@@ -306,7 +379,8 @@ export default function LibraryPage() {
             const title   = item.metadata?.title || item.metadata?.problem || meta.label;
             const isExp   = expanded === item.id;
             const isSearch = searchTokens.length > 0;
-            const snippet  = isSearch && !isExp ? getSnippet(item.content, searchTokens) : null;
+            const contentText = item.content ?? item.contentPreview ?? '';
+            const snippet  = isSearch && !isExp ? getSnippet(contentText, searchTokens) : null;
             return (
               <div key={item.id} className="lib-card" style={{ borderLeft: `3px solid ${meta.color}` }}>
                 {/* Card header */}
@@ -327,7 +401,18 @@ export default function LibraryPage() {
                     className="lib-icon-btn lib-icon-btn-print"
                     title={t('Print')}
                     aria-label={t('Print')}
-                    onClick={() => printContent(title, item.content)}
+                    onClick={() => {
+                      if (typeof item.content === 'string') {
+                        printContent(title, item.content);
+                        return;
+                      }
+                      toast('Loading the full item first…', 'info');
+                      void ensureFullItem(item).then((fullItem) => {
+                        printContent(title, fullItem.content ?? '');
+                      }).catch(() => {
+                        toast('Could not load the full item for printing.', 'error');
+                      });
+                    }}
                   >{'\uD83D\uDDA8\uFE0F'}</button>
                   <button className="lib-icon-btn" onClick={() => void deleteItem(item.id)} title={t('Delete')} aria-label={t('Delete')}>{'\u2715'}</button>
                 </div>
@@ -358,17 +443,35 @@ export default function LibraryPage() {
                       overflow: 'hidden',
                     } as React.CSSProperties}
                   >
-                    {item.content}
+                    {typeof item.content === 'string' ? item.content : contentText}
                   </div>
                 )}
 
                 {/* Actions */}
                 <div className="lib-card-actions">
                   <button className="lib-btn lib-btn-ghost lib-btn-sm"
-                    onClick={() => setExpanded(prev => prev === item.id ? null : item.id)}>
+                    onClick={() => {
+                      setExpanded(prev => prev === item.id ? null : item.id);
+                      if (!isExp && typeof item.content !== 'string') {
+                        void ensureFullItem(item).catch(() => {
+                          toast('Could not load the full item.', 'error');
+                        });
+                      }
+                    }}>
                     {isExp ? t('Collapse') : t('Expand')}
                   </button>
-                  <button className="lib-btn lib-btn-ghost lib-btn-sm" onClick={() => copyItem(item.content)}>
+                  <button className="lib-btn lib-btn-ghost lib-btn-sm" onClick={() => {
+                    if (typeof item.content === 'string') {
+                      copyItem(item.content);
+                      return;
+                    }
+                    toast('Loading the full item first…', 'info');
+                    void ensureFullItem(item).then((fullItem) => {
+                      copyItem(fullItem.content ?? '');
+                    }).catch(() => {
+                      toast('Could not load the full item for copying.', 'error');
+                    });
+                  }}>
                     {'\uD83D\uDCCB'} {t('Copy')}
                   </button>
                   <button className="lib-btn lib-btn-ghost lib-btn-sm" onClick={() => exportItem(item)}>
@@ -400,10 +503,37 @@ export default function LibraryPage() {
 
       <style jsx>{`
         .lib-page { max-width: 860px; margin: 0 auto; padding: 0 0 60px; }
-        .lib-header { margin-bottom: 16px; }
-        .lib-title-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+        .lib-shell { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
+        .lib-hero {
+          display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 14px;
+          padding: 18px; border: 1px solid var(--border-2); border-radius: 18px;
+          background:
+            radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 10%, transparent), transparent 35%),
+            linear-gradient(180deg, var(--bg-surface), var(--bg-inset));
+        }
+        .lib-title-block { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .lib-eyebrow {
+          font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent);
+        }
+        .lib-title-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
         .lib-title { font-size: var(--text-3xl, 1.75rem); font-weight: 700; margin: 0; }
         .lib-count { font-size: var(--text-sm); color: var(--text-3); }
+        .lib-subtitle { margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-2); max-width: 700px; }
+        .lib-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .lib-stat-card {
+          display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 14px;
+          border: 1px solid var(--border-2); background: color-mix(in srgb, var(--bg-surface) 85%, var(--bg-inset));
+        }
+        .lib-stat-label { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; }
+        .lib-stat-card strong { font-size: 20px; color: var(--text); }
+        .lib-controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .lib-controls-card {
+          display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 16px;
+          border: 1px solid var(--border-2); background: var(--bg-surface);
+        }
+        .lib-controls-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .lib-controls-head strong { font-size: 14px; color: var(--text); }
+        .lib-controls-note { margin: 0; font-size: 12px; color: var(--text-3); }
         .lib-search {
           width: 100%; max-width: 420px; padding: 9px 14px;
           border: 1px solid var(--border-2); border-radius: 8px;
@@ -474,6 +604,14 @@ export default function LibraryPage() {
         .lib-btn-ghost:hover { background: var(--bg-inset); color: var(--text); border-color: var(--border-3); }
         .lib-btn-sm { font-size: 12px; }
         .lib-btn-share:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
+        @media (max-width: 900px) {
+          .lib-hero,
+          .lib-controls-grid { grid-template-columns: 1fr; }
+          .lib-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 640px) {
+          .lib-stat-grid { grid-template-columns: 1fr 1fr; }
+        }
       `}</style>
     </div>
   );

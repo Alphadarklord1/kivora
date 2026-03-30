@@ -33,7 +33,8 @@ interface Owner {
 interface LibraryItem {
   id: string;
   mode: string;
-  content: string;
+  content?: string;
+  contentPreview?: string;
   metadata?: { title?: string; problem?: string } | null;
 }
 
@@ -159,7 +160,7 @@ export default function SharedWithMePage() {
   // Fetch library items for the quick-share dropdown
   useEffect(() => {
     setLibLoading(true);
-    fetch('/api/library', { credentials: 'include' })
+    fetch('/api/library?summary=1&limit=100', { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then((data: LibraryItem[]) => setLibItems(data))
       .catch(() => setLibItems([]))

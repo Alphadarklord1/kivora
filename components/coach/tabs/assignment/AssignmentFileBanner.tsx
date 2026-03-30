@@ -50,26 +50,26 @@ export function AssignmentFileBanner({
   return (
     <div className={styles.fileInputBanner}>
       <div className={styles.fileInputRow}>
-        <span className={styles.fileInputLabel}>📎 Load a file</span>
+        <span className={styles.fileInputLabel}>Source file</span>
         <div className={styles.fileInputBtns}>
           <button
             className={`${styles.btnSecondary} ${filePanelOpen === 'upload' ? styles.segBtnActive : ''}`}
             onClick={() => onTogglePanel('upload')}
           >
-            📄 Upload PDF / Word
+            Upload
           </button>
           <button
             className={`${styles.btnSecondary} ${filePanelOpen === 'workspace' ? styles.segBtnActive : ''}`}
             onClick={() => onTogglePanel('workspace')}
           >
-            🗂️ From Workspace
+            Workspace
           </button>
         </div>
         {fileName && (
           <div className={styles.fileLoadedChip}>
-            <span>✓ {fileName}</span>
+            <span>{fileName}</span>
             {fileWords > 0 && <span className={styles.wordCountPill}>{fileWords.toLocaleString()} words</span>}
-            <button className={styles.iconBtn} onClick={onClearFile} title="Remove file">✕</button>
+            <button className={styles.iconBtn} onClick={onClearFile} title="Remove file">Remove</button>
           </div>
         )}
       </div>

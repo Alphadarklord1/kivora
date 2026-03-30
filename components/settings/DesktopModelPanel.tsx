@@ -129,10 +129,19 @@ export function DesktopModelPanel() {
     );
   }
 
+  const bundledMiniInstalled = models.some(
+    (model) => model.key === 'mini' && model.isInstalled && model.installedSource === 'bundled',
+  );
+  const optionalDownloadsInstalled = models.filter(
+    (model) => model.key !== 'mini' && model.isInstalled,
+  ).length;
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
-        Mini is bundled and works offline from the first launch. Download a heavier model anytime for stronger AI responses — stored in your app data folder.
+        {bundledMiniInstalled
+          ? `Mini is included in this desktop build, so Kivora is ready for first-launch offline AI. Optional heavier models stay in your app data folder.${optionalDownloadsInstalled > 0 ? ` You already have ${optionalDownloadsInstalled} optional model${optionalDownloadsInstalled === 1 ? '' : 's'} installed.` : ''}`
+          : 'This build does not currently include the bundled Mini model, so first-launch offline AI is not ready yet. Install a local model or use Ollama until the 1.0 Mac bundle is staged correctly.'}
       </p>
 
       {error && (

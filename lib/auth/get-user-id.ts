@@ -63,8 +63,19 @@ export async function getUserId(
   if (isGuestModeEnabled()) {
     const guestSessionId = request.headers.get(GUEST_SESSION_HEADER)?.trim();
     if (isGuestSessionId(guestSessionId)) {
-      const guestUserId = await resolveGuestUserId(guestSessionId);
-      if (guestUserId) return guestUserId;
+      if (
+        process.env.NODE_ENV !== 'production' ||
+        process.env.STUDYPILOT_DESKTOP_ONLY === '1' ||
+        process.env.LOCAL_DEMO_MODE === '1'
+      ) {
+        return `guest:${guestSessionId}`;
+      }
+      try {
+        const guestUserId = await resolveGuestUserId(guestSessionId);
+        if (guestUserId) return guestUserId;
+      } catch {
+        return `guest:${guestSessionId}`;
+      }
     }
 
     if (!isDatabaseConfigured) {

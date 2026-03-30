@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { buildAnalyticsFromLocalPlans } from '@/lib/planner/local-plans';
 
+const ANALYTICS_CACHE_KEY = 'kivora-analytics-cache';
+const ANALYTICS_CACHE_TTL_MS = 5 * 60 * 1000;
+
 export interface QuizStats {
   totalAttempts: number;
   totalQuestions: number;
@@ -157,6 +160,13 @@ export function useAnalytics(initialPeriod: number = 30): UseAnalyticsReturn {
       const raw = await res.json();
       const analyticsData: AnalyticsData = raw?.fallback ? buildAnalyticsFromLocalPlans(raw) : raw;
       setData(analyticsData);
+      try {
+        sessionStorage.setItem(ANALYTICS_CACHE_KEY, JSON.stringify({
+          period,
+          ts: Date.now(),
+          data: analyticsData,
+        }));
+      } catch { /* ignore */ }
       // Persist streak to localStorage so other components can read it without re-fetching
       try {
         const streak = analyticsData?.activity?.currentStreak ?? 0;
@@ -171,8 +181,18 @@ export function useAnalytics(initialPeriod: number = 30): UseAnalyticsReturn {
   }, [period]);
 
   useEffect(() => {
+    try {
+      const cachedRaw = sessionStorage.getItem(ANALYTICS_CACHE_KEY);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw) as { period: number; ts: number; data: AnalyticsData };
+        if (cached.period === period && Date.now() - cached.ts < ANALYTICS_CACHE_TTL_MS) {
+          setData(cached.data);
+          setLoading(false);
+        }
+      }
+    } catch { /* ignore */ }
     fetchAnalytics();
-  }, [fetchAnalytics]);
+  }, [fetchAnalytics, period]);
 
   const setPeriod = useCallback((days: number) => {
     setPeriodState(days);

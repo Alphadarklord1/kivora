@@ -40,7 +40,6 @@ type MatlabHistoryItem = {
 };
 
 const DEMO_SCRIPT = 'A = [1 0 2 1; 2 1 3 0; 0 1 1 2]\nB = [1 2; 0 1; 3 0; 2 1]\nC = A * B\nC';
-
 const CHIP_GROUPS = [
   {
     label: 'Matrices',
@@ -63,7 +62,6 @@ const CHIP_GROUPS = [
     chips: ['sum(A)', 'mean(A)', 'size(A)', 'linspace(0,1,5)', 'plot(sin(x))'],
   },
 ] as const;
-
 
 interface MatlabSession {
   variables: Record<string, MatlabValue>;
@@ -656,7 +654,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
   const [gridSize, setGridSize] = useState(9);
   const [fieldScale, setFieldScale] = useState(0.7);
   const [restoredSession] = useState<MatlabSession | null>(() => loadStoredSession());
-  const [command, setCommand] = useState(restoredSession?.command || '');
+  const [command, setCommand] = useState(restoredSession?.command || 'X = [1 0 2 1; 2 1 3 0; 0 1 1 2]');
   const [scriptText, setScriptText] = useState(restoredSession?.script || DEMO_SCRIPT);
   const [runtimeVars, setRuntimeVars] = useState<Record<string, MatlabValue>>(
     restoredSession?.variables && typeof restoredSession.variables === 'object' ? restoredSession.variables : {}
@@ -923,11 +921,12 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       <div className="ml-hero">
         <div className="ml-hero-copy">
           <span className="ml-eyebrow">MathLab</span>
-          <h3>Matrix, vector, and script playground</h3>
+          <h3>Matrix, vector, and linear algebra playground</h3>
           <p>
-            Try commands inline, run short scripts, inspect the workspace, and send expressions straight to Graph.
+            Keep matrix arithmetic, vector work, eig/det/inv, scripts, and plotting together in one MATLAB-style workspace.
           </p>
           <div className="ml-stats">
+            <span>One combined lab</span>
             <span>{workspaceSummary.total} vars</span>
             <span>{workspaceSummary.matrixCount} matrices</span>
             <span>{workspaceSummary.scalarCount} scalars</span>
@@ -1162,6 +1161,24 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
           font-size: 12px; font-weight: 600; transition: border-color 0.12s, color 0.12s, transform 0.12s;
         }
         .ml-secondary-btn:hover { border-color: #f97316; color: #f97316; transform: translateY(-1px); }
+        .ml-focus-card {
+          display: flex; justify-content: space-between; align-items: center; gap: 14px;
+          padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: 14px;
+          background: var(--bg-surface);
+        }
+        .ml-focus-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .ml-focus-label {
+          font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #f97316;
+        }
+        .ml-focus-copy p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); max-width: 680px; }
+        .ml-subcategories { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+        .ml-subcategory {
+          padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border-subtle);
+          background: var(--bg-2); color: var(--text-secondary); font-size: 11px; font-weight: 600; cursor: pointer;
+          transition: border-color 0.12s, color 0.12s, background 0.12s, transform 0.12s;
+        }
+        .ml-subcategory:hover { border-color: #f97316; color: #f97316; transform: translateY(-1px); }
+        .ml-subcategory.is-active { background: rgba(249,115,22,0.12); color: #f97316; border-color: rgba(249,115,22,0.4); }
 
         /* Chips */
         .ml-chip-groups {
@@ -1352,6 +1369,8 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
         @media (max-width: 700px) {
           .ml-hero { flex-direction: column; }
           .ml-hero-actions { justify-content: flex-start; }
+          .ml-focus-card { flex-direction: column; align-items: flex-start; }
+          .ml-subcategories { justify-content: flex-start; }
           .ml-chip-groups { grid-template-columns: 1fr; }
           .ml-body { flex-direction: column; }
           .ml-right { width: 100%; }

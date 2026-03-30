@@ -254,57 +254,69 @@ export function NotesPanel({
             <strong className="notes-hero-title">PDF to Notes</strong>
             <span className="notes-hero-body">
               {sourceLabel
-                ? `Turn ${sourceLabel}${sourceWordCount ? ` · ${sourceWordCount.toLocaleString()} words` : ''} into ${styleMeta.label.toLowerCase()} you can edit, export, and keep studying from.`
-                : 'Pick a PDF or document in Workspace, then convert it into clean study notes here.'}
+                ? `Turn ${sourceLabel} into ${styleMeta.label.toLowerCase()} and refine it in the editor below.`
+                : 'Pick a PDF or document, then generate notes and refine them below.'}
             </span>
           </div>
-          <div className="notes-hero-actions">
-            {onOpenFiles && (
-              <button className="btn btn-ghost btn-sm" onClick={onOpenFiles}>
-                Files
-              </button>
-            )}
-            <button className="btn btn-primary btn-sm" disabled={!sourceReady} onClick={onGenerateFromSource}>
-              Generate notes
-            </button>
-          </div>
         </div>
 
-        <div className="notes-style-grid">
-          {NOTE_STYLE_OPTIONS.map((option) => {
-            const active = option.id === noteStyle;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => onNoteStyleChange?.(option.id)}
-                className={`notes-style-card${active ? ' active' : ''}`}
-              >
-                <strong>{option.label}</strong>
-                <span>{option.hint}</span>
+        <div className="notes-two-up">
+          <section className="notes-panel-card">
+            <div className="notes-panel-head">
+              <strong>1. Generate from a source</strong>
+              <span>{sourceLabel ? 'Source ready' : 'Choose a file first'}</span>
+            </div>
+            <div className="notes-stat-grid notes-stat-grid-compact">
+              <div className="notes-stat-card">
+                <div className="notes-stat-label">Source</div>
+                <div className="notes-stat-value">{sourceLabel ?? 'No file selected'}</div>
+              </div>
+              <div className="notes-stat-card">
+                <div className="notes-stat-label">Length</div>
+                <div className="notes-stat-value">{sourceWordCount ? `${sourceWordCount.toLocaleString()} words` : 'Waiting for extraction'}</div>
+              </div>
+            </div>
+            <div className="notes-hero-actions">
+              {onOpenFiles && (
+                <button className="btn btn-ghost btn-sm" onClick={onOpenFiles}>
+                  Choose file
+                </button>
+              )}
+              <button className="btn btn-ghost btn-sm" disabled={!sourceReady} onClick={onGenerateFromSource}>
+                Generate notes
               </button>
-            );
-          })}
-        </div>
+            </div>
+          </section>
 
-        <div className="notes-stat-grid">
-          <div className="notes-stat-card">
-            <div className="notes-stat-label">Source</div>
-            <div className="notes-stat-value">{sourceLabel ?? 'No file selected'}</div>
-          </div>
-          <div className="notes-stat-card">
-            <div className="notes-stat-label">Source length</div>
-            <div className="notes-stat-value">{sourceWordCount ? `${sourceWordCount.toLocaleString()} words` : 'Waiting for extraction'}</div>
-          </div>
-          <div className="notes-stat-card">
-            <div className="notes-stat-label">Note format</div>
-            <div className="notes-stat-value">{styleMeta.label}</div>
-          </div>
+          <section className="notes-panel-card">
+            <div className="notes-panel-head">
+              <strong>2. Pick the note style</strong>
+              <span>{styleMeta.label}</span>
+            </div>
+            <div className="notes-style-grid notes-style-grid-compact">
+              {NOTE_STYLE_OPTIONS.map((option) => {
+                const active = option.id === noteStyle;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => onNoteStyleChange?.(option.id)}
+                    className={`notes-style-card${active ? ' active' : ''}`}
+                  >
+                    <strong>{option.label}</strong>
+                    <span>{option.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-        {(viewMode === 'edit' || viewMode === 'split') && (
+      <div className="notes-editor-shell">
+        <div className="notes-editor-label">Editor</div>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+          {(viewMode === 'edit' || viewMode === 'split') && (
           <textarea
             ref={textareaRef}
             value={content}
@@ -329,21 +341,22 @@ export function NotesPanel({
           />
         )}
 
-        {(viewMode === 'preview' || viewMode === 'split') && (
-          <div
-            className="tool-output"
-            style={{
-              flex: 1,
-              padding: '16px 20px',
-              overflowY: 'auto',
-            }}
-            dangerouslySetInnerHTML={{
-              __html: content.trim()
-                ? mdToHtml(content)
-                : '<p style="color:var(--text-3);font-style:italic">Preview will appear here as you type or after you generate notes from a document.</p>',
-            }}
-          />
-        )}
+          {(viewMode === 'preview' || viewMode === 'split') && (
+            <div
+              className="tool-output"
+              style={{
+                flex: 1,
+                padding: '16px 20px',
+                overflowY: 'auto',
+              }}
+              dangerouslySetInnerHTML={{
+                __html: content.trim()
+                  ? mdToHtml(content)
+                  : '<p style="color:var(--text-3);font-style:italic">Preview will appear here as you type or after you generate notes from a document.</p>',
+              }}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

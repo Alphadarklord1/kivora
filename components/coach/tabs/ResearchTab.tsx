@@ -204,7 +204,7 @@ export function ResearchTab({
       </div>
 
       <div className={styles.contextBanner}>
-        <span>🌐 Scholar Hub research is source-first. It compares multiple articles, ranks stronger sources higher, and keeps citations visible as you explore.</span>
+        <span>🌐 Scholar Hub research compares multiple articles, ranks stronger sources higher, and keeps citations visible as you explore.</span>
       </div>
 
       {/* ── Topic research ─────────────────────────────────────────── */}
@@ -303,7 +303,7 @@ export function ResearchTab({
 
         {privacyMode === 'offline' && (
           <div className={styles.statusNote}>
-            Offline privacy mode is on, so topic research is paused. Use Source Brief with pasted text or uploaded files for fully local work.
+            Offline privacy mode is on, so topic research is paused. Use Workspace summarizing or chat with pasted text and uploaded files for fully local work.
           </div>
         )}
 

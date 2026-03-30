@@ -589,23 +589,13 @@ export function AssignmentWriterTab({
       <div className={styles.studioHero}>
         <div className={styles.studioHeroCopy}>
           <span className={styles.studioEyebrow}>Writing Studio</span>
-          <h3>Build a source-grounded report, then tighten the writing like an editor.</h3>
-          <p>
-            Start with evidence and structure in Build Report, then switch to Write &amp; Check when you want grammar,
-            clarity, and tone feedback on the final draft.
-          </p>
+          <h3>Build a report, then switch to editor mode.</h3>
+          <p>Load a brief or draft, outline the report, then move into Write &amp; Check for feedback.</p>
         </div>
         <div className={styles.studioHeroMeta}>
-          {writingStudioStats.map((item) => (
+          {writingStudioStats.slice(0, 2).map((item) => (
             <span key={item} className={styles.studioMetaPill}>{item}</span>
           ))}
-        </div>
-      </div>
-
-      {/* ── Panel header ── */}
-      <div className={styles.panelHead}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0 }}>Assignment &amp; Writing</h2>
           {(reportTopic || reportResult || checkText) && (
             <button
               className={styles.btnSecondary}
@@ -619,14 +609,10 @@ export function AssignmentWriterTab({
               }}
               title="Clear all work and start fresh"
             >
-              🗑 Clear draft
+              Clear draft
             </button>
           )}
         </div>
-        <p>
-          Load your assignment brief or student draft (PDF or Word), then build a model report or
-          get writing feedback — all in one place.
-        </p>
       </div>
 
       {/* ── File input banner ── */}

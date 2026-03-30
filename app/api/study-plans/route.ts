@@ -7,6 +7,10 @@ import { apiError, createRequestId } from '@/lib/api/error-response';
 import { betaReadFallback, databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 
+function isEphemeralGuest(userId: string | null | undefined) {
+  return userId === 'guest' || userId === 'local-demo-user' || Boolean(userId?.startsWith('guest:'));
+}
+
 export async function GET(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
@@ -17,6 +21,9 @@ export async function GET(request: NextRequest) {
     const userId = await getUserId(request);
     if (!userId) {
       return unauthorized(request, requestId);
+    }
+    if (isGuestModeEnabled() && isEphemeralGuest(userId)) {
+      return betaReadFallback([], { 'x-kivora-fallback': 'study-plans-guest' });
     }
 
     const { searchParams } = new URL(request.url);

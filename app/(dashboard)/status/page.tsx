@@ -15,10 +15,10 @@ export default function StatusPage() {
   const { t, isArabic } = useI18n({
     'Status & Support': 'الحالة والدعم',
     'Known product state, issue reporting, and team workflow in one place.': 'حالة المنتج الحالية والإبلاغ عن المشاكل ومسار عمل الفريق في مكان واحد.',
-    'Stable beta surfaces': 'أسطح البيتا المستقرة',
-    'Desktop-first, guest-friendly, and focused on the active study workflow.': 'المنتج موجه لسطح المكتب أولًا ويدعم وضع الضيف ويركز على مسار الدراسة النشط.',
+    'Desktop 1.0 surface': 'سطح الإصدار 1.0 لسطح المكتب',
+    'Desktop-first, guest-friendly, and focused on the stable study workflow.': 'المنتج موجه لسطح المكتب أولًا ويدعم وضع الضيف ويركز على مسار الدراسة المستقر.',
     'Known limits': 'القيود المعروفة',
-    'Web remains a beta runtime. Optional model installs depend on published release assets. Some advanced surfaces are intentionally hidden until stable.': 'الويب ما يزال بيئة بيتا. تثبيت النماذج الاختيارية يعتمد على نشر ملفات الإصدار. بعض الأسطح المتقدمة مخفية عمدًا حتى تصبح مستقرة.',
+    'Web remains a beta companion. Optional model installs depend on published release assets, and first-launch offline AI is guaranteed only when Mini is bundled into the desktop build.': 'الويب ما يزال رفيقًا بنسخة بيتا. تثبيت النماذج الاختيارية يعتمد على نشر ملفات الإصدار، والذكاء الاصطناعي المحلي من أول تشغيل يكون مضمونًا فقط عندما يكون Mini مضمّنًا داخل نسخة سطح المكتب.',
     'Report the right issue': 'أبلغ عن النوع الصحيح من المشكلة',
     'Choose the issue type that matches what went wrong so the team can reproduce it quickly.': 'اختر نوع البلاغ الذي يطابق المشكلة حتى يتمكن الفريق من إعادة إنتاجها بسرعة.',
     'Error report': 'بلاغ خطأ',
@@ -69,21 +69,23 @@ export default function StatusPage() {
 
       <div className={styles.grid}>
         <article className={`sp-panel ${styles.card}`}>
-          <span className="sp-eyebrow">{t('Stable beta surfaces')}</span>
-          <p>{t('Desktop-first, guest-friendly, and focused on the active study workflow.')}</p>
+          <span className="sp-eyebrow">{t('Desktop 1.0 surface')}</span>
+          <p>{t('Desktop-first, guest-friendly, and focused on the stable study workflow.')}</p>
           <ul className={styles.list}>
             <li>`/workspace`</li>
-            <li>`/tools`</li>
+            <li>`/coach`</li>
+            <li>`/math`</li>
             <li>`/planner`</li>
             <li>`/library`</li>
             <li>`/analytics`</li>
+            <li>`/sharing`</li>
             <li>`/settings`</li>
           </ul>
         </article>
 
         <article className={`sp-panel ${styles.card}`}>
           <span className="sp-eyebrow">{t('Known limits')}</span>
-          <p>{t('Web remains a beta runtime. Optional model installs depend on published release assets. Some advanced surfaces are intentionally hidden until stable.')}</p>
+          <p>{t('Web remains a beta companion. Optional model installs depend on published release assets, and first-launch offline AI is guaranteed only when Mini is bundled into the desktop build.')}</p>
         </article>
       </div>
 

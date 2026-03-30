@@ -38,8 +38,8 @@ export function deriveDesktopLocalRuntimeStatus(info: DesktopModelInfoLike | nul
     return {
       state: 'missing',
       source: 'none',
-      label: 'No bundled local model detected',
-      detail: 'Desktop downloads should include Mini by default. Until then, Kivora will use Ollama or deterministic offline fallbacks.',
+      label: 'No local model metadata detected',
+      detail: 'This build does not expose a bundled Mini model yet, so first-launch offline AI is not ready.',
       modelLabel: null,
     };
   }
@@ -55,7 +55,7 @@ export function deriveDesktopLocalRuntimeStatus(info: DesktopModelInfoLike | nul
       state: 'missing',
       source: 'none',
       label: 'No local model installed',
-      detail: 'Mini should be bundled into the desktop app. Until then, only Ollama or deterministic offline fallbacks are available.',
+      detail: 'This desktop build is missing the bundled Mini model, so only Ollama or deterministic offline fallbacks are available.',
       modelLabel: null,
     };
   }

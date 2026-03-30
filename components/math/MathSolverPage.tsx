@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import * as math from 'mathjs';
@@ -10,9 +11,16 @@ import { MathText } from '@/components/math/MathRenderer';
 import { MATH_CATEGORIES, MATH_CATEGORY_ORDER } from '@/lib/math/catalog';
 import type { MathCategoryId } from '@/lib/math/types';
 import { isCustomFuncDefinition, normalizeGraphExpression, buildSharedScope } from '@/lib/math/graph-utils';
-import { VisualAnalyzer } from '@/components/tools/VisualAnalyzer';
-import { MatlabLab } from '@/components/tools/MatlabLab';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
+
+const VisualAnalyzer = dynamic(
+  () => import('@/components/tools/VisualAnalyzer').then((mod) => mod.VisualAnalyzer),
+  { ssr: false, loading: () => <div className="tool-loading">Loading visual analyzer…</div> },
+);
+const MatlabLab = dynamic(
+  () => import('@/components/tools/MatlabLab').then((mod) => mod.MatlabLab),
+  { ssr: false, loading: () => <div className="tool-loading">Loading MATLAB Lab…</div> },
+);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -79,6 +87,10 @@ const TOPICS: Array<{ id: MathCategoryId; label: string; icon: string; color: st
     color: TOPIC_META[id].color,
     examples: MATH_CATEGORIES[id].examples.map((example) => example.expr),
   }));
+
+const PRIMARY_TOPICS = TOPICS.filter(
+  (topic) => topic.id !== 'vectors' && topic.id !== 'matrices' && topic.id !== 'linear-algebra',
+);
 
 type TopicId = MathCategoryId;
 type SpecialView = 'formulas' | 'graph' | 'units' | 'scan' | 'visual' | 'matlab';
@@ -716,6 +728,21 @@ interface StructForm {
   params: StructParam[];
   buildCommand: (p: Record<string, string>) => string;
 }
+
+const GEOMETRY_FORM_GROUPS: Record<string, string> = {
+  distance: 'Coordinate geometry',
+  midpoint: 'Coordinate geometry',
+  'line-through-points': 'Coordinate geometry',
+  circle: 'Coordinate geometry',
+  pythagorean: 'Triangles',
+  'triangle-area': 'Area & perimeter',
+  'triangle-bh': 'Area & perimeter',
+  rectangle: 'Area & perimeter',
+  sector: 'Area & perimeter',
+  sphere: 'Volume & solids',
+  cylinder: 'Volume & solids',
+  cone: 'Volume & solids',
+};
 
 // ── buildMatrix ─────────────────────────────────────────────────────────────
 function buildMatrix(p: Record<string,string>, key: string, rows: number, cols: number): string {
@@ -1878,6 +1905,12 @@ export function MathSolverPage() {
   useEffect(() => { setHistory(loadHistory()); }, []);
 
   useEffect(() => {
+    if (active === 'vectors' || active === 'matrices' || active === 'linear-algebra') {
+      setActive('matlab');
+    }
+  }, [active]);
+
+  useEffect(() => {
     const pending = localStorage.getItem('math_pending_problem');
     if (pending) {
       setInput(pending);
@@ -2062,7 +2095,9 @@ export function MathSolverPage() {
   const activeTitle = currentTopic?.label ?? specialMeta?.title ?? 'Math';
   const activeSubtitle = currentTopic
     ? `Focus on ${currentCategoryConfig?.supportedActions.slice(0, 4).join(' · ') ?? 'step-by-step problem solving'}.`
-    : specialMeta?.subtitle ?? '';
+    : active === 'matlab'
+      ? 'Run matrix, vector, and linear algebra workflows together in one MATLAB-style workspace.'
+      : specialMeta?.subtitle ?? '';
 
   const unitCat = UNIT_CATS[unitCatIdx];
   const unitResult = (() => {
@@ -2147,7 +2182,7 @@ export function MathSolverPage() {
               Solver Topics
             </div>
           )}
-          {TOPICS.map(t => <NavItem key={t.id} id={t.id} icon={t.icon} label={t.label} color={t.color} />)}
+          {PRIMARY_TOPICS.map(t => <NavItem key={t.id} id={t.id} icon={t.icon} label={t.label} color={t.color} />)}
           <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
           {sidebarOpen && (
             <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '2px 20px 4px', opacity: 0.6 }}>
@@ -2372,6 +2407,13 @@ export function MathSolverPage() {
               const forms = CATEGORY_FORMS[String(active)];
               if (!forms?.length) return null;
               const pf = forms.find(f => f.id === structFormType) ?? forms[0];
+              const groupedForms = active === 'geometry'
+                ? forms.reduce<Record<string, StructForm[]>>((acc, form) => {
+                    const key = GEOMETRY_FORM_GROUPS[form.id] ?? 'Other';
+                    acc[key] = [...(acc[key] ?? []), form];
+                    return acc;
+                  }, {})
+                : null;
               const handleStructSolve = () => {
                 const cmd = pf.buildCommand(structFormParams);
                 if (!cmd.trim()) return;
@@ -2386,29 +2428,62 @@ export function MathSolverPage() {
                   {/* ── Problem type pill tabs ── */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>Problem type</span>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {forms.map(f => {
-                        const isSelected = (structFormType === f.id) || (!structFormType && f === forms[0]);
-                        return (
-                          <button
-                            key={f.id}
-                            onClick={() => { setStructFormType(f.id); setStructFormParams({}); setResult(null); }}
-                            style={{
-                              padding: '6px 14px', borderRadius: 20,
-                              border: `1.5px solid ${isSelected ? currentAccent : 'var(--border-subtle)'}`,
-                              background: isSelected ? `${currentAccent}18` : 'var(--bg-2)',
-                              color: isSelected ? currentAccent : 'var(--text-secondary)',
-                              fontSize: 12, fontWeight: isSelected ? 700 : 400,
-                              cursor: 'pointer', transition: 'all 0.12s', whiteSpace: 'nowrap',
-                            }}
-                            onMouseEnter={e => { if (!isSelected) { e.currentTarget.style.borderColor = `${currentAccent}80`; e.currentTarget.style.color = currentAccent; } }}
-                            onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
-                          >
-                            {pillLabel(f.label)}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {groupedForms ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {Object.entries(groupedForms).map(([groupLabel, groupForms]) => (
+                          <div key={groupLabel} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{groupLabel}</span>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {groupForms.map((f) => {
+                                const isSelected = (structFormType === f.id) || (!structFormType && f === forms[0]);
+                                return (
+                                  <button
+                                    key={f.id}
+                                    onClick={() => { setStructFormType(f.id); setStructFormParams({}); setResult(null); }}
+                                    style={{
+                                      padding: '6px 14px', borderRadius: 20,
+                                      border: `1.5px solid ${isSelected ? currentAccent : 'var(--border-subtle)'}`,
+                                      background: isSelected ? `${currentAccent}18` : 'var(--bg-2)',
+                                      color: isSelected ? currentAccent : 'var(--text-secondary)',
+                                      fontSize: 12, fontWeight: isSelected ? 700 : 400,
+                                      cursor: 'pointer', transition: 'all 0.12s', whiteSpace: 'nowrap',
+                                    }}
+                                    onMouseEnter={e => { if (!isSelected) { e.currentTarget.style.borderColor = `${currentAccent}80`; e.currentTarget.style.color = currentAccent; } }}
+                                    onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
+                                  >
+                                    {pillLabel(f.label)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {forms.map(f => {
+                          const isSelected = (structFormType === f.id) || (!structFormType && f === forms[0]);
+                          return (
+                            <button
+                              key={f.id}
+                              onClick={() => { setStructFormType(f.id); setStructFormParams({}); setResult(null); }}
+                              style={{
+                                padding: '6px 14px', borderRadius: 20,
+                                border: `1.5px solid ${isSelected ? currentAccent : 'var(--border-subtle)'}`,
+                                background: isSelected ? `${currentAccent}18` : 'var(--bg-2)',
+                                color: isSelected ? currentAccent : 'var(--text-secondary)',
+                                fontSize: 12, fontWeight: isSelected ? 700 : 400,
+                                cursor: 'pointer', transition: 'all 0.12s', whiteSpace: 'nowrap',
+                              }}
+                              onMouseEnter={e => { if (!isSelected) { e.currentTarget.style.borderColor = `${currentAccent}80`; e.currentTarget.style.color = currentAccent; } }}
+                              onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
+                            >
+                              {pillLabel(f.label)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {/* ── Formula preview (left accent rail) ── */}

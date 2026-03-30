@@ -5,6 +5,11 @@ import { eq, and, desc } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
 import { betaReadFallback, unauthorized } from '@/lib/api/runtime-guards';
+import { isGuestModeEnabled } from '@/lib/runtime/mode';
+
+function isEphemeralGuest(userId: string | null | undefined) {
+  return userId === 'guest' || userId === 'local-demo-user' || Boolean(userId?.startsWith('guest:'));
+}
 
 // GET /api/recent - Get recent files for the user
 export async function GET(request: NextRequest) {
@@ -17,6 +22,9 @@ export async function GET(request: NextRequest) {
     const userId = await getUserId(request);
     if (!userId) {
       return unauthorized(request, requestId);
+    }
+    if (isEphemeralGuest(userId)) {
+      return betaReadFallback([]);
     }
 
   const { searchParams } = new URL(request.url);
@@ -51,6 +59,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(recentEntries);
   } catch (error) {
     console.error(`[Recent][${requestId}] GET failed`, error);
+    if (isGuestModeEnabled()) {
+      return betaReadFallback([]);
+    }
     return apiError(500, {
       errorCode: 'RECENT_FETCH_FAILED',
       reason: 'Failed to fetch recent files',
@@ -70,6 +81,9 @@ export async function POST(request: NextRequest) {
     const userId = await getUserId(request);
     if (!userId) {
       return unauthorized(request, requestId);
+    }
+    if (isEphemeralGuest(userId)) {
+      return betaReadFallback({ success: true, localOnly: true });
     }
 
     const body = await request.json();
@@ -138,6 +152,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(newEntry, { status: 201 });
   } catch (error) {
     console.error(`[Recent][${requestId}] POST failed`, error);
+    if (isGuestModeEnabled()) {
+      return betaReadFallback({ success: true, localOnly: true });
+    }
     return apiError(500, {
       errorCode: 'RECENT_UPDATE_FAILED',
       reason: 'Failed to update recent files',
@@ -158,12 +175,18 @@ export async function DELETE(request: NextRequest) {
     if (!userId) {
       return unauthorized(request, requestId);
     }
+    if (isEphemeralGuest(userId)) {
+      return betaReadFallback({ success: true });
+    }
 
     await db.delete(recentFiles).where(eq(recentFiles.userId, userId));
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error(`[Recent][${requestId}] DELETE failed`, error);
+    if (isGuestModeEnabled()) {
+      return betaReadFallback({ success: true });
+    }
     return apiError(500, {
       errorCode: 'RECENT_CLEAR_FAILED',
       reason: 'Failed to clear recent files',
