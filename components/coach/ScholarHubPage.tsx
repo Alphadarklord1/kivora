@@ -25,10 +25,6 @@ import styles from '@/app/(dashboard)/coach/page.module.css';
 
 const tabLoadingFallback = <div className="tool-loading">Loading section…</div>;
 
-const SourceBriefTab = dynamic(
-  () => import('./tabs/SourceBriefTab').then((mod) => mod.SourceBriefTab),
-  { ssr: false, loading: () => tabLoadingFallback },
-);
 const AssignmentWriterTab = dynamic(
   () => import('./tabs/AssignmentWriterTab').then((mod) => mod.AssignmentWriterTab),
   { ssr: false, loading: () => tabLoadingFallback },
@@ -43,16 +39,15 @@ const RecoveryTab = dynamic(
 );
 
 type CoachPanel   = 'review' | 'manage';
-type CoachSection = 'research' | 'brief' | 'write' | 'recovery';
+type CoachSection = 'research' | 'write' | 'recovery';
 type CoachOutput  =
   | { kind: 'quiz';      title: string; content: string; quiz: GeneratedContent; setId: string }
   | { kind: 'generated'; title: string; content: string };
 
 const TAB_LABELS: Record<CoachSection, { label: string; icon: string }> = {
-  'research': { label: 'Research',              icon: '🔍' },
-  'brief':    { label: 'Source',               icon: '📄' },
-  'write':    { label: 'Writing Studio',       icon: '✍️'  },
-  'recovery': { label: 'Recovery',              icon: '📊' },
+  research: { label: 'Research Workspace', icon: '🔍' },
+  write: { label: 'Writing Studio', icon: '✍️' },
+  recovery: { label: 'Recovery', icon: '📊' },
 };
 
 function mergeSets(local: SRSDeck[], remote: SRSDeck[]): SRSDeck[] {
@@ -82,12 +77,12 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
   const [output,          setOutput]          = useState<CoachOutput | null>(null);
 
   // Shared cross-tab state
-  const [sourceBrief,     setSourceBrief]     = useState<SourceBrief | null>(null);
+  const [sourceBrief]                      = useState<SourceBrief | null>(null);
   const [researchResult,  setResearchResult]  = useState<TopicResearchResult | null>(null);
   /** Topic to pre-load in Research tab (e.g. from Recovery "Reading" button) */
   const [researchPreload, setResearchPreload] = useState<string | undefined>(undefined);
 
-  // Source action loading state (shared between SourceBriefTab and WriterTab)
+  // Source action loading state (shared between research handoff and WriterTab)
   const [sourceActionLoading, setSourceActionLoading] = useState<'notes' | 'quiz' | 'flashcards' | null>(null);
 
   // ── SRS state ──────────────────────────────────────────────────────────────
@@ -234,25 +229,14 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
   const activeSectionSummary = useMemo(() => {
     if (activeSection === 'research') {
       return {
-        title: 'Multi-source research workspace',
+        title: 'Research workspace',
         description: researchResult
-          ? `Your current brief compares ${researchResult.sources.length} ranked sources and keeps ${researchResult.citations.length} citations visible.`
-          : 'Search automatically, compare manual links, and keep your evidence trail visible.',
+          ? `Search across ${researchResult.sources.length} ranked sources and keep ${researchResult.citations.length} citations visible while you explore.`
+          : 'Research a topic, compare manual links, or search the web in one focused workspace.',
         pills: [
-          researchResult ? `Provider: ${researchResult.provider}` : 'Ready for topic search',
+          'Topic-led research',
           researchResult ? `Ranking: ${researchResult.ranking}` : 'Auto / manual / hybrid',
-        ],
-      };
-    }
-    if (activeSection === 'brief') {
-      return {
-        title: 'Source breakdown',
-        description: sourceBrief
-          ? `You are working from ${sourceBrief.sourceLabel} and can turn it into notes, quiz material, or a review set handoff.`
-          : 'Paste text, analyze a URL, or upload a file to extract key ideas and get a grounded source brief.',
-        pills: [
-          sourceBrief ? `${sourceBrief.wordCount.toLocaleString()} words` : 'URL / text / file',
-          sourceBrief ? `${sourceBrief.keyPoints.length} key points` : 'Source-first workflow',
+          researchResult ? `Provider: ${researchResult.provider}` : 'Evidence-first synthesis',
         ],
       };
     }
@@ -348,7 +332,7 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
           </div>
         </div>
         <nav className={styles.tabNav}>
-          {(['research', 'brief', 'write', 'recovery'] as CoachSection[]).map(id => (
+          {(['research', 'write', 'recovery'] as CoachSection[]).map(id => (
             <button
               key={id}
               className={`${styles.tabBtn} ${activeSection === id ? styles.tabBtnActive : ''}`}
@@ -378,27 +362,17 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
         </div>
       </header>
 
-      <div className={styles.contextStrip} style={drawerMode ? { marginTop: 0 } : undefined}>
-        <div className={styles.contextStripGroup}>
-          <span className={styles.contextStripLabel}>Focus</span>
-          <strong>{contextStats.activeSource ?? 'Start with a topic or source'}</strong>
-        </div>
-        <div className={styles.contextStripMeta}>
-          <span className={styles.metaTag}>{contextStats.sourceCount} compared sources</span>
-          <span className={styles.metaTag}>{contextStats.citationCount} citations</span>
-          <span className={styles.metaTag}>{contextStats.dueCount} due review cards</span>
-          {topWeakAreas[0] && <span className={styles.metaTag}>Weak area: {topWeakAreas[0].topic}</span>}
-        </div>
-      </div>
-
-      <div className={styles.sectionStrip}>
+      <div className={styles.sectionStrip} style={drawerMode ? { marginTop: 0 } : undefined}>
         <div className={styles.sectionStripCopy}>
           <span className={styles.contextStripLabel}>{TAB_LABELS[activeSection].label}</span>
           <strong>{activeSectionSummary.title}</strong>
           <p>{activeSectionSummary.description}</p>
         </div>
         <div className={styles.sectionStripMeta}>
-          {activeSectionSummary.pills.map((pill) => (
+          <span className={styles.metaTag}>{contextStats.activeSource ?? 'Start with a topic or source'}</span>
+          {activeSection === 'research' && <span className={styles.metaTag}>{contextStats.citationCount} citations</span>}
+          {activeSection === 'recovery' && <span className={styles.metaTag}>{contextStats.dueCount} due</span>}
+          {activeSectionSummary.pills.slice(0, 2).map((pill) => (
             <span key={pill} className={styles.metaTag}>{pill}</span>
           ))}
         </div>
@@ -440,19 +414,18 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
       {/* Tab content */}
       <div className={styles.tabContent}>
 
-        {activeSection === 'brief' && (
-          <SourceBriefTab
-            sourceBrief={sourceBrief}
-            onBriefChange={brief => { setSourceBrief(brief); setOutput(null); }}
-            onOpenPanel={openPanel}
-            onNavigateToResearch={navigateToResearch}
-            onOutput={out => {
-              setOutput({ kind: 'generated', title: out.title, content: out.content });
-              outputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}
-            refreshReviewSets={refreshReviewSets}
-            refreshAnalytics={refreshAnalytics}
-          />
+        {activeSection === 'research' && (
+          <div className={styles.researchWorkspaceStack}>
+            <section className={styles.researchWorkspaceSection}>
+              <ResearchTab
+                sourceBrief={sourceBrief}
+                researchResult={researchResult}
+                onResearchResult={setResearchResult}
+                preloadTopic={researchPreload}
+                onPreloadConsumed={() => setResearchPreload(undefined)}
+              />
+            </section>
+          </div>
         )}
 
         {activeSection === 'write' && (
@@ -462,16 +435,6 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
             onNavigateToResearch={navigateToResearch}
             sourceActionLoading={sourceActionLoading}
             onSourceAction={mode => void handleSourceAction(mode)}
-          />
-        )}
-
-        {activeSection === 'research' && (
-          <ResearchTab
-            sourceBrief={sourceBrief}
-            researchResult={researchResult}
-            onResearchResult={setResearchResult}
-            preloadTopic={researchPreload}
-            onPreloadConsumed={() => setResearchPreload(undefined)}
           />
         )}
 

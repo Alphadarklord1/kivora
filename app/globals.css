@@ -1958,21 +1958,49 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   background: var(--bg-2);
 }
 .notes-hero {
-  padding: 16px;
+  padding: 14px;
   border-bottom: 1px solid var(--border);
   background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 10%, transparent), transparent 36%),
-    linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--surface)), var(--surface));
+    radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 8%, transparent), transparent 32%),
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, var(--surface)), var(--surface));
   display: grid;
-  gap: 14px;
+  gap: 12px;
   flex-shrink: 0;
 }
 .notes-hero-top {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
+}
+.notes-two-up {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.notes-panel-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 96%, white 4%);
+}
+.notes-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.notes-panel-head strong {
+  font-size: 12px;
+  color: var(--text);
+}
+.notes-panel-head span {
+  font-size: 11px;
+  color: var(--text-3);
 }
 .notes-hero-copy {
   display: grid;
@@ -2057,6 +2085,45 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   color: var(--text);
   font-weight: 600;
   line-height: 1.45;
+}
+
+.notes-editor-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.notes-editor-label {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 94%, var(--bg-2));
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+
+.notes-style-grid-compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.notes-stat-grid-compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 900px) {
+  .notes-two-up {
+    grid-template-columns: 1fr;
+  }
+  .notes-style-grid-compact,
+  .notes-stat-grid-compact {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 840px) {

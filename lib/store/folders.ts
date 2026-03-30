@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { broadcastInvalidate, listenForInvalidate, FOLDERS_CHANNEL } from '@/lib/sync/broadcast';
+import { loadLocalFolders } from '@/lib/folders/local-folders';
+import { listLocalFiles } from '@/lib/files/local-files';
 
 interface Folder {
   id: string;
@@ -35,14 +37,25 @@ export function useFoldersStore() {
     Promise.all([
       fetch('/api/folders', { credentials: 'include' }).then(r => r.ok ? r.json() : []),
       fetch('/api/topics',  { credentials: 'include' }).then(r => r.ok ? r.json() : []),
-      fetch('/api/files',   { credentials: 'include' }).then(r => r.ok ? r.json() : []),
+      fetch('/api/files?all=true',   { credentials: 'include' }).then(r => r.ok ? r.json() : []),
     ])
       .then(([f, t, fi]) => {
-        setFolders(Array.isArray(f)  ? f  : []);
-        setTopics( Array.isArray(t)  ? t  : []);
-        setFiles(  Array.isArray(fi) ? fi : []);
+        const localFolders = loadLocalFolders();
+        const localTopics = localFolders.flatMap(folder => folder.topics.map(topic => ({ ...topic, folderId: folder.id, createdAt: folder.createdAt })));
+        const localFiles = listLocalFiles();
+        const mergedFolders = [...localFolders.filter(local => !(Array.isArray(f) ? f : []).some((remote: Folder) => remote.id === local.id)), ...(Array.isArray(f) ? f : [])];
+        const mergedTopics = [...localTopics.filter(local => !(Array.isArray(t) ? t : []).some((remote: Topic) => remote.id === local.id)), ...(Array.isArray(t) ? t : [])];
+        const mergedFiles = [...localFiles.filter(local => !(Array.isArray(fi) ? fi : []).some((remote: FileItem) => remote.id === local.id)), ...(Array.isArray(fi) ? fi : [])];
+        setFolders(mergedFolders);
+        setTopics(mergedTopics as Topic[]);
+        setFiles(mergedFiles as FileItem[]);
       })
-      .catch(() => {});
+      .catch(() => {
+        const localFolders = loadLocalFolders();
+        setFolders(localFolders);
+        setTopics(localFolders.flatMap(folder => folder.topics.map(topic => ({ ...topic, folderId: folder.id, createdAt: folder.createdAt }))) as Topic[]);
+        setFiles(listLocalFiles() as FileItem[]);
+      });
   }, []);
 
   useEffect(() => {

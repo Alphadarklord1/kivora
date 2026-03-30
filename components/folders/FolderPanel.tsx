@@ -23,6 +23,15 @@ export interface FolderPanelProps {
 const LS_KEY    = 'kivora_local_folders';
 const localLoad = (): Folder[] => { try { return JSON.parse(localStorage.getItem(LS_KEY) ?? '[]'); } catch { return []; } };
 const localSave = (f: Folder[]) => { try { localStorage.setItem(LS_KEY, JSON.stringify(f)); } catch {} };
+const mergeFolders = (remote: Folder[], local: Folder[]) => {
+  const map = new Map<string, Folder>();
+  for (const folder of local) map.set(folder.id, folder);
+  for (const folder of remote) {
+    const existing = map.get(folder.id);
+    map.set(folder.id, existing ? { ...existing, ...folder, topics: folder.topics?.length ? folder.topics : existing.topics } : folder);
+  }
+  return Array.from(map.values());
+};
 
 const ACCEPT = '.pdf,.docx,.pptx,.txt,.md,.png,.jpg,.jpeg,.webp';
 
@@ -51,12 +60,20 @@ export function FolderPanel({
 
   const load = useCallback(async () => {
     setLoading(true);
+    const local = localLoad();
     try {
       const res = await fetch('/api/folders');
-      if (res.ok) setFolders(await res.json());
-      else setFolders(localLoad());
-    } catch { setFolders(localLoad()); }
-    finally { setLoading(false); }
+      if (res.ok) {
+        const remote = await res.json();
+        setFolders(mergeFolders(Array.isArray(remote) ? remote : [], local));
+      } else {
+        setFolders(local);
+      }
+    } catch {
+      setFolders(local);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load, refreshKey]);
@@ -85,8 +102,10 @@ export function FolderPanel({
       });
       if (res.ok) {
         const f = await res.json();
-        setFolders(p => [...p, { ...f, topics: [] }]);
-        toast('Folder created', 'success');
+        const nextFolder = { ...f, topics: f.topics ?? [] };
+        setFolders(p => [...p.filter(existing => existing.id !== nextFolder.id), nextFolder]);
+        if (f.localOnly) localSave([...folders.filter(existing => existing.id !== nextFolder.id), nextFolder]);
+        toast(f.localOnly ? 'Folder saved locally' : 'Folder created', f.localOnly ? 'info' : 'success');
       } else throw new Error();
     } catch {
       const f: Folder = { id: uuidv4(), name, expanded: true, topics: [] };
@@ -137,8 +156,12 @@ export function FolderPanel({
       });
       if (res.ok) {
         const t = await res.json();
-        setFolders(p => p.map(f => f.id === folderId ? { ...f, topics: [...f.topics, t] } : f));
-        toast('Topic created', 'success');
+        setFolders(p => {
+          const updated = p.map(f => f.id === folderId ? { ...f, topics: [...f.topics.filter(topic => topic.id !== t.id), t] } : f);
+          if (t.localOnly) localSave(updated);
+          return updated;
+        });
+        toast(t.localOnly ? 'Topic saved locally' : 'Topic created', t.localOnly ? 'info' : 'success');
       } else throw new Error();
     } catch {
       const t: Topic = { id: uuidv4(), name, folderId };
@@ -201,7 +224,11 @@ export function FolderPanel({
       const res = await createFileUploadRequest({ ...local, file });
       if (res.ok) {
         const json = await res.json().catch(() => null);
-        if (json?.storageWarning) {
+        if (json?.localOnly) {
+          upsertLocalFile(local);
+          toast(`"${file.name}" saved locally`, 'info');
+        } else if (json?.storageWarning) {
+          upsertLocalFile(local);
           toast(`"${file.name}" saved locally — cloud sync failed, will retry later`, 'warning');
         } else {
           toast(`"${file.name}" uploaded`, 'success');
