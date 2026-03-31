@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import { auth } from '@/auth';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
-import { GUEST_SESSION_HEADER, isGuestSessionId, resolveGuestUserId } from '@/lib/auth/guest-session';
+import { GUEST_SESSION_HEADER, isGuestSessionId } from '@/lib/auth/guest-session';
 
 const GUEST_USER_ID = 'guest';
 
@@ -14,8 +14,7 @@ export async function getUserId(): Promise<string | null> {
       const headerStore = await headers();
       const guestSessionId = headerStore.get(GUEST_SESSION_HEADER)?.trim();
       if (isGuestSessionId(guestSessionId)) {
-        const resolved = await resolveGuestUserId(guestSessionId);
-        if (resolved) return resolved;
+        return `guest:${guestSessionId}`;
       }
     } catch {
       // Ignore header lookup failures and fall back to the legacy guest ID.

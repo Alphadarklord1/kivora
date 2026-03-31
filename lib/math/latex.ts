@@ -86,6 +86,30 @@ function wrapExpression(expr: string) {
 
 function formatNaturalMath(text: string): string | null {
   const trimmed = text.trim();
+  const integrateFunction = trimmed.match(/^integrate\(\s*(.+?)\s*(?:,\s*([a-zA-Z]))?\s*\)$/i);
+  if (integrateFunction) {
+    const [, integrand, variable] = integrateFunction;
+    const dx = variable || 'x';
+    return `\\int ${wrapExpression(integrand)}\\, d${dx}`;
+  }
+
+  const derivativeFunction = trimmed.match(/^(?:diff|derivative)\(\s*(.+?)\s*(?:,\s*([a-zA-Z]))?\s*\)$/i);
+  if (derivativeFunction) {
+    const [, expr, variable] = derivativeFunction;
+    const dx = variable || 'x';
+    return `\\frac{d}{d${dx}}\\left(${wrapExpression(expr)}\\right)`;
+  }
+
+  const determinantFunction = trimmed.match(/^det\(\s*(.+)\s*\)$/i);
+  if (determinantFunction) {
+    return `\\det\\left(${wrapExpression(determinantFunction[1])}\\right)`;
+  }
+
+  const inverseFunction = trimmed.match(/^inv\(\s*(.+)\s*\)$/i);
+  if (inverseFunction) {
+    return `\\left(${wrapExpression(inverseFunction[1])}\\right)^{-1}`;
+  }
+
   const systemMatch = trimmed.match(/^(?:solve\s+system|system)\s+(.+)$/i);
   if (systemMatch) {
     const equations = systemMatch[1]

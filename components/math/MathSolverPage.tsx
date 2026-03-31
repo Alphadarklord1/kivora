@@ -7,8 +7,9 @@ import 'katex/dist/katex.min.css';
 import * as math from 'mathjs';
 import { extractTextFromBlob } from '@/lib/pdf/extract';
 import { readMathContext } from '@/lib/math/context';
-import { MathText } from '@/components/math/MathRenderer';
+import { MathRenderer, MathText } from '@/components/math/MathRenderer';
 import { MATH_CATEGORIES, MATH_CATEGORY_ORDER } from '@/lib/math/catalog';
+import { detectMathCategory } from '@/lib/math/symbolic-solver';
 import type { MathCategoryId } from '@/lib/math/types';
 import { isCustomFuncDefinition, normalizeGraphExpression, buildSharedScope } from '@/lib/math/graph-utils';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
@@ -742,6 +743,87 @@ const GEOMETRY_FORM_GROUPS: Record<string, string> = {
   sphere: 'Volume & solids',
   cylinder: 'Volume & solids',
   cone: 'Volume & solids',
+};
+
+const CATEGORY_FORM_GROUPS: Record<string, Record<string, string>> = {
+  algebra: {
+    quadratic: 'Equations',
+    linear: 'Equations',
+    factor: 'Expressions',
+    system2: 'Systems',
+    'complete-square': 'Expressions',
+    logarithmic: 'Equations',
+    exponential: 'Equations',
+    inequality: 'Inequalities',
+    rational: 'Expressions',
+  },
+  geometry: GEOMETRY_FORM_GROUPS,
+  calculus: {
+    derivative: 'Derivatives',
+    integral: 'Integrals',
+    limit: 'Limits',
+    critical: 'Analysis',
+    'second-derivative': 'Derivatives',
+    'definite-integral': 'Integrals',
+    lhopital: 'Limits',
+  },
+  trigonometry: {
+    'solve-trig': 'Equations',
+    'exact-trig': 'Identities & values',
+    'triangle-solver': 'Triangles',
+    'trig-simplify': 'Identities & values',
+    'trig-eval': 'Identities & values',
+    'law-sines': 'Triangles',
+    'law-cosines': 'Triangles',
+    'deg-rad': 'Angle conversion',
+    'amp-period': 'Graphs & transformations',
+  },
+  statistics: {
+    'mean-sd': 'Descriptive statistics',
+    binomial: 'Probability',
+    ci: 'Inference',
+    variance: 'Descriptive statistics',
+    'median-mode-range': 'Descriptive statistics',
+    combinatorics: 'Counting',
+  },
+  'sequences-series': {
+    'arith-nth': 'Arithmetic',
+    'arith-sum': 'Arithmetic',
+    'geom-nth': 'Geometric',
+    'geom-sum': 'Geometric',
+    'geom-infinite': 'Geometric',
+    'seq-type': 'Patterns',
+  },
+  'differential-equations': {
+    '2nd-order': 'Second-order',
+    'separable': 'First-order',
+    'slope-field': 'First-order',
+    linear: 'First-order',
+    decay: 'Applications',
+    'non-homogeneous': 'Second-order',
+  },
+  discrete: {
+    gcd: 'Number theory',
+    comb: 'Counting',
+    perm: 'Counting',
+    fibonacci: 'Sequences',
+    modpow: 'Number theory',
+    lcm: 'Number theory',
+    factorise: 'Number theory',
+    'floor-ceil': 'Integer functions',
+  },
+  physics: {
+    suvat: 'Motion',
+    ke: 'Energy',
+    projectile: 'Motion',
+    wave: 'Waves',
+    force: 'Mechanics',
+    pe: 'Energy',
+    momentum: 'Mechanics',
+    hooke: 'Mechanics',
+    power: 'Energy',
+    pressure: 'Mechanics',
+  },
 };
 
 // ── buildMatrix ─────────────────────────────────────────────────────────────
@@ -1851,6 +1933,117 @@ function autoWrapMath(raw: string): string {
   }).join('\n');
 }
 
+type QuestionInputSymbol = {
+  label: string;
+  insert: string;
+  cursorOffset?: number;
+};
+
+const QUESTION_INPUT_SYMBOLS: QuestionInputSymbol[] = [
+  { label: '^', insert: '^' },
+  { label: '√', insert: 'sqrt()', cursorOffset: -1 },
+  { label: '/', insert: '/' },
+  { label: 'π', insert: 'pi' },
+  { label: 'θ', insert: 'theta' },
+  { label: 'α', insert: 'alpha' },
+  { label: 'β', insert: 'beta' },
+  { label: 'λ', insert: 'lambda' },
+  { label: '∞', insert: 'inf' },
+  { label: '∂', insert: 'derivative of ' },
+  { label: '∫', insert: 'integral of  dx', cursorOffset: -3 },
+  { label: 'sin', insert: 'sin()', cursorOffset: -1 },
+  { label: 'cos', insert: 'cos()', cursorOffset: -1 },
+  { label: 'tan', insert: 'tan()', cursorOffset: -1 },
+  { label: 'ln', insert: 'ln()', cursorOffset: -1 },
+  { label: 'log', insert: 'log()', cursorOffset: -1 },
+  { label: 'e^x', insert: 'exp()', cursorOffset: -1 },
+  { label: '|x|', insert: 'abs()', cursorOffset: -1 },
+  { label: '≤', insert: ' <= ' },
+  { label: '≥', insert: ' >= ' },
+  { label: '≠', insert: ' != ' },
+  { label: '[[]]', insert: '[[1,2],[3,4]]' },
+  { label: "y'", insert: "y'" },
+  { label: "y''", insert: "y''" },
+  { label: 'Σ', insert: 'sum()', cursorOffset: -1 },
+  { label: 'det', insert: 'det()', cursorOffset: -1 },
+  { label: 'inv', insert: 'inv()', cursorOffset: -1 },
+];
+
+function insertQuestionSymbol(
+  currentValue: string,
+  insert: string,
+  textarea: HTMLTextAreaElement | null,
+  setValue: (value: string) => void,
+  cursorOffset = 0,
+) {
+  if (!textarea) {
+    setValue(`${currentValue}${insert}`);
+    return;
+  }
+
+  const start = textarea.selectionStart ?? currentValue.length;
+  const end = textarea.selectionEnd ?? currentValue.length;
+  const nextValue = `${currentValue.slice(0, start)}${insert}${currentValue.slice(end)}`;
+  const nextCursor = Math.max(start, start + insert.length + cursorOffset);
+  setValue(nextValue);
+
+  setTimeout(() => {
+    textarea.focus();
+    textarea.setSelectionRange(nextCursor, nextCursor);
+  }, 0);
+}
+
+function shouldRenderMathPreview(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+
+  if (/^(integral|derivative|limit)\b/i.test(trimmed)) return true;
+  if (/^(sqrt|sin|cos|tan|ln|log|exp|abs|det|inv|transpose|dot|cross|norm)\s*\(/i.test(trimmed)) return true;
+  if (/[=^√πθαβλ∞≤≥≠∫Σ]/.test(trimmed)) return true;
+  if (/\b(?:alpha|beta|theta|lambda|pi|inf)\b/i.test(trimmed)) return true;
+  if (/\[\[.*\]\]|\[[^\]]+\]/.test(trimmed)) return true;
+
+  return /^[\d\s()+\-*/.,xya-zA-Z'\\]+$/.test(trimmed);
+}
+
+function shouldOfferGraphFromSolver(problem: string, category: string, graphExpr: string | null | undefined) {
+  if (!graphExpr?.trim()) return false;
+
+  if (
+    category === 'statistics' ||
+    category === 'discrete' ||
+    category === 'physics' ||
+    category === 'sequences-series' ||
+    category === 'differential-equations' ||
+    category === 'vectors' ||
+    category === 'matrices' ||
+    category === 'linear-algebra'
+  ) {
+    return false;
+  }
+
+  const lower = problem.trim().toLowerCase();
+  if (!lower) return true;
+
+  if (/^(solve|find|evaluate|calculate|determine|simplify|factor|expand|complete(?:ing)? the square|integral|integrate|derivative|differentiate|limit|prove|show)\b/.test(lower)) {
+    return false;
+  }
+
+  if (/\barea\b|\bvolume\b|\bhypotenuse\b|\bmidpoint\b|\bdistance\b/.test(lower)) {
+    return false;
+  }
+
+  return /(^|\s)(y\s*=|x\s*=)/i.test(problem) || (!/[?]/.test(problem) && /x/.test(graphExpr));
+}
+
+function solverTopicForQuestion(problem: string): TopicId {
+  const detected = detectMathCategory(problem);
+  if (detected === 'vectors' || detected === 'matrices' || detected === 'linear-algebra') {
+    return 'algebra';
+  }
+  return detected;
+}
+
 export function MathSolverPage() {
   const [active, setActive] = useState<ActiveView>('algebra');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
@@ -2036,7 +2229,7 @@ export function MathSolverPage() {
         setHistory(prev => { const next = [item, ...prev.filter(h => h.problem !== p)]; saveHistory(next); return next; });
       }
       // Auto-populate graph if solver provides expression
-      if (data.graphExpr) {
+      if (shouldOfferGraphFromSolver(p, data.category, data.graphExpr)) {
         replaceGraphWith(data.graphExpr);
       }
     } catch {
@@ -2381,35 +2574,15 @@ export function MathSolverPage() {
               </div>
             )}
 
-            {currentCategoryConfig && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {currentCategoryConfig.supportedActions.map((action) => (
-                  <span
-                    key={action}
-                    style={{
-                      padding: '4px 10px',
-                      borderRadius: 999,
-                      border: `1px solid ${currentAccent}26`,
-                      background: `${currentAccent}10`,
-                      color: currentAccent,
-                      fontSize: 11,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {action}
-                  </span>
-                ))}
-              </div>
-            )}
-
             {/* ── Structured form (all solver categories) ── */}
             {(() => {
               const forms = CATEGORY_FORMS[String(active)];
               if (!forms?.length) return null;
               const pf = forms.find(f => f.id === structFormType) ?? forms[0];
-              const groupedForms = active === 'geometry'
+              const groupConfig = CATEGORY_FORM_GROUPS[String(active)];
+              const groupedForms = groupConfig
                 ? forms.reduce<Record<string, StructForm[]>>((acc, form) => {
-                    const key = GEOMETRY_FORM_GROUPS[form.id] ?? 'Other';
+                    const key = groupConfig[form.id] ?? 'Other';
                     acc[key] = [...(acc[key] ?? []), form];
                     return acc;
                   }, {})
@@ -2743,7 +2916,7 @@ export function MathSolverPage() {
                     )}
 
                     {/* Graph CTA */}
-                    {result.graphExpr && (
+                    {shouldOfferGraphFromSolver(input, result.category, result.graphExpr) && (
                       <button onClick={() => {
                         // Normalize graphExpr: prefix "y = " if it's a bare function with no "=" sign
                         const rawExpr = result.graphExpr!;
@@ -3108,8 +3281,8 @@ export function MathSolverPage() {
                 {scanExtracted && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => { setInput(scanExtracted); setActive('algebra'); inputRef.current?.focus(); }} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: 'var(--bg-3)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Use in solver</button>
-                      <button onClick={() => { setInput(scanExtracted); setActive('algebra'); setTimeout(() => { void solve(scanExtracted, 'algebra'); }, 0); }} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Solve now</button>
+                      <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); inputRef.current?.focus(); }} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: 'var(--bg-3)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Use in solver</button>
+                      <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); setTimeout(() => { void solve(scanExtracted, nextTopic); }, 0); }} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Solve now</button>
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Extracted text</div>
                     <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 13, color: 'var(--text-secondary)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>{scanExtracted}</div>
@@ -3121,8 +3294,17 @@ export function MathSolverPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>Type any math question. Use <code>x^2</code>, <code>sqrt(x)</code>, <code>[[1,2],[3,4]]</code>. Preview renders live as you type.</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  {([{label:'^',insert:'^'},{label:'√',insert:'sqrt()'},{label:'/',insert:'/'},{label:'π',insert:'pi'},{label:'θ',insert:'theta'},{label:'α',insert:'alpha'},{label:'β',insert:'beta'},{label:'λ',insert:'lambda'},{label:'∞',insert:'inf'},{label:'∂',insert:'d/dx'},{label:'∫',insert:'integrate()'},{label:'sin',insert:'sin()'},{label:'cos',insert:'cos()'},{label:'tan',insert:'tan()'},{label:'ln',insert:'ln()'},{label:'log',insert:'log()'},{label:'e^x',insert:'exp()'},{label:'|x|',insert:'abs()'},{label:'≤',insert:' <= '},{label:'≥',insert:' >= '},{label:'≠',insert:' != '},{label:'[[]]',insert:'[[1,2],[3,4]]'},{label:"y'",insert:"y'"},{label:"y''",insert:"y''"},{label:'Σ',insert:'sum()'},{label:'det',insert:'det()'},{label:'inv',insert:'inv()'}] as Array<{label:string;insert:string}>).map(sym => (
-                    <button key={sym.label+sym.insert} onClick={() => { const ta=document.getElementById('math-question-input') as HTMLTextAreaElement|null; if(!ta){setTypeInput(prev=>prev+sym.insert);return;} const s=ta.selectionStart??typeInput.length,e2=ta.selectionEnd??typeInput.length; setTypeInput(typeInput.slice(0,s)+sym.insert+typeInput.slice(e2)); setTimeout(()=>{ta.focus();ta.setSelectionRange(s+sym.insert.length,s+sym.insert.length);},0); }} style={{ padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace' }}>{sym.label}</button>
+                  {QUESTION_INPUT_SYMBOLS.map((sym) => (
+                    <button
+                      key={sym.label + sym.insert}
+                      onClick={() => {
+                        const textarea = document.getElementById('math-question-input') as HTMLTextAreaElement | null;
+                        insertQuestionSymbol(typeInput, sym.insert, textarea, setTypeInput, sym.cursorOffset ?? 0);
+                      }}
+                      style={{ padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace' }}
+                    >
+                      {sym.label}
+                    </button>
                   ))}
                 </div>
                 <textarea id="math-question-input" value={typeInput} onChange={e => setTypeInput(e.target.value)}
@@ -3131,12 +3313,16 @@ export function MathSolverPage() {
                 {typeInput.trim() && (
                   <div style={{ padding: '12px 16px', borderRadius: 12, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', minHeight: 48 }}>
                     <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 8 }}>Preview</div>
-                    <MathText>{autoWrapMath(typeInput)}</MathText>
+                    {shouldRenderMathPreview(typeInput) ? (
+                      <MathRenderer math={typeInput.trim()} display />
+                    ) : (
+                      <MathText>{autoWrapMath(typeInput)}</MathText>
+                    )}
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button disabled={!typeInput.trim()} onClick={() => { setInput(typeInput); setActive('algebra'); inputRef.current?.focus(); }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}>Use in solver</button>
-                  <button disabled={!typeInput.trim()} onClick={() => { const q=typeInput.trim(); setInput(q); setActive('algebra'); setTimeout(()=>{ void solve(q,'algebra'); },0); }} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}>Solve now</button>
+                  <button disabled={!typeInput.trim()} onClick={() => { const q = typeInput.trim(); const nextTopic = solverTopicForQuestion(q); setInput(q); setActive(nextTopic); inputRef.current?.focus(); }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}>Use in solver</button>
+                  <button disabled={!typeInput.trim()} onClick={() => { const q = typeInput.trim(); const nextTopic = solverTopicForQuestion(q); setInput(q); setActive(nextTopic); setTimeout(() => { void solve(q, nextTopic); }, 0); }} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}>Solve now</button>
                   <button disabled={!typeInput.trim()} onClick={() => setTypeInput('')} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}>Clear</button>
                 </div>
               </div>

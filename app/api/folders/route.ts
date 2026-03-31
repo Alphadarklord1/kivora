@@ -53,13 +53,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Folder name is required.' }, { status: 400 });
   }
 
-  const [folder] = await db.insert(folders).values({
+  const fallbackFolder = {
     id: uuidv4(),
     userId,
     name: name.trim(),
     expanded: true,
     sortOrder: 0,
-  }).returning();
+    topics: [],
+    localOnly: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 
-  return NextResponse.json(folder, { status: 201 });
+  if (isEphemeralGuest(userId)) {
+    return NextResponse.json(fallbackFolder, { status: 201 });
+  }
+
+  try {
+    const [folder] = await db.insert(folders).values({
+      id: fallbackFolder.id,
+      userId,
+      name: name.trim(),
+      expanded: true,
+      sortOrder: 0,
+    }).returning();
+
+    return NextResponse.json(folder, { status: 201 });
+  } catch (error) {
+    console.error('[folders] POST failed, falling back to local-only folder', error);
+    return NextResponse.json(fallbackFolder, { status: 201 });
+  }
 }

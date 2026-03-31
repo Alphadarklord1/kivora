@@ -504,7 +504,12 @@ export function WorkspacePanel({
     if (selectedTopic) qs.set('topicId', selectedTopic);
     try {
       const r = await fetch(`/api/files?${qs}`);
-      const loaded: FileRecord[] = r.ok ? await r.json() : listLocalFiles(selectedFolder, selectedTopic);
+      const remote: FileRecord[] = r.ok ? await r.json() : [];
+      const local = listLocalFiles(selectedFolder, selectedTopic) as FileRecord[];
+      const loaded: FileRecord[] = [
+        ...remote,
+        ...local.filter((entry) => !remote.some((remoteEntry) => remoteEntry.id === entry.id)),
+      ];
       setFiles(loaded);
       // Check for missing blobs in the background (deferred so file list renders first)
       const checkMissing = async () => {
@@ -603,7 +608,14 @@ export function WorkspacePanel({
         file,
       });
       toast(res.ok ? `"${file.name}" uploaded` : `"${file.name}" saved locally`, res.ok ? 'success' : 'info');
-      if (!res.ok) upsertLocalFile(local);
+      if (res.ok) {
+        const payload = await res.json().catch(() => null);
+        if (payload?.localOnly || payload?.storageWarning) {
+          upsertLocalFile(local);
+        }
+      } else {
+        upsertLocalFile(local);
+      }
     } catch { upsertLocalFile(local); toast(`"${file.name}" saved locally`, 'info'); }
     await loadFiles(); onRefresh();
   }

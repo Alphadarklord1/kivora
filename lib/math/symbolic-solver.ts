@@ -185,11 +185,25 @@ function deriveGraphExpression(normalizedInput: string, category: MathCategoryId
     return undefined;
   }
 
+  const lower = normalizedInput.trim().toLowerCase();
+  if (
+    /^(solve|find|evaluate|calculate|determine|simplify|factor|expand|complete(?:ing)? the square|integral|integrate|derivative|differentiate|limit|prove|show)\b/.test(lower) ||
+    /\barea\b|\bvolume\b|\bhypotenuse\b|\bmidpoint\b|\bdistance\b/.test(lower)
+  ) {
+    return undefined;
+  }
+
+  const explicitGraph = normalizedInput.match(/^\s*([xy])\s*=\s*(.+)$/i);
+  if (explicitGraph) {
+    return `${explicitGraph[1]} = ${explicitGraph[2].trim()}`;
+  }
+
   if (normalizedInput.includes('=')) {
     const [lhs, rhs] = normalizedInput.split('=').map((part) => part.trim());
-    if (lhs && rhs && /x/.test(`${lhs}${rhs}`)) {
+    if (lhs && rhs && /x/.test(`${lhs}${rhs}`) && !/\b[a-z]+\s*=/.test(normalizedInput)) {
       return `(${lhs}) - (${rhs})`;
     }
+    return undefined;
   }
 
   const candidate = normalizedInput
@@ -200,7 +214,7 @@ function deriveGraphExpression(normalizedInput: string, category: MathCategoryId
     .replace(/\s+dx$/i, '')
     .trim();
 
-  return /x/.test(candidate) ? candidate : undefined;
+  return /x/.test(candidate) && !/[?]/.test(candidate) ? candidate : undefined;
 }
 
 function categoryFromProblem(normalizedInput: string): MathCategoryId {
