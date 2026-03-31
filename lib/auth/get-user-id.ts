@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 import { hasValidTwoFactorSession, LEGACY_TWO_FACTOR_COOKIE_NAME, TWO_FACTOR_COOKIE_NAME } from '@/lib/auth/two-factor';
 import { GUEST_SESSION_HEADER, isGuestEmail, isGuestSessionId, resolveGuestUserId } from '@/lib/auth/guest-session';
+import { isDatabaseUnreachableError, isLocalAuthUserId } from '@/lib/auth/local-auth-store';
 
 export const DEMO_USER_EMAIL = 'demo@local.kivora';
 export const LEGACY_STUDYHARBOR_DEMO_USER_EMAIL = 'demo@local.studyharbor';
@@ -33,7 +34,7 @@ export async function getUserId(
     });
     const tokenUserId = (token?.id || token?.sub) as string | undefined;
     if (tokenUserId) {
-      if (!isDatabaseConfigured) {
+      if (!isDatabaseConfigured || isLocalAuthUserId(tokenUserId)) {
         return tokenUserId;
       }
 
@@ -41,9 +42,17 @@ export async function getUserId(
         return tokenUserId;
       }
 
-      const user = await db.query.users.findFirst({
-        where: eq(users.id, tokenUserId),
-      });
+      let user;
+      try {
+        user = await db.query.users.findFirst({
+          where: eq(users.id, tokenUserId),
+        });
+      } catch (error) {
+        if (isDatabaseUnreachableError(error)) {
+          return tokenUserId;
+        }
+        throw error;
+      }
 
       if (!user?.twoFactorEnabled) {
         return tokenUserId;

@@ -5,6 +5,7 @@ import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { apiError } from '@/lib/api/error-response';
 import { clearTwoFactorCookie, normalizeTwoFactorCode, revokeTwoFactorSessions, verifyTwoFactorCode } from '@/lib/auth/two-factor';
+import { isLocalAuthUserId } from '@/lib/auth/local-auth-store';
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -14,6 +15,13 @@ export async function POST(request: NextRequest) {
     return apiError(401, {
       errorCode: 'UNAUTHORIZED',
       reason: 'Authentication required',
+    });
+  }
+
+  if (isLocalAuthUserId(userId)) {
+    return apiError(503, {
+      errorCode: 'LOCAL_ACCOUNT_2FA_UNAVAILABLE',
+      reason: 'Two-step verification is not available for local-only accounts yet.',
     });
   }
 
