@@ -347,6 +347,14 @@ export async function PUT(request: NextRequest) {
         });
       }
 
+      if (!updatedLocal || typeof updatedLocal === 'string') {
+        return apiError(404, {
+          errorCode: 'ACCOUNT_NOT_FOUND',
+          reason: 'Local account not found on this device',
+          requestId,
+        });
+      }
+
       return NextResponse.json({
         id: updatedLocal.id,
         email: updatedLocal.email,

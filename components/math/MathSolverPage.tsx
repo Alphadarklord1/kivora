@@ -2229,7 +2229,7 @@ export function MathSolverPage() {
         setHistory(prev => { const next = [item, ...prev.filter(h => h.problem !== p)]; saveHistory(next); return next; });
       }
       // Auto-populate graph if solver provides expression
-      if (shouldOfferGraphFromSolver(p, data.category, data.graphExpr)) {
+      if (data.graphExpr && shouldOfferGraphFromSolver(p, data.category, data.graphExpr)) {
         replaceGraphWith(data.graphExpr);
       }
     } catch {
