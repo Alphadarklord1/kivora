@@ -25,6 +25,7 @@ export default function RegisterPage() {
   const [name, setName]         = useState('');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
+  const [showPwd, setShowPwd]   = useState(false);
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
   const [caps, setCaps]         = useState<AuthCapabilities | null>(null);
@@ -44,6 +45,7 @@ export default function RegisterPage() {
 
   const hasOAuth = !caps?.oauthDisabled && (caps?.googleConfigured || caps?.microsoftConfigured || caps?.githubConfigured);
   const dbReady  = caps?.dbConfigured !== false;
+  const providerCount = [caps?.googleConfigured, caps?.microsoftConfigured, caps?.githubConfigured].filter(Boolean).length;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -129,8 +131,14 @@ export default function RegisterPage() {
         {/* Right panel — form */}
         <div className={styles.card}>
           <div className={styles.cardHeader}>
+            <div className={styles.cardHeaderTop}>
+              <span className={`${styles.badge} ${styles.badgeReady}`}>Free account</span>
+              <span className={`${styles.badge} ${hasOAuth ? styles.badgeReady : styles.badgeNeutral}`}>
+                {hasOAuth ? `${providerCount} quick start option${providerCount === 1 ? '' : 's'}` : 'Email signup'}
+              </span>
+            </div>
             <h1>Create account</h1>
-            <p>Get started — it takes 30 seconds.</p>
+            <p>Get started in under a minute, then keep your study flow synced across Kivora.</p>
           </div>
 
           <div className={styles.stack}>
@@ -148,6 +156,17 @@ export default function RegisterPage() {
                 but full Supabase Auth sync and storage backup need <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>SUPABASE_SERVICE_ROLE_KEY</code>.
               </div>
             )}
+
+            <div className={styles.miniGrid}>
+              <div className={styles.miniCard}>
+                <strong>Sync when you want it</strong>
+                <p>Save plans, library items, and account settings across sessions without rebuilding your setup.</p>
+              </div>
+              <div className={styles.miniCard}>
+                <strong>Stay local when needed</strong>
+                <p>You can still use guest mode and local AI paths if you are not ready to depend on cloud features.</p>
+              </div>
+            </div>
 
             {/* OAuth quick-register */}
             {hasOAuth && (
@@ -193,21 +212,40 @@ export default function RegisterPage() {
             {/* Email registration form */}
             <form className={styles.form} onSubmit={handleSubmit}>
               <div className={styles.field}>
-                <label htmlFor="name">Name</label>
+                <div className={styles.fieldHeader}>
+                  <label htmlFor="name">Name</label>
+                </div>
                 <input id="name" type="text" placeholder="Your name" value={name}
                   onChange={e => setName(e.target.value)} required autoComplete="name" />
+                <p className={styles.helperText}>This is what shows up across your account, public profile, and shared study items.</p>
               </div>
               <div className={styles.field}>
-                <label htmlFor="email">Email</label>
+                <div className={styles.fieldHeader}>
+                  <label htmlFor="email">Email</label>
+                </div>
                 <input id="email" type="email" placeholder="you@example.com" value={email}
                   onChange={e => setEmail(e.target.value)} required autoComplete="email" />
+                <p className={styles.helperText}>Use an address you’ll keep, so your progress and recovery options stay simple.</p>
               </div>
               <div className={styles.field}>
-                <label htmlFor="password">Password</label>
-                <input id="password" type="password" placeholder="At least 8 characters" value={password}
-                  onChange={e => setPassword(e.target.value)} required minLength={8} autoComplete="new-password" />
+                <div className={styles.fieldHeader}>
+                  <label htmlFor="password">Password</label>
+                </div>
+                <div className={styles.passwordWrap}>
+                  <input id="password" type={showPwd ? 'text' : 'password'} placeholder="At least 8 characters" value={password}
+                    onChange={e => setPassword(e.target.value)} required minLength={8} autoComplete="new-password" style={{ paddingRight: 44 }} />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwd(v => !v)}
+                    className={styles.visibilityButton}
+                    aria-label={showPwd ? 'Hide password' : 'Show password'}
+                  >
+                    {showPwd ? '🙈' : '👁'}
+                  </button>
+                </div>
+                <p className={styles.helperText}>Use 8+ characters. A long unique password makes recovery and provider linking much easier later.</p>
               </div>
-              {error && <p style={{ margin: 0, fontSize: '0.875rem', color: '#f87171' }}>{error}</p>}
+              {error && <p className={styles.errorBanner}>{error}</p>}
               <button
                 type="submit"
                 className={styles.submitButton}
@@ -227,6 +265,10 @@ export default function RegisterPage() {
                 </Link>
               </>
             )}
+
+            <div className={styles.cardFooterNote}>
+              Creating an account gives you the cleanest path for sync, profile settings, and shared study history. You can still stay local-first when needed.
+            </div>
 
             <div className={styles.footerRow}>
               <span>Already have an account?</span>

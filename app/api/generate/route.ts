@@ -10,11 +10,10 @@ import { redactForAi, resolveAiDataMode } from '@/lib/privacy/ai-data';
 // Core modes supported by offline fallback
 const OFFLINE_MODES: ToolMode[] = [
   'summarize', 'rephrase', 'explain', 'notes', 'quiz',
-  'mcq', 'flashcards', 'assignment',
+  'mcq', 'flashcards', 'assignment', 'outline', 'exam', 'practice',
 ];
 
-// All modes including AI-only extras
-const VALID_MODES = [...OFFLINE_MODES, 'outline', 'exam'] as const;
+const VALID_MODES = [...OFFLINE_MODES] as const;
 type AllModes = typeof VALID_MODES[number];
 
 const SYSTEM_PROMPT = 'You are a study assistant. Be concise, accurate, and helpful.';
@@ -206,6 +205,7 @@ function buildUserPrompt(mode: AllModes, text: string, options?: Record<string, 
     assignment: `Generate a structured assignment with ${count} questions based on:\n\n${text}`,
     outline:    `Create a detailed hierarchical outline with main topics and subtopics from:\n\n${text}`,
     exam:       `Create a realistic exam paper with ${count} mixed questions (MCQ, short answer, essay) worth 100 marks total. Include a marking scheme. Based on:\n\n${text}`,
+    practice:   `Create one strong practice problem based on this material. Use this format exactly: ## Problem, ## Hint 1, ## Hint 2, ## Hint 3, ## Solution.\n\n${text}`,
   };
 
   return instructions[mode];

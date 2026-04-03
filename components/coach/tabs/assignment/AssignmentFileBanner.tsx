@@ -51,18 +51,21 @@ export function AssignmentFileBanner({
     <div className={styles.fileInputBanner}>
       <div className={styles.fileInputRow}>
         <span className={styles.fileInputLabel}>Source file</span>
+        <span className={styles.fileInputHint}>
+          {fileName ? 'Loaded into Build and Write' : 'Optional, but useful for grounded drafts'}
+        </span>
         <div className={styles.fileInputBtns}>
           <button
             className={`${styles.btnSecondary} ${filePanelOpen === 'upload' ? styles.segBtnActive : ''}`}
             onClick={() => onTogglePanel('upload')}
           >
-            Upload
+            Upload file
           </button>
           <button
             className={`${styles.btnSecondary} ${filePanelOpen === 'workspace' ? styles.segBtnActive : ''}`}
             onClick={() => onTogglePanel('workspace')}
           >
-            Workspace
+            From Workspace
           </button>
         </div>
         {fileName && (
@@ -91,7 +94,7 @@ export function AssignmentFileBanner({
             className={styles.hiddenInput}
             onChange={(event) => void onFileChange(event.target.files?.[0] ?? null)}
           />
-          {fileLoading ? <span>⏳ Extracting text…</span> : <span>Click to choose or drag a PDF / Word file here</span>}
+          {fileLoading ? <span>⏳ Extracting text…</span> : <span>Click to choose or drag a PDF / Word file</span>}
         </div>
       )}
 

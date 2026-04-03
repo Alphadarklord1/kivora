@@ -70,6 +70,7 @@ export default function LoginPage() {
   const hasOAuth = !caps?.oauthDisabled && (caps?.googleConfigured || caps?.microsoftConfigured || caps?.githubConfigured);
   const dbReady  = caps?.dbConfigured !== false; // assume true while loading
   const authDisabled = caps?.authDisabled;
+  const providerCount = [caps?.googleConfigured, caps?.microsoftConfigured, caps?.githubConfigured].filter(Boolean).length;
 
   return (
     <div className={styles.shell} dir={settings.language === 'ar' ? 'rtl' : 'ltr'}>
@@ -105,8 +106,14 @@ export default function LoginPage() {
         {/* Right panel — form */}
         <div className={styles.card}>
           <div className={styles.cardHeader}>
+            <div className={styles.cardHeaderTop}>
+              <span className={`${styles.badge} ${dbReady ? styles.badgeReady : styles.badgeSetup}`}>{dbReady ? 'Account ready' : 'Local-first mode'}</span>
+              <span className={`${styles.badge} ${hasOAuth ? styles.badgeReady : styles.badgeNeutral}`}>
+                {hasOAuth ? `${providerCount} quick sign-in option${providerCount === 1 ? '' : 's'}` : 'Email + guest available'}
+              </span>
+            </div>
             <h1>Sign in</h1>
-            <p>Welcome back — pick up where you left off.</p>
+            <p>Welcome back — jump back into your study flow without losing your place.</p>
           </div>
 
           <div className={styles.stack}>
@@ -128,6 +135,17 @@ export default function LoginPage() {
                 <code> NEXT_PUBLIC_SUPABASE_URL </code> and <code> SUPABASE_SERVICE_ROLE_KEY </code> are added.
               </div>
             )}
+
+            <div className={styles.miniGrid}>
+              <div className={styles.miniCard}>
+                <strong>Pick up saved work</strong>
+                <p>Your library, plans, and settings stay together when you use an account.</p>
+              </div>
+              <div className={styles.miniCard}>
+                <strong>Still works locally</strong>
+                <p>If cloud setup is incomplete, you can keep moving in guest mode and come back later.</p>
+              </div>
+            </div>
 
             {/* OAuth providers */}
             {hasOAuth && (
@@ -185,7 +203,9 @@ export default function LoginPage() {
             {/* Email / password form */}
             <form className={styles.form} onSubmit={handleSubmit}>
               <div className={styles.field}>
-                <label htmlFor="email">Email</label>
+                <div className={styles.fieldHeader}>
+                  <label htmlFor="email">Email</label>
+                </div>
                 <input
                   id="email"
                   type="email"
@@ -195,10 +215,16 @@ export default function LoginPage() {
                   required
                   autoComplete="email"
                 />
+                <p className={styles.helperText}>Use the same address you used for your study account or provider sign-in.</p>
               </div>
               <div className={styles.field}>
-                <label htmlFor="password">Password</label>
-                <div style={{ position: 'relative' }}>
+                <div className={styles.fieldHeader}>
+                  <label htmlFor="password">Password</label>
+                  <Link href="/forgot-password" className={styles.inlineLink}>
+                    Forgot password?
+                  </Link>
+                </div>
+                <div className={styles.passwordWrap}>
                   <input
                     id="password"
                     type={showPwd ? 'text' : 'password'}
@@ -212,14 +238,15 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowPwd(v => !v)}
-                    style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9cadc8', fontSize: 14, padding: 0 }}
+                    className={styles.visibilityButton}
                     aria-label={showPwd ? 'Hide password' : 'Show password'}
                   >
                     {showPwd ? '🙈' : '👁'}
                   </button>
                 </div>
+                <p className={styles.helperText}>Local-only accounts work too, so sign-in can keep working even when hosted sync is limited.</p>
               </div>
-              {error && <p style={{ margin: 0, fontSize: '0.875rem', color: '#f87171' }}>{error}</p>}
+              {error && <p className={styles.errorBanner}>{error}</p>}
               <button
                 type="submit"
                 className={styles.submitButton}
@@ -228,11 +255,6 @@ export default function LoginPage() {
               >
                 {loading ? 'Signing in…' : 'Sign in with email'}
               </button>
-              <div style={{ textAlign: 'right', marginTop: -4 }}>
-                <Link href="/forgot-password" style={{ fontSize: 13, color: 'var(--primary, #4f86f7)', textDecoration: 'none', opacity: 0.85 }}>
-                  Forgot password?
-                </Link>
-              </div>
             </form>
 
             {!hasOAuth && <div className={styles.divider}>or</div>}
@@ -243,6 +265,10 @@ export default function LoginPage() {
                 Continue as Guest — no account needed
               </Link>
             )}
+
+            <div className={styles.cardFooterNote}>
+              Signing in gives you cleaner sync across study tools. Guest mode stays available when you just want to move fast.
+            </div>
 
             <div className={styles.footerRow}>
               <span>No account?</span>

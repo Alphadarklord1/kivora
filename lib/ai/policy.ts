@@ -2,6 +2,7 @@ export type StudyAiMode =
   | 'assignment'
   | 'summarize'
   | 'explain'
+  | 'practice'
   | 'mcq'
   | 'quiz'
   | 'notes'
@@ -35,6 +36,7 @@ export type AiScopeDecision = AiScopeAllowed | AiScopeBlocked;
 export const STUDYPILOT_ALLOWED_AI_MODES: StudyAiMode[] = [
   'assignment',
   'summarize',
+  'practice',
   'mcq',
   'quiz',
   'notes',
@@ -50,6 +52,7 @@ const allowedModes = new Set<string>(STUDYPILOT_ALLOWED_AI_MODES);
 const MODE_MIN_LENGTH: Partial<Record<StudyAiMode, number>> = {
   assignment: 30,
   summarize: 40,
+  practice: 40,
   mcq: 40,
   quiz: 40,
   notes: 40,

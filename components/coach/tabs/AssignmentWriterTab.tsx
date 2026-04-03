@@ -233,6 +233,7 @@ export function AssignmentWriterTab({
   const [reportSavedLib,  setReportSavedLib]  = useState(false);
   const [exportingDocx,   setExportingDocx]   = useState(false);
   const [exportingPptx,   setExportingPptx]   = useState(false);
+  const [showKeyPoints,   setShowKeyPoints]   = useState(false);
 
   // Assignment helper
   const [assignText,    setAssignText]    = useState('');
@@ -270,7 +271,7 @@ export function AssignmentWriterTab({
         if (typeof d.reportTopic     === 'string') setReportTopic(d.reportTopic);
         if (d.reportType === 'essay' || d.reportType === 'report' || d.reportType === 'literature_review') setReportType(d.reportType);
         if (typeof d.reportWordCount === 'number') setReportWordCount(d.reportWordCount);
-        if (typeof d.reportKeyPoints === 'string') setReportKeyPoints(d.reportKeyPoints);
+        if (typeof d.reportKeyPoints === 'string') { setReportKeyPoints(d.reportKeyPoints); if (d.reportKeyPoints) setShowKeyPoints(true); }
         if (Array.isArray(d.outline))               setOutline(d.outline as OutlineSection[]);
         if (typeof d.reportResult    === 'string') setReportResult(d.reportResult);
         if (typeof d.checkText       === 'string') setCheckText(d.checkText);
@@ -611,45 +612,17 @@ export function AssignmentWriterTab({
   const sourceLabel     = fileName || '';
   const hasWriterResult = checkScore !== null || legacyResult.length > 0;
   const activeSuggs     = checkSuggs.filter(s => !dismissed.has(s.id));
-  const writingStudioStats = [
-    fileName ? `Source file: ${fileName}` : 'No source file loaded yet',
-    `${selectedSources.length} source${selectedSources.length === 1 ? '' : 's'} selected`,
-    `${outline?.length ?? 0} outline section${(outline?.length ?? 0) === 1 ? '' : 's'}`,
-    `${activeSuggs.length} active suggestion${activeSuggs.length === 1 ? '' : 's'}`,
-  ];
+  const writingStage = reportResult
+    ? 3
+    : outline
+      ? 2
+      : reportTopic.trim() || fileName
+        ? 1
+        : 0;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className={styles.reportLayout}>
-
-      <div className={styles.studioHero}>
-        <div className={styles.studioHeroCopy}>
-          <span className={styles.studioEyebrow}>Writing Studio</span>
-          <h3>Build a report, then switch to editor mode.</h3>
-          <p>Load a brief or draft, outline the report, then move into Write &amp; Check for feedback.</p>
-        </div>
-        <div className={styles.studioHeroMeta}>
-          {writingStudioStats.slice(0, 2).map((item) => (
-            <span key={item} className={styles.studioMetaPill}>{item}</span>
-          ))}
-          {(reportTopic || reportResult || checkText) && (
-            <button
-              className={styles.btnSecondary}
-              style={{ fontSize: 11, padding: '2px 8px' }}
-              onClick={() => {
-                setReportTopic(''); setReportType('essay'); setReportWordCount(1000);
-                setReportKeyPoints(''); setOutline(null); setReportResult('');
-                setCheckText(''); clearWriterResults(); setAssignText(''); setAssignResult('');
-                localStorage.removeItem(DRAFT_KEY);
-                toast('Draft cleared', 'info');
-              }}
-              title="Clear all work and start fresh"
-            >
-              Clear draft
-            </button>
-          )}
-        </div>
-      </div>
 
       {/* ── File input banner ── */}
       <AssignmentFileBanner
@@ -670,26 +643,86 @@ export function AssignmentWriterTab({
         onClearFile={clearFile}
       />
 
-      {/* ── Inner tab switcher ── */}
+      {/* ── Tab nav bar ── */}
       <div className={styles.innerTabNav}>
-        <button
-          className={`${styles.studioTabBtn} ${innerTab === 'build' ? styles.studioTabBtnActive : ''}`}
-          onClick={() => setInnerTab('build')}
-        >
-          <span>📋 Build Report</span>
-          <small>Outline, cite, draft</small>
-        </button>
-        <button
-          className={`${styles.studioTabBtn} ${innerTab === 'write' ? styles.studioTabBtnActive : ''}`}
-          onClick={() => {
-            setInnerTab('write');
-            // Auto-fill editor from loaded file if it is empty
-            if (fileText && !checkText) setCheckText(fileText.slice(0, 8000));
-          }}
-        >
-          <span>✍️ Write &amp; Check</span>
-          <small>Review, improve, export</small>
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            className={`${styles.studioTabBtn} ${innerTab === 'build' ? styles.studioTabBtnActive : ''}`}
+            onClick={() => setInnerTab('build')}
+          >
+            <span>📋 Build Report</span>
+            <small>Outline, cite, draft</small>
+          </button>
+          <button
+            className={`${styles.studioTabBtn} ${innerTab === 'write' ? styles.studioTabBtnActive : ''}`}
+            onClick={() => {
+              setInnerTab('write');
+              if (fileText && !checkText) setCheckText(fileText.slice(0, 8000));
+            }}
+          >
+            <span>✍️ Write &amp; Check</span>
+            <small>Review, improve, export</small>
+          </button>
+        </div>
+        <div className={styles.studioNavMeta}>
+          {fileName && <span className={styles.studioMetaPill}>📄 {fileName}</span>}
+          {innerTab === 'write' && activeSuggs.length > 0 && (
+            <span className={styles.studioMetaPill}>{activeSuggs.length} suggestion{activeSuggs.length !== 1 ? 's' : ''}</span>
+          )}
+          {(reportTopic || reportResult || checkText) && (
+            <button
+              className={styles.btnSecondary}
+              style={{ fontSize: '0.75rem', padding: '3px 9px' }}
+              onClick={() => {
+                setReportTopic(''); setReportType('essay'); setReportWordCount(1000);
+                setReportKeyPoints(''); setShowKeyPoints(false); setOutline(null); setReportResult('');
+                setCheckText(''); clearWriterResults(); setAssignText(''); setAssignResult('');
+                localStorage.removeItem(DRAFT_KEY);
+                toast('Draft cleared', 'info');
+              }}
+              title="Clear all work and start fresh"
+            >
+              Clear draft
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className={styles.studioSteps}>
+        {[
+          {
+            step: '1',
+            title: 'Load brief',
+            detail: fileName ? fileName : 'Use a source file or start from a topic',
+            active: writingStage >= 0 && innerTab === 'build',
+            done: Boolean(fileName || reportTopic.trim()),
+          },
+          {
+            step: '2',
+            title: 'Build draft',
+            detail: outline ? `${outline.length} outline section${outline.length === 1 ? '' : 's'} ready` : 'Set type, topic, and outline',
+            active: innerTab === 'build' && writingStage >= 1,
+            done: Boolean(reportResult),
+          },
+          {
+            step: '3',
+            title: 'Review writing',
+            detail: innerTab === 'write' ? `${writerWordCount.toLocaleString()} words in editor` : 'Switch to Write & Check',
+            active: innerTab === 'write',
+            done: hasWriterResult,
+          },
+        ].map((item) => (
+          <div
+            key={item.step}
+            className={`${styles.studioStepCard} ${item.active ? styles.studioStepCardActive : ''} ${item.done ? styles.studioStepCardDone : ''}`}
+          >
+            <span className={styles.studioStepNum}>{item.done ? '✓' : item.step}</span>
+            <div>
+              <strong>{item.title}</strong>
+              <p>{item.detail}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* ════════════════════════════════════════════════════════════════════ */}
@@ -697,132 +730,157 @@ export function AssignmentWriterTab({
       {/* ════════════════════════════════════════════════════════════════════ */}
       {innerTab === 'build' && (
         <>
-          {/* Controls row */}
+          {/* Controls */}
           <div className={styles.reportControls}>
-            <div className={styles.controlGroup}>
-              <label className={styles.controlLabel}>Type</label>
-              <div className={styles.segControl}>
-                {REPORT_TYPES.map(t => (
-                  <button
-                    key={t.id}
-                    className={`${styles.segBtn} ${reportType === t.id ? styles.segBtnActive : ''}`}
-                    onClick={() => setReportType(t.id)}
-                  >
-                    {t.label}
-                  </button>
-                ))}
+            <div className={styles.buildHead}>
+              <div>
+                <strong>Build draft</strong>
+                <p>Set the topic, choose the structure, then outline before writing.</p>
               </div>
+              <span className={styles.buildHint}>{outline ? 'Outline ready' : 'Start with a topic'}</span>
             </div>
-            <div className={styles.controlGroup} style={{ flex: 2 }}>
+            {/* Topic — primary, full width */}
+            <div style={{ width: '100%' }}>
               <label className={styles.controlLabel}>Topic</label>
               <input
                 className={styles.textInput}
+                style={{ fontSize: '0.95rem', padding: '0.65rem 0.85rem' }}
                 value={reportTopic}
                 onChange={e => setReportTopic(e.target.value)}
-                placeholder="e.g. The causes of World War I"
+                placeholder="What are you writing about? e.g. The causes of World War I"
                 onKeyDown={e => e.key === 'Enter' && !outlineLoading && reportTopic.trim() ? void handleGenerateOutline() : undefined}
               />
             </div>
-            <div className={styles.controlGroup}>
-              <label className={styles.controlLabel}>Words</label>
-              <select className={styles.selectInput} value={reportWordCount} onChange={e => setReportWordCount(+e.target.value)}>
-                {[500, 750, 1000, 1500, 2000, 3000].map(n => (
-                  <option key={n} value={n}>{n.toLocaleString()}</option>
-                ))}
-              </select>
+            {/* Options row */}
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end', width: '100%' }}>
+              <div className={styles.controlGroup}>
+                <label className={styles.controlLabel}>Type</label>
+                <div className={styles.segControl}>
+                  {REPORT_TYPES.map(t => (
+                    <button
+                      key={t.id}
+                      className={`${styles.segBtn} ${reportType === t.id ? styles.segBtnActive : ''}`}
+                      onClick={() => setReportType(t.id)}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className={styles.controlGroup}>
+                <label className={styles.controlLabel}>Words</label>
+                <select className={styles.selectInput} value={reportWordCount} onChange={e => setReportWordCount(+e.target.value)}>
+                  {[500, 750, 1000, 1500, 2000, 3000].map(n => (
+                    <option key={n} value={n}>{n.toLocaleString()}</option>
+                  ))}
+                </select>
+              </div>
+              <div className={styles.buildActionRow}>
+                <button
+                  className={styles.btnSecondary}
+                  style={{ fontSize: '0.8rem', color: showKeyPoints ? undefined : 'var(--text-muted, #64748b)' }}
+                  onClick={() => setShowKeyPoints(v => !v)}
+                  type="button"
+                >
+                  {showKeyPoints ? 'Hide key points' : 'Add key points'}
+                </button>
+                <button
+                  className={styles.btnPrimary}
+                  disabled={outlineLoading || reportLoading || !reportTopic.trim()}
+                  onClick={() => void handleGenerateOutline()}
+                >
+                  {outlineLoading ? 'Building…' : 'Outline'}
+                </button>
+                {outline && (
+                  <button
+                    className={styles.btnPrimary}
+                    disabled={reportLoading}
+                    onClick={() => void handleWriteDraft()}
+                  >
+                    {reportLoading ? 'Writing…' : 'Write Draft'}
+                  </button>
+                )}
+              </div>
             </div>
-            <button
-              className={styles.btnPrimary}
-              style={{ alignSelf: 'flex-end' }}
-              disabled={outlineLoading || reportLoading || !reportTopic.trim()}
-              onClick={() => void handleGenerateOutline()}
-            >
-              {outlineLoading ? 'Building…' : '📋 Outline'}
-            </button>
-            {outline && (
-              <button
-                className={styles.btnPrimary}
-                style={{ alignSelf: 'flex-end' }}
-                disabled={reportLoading}
-                onClick={() => void handleWriteDraft()}
-              >
-                {reportLoading ? 'Writing…' : '✨ Write Draft'}
-              </button>
+            {/* Key points — shown on demand */}
+            {showKeyPoints && (
+              <div className={styles.optionalBlock}>
+                <label className={styles.controlLabel}>
+                  Key points to cover <span className={styles.optional}>(optional)</span>
+                </label>
+                <textarea
+                  className={styles.textArea}
+                  rows={2}
+                  value={reportKeyPoints}
+                  onChange={e => setReportKeyPoints(e.target.value)}
+                  placeholder="e.g. Alliance system, nationalism, assassination of Franz Ferdinand…"
+                />
+              </div>
             )}
-          </div>
-
-          <div className={styles.controlGroup}>
-            <label className={styles.controlLabel}>
-              Key points to cover <span className={styles.optional}>(optional)</span>
-            </label>
-            <textarea
-              className={styles.textArea}
-              rows={2}
-              value={reportKeyPoints}
-              onChange={e => setReportKeyPoints(e.target.value)}
-              placeholder="e.g. Alliance system, nationalism, assassination of Franz Ferdinand…"
-            />
           </div>
 
           {/* Source discovery */}
           {reportTopic.trim() && (
-            <div className={styles.sourceDiscovery}>
-              <div className={styles.sourceDiscoveryHead}>
-                <strong>📚 Sources</strong>
-                <span className={styles.sourceDiscoveryStatus}>
+            <details
+              className={styles.detailsBlock}
+              open={Boolean(selectedUrls.size || sourcesLoading || sourcesError)}
+            >
+              <summary className={styles.detailsSummary}>
+                📚 Optional sources & citations
+                <span className={styles.sourceDiscoveryStatus} style={{ marginLeft: 8 }}>
                   {sourcesLoading
                     ? '⏳ Finding sources…'
                     : sourcesError
                       ? `⚠️ ${sourcesError}`
                       : sources.length > 0
-                        ? `${sources.length} sources found — ${selectedUrls.size} selected`
-                        : 'No sources yet'}
+                        ? `${sources.length} found — ${selectedUrls.size} selected`
+                        : 'Research support is optional'}
                 </span>
-              </div>
-              {sources.length > 0 && (
-                <div className={styles.sourceCardGrid}>
-                  {sources.map(source => {
-                    const grade    = gradeSource(source.type);
-                    const selected = selectedUrls.has(source.url);
-                    return (
-                      <div
-                        key={source.url}
-                        className={`${styles.sourceCard} ${selected ? styles.sourceCardSelected : ''}`}
-                        onClick={() => toggleSource(source.url)}
-                      >
-                        <div className={styles.sourceCardTop}>
-                          <div className={styles.sourceCardMeta}>
-                            <span className={`${styles.sourceGradeBadge} ${grade.cssClass}`} title={grade.label}>{grade.badge}</span>
-                            <span className={styles.sourceCardOrigin}>{source.source}</span>
+              </summary>
+              <div className={styles.detailsBody}>
+                {sources.length > 0 && (
+                  <div className={styles.sourceCardGrid}>
+                    {sources.map(source => {
+                      const grade    = gradeSource(source.type);
+                      const selected = selectedUrls.has(source.url);
+                      return (
+                        <div
+                          key={source.url}
+                          className={`${styles.sourceCard} ${selected ? styles.sourceCardSelected : ''}`}
+                          onClick={() => toggleSource(source.url)}
+                        >
+                          <div className={styles.sourceCardTop}>
+                            <div className={styles.sourceCardMeta}>
+                              <span className={`${styles.sourceGradeBadge} ${grade.cssClass}`} title={grade.label}>{grade.badge}</span>
+                              <span className={styles.sourceCardOrigin}>{source.source}</span>
+                            </div>
+                            <span className={styles.sourceCardTime}>~{source.readingMinutes} min</span>
                           </div>
-                          <span className={styles.sourceCardTime}>~{source.readingMinutes} min</span>
-                        </div>
-                        <strong className={styles.sourceCardTitle}>{source.title}</strong>
-                        <p className={styles.sourceCardExcerpt}>{source.excerpt}</p>
-                        <div className={styles.sourceCardFooter}>
-                          <label className={styles.sourceCardCheckbox} onClick={e => e.stopPropagation()}>
-                            <input type="checkbox" checked={selected} onChange={() => toggleSource(source.url)} />
-                            Use in report
-                          </label>
-                          <div style={{ display: 'flex', gap: '0.35rem' }}>
-                            <a href={source.url} target="_blank" rel="noopener noreferrer" className={styles.citationBtn} onClick={e => e.stopPropagation()}>Open ↗</a>
-                            <button className={styles.citationBtn} onClick={e => { e.stopPropagation(); void handleCopyCitation(source); }} title="Copy citation">📎 Cite</button>
+                          <strong className={styles.sourceCardTitle}>{source.title}</strong>
+                          <p className={styles.sourceCardExcerpt}>{source.excerpt}</p>
+                          <div className={styles.sourceCardFooter}>
+                            <label className={styles.sourceCardCheckbox} onClick={e => e.stopPropagation()}>
+                              <input type="checkbox" checked={selected} onChange={() => toggleSource(source.url)} />
+                              Use in report
+                            </label>
+                            <div style={{ display: 'flex', gap: '0.35rem' }}>
+                              <a href={source.url} target="_blank" rel="noopener noreferrer" className={styles.citationBtn} onClick={e => e.stopPropagation()}>Open ↗</a>
+                              <button className={styles.citationBtn} onClick={e => { e.stopPropagation(); void handleCopyCitation(source); }} title="Copy citation">📎 Cite</button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {selectedUrls.size > 0 && (
-                <div style={{ padding: '0 0.85rem 0.85rem' }}>
+                      );
+                    })}
+                  </div>
+                )}
+                {selectedUrls.size > 0 && (
                   <div className={styles.selectedBar}>
                     <strong>{selectedUrls.size} source{selectedUrls.size > 1 ? 's' : ''} selected — included as context in your report</strong>
                     <button className={styles.btnSecondary} onClick={() => void handleCopyAllCitations()}>📎 Copy all for MyBib</button>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            </details>
           )}
 
           {/* Context banner */}
@@ -922,8 +980,8 @@ export function AssignmentWriterTab({
           )}
 
           {/* Assignment helper — auto-opens when a file is loaded */}
-          <details className={styles.detailsBlock} open={!!assignText}>
-            <summary className={styles.detailsSummary}>🔍 Assignment Helper — decode a confusing prompt</summary>
+          <details className={styles.detailsBlock} open={!!assignResult}>
+            <summary className={styles.detailsSummary}>🔍 Assignment Helper — optional support for confusing prompts</summary>
             <div className={styles.detailsBody}>
               <div className={styles.segControl} style={{ marginBottom: '0.75rem' }}>
                 {ASSIGN_MODES.map(m => (

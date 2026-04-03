@@ -8,6 +8,7 @@ import {
   evaluateAiScope,
   type AiScopeBlocked,
   type AiScopeErrorCode,
+  STUDYPILOT_ALLOWED_AI_MODES,
   type StudyAiMode,
 } from '@/lib/ai/policy';
 import {
@@ -63,6 +64,14 @@ const DEFAULT_PREFS: AiPreferences = {
   openaiModel: getDefaultAiRuntimePreferences().cloudModel,
   enableCloudFallback: true,
 };
+
+const STUDY_AI_MODE_SET = new Set<StudyAiMode>(STUDYPILOT_ALLOWED_AI_MODES);
+
+function toStudyAiModes(value: unknown): StudyAiMode[] {
+  if (!Array.isArray(value)) return ['summarize', 'notes', 'quiz'];
+  const modes = value.filter((item): item is StudyAiMode => typeof item === 'string' && STUDY_AI_MODE_SET.has(item as StudyAiMode));
+  return modes.length ? modes : ['summarize', 'notes', 'quiz'];
+}
 
 function normalizeProvider(value: string | null): AiProvider {
   if (value === 'offline') {
@@ -142,9 +151,7 @@ async function requestOpenAI(
           status: 'policy_block',
           errorCode: (payload.errorCode as AiScopeErrorCode) || 'OUT_OF_SCOPE',
           reason: String(payload.reason || payload.error || 'Out-of-scope request'),
-          suggestionModes: Array.isArray(payload.suggestionModes)
-            ? (payload.suggestionModes as ToolMode[])
-            : ['summarize', 'notes', 'quiz'],
+          suggestionModes: toStudyAiModes(payload.suggestionModes),
         };
       }
 
@@ -212,7 +219,7 @@ async function requestDesktopLocal(
         status: 'policy_block',
         errorCode: 'OUT_OF_SCOPE',
         reason: result.reason || result.message,
-        suggestionModes: result.suggestionModes || ['summarize', 'notes', 'quiz'],
+        suggestionModes: toStudyAiModes(result.suggestionModes),
       };
     }
 
