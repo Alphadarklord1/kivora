@@ -168,7 +168,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="sidebar-nav">
         {!collapsed && (
-          <div className="sidebar-section-label">Core</div>
+          <div className="sidebar-section-label">{t('Core')}</div>
         )}
         {CORE_NAV_ITEMS.map(item => (
           <Link
@@ -184,7 +184,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ))}
 
         {!collapsed && (
-          <div className="sidebar-section-label" style={{ marginTop: 10 }}>Tools</div>
+          <div className="sidebar-section-label" style={{ marginTop: 10 }}>{t('Tools')}</div>
         )}
         {SUPPORT_NAV_ITEMS.map(item => (
           <Link
@@ -246,7 +246,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           title="Search (⌘K)"
         >
           <span className="nav-icon">🔍</span>
-          {!collapsed && <span className="nav-label">Search</span>}
+          {!collapsed && <span className="nav-label">{t('Search')}</span>}
         </button>
 
         <Link
@@ -312,7 +312,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Quick search palette — rendered globally, triggered by Cmd+K or search button */}
       <QuickSearchPalette
         isOpen={searchOpen}
-        isArabic={settings.language === 'ar'}
         query={searchQuery}
         items={searchItems}
         loading={false}
@@ -323,7 +322,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {showModelWizard && (
         <ModelSetupWizard
-          isArabic={settings.language === 'ar'}
           onComplete={() => setShowModelWizard(false)}
         />
       )}

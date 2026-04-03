@@ -12,7 +12,13 @@ interface ModelEntry {
   isInstalled: boolean;
   installedSource: 'bundled' | 'userData' | 'none';
   isDownloading: boolean;
-  downloadProgress?: { percent: number; state: string } | null;
+  downloadProgress?: {
+    percent: number;
+    state: string;
+    downloadedBytes?: number;
+    totalBytes?: number;
+    speedBps?: number;
+  } | null;
 }
 
 interface SelectionResult {
@@ -20,9 +26,23 @@ interface SelectionResult {
   recommendedModelKey: string;
 }
 
-function formatSize(bytes: number) {
+function formatBytes(bytes: number) {
   if (!bytes || bytes <= 0) return '—';
-  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(0)} MB`;
+  return `${(bytes / 1024).toFixed(0)} KB`;
+}
+
+function formatSpeed(bps: number) {
+  if (!bps || bps <= 0) return '';
+  if (bps >= 1024 ** 2) return ` · ${(bps / 1024 ** 2).toFixed(1)} MB/s`;
+  if (bps >= 1024) return ` · ${(bps / 1024).toFixed(0)} KB/s`;
+  return ` · ${bps} B/s`;
+}
+
+// Keep old alias for static size display
+function formatSize(bytes: number) {
+  return formatBytes(bytes);
 }
 
 const MODEL_LABELS: Record<string, { name: string; description: string; tag: string }> = {
@@ -111,6 +131,25 @@ export function DesktopModelPanel() {
       const result = await window.electronAPI.desktopAI.setModel(key);
       if (!result.ok) {
         setError(result.message || 'Failed to switch model');
+        return;
+      }
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unexpected error');
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleRemove(key: string) {
+    if (!window.electronAPI?.desktopAI) return;
+    if (!confirm('Remove this model from your app data? You can re-download it later.')) return;
+    setBusyKey(key);
+    setError(null);
+    try {
+      const result = await window.electronAPI.desktopAI.removeModel(key);
+      if (!result.ok) {
+        setError(result.message || 'Failed to remove model');
         return;
       }
       await refresh();
@@ -218,8 +257,12 @@ export function DesktopModelPanel() {
             {model.isDownloading && (
               <div style={{ display: 'grid', gap: 4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                  <span>{model.downloadProgress?.state ?? 'Downloading…'}</span>
-                  <span>{Math.round(progress)}%</span>
+                  <span>
+                    {model.downloadProgress?.downloadedBytes != null && model.downloadProgress.totalBytes
+                      ? `${formatBytes(model.downloadProgress.downloadedBytes)} / ${formatBytes(model.downloadProgress.totalBytes)}${formatSpeed(model.downloadProgress.speedBps ?? 0)}`
+                      : 'Downloading…'}
+                  </span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{Math.round(progress)}%</span>
                 </div>
                 <div style={{ height: 6, borderRadius: 99, background: 'var(--border-2)', overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${progress}%`, background: 'var(--primary-6)', borderRadius: 99, transition: 'width 0.3s' }} />
@@ -252,6 +295,17 @@ export function DesktopModelPanel() {
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>
                   Currently active
                 </span>
+              )}
+              {model.isInstalled && !isActive && model.installedSource === 'userData' && !model.isDownloading && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={isBusy}
+                  style={{ color: 'var(--text-3)' }}
+                  onClick={() => handleRemove(model.key)}
+                >
+                  {isBusy ? 'Removing…' : 'Remove'}
+                </button>
               )}
               {model.isDownloading && (
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>

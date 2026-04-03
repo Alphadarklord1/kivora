@@ -139,6 +139,80 @@ export async function searchSemanticScholar(query: string, limit = 3): Promise<A
     });
 }
 
+// ── OpenAlex API ─────────────────────────────────────────────────────────────
+
+interface OpenAlexWork {
+  id: string;
+  title: string | null;
+  abstract_inverted_index: Record<string, number[]> | null;
+  authorships: Array<{ author: { display_name: string } }>;
+  publication_year: number | null;
+  primary_location: { landing_page_url: string | null; pdf_url: string | null } | null;
+  open_access: { is_oa: boolean; oa_url: string | null } | null;
+}
+
+interface OpenAlexResponse {
+  results: OpenAlexWork[];
+}
+
+function reconstructAbstract(inv: Record<string, number[]>): string {
+  const words: string[] = [];
+  for (const [word, positions] of Object.entries(inv)) {
+    for (const pos of positions) {
+      words[pos] = word;
+    }
+  }
+  return words.filter(Boolean).join(' ');
+}
+
+/**
+ * Search OpenAlex for scholarly works on a topic.
+ * Free, no API key, no strict rate limit, 250M+ works indexed.
+ */
+export async function searchOpenAlex(query: string, limit = 3): Promise<ArticleSuggestion[]> {
+  const params = new URLSearchParams({
+    search: query,
+    'per-page': String(limit),
+    sort: 'relevance_score:desc',
+    select: 'id,title,abstract_inverted_index,authorships,publication_year,primary_location,open_access',
+  });
+  const res = await fetch(
+    `https://api.openalex.org/works?${params.toString()}`,
+    {
+      headers: { 'User-Agent': 'Kivora/1.0 (mailto:support@kivora.app; study assistant)' },
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  if (!res.ok) return [];
+
+  const data = await res.json() as OpenAlexResponse;
+  const works = data?.results ?? [];
+
+  return works
+    .filter(w => w.title && w.abstract_inverted_index)
+    .slice(0, limit)
+    .map(w => {
+      const abstract = reconstructAbstract(w.abstract_inverted_index!);
+      const url =
+        w.open_access?.oa_url ??
+        w.primary_location?.pdf_url ??
+        w.primary_location?.landing_page_url ??
+        `https://openalex.org/${w.id.split('/').pop()}`;
+      const authors = w.authorships.slice(0, 2).map(a => a.author.display_name).join(', ');
+      const yearStr = w.publication_year ? ` (${w.publication_year})` : '';
+      const excerpt = abstract.replace(/\s+/g, ' ').trim().slice(0, 200);
+
+      return {
+        title: `${w.title!}${yearStr}${authors ? ' — ' + authors : ''}`,
+        url,
+        source: 'OpenAlex',
+        excerpt: excerpt.endsWith('.') ? excerpt : excerpt + '…',
+        readingMinutes: Math.max(3, Math.ceil(abstract.split(/\s+/).length / 220) + 10),
+        type: 'academic' as const,
+      };
+    });
+}
+
 /**
  * Build static "further reading" suggestions for a topic — links to curated
  * educational platforms that don't require scraping.

@@ -1832,30 +1832,17 @@ export function WorkspacePanel({
 
         {/* ─────────────────── NOTES ─────────────────── */}
         {mainTab === 'notes' && (
-          <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
-            <div className="workspace-focus-strip" style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-              <div className="workspace-focus-card">
-                <span className="workspace-focus-eyebrow">Notes workflow</span>
-                <strong>{selFile ? `Ready to convert ${selFile.name}` : 'Turn PDFs and documents into notes'}</strong>
-                <span>{selFile ? `${noteStyle[0].toUpperCase() + noteStyle.slice(1)} format selected${extractedText ? ` · ${wordCount(extractedText).toLocaleString()} words loaded` : ''}` : 'Choose a file in Workspace and generate study-ready notes without leaving the app.'}</span>
-              </div>
-              <div className="workspace-focus-card workspace-focus-card--actions">
-                <button className="btn btn-secondary btn-sm" onClick={() => setMainTab('files')}>Choose file</button>
-                <button className="btn btn-ghost btn-sm" onClick={() => setMainTab('generate')}>Open tools</button>
-              </div>
-            </div>
-            <NotesPanel
-              folderId={selectedFolder}
-              injectContent={notesInject}
-              onInjectConsumed={() => setNotesInject(undefined)}
-              sourceLabel={selFile?.name ?? null}
-              sourceWordCount={extractedText ? wordCount(extractedText) : undefined}
-              noteStyle={noteStyle}
-              onNoteStyleChange={setNoteStyle}
-              onGenerateFromSource={() => void generateNotesForWorkspace()}
-              onOpenFiles={() => setMainTab('files')}
-            />
-          </div>
+          <NotesPanel
+            folderId={selectedFolder}
+            injectContent={notesInject}
+            onInjectConsumed={() => setNotesInject(undefined)}
+            sourceLabel={selFile?.name ?? null}
+            sourceWordCount={extractedText ? wordCount(extractedText) : undefined}
+            noteStyle={noteStyle}
+            onNoteStyleChange={setNoteStyle}
+            onGenerateFromSource={() => void generateNotesForWorkspace()}
+            onOpenFiles={() => setMainTab('files')}
+          />
         )}
 
         {/* ─────────────────── FOCUS ─────────────────── */}

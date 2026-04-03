@@ -20,7 +20,6 @@ import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
 import { loadClientAiDataMode } from '@/lib/privacy/ai-data';
 import { extractTextFromBlob } from '@/lib/pdf/extract';
 import { idbStore } from '@/lib/idb';
-import type { SourceBrief } from '@/lib/coach/source-brief';
 import type { TopicResearchResult } from '@/lib/coach/research';
 import type { ArticleSuggestion } from '@/lib/coach/articles';
 import {
@@ -31,6 +30,7 @@ import {
 } from '@/lib/coach/writing';
 import type { OutlineSection } from '@/app/api/coach/report/route';
 import type { CheckResult, WritingSuggestion } from '@/app/api/coach/check/route';
+import type { AssistAction } from '@/app/api/coach/assist/route';
 import { AssignmentFileBanner } from './assignment/AssignmentFileBanner';
 import { WriteCheckPanel } from './assignment/WriteCheckPanel';
 import styles from '@/app/(dashboard)/coach/page.module.css';
@@ -89,7 +89,6 @@ function buildCitationText(source: ArticleSuggestion): string {
 
 function buildContextText(
   selectedSources: ArticleSuggestion[],
-  sourceBrief: SourceBrief | null,
   researchResult: TopicResearchResult | null,
   fileText: string,
 ): string {
@@ -99,10 +98,6 @@ function buildContextText(
     parts.push(`Topic overview: ${researchResult.overview}`);
     if (researchResult.keyIdeas.length)
       parts.push(`Key ideas:\n${researchResult.keyIdeas.map(k => `- ${k}`).join('\n')}`);
-  } else if (sourceBrief) {
-    parts.push(`Source: ${sourceBrief.title}\nSummary: ${sourceBrief.summary}`);
-    if (sourceBrief.keyPoints.length)
-      parts.push(`Key points:\n${sourceBrief.keyPoints.map(k => `- ${k}`).join('\n')}`);
   }
   if (selectedSources.length > 0) {
     parts.push(`Selected sources:\n${selectedSources.map((s, i) => `[S${i + 1}] ${s.title} (${s.source}): ${s.excerpt}`).join('\n')}`);
@@ -126,21 +121,20 @@ type FilterType = 'all' | WritingSuggestion['type'];
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
-  sourceBrief: SourceBrief | null;
   researchResult: TopicResearchResult | null;
   onNavigateToResearch: (topic: string) => void;
-  sourceActionLoading: 'notes' | 'quiz' | 'flashcards' | null;
-  onSourceAction: (mode: 'notes' | 'quiz' | 'flashcards') => void;
+  /** When set, pre-fills the report topic and auto-switches to Build Report panel. */
+  preloadTopic?: string;
+  onPreloadConsumed?: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function AssignmentWriterTab({
-  sourceBrief,
   researchResult,
   onNavigateToResearch,
-  sourceActionLoading,
-  onSourceAction,
+  preloadTopic,
+  onPreloadConsumed,
 }: Props) {
   const { toast } = useToast();
   const privacyMode = loadClientAiDataMode();
@@ -264,6 +258,8 @@ export function AssignmentWriterTab({
   const [dismissed,       setDismissed]       = useState<Set<string>>(new Set());
   const [suggFilter,      setSuggFilter]      = useState<FilterType>('all');
   const [legacyResult,    setLegacyResult]    = useState('');
+  const [assistLoading,   setAssistLoading]   = useState(false);
+  const [wordCountGoal,   setWordCountGoal]   = useState(0);
 
   // ── Draft: restore on mount ───────────────────────────────────────────────
   useEffect(() => {
@@ -286,6 +282,15 @@ export function AssignmentWriterTab({
     } catch { /* ignore corrupt draft */ }
     draftLoadedRef.current = true;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Pre-load topic from Research tab ─────────────────────────────────────
+  useEffect(() => {
+    if (!preloadTopic) return;
+    setReportTopic(preloadTopic);
+    setInnerTab('build');
+    onPreloadConsumed?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preloadTopic]);
 
   // ── Draft: auto-save on change (debounced 1s) ─────────────────────────────
   useEffect(() => {
@@ -338,12 +343,10 @@ export function AssignmentWriterTab({
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const selectedSources = sources.filter(s => selectedUrls.has(s.url));
-  const context = buildContextText(selectedSources, sourceBrief, researchResult, fileText);
+  const context = buildContextText(selectedSources, researchResult, fileText);
   const contextSource = researchResult
     ? `Research: ${researchResult.topic}`
-    : sourceBrief ? `Source: ${sourceBrief.title}`
-    : fileText    ? `File: ${fileName}`
-    : null;
+    : fileName || null;
 
   function toggleSource(url: string) {
     setSelectedUrls(prev => {
@@ -491,11 +494,9 @@ export function AssignmentWriterTab({
     setCheckLoading(true);
     clearWriterResults();
     try {
-      const contextBlock = sourceBrief
-        ? `Reference source:\nTitle: ${sourceBrief.title}\nSummary: ${sourceBrief.summary}`
-        : fileText
-          ? `Assignment document:\n${fileText.slice(0, 2000)}`
-          : undefined;
+      const contextBlock = fileText
+        ? `Assignment document:\n${fileText.slice(0, 2000)}`
+        : undefined;
       const res = await fetch('/api/coach/check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -543,6 +544,41 @@ export function AssignmentWriterTab({
     toast('Switched to Build Report — topic pre-filled', 'info');
   }
 
+  async function handleAiAssist(action: AssistAction, selectedText: string, selStart: number, selEnd: number) {
+    if (assistLoading) return;
+    setAssistLoading(true);
+    try {
+      const ai = loadAiRuntimePreferences();
+      const privacyMode = loadClientAiDataMode();
+      const res = await fetch('/api/coach/assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text:    action === 'continue' ? checkText : selectedText,
+          action,
+          context: fileText.slice(0, 1200) || '',
+          ai,
+          privacyMode,
+        }),
+      });
+      const data = await res.json() as { result?: string; error?: string };
+      if (!res.ok || !data.result) throw new Error(data.error ?? 'AI assist failed');
+
+      if (action === 'continue') {
+        // Append the new paragraph at the end
+        setCheckText(prev => prev.trimEnd() + '\n\n' + data.result!);
+      } else {
+        // Replace the selected range in the text
+        setCheckText(prev => prev.slice(0, selStart) + data.result! + prev.slice(selEnd));
+      }
+      toast(`${action.charAt(0).toUpperCase() + action.slice(1)} applied`, 'success');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'AI assist failed', 'error');
+    } finally {
+      setAssistLoading(false);
+    }
+  }
+
   async function handleSaveWriter() {
     const hasResult = checkScore !== null || legacyResult.length > 0;
     if (!hasResult) return;
@@ -572,7 +608,7 @@ export function AssignmentWriterTab({
   const draftWordCount  = countWords(reportResult);
   const writerWordCount = countWords(checkText);
   const writerCharCount = checkText.length;
-  const sourceLabel     = (sourceBrief?.title ?? fileName) || '';
+  const sourceLabel     = fileName || '';
   const hasWriterResult = checkScore !== null || legacyResult.length > 0;
   const activeSuggs     = checkSuggs.filter(s => !dismissed.has(s.id));
   const writingStudioStats = [
@@ -794,7 +830,7 @@ export function AssignmentWriterTab({
             <div className={styles.contextBanner}>
               <span>📄 Also using: <strong>{contextSource}</strong></span>
               <div className={styles.bannerActions}>
-                <button className={styles.btnSecondary} onClick={() => onNavigateToResearch(reportTopic || sourceBrief?.title || fileName)}>
+                <button className={styles.btnSecondary} onClick={() => onNavigateToResearch(reportTopic || fileName)}>
                   Research wider
                 </button>
                 <a className={styles.btnSecondary} href="https://www.mybib.com/" target="_blank" rel="noopener noreferrer">MyBib ↗</a>
@@ -950,8 +986,6 @@ export function AssignmentWriterTab({
           checkSuggs={checkSuggs}
           suggFilter={suggFilter}
           legacyResult={legacyResult}
-          sourceBrief={sourceBrief}
-          sourceActionLoading={sourceActionLoading}
           onCheckTextChange={setCheckText}
           onCheckWork={() => void handleCheckWork()}
           onApplyAllSuggs={applyAllSuggs}
@@ -978,7 +1012,10 @@ export function AssignmentWriterTab({
           onDismissSuggestion={(id) => setDismissed(prev => new Set([...prev, id]))}
           onApplySuggestion={applySuggestion}
           onFilterChange={setSuggFilter}
-          onSourceAction={onSourceAction}
+          onAiAssist={(action, sel, s, e) => void handleAiAssist(action, sel, s, e)}
+          assistLoading={assistLoading}
+          wordCountGoal={wordCountGoal}
+          onWordCountGoalChange={setWordCountGoal}
         />
       )}
 

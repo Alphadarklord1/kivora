@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 export type QuickSearchType = 'page' | 'file' | 'library';
 
@@ -16,7 +17,6 @@ export interface QuickSearchItem {
 
 interface QuickSearchPaletteProps {
   isOpen: boolean;
-  isArabic: boolean;
   query: string;
   items: QuickSearchItem[];
   loading: boolean;
@@ -27,7 +27,6 @@ interface QuickSearchPaletteProps {
 
 export function QuickSearchPalette({
   isOpen,
-  isArabic,
   query,
   items,
   loading,
@@ -38,21 +37,7 @@ export function QuickSearchPalette({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-
-  const t = useCallback((key: string) => {
-    const ar: Record<string, string> = {
-      'Quick Search': 'بحث سريع',
-      'Search pages, files, and library...': 'ابحث في الصفحات والملفات والمكتبة...',
-      Pages: 'الصفحات',
-      Files: 'الملفات',
-      Library: 'المكتبة',
-      'No results': 'لا توجد نتائج',
-      'Type to search pages, files, and library items.': 'اكتب للبحث في الصفحات والملفات وعناصر المكتبة.',
-      'Use arrows to navigate, Enter to open, Esc to close': 'استخدم الأسهم للتنقل، Enter للفتح، Esc للإغلاق',
-      Loading: 'جارٍ التحميل',
-    };
-    return isArabic ? (ar[key] || key) : key;
-  }, [isArabic]);
+  const { t } = useI18n();
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();

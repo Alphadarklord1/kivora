@@ -18,11 +18,11 @@ interface Props {
 
 const STORAGE_PREFIX = 'kivora-notes-';
 
-const NOTE_STYLE_OPTIONS: Array<{ id: NoteStyle; label: string; hint: string }> = [
-  { id: 'study', label: 'Study notes', hint: 'Headings, bullets, key terms' },
-  { id: 'summary', label: 'Summary sheet', hint: 'Fast overview and takeaways' },
-  { id: 'revision', label: 'Revision sheet', hint: 'Exam cues, definitions, recall prompts' },
-  { id: 'cornell', label: 'Cornell', hint: 'Cue column, notes, review summary' },
+const NOTE_STYLES: Array<{ id: NoteStyle; label: string; hint: string }> = [
+  { id: 'study',    label: 'Study',    hint: 'Headings, bullets, key terms' },
+  { id: 'summary',  label: 'Summary',  hint: 'Fast overview and takeaways' },
+  { id: 'revision', label: 'Revision', hint: 'Exam cues, definitions, recall prompts' },
+  { id: 'cornell',  label: 'Cornell',  hint: 'Cue column, notes, review summary' },
 ];
 
 function mdToHtml(md: string): string {
@@ -43,16 +43,18 @@ function mdToHtml(md: string): string {
 type ViewMode = 'edit' | 'preview' | 'split';
 
 const TOOLBAR_BTNS: Array<{ label: string; title: string; actionKey: string; style?: React.CSSProperties }> = [
-  { label: 'B', title: 'Bold (Ctrl+B)', actionKey: 'bold', style: { fontWeight: 700 } },
-  { label: 'I', title: 'Italic (Ctrl+I)', actionKey: 'italic', style: { fontStyle: 'italic' } },
-  { label: 'H1', title: 'Heading 1', actionKey: 'h1' },
-  { label: 'H2', title: 'Heading 2', actionKey: 'h2' },
-  { label: 'H3', title: 'Heading 3', actionKey: 'h3' },
-  { label: '•', title: 'Bullet list', actionKey: 'bullet' },
-  { label: '1.', title: 'Numbered list', actionKey: 'numbered' },
-  { label: '</>', title: 'Inline code', actionKey: 'code' },
-  { label: '---', title: 'Horizontal divider', actionKey: 'divider' },
+  { label: 'B',   title: 'Bold (Ctrl+B)',   actionKey: 'bold',     style: { fontWeight: 700 } },
+  { label: 'I',   title: 'Italic (Ctrl+I)', actionKey: 'italic',   style: { fontStyle: 'italic' } },
+  { label: 'H1',  title: 'Heading 1',       actionKey: 'h1' },
+  { label: 'H2',  title: 'Heading 2',       actionKey: 'h2' },
+  { label: 'H3',  title: 'Heading 3',       actionKey: 'h3' },
+  { label: '•',   title: 'Bullet list',     actionKey: 'bullet' },
+  { label: '1.',  title: 'Numbered list',   actionKey: 'numbered' },
+  { label: '</>',  title: 'Inline code',    actionKey: 'code' },
+  { label: '---', title: 'Divider',         actionKey: 'divider' },
 ];
+
+type NoteMode = 'plain' | 'pdf';
 
 export function NotesPanel({
   folderId,
@@ -65,15 +67,15 @@ export function NotesPanel({
   onGenerateFromSource,
   onOpenFiles,
 }: Props) {
-  const [content, setContent] = useState('');
-  const [viewMode, setViewMode] = useState<ViewMode>('edit');
-  const [saved, setSaved] = useState(true);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [content, setContent]     = useState('');
+  const [viewMode, setViewMode]   = useState<ViewMode>('edit');
+  const [noteMode, setNoteMode]   = useState<NoteMode>('plain');
+  const [saved, setSaved]         = useState(true);
+  const textareaRef               = useRef<HTMLTextAreaElement>(null);
+  const saveTimer                 = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const storageKey = folderId ? `${STORAGE_PREFIX}${folderId}` : `${STORAGE_PREFIX}global`;
 
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const savedValue = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null;
     setContent(savedValue ?? '');
@@ -89,7 +91,6 @@ export function NotesPanel({
     setSaved(false);
     onInjectConsumed?.();
   }, [injectContent, onInjectConsumed]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const debouncedSave = useCallback((text: string) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -151,9 +152,9 @@ export function NotesPanel({
 
   function downloadNotes() {
     const blob = new Blob([content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
     a.download = `notes-${folderId ?? 'global'}-${new Date().toISOString().slice(0, 10)}.md`;
     a.click();
     URL.revokeObjectURL(url);
@@ -167,35 +168,58 @@ export function NotesPanel({
   }
 
   const toolbarActions: Record<string, () => void> = {
-    bold: () => wrap('**', '**', 'bold text'),
-    italic: () => wrap('*', '*', 'italic text'),
-    h1: () => insertLine('# '),
-    h2: () => insertLine('## '),
-    h3: () => insertLine('### '),
-    bullet: () => insertLine('- '),
+    bold:     () => wrap('**', '**', 'bold text'),
+    italic:   () => wrap('*', '*', 'italic text'),
+    h1:       () => insertLine('# '),
+    h2:       () => insertLine('## '),
+    h3:       () => insertLine('### '),
+    bullet:   () => insertLine('- '),
     numbered: () => insertLine('1. '),
-    code: () => wrap('`', '`', 'code'),
-    divider: insertDivider,
+    code:     () => wrap('`', '`', 'code'),
+    divider:  insertDivider,
   };
 
-  const notesWordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
-  const sourceReady = Boolean(sourceLabel && onGenerateFromSource);
-  const styleMeta = NOTE_STYLE_OPTIONS.find((option) => option.id === noteStyle) ?? NOTE_STYLE_OPTIONS[0];
+  const wordCount      = content.trim() ? content.trim().split(/\s+/).length : 0;
+  const sourceReady    = Boolean(sourceLabel && onGenerateFromSource);
+  const activeStyle    = NOTE_STYLES.find((s) => s.id === noteStyle) ?? NOTE_STYLES[0];
 
   return (
-    <div className="notes-workflow" style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', overflow: 'hidden' }}>
-      <div
-        style={{
-          padding: '6px 12px',
-          borderBottom: '1px solid var(--border)',
-          background: 'var(--surface-2)',
-          display: 'flex',
-          gap: 4,
-          alignItems: 'center',
-          flexShrink: 0,
-          flexWrap: 'wrap',
-        }}
-      >
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', overflow: 'hidden' }}>
+
+      {/* ── Mode switcher + toolbar ─────────────────────────────────────────── */}
+      <div style={{
+        padding: '6px 12px',
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--surface-2)',
+        display: 'flex',
+        gap: 4,
+        alignItems: 'center',
+        flexShrink: 0,
+        flexWrap: 'wrap',
+      }}>
+        {/* Mode tabs */}
+        {(['plain', 'pdf'] as NoteMode[]).map((m) => (
+          <button
+            key={m}
+            onClick={() => setNoteMode(m)}
+            style={{
+              padding: '3px 10px',
+              background: noteMode === m ? 'var(--accent)' : 'var(--surface)',
+              color: noteMode === m ? '#fff' : 'var(--text-2)',
+              border: '1px solid var(--border-2)',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: noteMode === m ? 600 : 400,
+            }}
+          >
+            {m === 'plain' ? 'Note' : 'PDF → Notes'}
+          </button>
+        ))}
+
+        <div style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 4px' }} />
+
+        {/* Formatting toolbar */}
         {TOOLBAR_BTNS.map((btn) => (
           <button
             key={btn.label}
@@ -219,6 +243,7 @@ export function NotesPanel({
 
         <div style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 4px' }} />
 
+        {/* View mode */}
         {(['edit', 'split', 'preview'] as ViewMode[]).map((m) => (
           <button
             key={m}
@@ -240,88 +265,105 @@ export function NotesPanel({
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
           <span style={{ fontSize: 10, color: 'var(--text-3)' }}>
-            {saved ? 'Saved' : 'Saving'} · {notesWordCount} words
+            {saved ? 'Saved' : 'Saving…'} · {wordCount} words
           </span>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={downloadNotes} title="Export as .md">⬇</button>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, color: 'var(--danger)' }} onClick={clearNotes} title="Clear notes">✕</button>
         </div>
       </div>
 
-      <div className="notes-hero">
-        <div className="notes-hero-top">
-          <div className="notes-hero-copy">
-            <span className="notes-eyebrow">Workspace Notes</span>
-            <strong className="notes-hero-title">PDF to Notes</strong>
-            <span className="notes-hero-body">
-              {sourceLabel
-                ? `Turn ${sourceLabel} into ${styleMeta.label.toLowerCase()} and refine it in the editor below.`
-                : 'Pick a PDF or document, then generate notes and refine them below.'}
+      {/* ── PDF → Notes control strip (only in pdf mode) ─────────────────────── */}
+      {noteMode === 'pdf' && (
+        <div style={{
+          padding: '10px 16px',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--surface-2)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          flexShrink: 0,
+          flexWrap: 'wrap',
+        }}>
+          {/* Source info */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Source</span>
+            <span style={{
+              fontSize: 12,
+              fontWeight: 500,
+              color: sourceLabel ? 'var(--text)' : 'var(--text-3)',
+              maxWidth: 200,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {sourceLabel ?? 'No file selected'}
             </span>
-          </div>
-        </div>
-
-        <div className="notes-two-up">
-          <section className="notes-panel-card">
-            <div className="notes-panel-head">
-              <strong>1. Generate from a source</strong>
-              <span>{sourceLabel ? 'Source ready' : 'Choose a file first'}</span>
-            </div>
-            <div className="notes-stat-grid notes-stat-grid-compact">
-              <div className="notes-stat-card">
-                <div className="notes-stat-label">Source</div>
-                <div className="notes-stat-value">{sourceLabel ?? 'No file selected'}</div>
-              </div>
-              <div className="notes-stat-card">
-                <div className="notes-stat-label">Length</div>
-                <div className="notes-stat-value">{sourceWordCount ? `${sourceWordCount.toLocaleString()} words` : 'Waiting for extraction'}</div>
-              </div>
-            </div>
-            <div className="notes-hero-actions">
-              {onOpenFiles && (
-                <button className="btn btn-ghost btn-sm" onClick={onOpenFiles}>
-                  Choose file
-                </button>
-              )}
-              <button className="btn btn-ghost btn-sm" disabled={!sourceReady} onClick={onGenerateFromSource}>
-                Generate notes
+            {sourceWordCount && (
+              <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+                · {sourceWordCount.toLocaleString()} words
+              </span>
+            )}
+            {onOpenFiles && (
+              <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, flexShrink: 0 }} onClick={onOpenFiles}>
+                {sourceLabel ? 'Change' : 'Choose file'}
               </button>
-            </div>
-          </section>
+            )}
+          </div>
 
-          <section className="notes-panel-card">
-            <div className="notes-panel-head">
-              <strong>2. Pick the note style</strong>
-              <span>{styleMeta.label}</span>
+          <div style={{ width: 1, height: 18, background: 'var(--border)', flexShrink: 0 }} />
+
+          {/* Style selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Style</span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {NOTE_STYLES.map((s) => (
+                <button
+                  key={s.id}
+                  title={s.hint}
+                  onClick={() => onNoteStyleChange?.(s.id)}
+                  style={{
+                    padding: '2px 9px',
+                    background: noteStyle === s.id ? 'var(--accent)' : 'var(--surface)',
+                    color: noteStyle === s.id ? '#fff' : 'var(--text-2)',
+                    border: '1px solid var(--border-2)',
+                    borderRadius: 5,
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: noteStyle === s.id ? 600 : 400,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {s.label}
+                </button>
+              ))}
             </div>
-            <div className="notes-style-grid notes-style-grid-compact">
-              {NOTE_STYLE_OPTIONS.map((option) => {
-                const active = option.id === noteStyle;
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => onNoteStyleChange?.(option.id)}
-                    className={`notes-style-card${active ? ' active' : ''}`}
-                  >
-                    <strong>{option.label}</strong>
-                    <span>{option.hint}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
+          </div>
+
+          {/* Generate button */}
+          <button
+            className="btn btn-primary btn-sm"
+            style={{ marginLeft: 'auto', flexShrink: 0 }}
+            disabled={!sourceReady}
+            onClick={onGenerateFromSource}
+            title={sourceReady ? `Generate ${activeStyle.label.toLowerCase()} notes` : 'Choose a file first'}
+          >
+            Generate notes
+          </button>
         </div>
-      </div>
+      )}
 
-      <div className="notes-editor-shell">
-        <div className="notes-editor-label">Editor</div>
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-          {(viewMode === 'edit' || viewMode === 'split') && (
+      {/* ── Editor ─────────────────────────────────────────────────────────── */}
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+        {(viewMode === 'edit' || viewMode === 'split') && (
           <textarea
             ref={textareaRef}
             value={content}
             onChange={handleChange}
-            placeholder={`# My Notes\n\nStart typing in Markdown…\n\n- Use **bold** or *italic*\n- Add headings with # / ## / ###\n- Use \`code\` for inline code\n\nTip: Generate notes from a PDF above, then refine them here.`}
+            placeholder={
+              noteMode === 'pdf'
+                ? '# Notes\n\nChoose a file above and click Generate notes — your notes will appear here and you can edit them freely.'
+                : '# My Notes\n\nStart typing in Markdown…\n\n- Use **bold** or *italic*\n- Add headings with # / ## / ###\n- Use `code` for inline code'
+            }
             spellCheck
             style={{
               flex: 1,
@@ -341,22 +383,17 @@ export function NotesPanel({
           />
         )}
 
-          {(viewMode === 'preview' || viewMode === 'split') && (
-            <div
-              className="tool-output"
-              style={{
-                flex: 1,
-                padding: '16px 20px',
-                overflowY: 'auto',
-              }}
-              dangerouslySetInnerHTML={{
-                __html: content.trim()
-                  ? mdToHtml(content)
-                  : '<p style="color:var(--text-3);font-style:italic">Preview will appear here as you type or after you generate notes from a document.</p>',
-              }}
-            />
-          )}
-        </div>
+        {(viewMode === 'preview' || viewMode === 'split') && (
+          <div
+            className="tool-output"
+            style={{ flex: 1, padding: '16px 20px', overflowY: 'auto' }}
+            dangerouslySetInnerHTML={{
+              __html: content.trim()
+                ? mdToHtml(content)
+                : '<p style="color:var(--text-3);font-style:italic">Preview appears here as you type.</p>',
+            }}
+          />
+        )}
       </div>
     </div>
   );

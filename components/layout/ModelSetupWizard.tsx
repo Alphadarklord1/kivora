@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { storageKeys, writeCompatStorage } from '@/lib/storage/keys';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface ModelSetupWizardProps {
-  isArabic: boolean;
   onComplete: () => void;
 }
 
@@ -25,65 +25,34 @@ interface WizardModel {
   } | null;
 }
 
-function formatSize(bytes: number, isArabic: boolean) {
-  if (!bytes || bytes <= 0) return isArabic ? 'الحجم غير متوفر' : 'Size unavailable';
+function formatSize(bytes: number, sizeUnavailable: string) {
+  if (!bytes || bytes <= 0) return sizeUnavailable;
   const gb = bytes / (1024 ** 3);
   return `${gb.toFixed(1)} GB`;
 }
 
-function getInstallErrorMessage(status: string | undefined, fallback: string | undefined, isArabic: boolean) {
-  const map: Record<string, { en: string; ar: string }> = {
-    network_error: {
-      en: 'Could not download optional model. Continue with Mini offline.',
-      ar: 'تعذر تنزيل النموذج الاختياري. يمكنك المتابعة بنموذج Mini بدون إنترنت.',
-    },
-    checksum_error: {
-      en: 'Model integrity validation failed. Continue with Mini offline.',
-      ar: 'فشل التحقق من سلامة النموذج. يمكنك المتابعة بنموذج Mini بدون إنترنت.',
-    },
-    disk_error: {
-      en: 'Could not save model to disk. Continue with Mini offline.',
-      ar: 'تعذر حفظ النموذج على القرص. يمكنك المتابعة بنموذج Mini بدون إنترنت.',
-    },
+function getInstallErrorMessage(
+  status: string | undefined,
+  fallback: string | undefined,
+  t: (key: string) => string,
+) {
+  const map: Record<string, string> = {
+    network_error: 'Could not download optional model. Continue with Mini offline.',
+    checksum_error: 'Model integrity validation failed. Continue with Mini offline.',
+    disk_error: 'Could not save model to disk. Continue with Mini offline.',
   };
-
-  if (status && map[status]) {
-    return isArabic ? map[status].ar : map[status].en;
-  }
+  if (status && map[status]) return t(map[status]);
   if (fallback) return fallback;
-  return isArabic ? 'تعذر تثبيت النموذج.' : 'Failed to install model.';
+  return t('Failed to install model.');
 }
 
-export function ModelSetupWizard({ isArabic, onComplete }: ModelSetupWizardProps) {
+export function ModelSetupWizard({ onComplete }: ModelSetupWizardProps) {
+  const { t, isRTL } = useI18n();
   const [loading, setLoading] = useState(true);
   const [models, setModels] = useState<WizardModel[]>([]);
   const [recommendedModelKey, setRecommendedModelKey] = useState<string>('mini');
   const [busyModelKey, setBusyModelKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const dictionary = useMemo(() => ({
-    title: isArabic ? 'اختر نموذج الذكاء الاصطناعي المحلي' : 'Choose your local AI model',
-    subtitle: isArabic
-      ? 'يمكنك البدء فورًا بنموذج Mini بدون إنترنت، أو تثبيت نموذج أقوى لاحقًا.'
-      : 'You can start immediately with Mini offline, or install a stronger model now.',
-    bundledReady: isArabic
-      ? 'نموذج Mini مضمن بالفعل في هذا التنزيل، لذا يمكنك البدء محليًا من أول تشغيل.'
-      : 'Mini is already included in this desktop download, so you can start locally from the first launch.',
-    bundledMissing: isArabic
-      ? 'هذا التنزيل لا يحتوي حاليًا على نموذج Mini المضمن، لذلك لن يكون الذكاء الاصطناعي المحلي جاهزًا من أول تشغيل حتى يتم تثبيت نموذج.'
-      : 'This build does not currently include bundled Mini, so local AI will not be ready from first launch until a model is installed.',
-    recommended: isArabic ? 'موصى به' : 'Recommended',
-    installed: isArabic ? 'مثبّت' : 'Installed',
-    installUse: isArabic ? 'تثبيت واستخدام' : 'Install & Use',
-    useNow: isArabic ? 'استخدام الآن' : 'Use Now',
-    skipMini: isArabic ? 'تخطي والبدء بـ Mini' : 'Skip and start with Mini',
-    continueMini: isArabic ? 'المتابعة بنموذج Mini' : 'Continue with Mini',
-    working: isArabic ? 'جارٍ التنفيذ...' : 'Working...',
-    laptop: isArabic ? 'لابتوب' : 'Laptop',
-    balanced: isArabic ? 'متوازن' : 'Balanced',
-    desktop: isArabic ? 'مكتبي' : 'Desktop',
-    progress: isArabic ? 'جارٍ التنزيل' : 'Downloading',
-  }), [isArabic]);
 
   const refresh = async () => {
     if (!window.electronAPI?.desktopAI) return;
@@ -138,20 +107,20 @@ export function ModelSetupWizard({ isArabic, onComplete }: ModelSetupWizardProps
       if (!model.isInstalled) {
         const installResult = await window.electronAPI.desktopAI.installModel(model.key);
         if (!installResult.ok) {
-          setError(getInstallErrorMessage(installResult.status, installResult.message, isArabic));
+          setError(getInstallErrorMessage(installResult.status, installResult.message, t));
           return;
         }
       }
 
       const switchResult = await window.electronAPI.desktopAI.setModel(model.key);
       if (!switchResult.ok) {
-        setError(switchResult.message || (isArabic ? 'تعذر تفعيل النموذج' : 'Failed to activate model'));
+        setError(switchResult.message || t('Failed to activate model'));
         return;
       }
 
       await complete(model.key);
     } catch (err) {
-      setError(err instanceof Error ? err.message : (isArabic ? 'حدث خطأ غير متوقع' : 'Unexpected error'));
+      setError(err instanceof Error ? err.message : t('Unexpected error'));
     } finally {
       setBusyModelKey(null);
       await refresh();
@@ -168,15 +137,15 @@ export function ModelSetupWizard({ isArabic, onComplete }: ModelSetupWizardProps
   };
 
   const getRecommendationLabel = (recommendedFor: WizardModel['recommendedFor']) => {
-    if (recommendedFor === 'laptop') return dictionary.laptop;
-    if (recommendedFor === 'pc') return dictionary.desktop;
-    return dictionary.balanced;
+    if (recommendedFor === 'laptop') return t('Laptop');
+    if (recommendedFor === 'pc') return t('Desktop');
+    return t('Balanced');
   };
 
   if (loading) {
     return (
       <div className="model-setup-overlay">
-        <div className="model-setup-card">{isArabic ? 'جارٍ تحميل النماذج...' : 'Loading models...'}</div>
+        <div className="model-setup-card">{t('Loading models...')}</div>
       </div>
     );
   }
@@ -185,9 +154,12 @@ export function ModelSetupWizard({ isArabic, onComplete }: ModelSetupWizardProps
 
   return (
     <div className="model-setup-overlay">
-      <div className="model-setup-card" dir={isArabic ? 'rtl' : 'ltr'}>
-        <h2>{dictionary.title}</h2>
-        <p>{bundledMiniInstalled ? dictionary.bundledReady : dictionary.bundledMissing}</p>
+      <div className="model-setup-card" dir={isRTL ? 'rtl' : 'ltr'}>
+        <h2>{t('Choose your local AI model')}</h2>
+        <p>{bundledMiniInstalled
+          ? t('Mini is already included in this desktop download, so you can start locally from the first launch.')
+          : t('This build does not currently include bundled Mini, so local AI will not be ready from first launch until a model is installed.')
+        }</p>
 
         <div className="model-grid">
           {models.map((model) => {
@@ -197,19 +169,19 @@ export function ModelSetupWizard({ isArabic, onComplete }: ModelSetupWizardProps
               <div key={model.key} className={`model-item ${isRecommended ? 'recommended' : ''}`}>
                 <div className="model-head">
                   <strong>{model.modelId}</strong>
-                  {isRecommended && <span className="badge">{dictionary.recommended}</span>}
+                  {isRecommended && <span className="badge">{t('Recommended')}</span>}
                 </div>
                 <div className="meta">{model.quantization}</div>
-                <div className="meta">{formatSize(model.sizeBytes, isArabic)}</div>
+                <div className="meta">{formatSize(model.sizeBytes, t('Size unavailable'))}</div>
                 <div className="meta">
-                  {isArabic ? 'موصى به لـ' : 'Best for'}: {getRecommendationLabel(model.recommendedFor)} ({model.minRamGb}GB+ RAM)
+                  {t('Best for')}: {getRecommendationLabel(model.recommendedFor)} ({model.minRamGb}GB+ RAM)
                 </div>
                 <div className="meta">
-                  {model.isInstalled ? dictionary.installed : (isArabic ? 'غير مثبّت' : 'Not installed')}
+                  {model.isInstalled ? t('Installed') : t('Not installed')}
                 </div>
                 {model.isDownloading && (
                   <div className="progress-row">
-                    <span>{dictionary.progress}</span>
+                    <span>{t('Downloading')}</span>
                     <span>{progress}%</span>
                   </div>
                 )}
@@ -219,8 +191,8 @@ export function ModelSetupWizard({ isArabic, onComplete }: ModelSetupWizardProps
                   disabled={Boolean(busyModelKey)}
                 >
                   {busyModelKey === model.key
-                    ? dictionary.working
-                    : model.isInstalled ? dictionary.useNow : dictionary.installUse}
+                    ? t('Working...')
+                    : model.isInstalled ? t('Use Now') : t('Install & Use')}
                 </button>
               </div>
             );
@@ -230,7 +202,7 @@ export function ModelSetupWizard({ isArabic, onComplete }: ModelSetupWizardProps
         {error && <p className="error-text">{error}</p>}
 
         <button className="skip-btn" onClick={handleSkip} disabled={Boolean(busyModelKey)}>
-          {error ? dictionary.continueMini : dictionary.skipMini}
+          {error ? t('Continue with Mini') : t('Skip and start with Mini')}
         </button>
       </div>
 
