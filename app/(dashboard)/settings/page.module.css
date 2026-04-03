@@ -130,6 +130,197 @@
   gap: 1rem;
 }
 
+.settingsFeatureGrid {
+  display: grid;
+  gap: 1rem;
+}
+
+.settingsFeatureCard {
+  padding: 1rem 1.05rem;
+  border-radius: 1.15rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 94%, transparent), color-mix(in srgb, var(--bg-surface) 84%, transparent));
+  display: grid;
+  gap: 0.9rem;
+}
+
+.settingsFeatureHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.settingsFeatureHead strong {
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.settingsFeatureHead p {
+  margin: 0.25rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  max-width: 60ch;
+}
+
+.previewSurface {
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 12%, transparent), transparent 28%),
+    color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  display: grid;
+  gap: 14px;
+}
+
+.previewGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 8px;
+}
+
+.previewSwatch {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: center;
+}
+
+.previewSwatchBlock {
+  width: 100%;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+}
+
+.previewSwatchLabel {
+  font-size: var(--text-xs);
+  color: var(--text-3);
+  text-align: center;
+}
+
+.previewCopy {
+  display: grid;
+  gap: 8px;
+}
+
+.previewEyebrow {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.previewTitle {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.previewText {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.runtimeSummaryCard,
+.runtimeWiringCard,
+.runtimeCard,
+.aiHero {
+  padding: 1rem 1.05rem;
+  border-radius: 1.15rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 94%, transparent), color-mix(in srgb, var(--bg-surface) 84%, transparent));
+}
+
+.runtimeSummaryCard,
+.runtimeWiringCard,
+.aiHero {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.runtimeSummaryHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.runtimeSummaryHead strong {
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.runtimeSummaryHead p {
+  margin: 0.25rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  max-width: 62ch;
+}
+
+.runtimeChipRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.runtimeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.runtimeCard {
+  display: grid;
+  gap: 10px;
+}
+
+.runtimeCardHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.aiHero {
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 14%, transparent), transparent 28%),
+    color-mix(in srgb, var(--bg-surface) 92%, transparent);
+}
+
+.aiHeroCopy h3 {
+  margin: 0.18rem 0 0.35rem;
+  font-size: 1.08rem;
+}
+
+.aiHeroCopy p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
+.aiHeroBadges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.reportGrid {
+  display: grid;
+  grid-template-columns: 1.1fr minmax(280px, 0.9fr);
+  gap: 1rem;
+  align-items: start;
+}
+
 .downloadPanel {
   padding: 1rem;
 }
@@ -138,6 +329,92 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 0.75rem;
+}
+
+.languageGrid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.languageCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border-2);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.languageCard:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-2));
+}
+
+.languageCardActive {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.languageCardHeader {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.languageLabel {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.languageBadge,
+.languageRtlBadge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.languageHint {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.languageSample {
+  font-size: var(--text-sm);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.languageNote {
+  font-size: var(--text-xs);
+  color: var(--text-3);
+  line-height: 1.45;
+}
+
+.languageSupportCard {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  display: grid;
+  gap: 8px;
+}
+
+.languageSupportHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .utilityGrid {
@@ -262,6 +539,273 @@
   background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
 }
 
+.reportChecklist {
+  padding: 1rem 1.05rem;
+  border-radius: 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 94%, transparent), color-mix(in srgb, var(--bg-surface) 84%, transparent));
+  display: grid;
+  gap: 0.9rem;
+}
+
+.reportChecklist h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.reportChecklist p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.reportChecklistList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.reportChecklistItem {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.reportChecklistDot {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-surface));
+  color: var(--primary);
+}
+
+.reportChecklistBody strong {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.reportChecklistBody span {
+  display: block;
+  margin-top: 0.18rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.accountHero {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding: 1rem 1.05rem;
+  border-radius: 1.15rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 12%, transparent), transparent 28%),
+    color-mix(in srgb, var(--bg-surface) 90%, transparent);
+}
+
+.accountActionStack {
+  display: grid;
+  gap: 8px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.toggleGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border-2);
+  background: var(--surface-2);
+  transition: border-color 0.14s, background 0.14s;
+}
+
+.toggleRowActive {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--border-2));
+  background: color-mix(in srgb, var(--primary) 5%, var(--surface-2));
+}
+
+.toggleSwitch {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  border: none;
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.2s;
+  background: var(--border-2);
+}
+
+.toggleSwitch[data-on='true'] {
+  background: var(--primary, var(--accent));
+}
+
+.toggleThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  transition: left 0.2s;
+}
+
+.toggleThumb[data-on='true'] {
+  left: 22px;
+}
+
+.inlineNote {
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+
+.privacyDataMap {
+  display: grid;
+  gap: 8px;
+}
+
+.privacyDataRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.privacyCompareGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.privacyGoodCard,
+.privacyWarnCard {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid;
+}
+
+.privacyGoodCard {
+  background: rgba(74, 222, 128, 0.08);
+  border-color: rgba(74, 222, 128, 0.2);
+}
+
+.privacyWarnCard {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.privacyCompareTitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.privacyList {
+  margin: 0;
+  padding-left: 16px;
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  line-height: 1.8;
+}
+
+.privacyModeGrid {
+  display: grid;
+  gap: 8px;
+}
+
+.privacyModeCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  border: 1.5px solid var(--border-2);
+  background: var(--surface-2);
+  transition: all 0.14s;
+}
+
+.privacyModeCardActive {
+  border: 2px solid var(--accent);
+  background: var(--accent-subtle, color-mix(in srgb, var(--accent) 10%, var(--surface)));
+}
+
+.privacyModeTitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.privacyActiveDot {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-left: 6px;
+}
+
+.deleteCard {
+  padding: 1rem 1.05rem;
+  border-radius: 1.15rem;
+  border: 1px solid color-mix(in srgb, var(--danger, #ef4444) 28%, var(--border-subtle));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--danger, #ef4444) 4%, var(--bg-surface)), color-mix(in srgb, var(--bg-surface) 84%, transparent));
+  display: grid;
+  gap: 0.9rem;
+}
+
+.deleteRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.deleteInput {
+  flex: 1;
+  min-width: 220px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: var(--text-sm);
+  border: 1.5px solid var(--border-2);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.deleteInput:focus {
+  outline: none;
+  border-color: var(--danger, #ef4444);
+}
+
 @media (max-width: 980px) {
   .settingsShell {
     grid-template-columns: 1fr;
@@ -273,5 +817,13 @@
 
   .railNav {
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+
+  .reportGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .deleteRow {
+    align-items: stretch;
   }
 }

@@ -28,6 +28,16 @@ export type LocalManifestModel = {
   url?: string;
 };
 
+export type ReleaseModelDownload = LocalManifestModel & {
+  label: string;
+  summary: string;
+  bundled: boolean;
+  fit: string;
+  publishedAsset: ReleaseAsset | null;
+  downloadUrl: string | null;
+  downloadSource: 'release' | 'manifest' | 'none';
+};
+
 export const MODEL_COPY: Record<string, { label: string; summary: string; bundled: boolean; fit: string }> = {
   mini: {
     label: 'Mini Model',
@@ -86,8 +96,9 @@ export async function getReleaseDownloadData() {
   const manifestAsset = findAsset(assets, (asset) => asset.name === 'model-manifest.json');
   const checksumsAsset = findAsset(assets, (asset) => asset.name === 'SHA256SUMS.txt');
 
-  const localModels = ((localManifest.models || []) as LocalManifestModel[]).map((model) => {
+  const localModels: ReleaseModelDownload[] = ((localManifest.models || []) as LocalManifestModel[]).map((model) => {
     const publishedAsset = findAsset(assets, (asset) => asset.name === model.file);
+    const downloadUrl = publishedAsset?.browser_download_url || model.url || null;
     return {
       ...model,
       label: MODEL_COPY[model.key]?.label || model.modelId,
@@ -95,6 +106,8 @@ export async function getReleaseDownloadData() {
       bundled: MODEL_COPY[model.key]?.bundled ?? false,
       fit: MODEL_COPY[model.key]?.fit || `${model.minRamGb} GB RAM`,
       publishedAsset,
+      downloadUrl,
+      downloadSource: publishedAsset ? 'release' : model.url ? 'manifest' : 'none',
     };
   });
 

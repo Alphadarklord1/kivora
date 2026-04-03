@@ -151,12 +151,17 @@ async function fetchManualSource(urlValue: string): Promise<ResearchSource> {
       'User-Agent': 'Mozilla/5.0 (compatible; KivoraBot/1.0; +https://kivora.app)',
       Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
     },
-    redirect: 'manual',
+    redirect: 'follow',
     signal: AbortSignal.timeout(20_000),
   });
 
-  if (response.status >= 300 && response.status < 400) {
-    throw new Error('One of the manual sources redirects and cannot be fetched.');
+  // Validate final URL after following redirects (e.g. DOI → journal page)
+  if (response.url && response.url !== url.toString()) {
+    try {
+      assertNotPrivateUrl(new URL(response.url));
+    } catch {
+      throw new Error('This source redirects to a private or unsupported address.');
+    }
   }
 
   if (!response.ok) {
@@ -403,4 +408,74 @@ export async function researchTopic(args: {
     rankingSummary,
     provider: source,
   };
+}
+
+// ── Citation formatting ───────────────────────────────────────────────────────
+
+export type CitationFormat = 'apa' | 'mla' | 'chicago' | 'harvard';
+
+/**
+ * Extract year and authors from a title string like:
+ * "Photosynthesis in C4 plants (2021) — Smith, J., Jones, A."
+ * S2/OpenAlex embed these in the title field.
+ */
+function parseTitleMeta(title: string): { cleanTitle: string; year: string; authors: string } {
+  // Try "(YYYY) — Authors" pattern at the end
+  const withAuthors = title.match(/^(.+?)\s*\((\d{4})\)\s*—\s*(.+)$/);
+  if (withAuthors) {
+    return { cleanTitle: withAuthors[1].trim(), year: withAuthors[2], authors: withAuthors[3].trim() };
+  }
+  // Try "(YYYY)" at the end without authors
+  const yearOnly = title.match(/^(.+?)\s*\((\d{4})\)\s*$/);
+  if (yearOnly) {
+    return { cleanTitle: yearOnly[1].trim(), year: yearOnly[2], authors: '' };
+  }
+  return { cleanTitle: title, year: new Date().getFullYear().toString(), authors: '' };
+}
+
+function formatSingleCitation(citation: ResearchCitation, format: CitationFormat): string {
+  const { cleanTitle, year, authors } = parseTitleMeta(citation.title);
+  const source = citation.source.replace(/^.+ — /, ''); // strip title prefix if present
+  const url = citation.url;
+  const authorPart = authors || source;
+  const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  switch (format) {
+    case 'apa':
+      // Author(s). (Year). Title. Source. URL
+      return `${authorPart}. (${year}). ${cleanTitle}. ${source}. ${url}`;
+
+    case 'mla':
+      // "Title." Source, Year, URL. Accessed Day Month Year.
+      return `"${cleanTitle}." ${source}, ${year}, ${url}. Accessed ${today}.`;
+
+    case 'chicago':
+      // Author(s). "Title." Source, Year. URL.
+      return `${authorPart}. "${cleanTitle}." ${source}, ${year}. ${url}.`;
+
+    case 'harvard':
+      // Author(s). (Year) Title. Available at: URL [Accessed Day Month Year].
+      return `${authorPart}. (${year}) ${cleanTitle}. Available at: ${url} [Accessed ${today}].`;
+  }
+}
+
+export function formatCitations(citations: ResearchCitation[], format: CitationFormat): string {
+  return citations
+    .map((c, i) => `[${i + 1}] ${formatSingleCitation(c, format)}`)
+    .join('\n\n');
+}
+
+/**
+ * Build a MyBib import URL for a search query.
+ * MyBib allows pre-filling the search via its URL scheme.
+ */
+export function buildMyBibUrl(topic: string): string {
+  return `https://www.mybib.com/tools/bibliography-generator?q=${encodeURIComponent(topic)}`;
+}
+
+/**
+ * Build a MyBib URL for a specific source URL (cite a webpage).
+ */
+export function buildMyBibCiteUrl(sourceUrl: string): string {
+  return `https://www.mybib.com/tools/bibliography-generator?url=${encodeURIComponent(sourceUrl)}`;
 }

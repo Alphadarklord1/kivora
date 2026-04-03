@@ -48,6 +48,19 @@ const DENSITY_OPTIONS: { id: Density; label: string; hint: string }[] = [
   { id: 'comfortable', label: 'Comfortable', hint: 'Easier scanning and taps' },
 ];
 
+const LANGUAGE_SAMPLE: Record<string, { greeting: string; note: string }> = {
+  en: { greeting: 'Workspace, Scholar Hub, and Math stay in sync.', note: 'Best if you want the default interface copy.' },
+  ar: { greeting: 'مساحة العمل وScholar Hub والرياضيات تبقى متناسقة.', note: 'Right-to-left layout turns on automatically.' },
+  fr: { greeting: 'Workspace, Scholar Hub et Maths restent cohérents.', note: 'Useful if you want French labels while studying.' },
+};
+
+const RUNTIME_READINESS_ITEMS = [
+  'Email sign-in & profile sync',
+  'OAuth sign-in',
+  'Cloud file backup',
+  'Cloud AI',
+] as const;
+
 interface AccountState {
   id: string;
   email: string;
@@ -130,11 +143,11 @@ const SETTINGS_SECTIONS: Array<{
 }> = [
   { id: 'account', icon: '👤', label: 'Account', title: 'Profile and account basics', description: 'Name, image, bio, and sign-in details.' },
   { id: 'security', icon: '🔒', label: 'Security', title: 'Password and 2-step verification', description: 'Protect the account before you rely on it.' },
-  { id: 'appearance', icon: '🎨', label: 'Appearance', title: 'Theme, language, and readability', description: 'Keep the app readable without oversized defaults.' },
+  { id: 'appearance', icon: '🎨', label: 'Appearance', title: 'Theme, language, and readability', description: 'Keep the app readable and make language switching feel deliberate.' },
   { id: 'notifications', icon: '🔔', label: 'Notifications', title: 'Notification preferences', description: 'Control reminders, review alerts, and system messages.' },
   { id: 'runtime', icon: '⚙️', label: 'Runtime', title: 'What works in this runtime', description: 'Check cloud, auth, and storage readiness.' },
   { id: 'ai-models', icon: '🤖', label: 'AI & Downloads', title: 'AI routing and desktop downloads', description: 'One place for model mode and releases.' },
-  { id: 'utilities', icon: '🧰', label: 'Utilities', title: 'Secondary tools', description: 'Analytics, sharing, and status live here.' },
+  { id: 'utilities', icon: '🧰', label: 'Labs & Tools', title: 'Labs and secondary tools', description: 'Math labs, analytics, sharing, and status live here.' },
   { id: 'reporting', icon: '🐛', label: 'Report Issue', title: 'Diagnostics and issue reporting', description: 'File bugs without leaving settings.' },
   { id: 'privacy', icon: '🛡️', label: 'Privacy', title: 'Privacy and data control', description: 'Choose how much Kivora stores and sends.' },
 ];
@@ -688,15 +701,15 @@ export default function SettingsPage() {
       <div id="account">
       <Section title="Account" subtitle="Profile, connected sign-in methods, and basic account details.">
         {showGuestState ? (
-          <div style={{ display: 'grid', gap: 16 }}>
+          <div className={styles.sectionStack}>
             <GuestUpgradeNotice />
 
-            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div className={styles.accountHero}>
               <AvatarPreview image={imageUrl || null} name={name || 'Guest user'} email={session?.user?.email ?? 'guest@kivora.local'} />
               <div style={{ flex: 1, minWidth: 220 }}>
                 <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)' }}>{name || 'Guest user'}</div>
                 <div style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', marginTop: 4 }}>Profile fields will save after sign-in.</div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                <div className={styles.runtimeChipRow} style={{ marginTop: 12 }}>
                   <span className="badge">Profile picture</span>
                   <span className="badge">Short description</span>
                   <span className="badge">Study interests</span>
@@ -705,7 +718,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+            <div className={styles.formGrid}>
               <div>
                 <label style={labelStyle}>Display name</label>
                 <input style={fieldStyle} value={name} onChange={e => setName(e.target.value)} placeholder="Your name" disabled />
@@ -742,8 +755,8 @@ export default function SettingsPage() {
         ) : accountLoading ? (
           <div className="skeleton" style={{ height: 180, borderRadius: 18 }} />
         ) : account ? (
-          <>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div className={styles.sectionStack}>
+            <div className={styles.accountHero}>
               <AvatarPreview image={imageUrl || account.image} name={name || account.name} email={account.email} />
               <div style={{ flex: 1, minWidth: 220 }}>
                 <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)' }}>{account.name || account.email}</div>
@@ -751,7 +764,7 @@ export default function SettingsPage() {
                 <div style={{ color: 'var(--text-3)', fontSize: 'var(--text-xs)', marginTop: 6 }}>
                   Member since {accountCreatedLabel || 'recently'}
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                <div className={styles.runtimeChipRow} style={{ marginTop: 12 }}>
                   <span className="badge">{account.stats.folders} folders</span>
                   <span className="badge">{account.stats.files} files</span>
                   <span className="badge">{account.stats.libraryItems} library items</span>
@@ -761,7 +774,7 @@ export default function SettingsPage() {
                   ))}
                 </div>
               </div>
-              <div style={{ display: 'grid', gap: 8 }}>
+              <div className={styles.accountActionStack}>
                 <button className="btn btn-danger btn-sm" onClick={handleSignOut}>Sign out</button>
                 <button className="btn btn-ghost btn-sm" onClick={copyPublicProfileLink} disabled={!publicProfileUrl}>
                   Copy public profile link
@@ -774,7 +787,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+            <div className={styles.formGrid}>
               <div>
                 <label style={labelStyle}>Display name</label>
                 <input style={fieldStyle} value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
@@ -824,7 +837,7 @@ export default function SettingsPage() {
               </button>
             </div>
 
-            <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)', display: 'grid', gap: 10 }}>
+            <div className={styles.settingsFeatureCard}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontWeight: 700 }}>Public profile</div>
@@ -838,7 +851,7 @@ export default function SettingsPage() {
                 {publicProfileUrl || 'Save your account first to generate a public profile link.'}
               </code>
             </div>
-          </>
+          </div>
         ) : (
           <p style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>We could not load your account right now.</p>
         )}
@@ -850,9 +863,9 @@ export default function SettingsPage() {
       <div id="security">
       <Section title="Security" subtitle="Password changes and two-step verification for your account.">
         {showGuestState ? (
-          <div style={{ display: 'grid', gap: 16 }}>
+          <div className={styles.sectionStack}>
             <GuestUpgradeNotice compact />
-            <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)', opacity: 0.76 }}>
+            <div className={styles.settingsFeatureCard} style={{ opacity: 0.76 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontWeight: 700 }}>Two-step verification</div>
@@ -867,13 +880,13 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <form style={{ display: 'grid', gap: 12, opacity: 0.76 }}>
+            <form className={styles.sectionStack} style={{ opacity: 0.76 }}>
               <div style={{ fontWeight: 700 }}>Password</div>
               <div>
                 <label style={labelStyle}>Current password</label>
                 <input style={fieldStyle} type="password" placeholder="Current password" disabled />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              <div className={styles.formGrid}>
                 <div>
                   <label style={labelStyle}>New password</label>
                   <input style={fieldStyle} type="password" placeholder="At least 6 characters" disabled />
@@ -893,8 +906,8 @@ export default function SettingsPage() {
         ) : accountLoading ? (
           <div className="skeleton" style={{ height: 210, borderRadius: 18 }} />
         ) : account ? (
-          <>
-            <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
+          <div className={styles.sectionStack}>
+            <div className={styles.settingsFeatureCard}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontWeight: 700 }}>Two-step verification</div>
@@ -965,8 +978,13 @@ export default function SettingsPage() {
               ) : null}
             </div>
 
-            <form onSubmit={changePassword} style={{ display: 'grid', gap: 12 }}>
-              <div style={{ fontWeight: 700 }}>Password</div>
+            <form onSubmit={changePassword} className={styles.settingsFeatureCard}>
+              <div className={styles.settingsFeatureHead}>
+                <div>
+                  <strong>Password</strong>
+                  <p>Use a long, unique password if you want email sign-in alongside Google or Microsoft later.</p>
+                </div>
+              </div>
               {account.hasPassword ? (
                 <div>
                   <label style={labelStyle}>Current password</label>
@@ -977,7 +995,7 @@ export default function SettingsPage() {
                   You signed up with an external provider. Set a password here if you want email + password sign-in as well.
                 </p>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              <div className={styles.formGrid}>
                 <div>
                   <label style={labelStyle}>New password</label>
                   <input style={fieldStyle} type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="At least 6 characters" />
@@ -996,7 +1014,7 @@ export default function SettingsPage() {
                 </button>
               </div>
             </form>
-          </>
+          </div>
         ) : (
           <p style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>We could not load your security settings right now.</p>
         )}
@@ -1013,7 +1031,32 @@ export default function SettingsPage() {
       {activeSection === 'runtime' && (
       <div id="runtime">
       <Section title="Runtime readiness" subtitle="Check what works in this runtime before you rely on cloud sync, sign-in, or hosted AI.">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+        <div className={styles.runtimeSummaryCard}>
+          <div className={styles.runtimeSummaryHead}>
+            <div>
+              <strong>At a glance</strong>
+              <p>
+                This is the quick product view: can you sign in, sync files, and use cloud AI here, or should you stay local-first?
+              </p>
+            </div>
+            <span className="badge">
+              {RUNTIME_READINESS_ITEMS.filter((title) => {
+                if (title === 'Email sign-in & profile sync') return Boolean(authCapabilities && authCapabilities.dbConfigured !== false && authCapabilities.authDisabled !== true);
+                if (title === 'OAuth sign-in') return Boolean(authCapabilities) && !authCapabilities?.oauthDisabled && Boolean(authCapabilities?.googleConfigured || authCapabilities?.githubConfigured || authCapabilities?.microsoftConfigured);
+                if (title === 'Cloud file backup') return Boolean(authCapabilities?.supabaseStorageConfigured);
+                return Boolean(aiStatus?.cloudConfigured);
+              }).length}/{RUNTIME_READINESS_ITEMS.length} ready
+            </span>
+          </div>
+          <div className={styles.runtimeChipRow}>
+            <span className={`badge ${authCapabilities && authCapabilities.dbConfigured !== false && authCapabilities.authDisabled !== true ? 'badge-success' : ''}`}>Sign-in</span>
+            <span className={`badge ${Boolean(authCapabilities) && !authCapabilities?.oauthDisabled && Boolean(authCapabilities?.googleConfigured || authCapabilities?.githubConfigured || authCapabilities?.microsoftConfigured) ? 'badge-success' : ''}`}>OAuth</span>
+            <span className={`badge ${authCapabilities?.supabaseStorageConfigured ? 'badge-success' : ''}`}>Cloud files</span>
+            <span className={`badge ${aiStatus?.cloudConfigured ? 'badge-success' : ''}`}>Cloud AI</span>
+          </div>
+        </div>
+
+        <div className={styles.runtimeGrid}>
           {[
             {
               title: 'Email sign-in & profile sync',
@@ -1058,18 +1101,23 @@ export default function SettingsPage() {
                 : 'Cloud AI is unavailable, so Kivora will stay local/offline-first here.',
             },
           ].map((item) => (
-            <div key={item.title} style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)', display: 'grid', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+            <div key={item.title} className={styles.runtimeCard}>
+              <div className={styles.runtimeCardHead}>
                 <div style={{ fontWeight: 700 }}>{item.title}</div>
-                <span className={`badge ${item.ready ? 'badge-success' : ''}`}>{item.ready ? 'Ready' : 'Local-only / unavailable'}</span>
+                <span className={`badge ${item.ready ? 'badge-success' : ''}`}>{item.ready ? 'Ready' : 'Local-only'}</span>
               </div>
               <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', margin: 0 }}>{item.detail}</p>
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 14, padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)', display: 'grid', gap: 10 }}>
-          <div style={{ fontWeight: 700 }}>Supabase wiring</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className={styles.runtimeWiringCard}>
+          <div className={styles.runtimeSummaryHead}>
+            <div>
+              <strong>Supabase wiring</strong>
+              <p>The technical wiring is still here, but kept in one compact place instead of dominating the whole section.</p>
+            </div>
+          </div>
+          <div className={styles.runtimeChipRow}>
             <span className={`badge ${authCapabilities?.supabaseUrlConfigured ? 'badge-success' : ''}`}>URL {authCapabilities?.supabaseUrlConfigured ? 'ready' : 'missing'}</span>
             <span className={`badge ${authCapabilities?.supabaseAnonKeyConfigured ? 'badge-success' : ''}`}>Anon key {authCapabilities?.supabaseAnonKeyConfigured ? 'ready' : 'missing'}</span>
             <span className={`badge ${authCapabilities?.supabaseServiceRoleConfigured ? 'badge-success' : ''}`}>Service role {authCapabilities?.supabaseServiceRoleConfigured ? 'ready' : 'missing'}</span>
@@ -1086,47 +1134,64 @@ export default function SettingsPage() {
       {activeSection === 'appearance' && (
       <div id="appearance">
       <Section title="Appearance" subtitle="Make the app readable and comfortable without oversized defaults or confusing labels.">
-        <div>
-          <div style={labelStyle}>Theme</div>
-          <ChoiceButtons options={THEME_OPTIONS} value={settings.theme} onChange={value => set('theme', value)} />
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
-          <div>
-            <div style={labelStyle}>Font size</div>
-            <ChoiceButtons options={FONT_OPTIONS.map(option => ({ id: option.value, label: option.label }))} value={settings.fontSize} onChange={value => set('fontSize', value)} />
-          </div>
-          <div>
-            <div style={labelStyle}>Line spacing</div>
-            <ChoiceButtons options={LINE_HEIGHT_OPTIONS.map(option => ({ id: option.value, label: option.label }))} value={settings.lineHeight} onChange={value => set('lineHeight', value)} />
-          </div>
-        </div>
-
-        <div>
-          <div style={labelStyle}>Layout density</div>
-          <ChoiceButtons options={DENSITY_OPTIONS} value={settings.density} onChange={value => set('density', value)} />
-        </div>
-
-        <div style={{ padding: 16, borderRadius: 16, border: '1px solid var(--border-2)', background: 'var(--surface-2)' }}>
-          <div style={{ fontWeight: 700, marginBottom: 10 }}>Live preview</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: 8, marginBottom: 14 }}>
-            {[
-              { label: 'Accent', bg: 'var(--primary, var(--accent))' },
-              { label: 'Surface', bg: 'var(--surface)' },
-              { label: 'Surface 2', bg: 'var(--surface-2)' },
-              { label: 'Background', bg: 'var(--bg)' },
-              { label: 'Border', bg: 'var(--border-2)' },
-            ].map(swatch => (
-              <div key={swatch.label} style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
-                <div style={{ width: '100%', height: 36, borderRadius: 8, background: swatch.bg, border: '1px solid var(--border-2)' }} />
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', textAlign: 'center' }}>{swatch.label}</span>
+        <div className={styles.settingsFeatureGrid}>
+          <div className={styles.settingsFeatureCard}>
+            <div className={styles.settingsFeatureHead}>
+              <div>
+                <strong>Theme</strong>
+                <p>Pick the overall mood of the app before fine-tuning text size or density.</p>
               </div>
-            ))}
+              <span className="badge">{settings.theme}</span>
+            </div>
+            <ChoiceButtons options={THEME_OPTIONS} value={settings.theme} onChange={value => set('theme', value)} />
           </div>
-          <div style={{ display: 'grid', gap: 6 }}>
-            <p style={{ margin: 0 }}>
-              The quick brown fox jumps over the lazy dog. This sentence uses your current font size and line spacing.
-            </p>
+
+          <div className={styles.settingsFeatureCard}>
+            <div className={styles.settingsFeatureHead}>
+              <div>
+                <strong>Readability</strong>
+                <p>Adjust font size, line spacing, and density together so the whole app stays comfortable.</p>
+              </div>
+              <span className="badge">Live</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+              <div>
+                <div style={labelStyle}>Font size</div>
+                <ChoiceButtons options={FONT_OPTIONS.map(option => ({ id: option.value, label: option.label }))} value={settings.fontSize} onChange={value => set('fontSize', value)} />
+              </div>
+              <div>
+                <div style={labelStyle}>Line spacing</div>
+                <ChoiceButtons options={LINE_HEIGHT_OPTIONS.map(option => ({ id: option.value, label: option.label }))} value={settings.lineHeight} onChange={value => set('lineHeight', value)} />
+              </div>
+            </div>
+            <div>
+              <div style={labelStyle}>Layout density</div>
+              <ChoiceButtons options={DENSITY_OPTIONS} value={settings.density} onChange={value => set('density', value)} />
+            </div>
+          </div>
+
+          <div className={styles.previewSurface}>
+            <div className={styles.previewCopy}>
+              <span className={styles.previewEyebrow}>Live preview</span>
+              <h3 className={styles.previewTitle}>See your current settings together</h3>
+              <p className={styles.previewText}>
+                The quick brown fox jumps over the lazy dog. This preview uses your active theme, font size, line spacing, and density.
+              </p>
+            </div>
+            <div className={styles.previewGrid}>
+              {[
+                { label: 'Accent', bg: 'var(--primary, var(--accent))' },
+                { label: 'Surface', bg: 'var(--surface)' },
+                { label: 'Surface 2', bg: 'var(--surface-2)' },
+                { label: 'Background', bg: 'var(--bg)' },
+                { label: 'Border', bg: 'var(--border-2)' },
+              ].map(swatch => (
+                <div key={swatch.label} className={styles.previewSwatch}>
+                  <div className={styles.previewSwatchBlock} style={{ background: swatch.bg }} />
+                  <span className={styles.previewSwatchLabel}>{swatch.label}</span>
+                </div>
+              ))}
+            </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button className="btn btn-primary btn-sm" type="button" style={{ pointerEvents: 'none' }}>Primary button</button>
               <button className="btn btn-ghost btn-sm" type="button" style={{ pointerEvents: 'none' }}>Ghost button</button>
@@ -1137,63 +1202,47 @@ export default function SettingsPage() {
         </div>
       </Section>
       <Section title="Language" subtitle="Switch the interface language. Changes take effect immediately across the whole app.">
-        <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(3, 1fr)' }}>
+        <div className={styles.languageGrid}>
           {LOCALE_OPTIONS.map(opt => {
             const active = settings.language === opt.id;
+            const sample = LANGUAGE_SAMPLE[opt.id];
             return (
               <button
                 key={opt.id}
                 type="button"
                 onClick={() => set('language', opt.id)}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: opt.rtl ? 'flex-end' : 'flex-start',
-                  gap: 6,
-                  padding: '14px 16px',
-                  borderRadius: 14,
-                  border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border-2)'}`,
-                  background: active
-                    ? 'color-mix(in srgb, var(--accent) 10%, var(--bg-surface))'
-                    : 'var(--bg-surface)',
-                  cursor: 'pointer',
-                  textAlign: opt.rtl ? 'right' : 'left',
-                  transition: 'border-color 0.15s, background 0.15s',
-                  boxShadow: active ? '0 0 0 3px var(--accent-glow)' : 'none',
-                }}
+                className={`${styles.languageCard} ${active ? styles.languageCardActive : ''}`}
+                style={{ alignItems: opt.rtl ? 'flex-end' : 'flex-start', textAlign: opt.rtl ? 'right' : 'left' }}
               >
-                <span style={{
-                  fontSize: '1.05rem',
-                  fontWeight: 700,
-                  color: active ? 'var(--accent)' : 'var(--text)',
-                  direction: opt.rtl ? 'rtl' : 'ltr',
-                }}>
-                  {opt.label}
-                </span>
-                <span style={{
-                  fontSize: '11px',
-                  color: active ? 'var(--accent)' : 'var(--text-3)',
-                }}>
-                  {opt.hint}
-                </span>
-                {opt.rtl && (
-                  <span style={{
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    padding: '2px 6px',
-                    borderRadius: 5,
-                    background: active
-                      ? 'color-mix(in srgb, var(--accent) 20%, transparent)'
-                      : 'var(--bg-inset)',
-                    color: active ? 'var(--accent)' : 'var(--text-3)',
-                  }}>
-                    RTL
+                <div className={styles.languageCardHeader}>
+                  <span
+                    className={styles.languageLabel}
+                    style={{ color: active ? 'var(--accent)' : 'var(--text)', direction: opt.rtl ? 'rtl' : 'ltr' }}
+                  >
+                    {opt.label}
                   </span>
+                  {active ? <span className={styles.languageBadge}>Current</span> : null}
+                </div>
+                <span className={styles.languageHint}>{opt.hint}</span>
+                <span className={styles.languageSample} style={{ direction: opt.rtl ? 'rtl' : 'ltr' }}>
+                  {sample.greeting}
+                </span>
+                <span className={styles.languageNote}>{sample.note}</span>
+                {opt.rtl && (
+                  <span className={styles.languageRtlBadge}>RTL</span>
                 )}
               </button>
             );
           })}
+        </div>
+        <div className={styles.languageSupportCard}>
+          <div className={styles.languageSupportHeader}>
+            <strong>Language support</strong>
+            <span className="badge">{settings.language.toUpperCase()}</span>
+          </div>
+          <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
+            Kivora switches the main navigation, settings copy, and the core study surfaces immediately. When a smaller label is not translated yet, it falls back to English instead of breaking the layout.
+          </p>
         </div>
         {settings.language !== 'en' && (
           <p style={{ margin: '10px 0 0', fontSize: '12px', color: 'var(--text-3)' }}>
@@ -1208,20 +1257,37 @@ export default function SettingsPage() {
       <div id="ai-models">
       <Section title="AI, models & downloads" subtitle="This is now the home for local/cloud mode selection and desktop downloads, instead of separate sidebar entries.">
         <div className={styles.downloadsStack}>
-          <div className={styles.downloadPanel}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>AI routing</div>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginBottom: 14 }}>
-              Choose whether Kivora should prefer local privacy, cloud convenience, or automatic fallback. For the 1.0 Mac release, Mini must be bundled before we promise first-launch offline AI.
-            </p>
+          <div className={styles.aiHero}>
+            <div className={styles.aiHeroCopy}>
+              <span className={styles.previewEyebrow}>AI control center</span>
+              <h3>Choose how Kivora thinks before you download anything else.</h3>
+              <p>
+                Start with local-first privacy, switch to cloud convenience when you want it, and keep the Mac bundled Mini path as the clean default for offline use.
+              </p>
+            </div>
+            <div className={styles.aiHeroBadges}>
+              <span className="badge">Local-first</span>
+              <span className="badge">Cloud optional</span>
+              <span className="badge badge-success">Mac Mini path</span>
+            </div>
+          </div>
+
+          <div className={styles.settingsFeatureCard}>
+            <div className={styles.settingsFeatureHead}>
+              <div>
+                <strong>AI routing</strong>
+                <p>Pick the behavior you want first, then layer downloads on top only if they actually help your machine.</p>
+              </div>
+            </div>
             <AiRuntimeControls compact />
           </div>
 
-          <div className={styles.downloadPanel}>
+          <div className={styles.settingsFeatureCard}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
               <div>
                 <div style={{ fontWeight: 700 }}>Downloads & releases</div>
                 <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginTop: 4 }}>
-                  Desktop installers and optional local AI assets live here now too.
+                  Install the app first, then add bigger optional models only if Mini is not enough for your workflow.
                 </div>
               </div>
               {downloads?.releaseUrl ? (
@@ -1263,18 +1329,24 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* ── Desktop: in-app model upgrade ──────────────────────────── */}
-          <div className={styles.downloadPanel}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Offline AI model</div>
+          <div className={styles.settingsFeatureCard}>
+            <div className={styles.settingsFeatureHead}>
+              <div>
+                <strong>Offline AI model</strong>
+                <p>Use the bundled Mini when it is available, then install Balanced or Pro only if you want more local quality.</p>
+              </div>
+            </div>
             <DesktopModelPanel />
           </div>
 
-          {/* ── Web/browser: Ollama + Qwen local AI setup ──────────────── */}
-          <div className={styles.downloadPanel} id="ollama-setup">
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Local AI (Ollama + Qwen) — browser only</div>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginBottom: 14, margin: '0 0 14px' }}>
-              If using the web version, run Qwen 2.5 on-device via Ollama for private offline AI. Not needed when using the desktop app.
-            </p>
+          <div className={styles.settingsFeatureCard} id="ollama-setup">
+            <div className={styles.settingsFeatureHead}>
+              <div>
+                <strong>Browser local AI</strong>
+                <p>If you are in the web version instead of the desktop app, Ollama is the local path. Desktop users do not need this.</p>
+              </div>
+              <span className="badge">Web only</span>
+            </div>
             <OllamaSetupPanel />
           </div>
         </div>
@@ -1284,10 +1356,24 @@ export default function SettingsPage() {
 
       {activeSection === 'utilities' && (
       <div id="utilities">
-      <Section title="Utilities" subtitle="Secondary pages still exist, but the main product now revolves around Workspace, Scholar Hub, and Math.">
+      <Section title="Labs & tools" subtitle="Keep the extra study labs easy to reach without adding clutter to the main navigation.">
         <div className={styles.sectionStack}>
           <div className={styles.utilityGrid}>
             {[
+              {
+                href: '/math',
+                icon: '∑',
+                title: 'Math labs',
+                description: 'Jump straight into MATLAB Lab, graphing, question scan, and the other Math workspaces from one place.',
+                meta: ['MATLAB Lab', 'Graphs', 'Question scan'],
+              },
+              {
+                href: '/tools',
+                icon: '🧪',
+                title: 'Study tools',
+                description: 'Open the wider tool surface when you want generators, helpers, and side workflows outside the main three pillars.',
+                meta: ['Generators', 'Helpers', 'Toolbox'],
+              },
               {
                 href: '/analytics',
                 icon: '📈',
@@ -1329,14 +1415,14 @@ export default function SettingsPage() {
 
           <div className={styles.reportHero}>
             <div className={styles.reportHeroCopy}>
-              <h3>Secondary tools, still easy to reach</h3>
+              <h3>Labs stay close, but the product stays focused</h3>
               <p>
-                These pages are no longer top-level sidebar destinations, but they are still part of the finished product. Keep them here for diagnostics, sharing, and progress review without making the main navigation noisy.
+                Workspace, Scholar Hub, and Math remain the main pillars. This section keeps labs, diagnostics, and secondary tools one click away without making the sidebar feel overloaded.
               </p>
             </div>
             <div className={styles.reportActionRow}>
               <a href="/workspace" className="btn btn-primary btn-sm">Open Workspace</a>
-              <a href="/sharing" className="btn btn-ghost btn-sm">Open Sharing</a>
+              <a href="/math" className="btn btn-ghost btn-sm">Open Math</a>
             </div>
           </div>
         </div>
@@ -1347,25 +1433,63 @@ export default function SettingsPage() {
       {activeSection === 'reporting' && (
       <div id="reporting">
       <Section title="Report & diagnostics" subtitle="File bugs and feature requests directly from settings, with the current route, theme, and language already included.">
-        <div className={styles.reportShell}>
-          <div className={styles.reportHero}>
-            <div className={styles.reportHeroCopy}>
-              <h3>Report a problem without leaving settings</h3>
-              <p>
-                Use this panel for bugs, broken UI, and missing workflows. Kivora will prefill diagnostics so the issue is easier to act on and you do not have to gather everything manually.
-              </p>
+        <div className={styles.reportGrid}>
+          <div className={styles.reportShell}>
+            <div className={styles.reportHero}>
+              <div className={styles.reportHeroCopy}>
+                <h3>Report a problem without leaving settings</h3>
+                <p>
+                  Use this panel for bugs, broken UI, and missing workflows. Kivora prefills route, theme, and language diagnostics so the report is useful immediately.
+                </p>
+              </div>
+              <div className={styles.reportActionRow}>
+                <a href="/status" className="btn btn-ghost btn-sm">Open status</a>
+                <a href="https://github.com/Alphadarklord1/kivora/issues" className="btn btn-ghost btn-sm" target="_blank" rel="noreferrer">
+                  View issues
+                </a>
+              </div>
             </div>
-            <div className={styles.reportActionRow}>
-              <a href="/status" className="btn btn-ghost btn-sm">Open status</a>
-              <a href="https://github.com/Alphadarklord1/kivora/issues" className="btn btn-ghost btn-sm" target="_blank" rel="noreferrer">
-                View issues
-              </a>
+
+            <div className={styles.reportPanel}>
+              <ReportIssuePanel embedded />
             </div>
           </div>
 
-          <div className={styles.reportPanel}>
-            <ReportIssuePanel embedded />
-          </div>
+          <aside className={styles.reportChecklist}>
+            <h3>Before you send it</h3>
+            <p>
+              Good reports are short, specific, and reproducible. This checklist keeps the signal high without making the process heavy.
+            </p>
+            <div className={styles.reportChecklistList}>
+              {[
+                {
+                  title: 'Say what you expected',
+                  body: 'Describe the intended result first, then explain what actually happened.',
+                },
+                {
+                  title: 'Include the screen or flow',
+                  body: 'Mention the exact page, tool, or tab so we can reproduce the issue quickly.',
+                },
+                {
+                  title: 'Attach useful context',
+                  body: 'If the bug is visual, add a screenshot. If it is data-related, mention whether you were in guest, local, or signed-in mode.',
+                },
+              ].map((item, index) => (
+                <div key={item.title} className={styles.reportChecklistItem}>
+                  <span className={styles.reportChecklistDot}>{index + 1}</span>
+                  <div className={styles.reportChecklistBody}>
+                    <strong>{item.title}</strong>
+                    <span>{item.body}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <span className="badge">Bug</span>
+              <span className="badge">Feature request</span>
+              <span className="badge badge-success">Diagnostics included</span>
+            </div>
+          </aside>
         </div>
       </Section>
       </div>
@@ -1439,16 +1563,7 @@ function NotifToggleRow({
   disabled?: boolean;
 }) {
   return (
-    <div
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        gap: 14, padding: '12px 14px', borderRadius: 12,
-        border: `1.5px solid ${checked ? 'color-mix(in srgb, var(--primary) 28%, var(--border-2))' : 'var(--border-2)'}`,
-        background: checked ? 'color-mix(in srgb, var(--primary) 5%, var(--surface-2))' : 'var(--surface-2)',
-        transition: 'border-color 0.14s, background 0.14s',
-        opacity: disabled ? 0.5 : 1,
-      }}
-    >
+    <div className={`${styles.toggleRow} ${checked ? styles.toggleRowActive : ''}`} style={{ opacity: disabled ? 0.5 : 1 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>{label}</div>
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>{hint}</div>
@@ -1458,19 +1573,11 @@ function NotifToggleRow({
         onClick={onToggle}
         disabled={disabled}
         aria-label={`${checked ? 'Disable' : 'Enable'} ${label}`}
-        style={{
-          width: 44, height: 24, borderRadius: 12, border: 'none',
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          background: checked ? 'var(--primary, var(--accent))' : 'var(--border-2)',
-          position: 'relative', flexShrink: 0, transition: 'background 0.2s',
-        }}
+        className={styles.toggleSwitch}
+        data-on={checked ? 'true' : 'false'}
+        style={{ cursor: disabled ? 'not-allowed' : 'pointer' }}
       >
-        <span style={{
-          position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%',
-          background: '#fff', transition: 'left 0.2s',
-          left: checked ? 22 : 2,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.22)',
-        }} />
+        <span className={styles.toggleThumb} data-on={checked ? 'true' : 'false'} />
       </button>
     </div>
   );
@@ -1580,55 +1687,42 @@ function NotificationsSection() {
         title="Notifications"
         subtitle="Control which reminders and alerts Kivora surfaces during your study sessions."
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
-            {enabledCount} of {NOTIFICATION_PREFS.length} notification types active
-          </span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-ghost btn-sm" onClick={enableAll} type="button">Enable all</button>
-            <button className="btn btn-ghost btn-sm" onClick={disableAll} type="button">Disable all</button>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gap: 10 }}>
-          {NOTIFICATION_PREFS.map(item => (
-            <div
-              key={item.key}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                gap: 14, padding: '12px 14px', borderRadius: 12,
-                border: `1.5px solid ${prefs[item.key] ? 'color-mix(in srgb, var(--primary) 28%, var(--border-2))' : 'var(--border-2)'}`,
-                background: prefs[item.key] ? 'color-mix(in srgb, var(--primary) 5%, var(--surface-2))' : 'var(--surface-2)',
-                transition: 'border-color 0.14s, background 0.14s',
-              }}
-            >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>{item.label}</div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>{item.hint}</div>
+        <div className={styles.sectionStack}>
+          <div className={styles.settingsFeatureCard}>
+            <div className={styles.settingsFeatureHead}>
+              <div>
+                <strong>Notification plan</strong>
+                <p>Keep the signal high: enable the reminders that help your study flow, and drop the ones that create noise.</p>
               </div>
-              <button
-                type="button"
-                onClick={() => toggle(item.key)}
-                aria-label={`${prefs[item.key] ? 'Disable' : 'Enable'} ${item.label}`}
-                style={{
-                  width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
-                  background: prefs[item.key] ? 'var(--primary, var(--accent))' : 'var(--border-2)',
-                  position: 'relative', flexShrink: 0, transition: 'background 0.2s',
-                }}
-              >
-                <span style={{
-                  position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%',
-                  background: '#fff', transition: 'left 0.2s',
-                  left: prefs[item.key] ? 22 : 2,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.22)',
-                }} />
-              </button>
+              <span className="badge">{enabledCount}/{NOTIFICATION_PREFS.length} active</span>
             </div>
-          ))}
-        </div>
+            <div className={styles.runtimeChipRow}>
+              <span className="badge">Study reminders</span>
+              <span className="badge">Review alerts</span>
+              <span className="badge">Uploads</span>
+              <span className="badge">System warnings</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn btn-ghost btn-sm" onClick={enableAll} type="button">Enable all</button>
+              <button className="btn btn-ghost btn-sm" onClick={disableAll} type="button">Disable all</button>
+            </div>
+          </div>
 
-        <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border-2)', fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-          Preferences are stored locally on this device and do not sync across browsers. Browser notification permission is separate — grant it when prompted by your browser.
+          <div className={styles.toggleGrid}>
+            {NOTIFICATION_PREFS.map(item => (
+              <NotifToggleRow
+                key={item.key}
+                checked={prefs[item.key]}
+                label={item.label}
+                hint={item.hint}
+                onToggle={() => toggle(item.key)}
+              />
+            ))}
+          </div>
+
+          <div className={styles.inlineNote}>
+            Preferences are stored locally on this device and do not sync across browsers. Browser notification permission is separate — grant it when prompted by your browser.
+          </div>
         </div>
       </Section>
 
@@ -1637,55 +1731,54 @@ function NotificationsSection() {
         title="Browser Notifications"
         subtitle="Allow Kivora to send timed OS-level alerts even when you are away from the tab."
       >
-        {/* Permission status row */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          flexWrap: 'wrap', gap: 12, padding: '14px 16px', borderRadius: 12,
-          border: '1px solid var(--border-2)', background: 'var(--surface-2)',
-        }}>
-          <div>
-            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Permission status</div>
-            <div style={{ fontSize: 'var(--text-xs)', marginTop: 2, color: permissionColor[browserPermission] }}>
-              {permissionLabel[browserPermission]}
+        <div className={styles.sectionStack}>
+          <div className={styles.settingsFeatureCard}>
+            <div className={styles.settingsFeatureHead}>
+              <div>
+                <strong>Permission status</strong>
+                <p>Browser-level notifications need one extra permission beyond the in-app toggles above.</p>
+              </div>
+              <span className="badge" style={{ color: permissionColor[browserPermission] }}>
+                {permissionLabel[browserPermission]}
+              </span>
             </div>
+            {browserPermission !== 'granted' && browserPermission !== 'unsupported' && (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={handleRequestPermission}
+                disabled={requestingPermission || browserPermission === 'denied'}
+              >
+                {browserPermission === 'denied' ? 'Blocked by browser' : requestingPermission ? 'Requesting…' : 'Enable notifications'}
+              </button>
+            )}
+            {browserPermission === 'denied' && (
+              <div className={styles.inlineNote}>
+                To re-enable, click the lock icon in your browser address bar and allow notifications.
+              </div>
+            )}
           </div>
-          {browserPermission !== 'granted' && browserPermission !== 'unsupported' && (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={handleRequestPermission}
-              disabled={requestingPermission || browserPermission === 'denied'}
-            >
-              {browserPermission === 'denied' ? 'Blocked by browser' : requestingPermission ? 'Requesting…' : 'Enable notifications'}
-            </button>
-          )}
-          {browserPermission === 'denied' && (
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-              To re-enable, click the lock icon in your browser address bar and allow notifications.
-            </span>
-          )}
-        </div>
 
-        {/* Exam reminders toggle */}
-        <NotifToggleRow
-          checked={examNotifEnabled}
-          label="Exam reminders"
-          hint="Sends a reminder the evening before and the morning of any exam in your Planner. Requires browser notification permission."
-          onToggle={toggleExamNotif}
-          disabled={browserPermission !== 'granted'}
-        />
+          <div className={styles.toggleGrid}>
+            <NotifToggleRow
+              checked={examNotifEnabled}
+              label="Exam reminders"
+              hint="Sends a reminder the evening before and the morning of any exam in your Planner. Requires browser notification permission."
+              onToggle={toggleExamNotif}
+              disabled={browserPermission !== 'granted'}
+            />
+            <NotifToggleRow
+              checked={streakNotifEnabled}
+              label="Daily streak alerts"
+              hint="Notifies you at 8 pm if you have not studied any flashcards yet today, so you can keep your streak going."
+              onToggle={toggleStreakNotif}
+              disabled={browserPermission !== 'granted'}
+            />
+          </div>
 
-        {/* Daily streak alerts toggle */}
-        <NotifToggleRow
-          checked={streakNotifEnabled}
-          label="Daily streak alerts"
-          hint="Notifies you at 8 pm if you have not studied any flashcards yet today, so you can keep your streak going."
-          onToggle={toggleStreakNotif}
-          disabled={browserPermission !== 'granted'}
-        />
-
-        <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border-2)', fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-          Scheduled alerts are set up when the app loads and require the browser tab to be open at the scheduled time. Reminders are deduplicated so you will not receive the same alert twice.
+          <div className={styles.inlineNote}>
+            Scheduled alerts are set up when the app loads and require the browser tab to be open at the scheduled time. Reminders are deduplicated so you will not receive the same alert twice.
+          </div>
         </div>
       </Section>
     </>
@@ -1813,81 +1906,89 @@ function PrivacySection() {
   return (
     <>
       <Section
-        title="🔒 Privacy & Data control"
+        title="Privacy & data control"
         subtitle="Understand exactly what is stored, where, and what you can do with it."
       >
-        {/* Data map */}
-        <div>
-          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 10 }}>Where your data lives</div>
-          <div style={{ display: 'grid', gap: 6 }}>
-            {dataItems.map(item => (
-              <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: 'var(--surface-2)' }}>
-                <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{item.label}</div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{item.note}</div>
-                </div>
-                <span className="badge" style={{ flexShrink: 0, fontSize: 10 }}>{item.where}</span>
+        <div className={styles.sectionStack}>
+          <div className={styles.settingsFeatureCard}>
+            <div className={styles.settingsFeatureHead}>
+              <div>
+                <strong>Where your data lives</strong>
+                <p>The goal here is simple: make it obvious what stays local, what syncs, and what is only metadata.</p>
               </div>
-            ))}
+              <span className="badge">Transparent by default</span>
+            </div>
+            <div className={styles.privacyDataMap}>
+              {dataItems.map(item => (
+                <div key={item.label} className={styles.privacyDataRow}>
+                  <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{item.label}</div>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{item.note}</div>
+                  </div>
+                  <span className="badge" style={{ flexShrink: 0, fontSize: 10 }}>{item.where}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </Section>
 
       <Section
-        title="🤖 AI API data controls"
+        title="AI API data controls"
         subtitle="Control what your content is used for and what can be sent to AI APIs."
       >
-        {/* What AI can/cannot do */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div style={{ padding: 14, borderRadius: 10, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)' }}>
-            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 8, color: '#4ade80' }}>✓ What AI can do</div>
-            <ul style={{ margin: 0, padding: '0 0 0 16px', fontSize: 'var(--text-xs)', color: 'var(--text-2)', lineHeight: 1.8 }}>
-              {aiCanItems.map(item => <li key={item}>{item}</li>)}
-            </ul>
+        <div className={styles.sectionStack}>
+          <div className={styles.privacyCompareGrid}>
+            <div className={styles.privacyGoodCard}>
+              <div className={styles.privacyCompareTitle}>What AI can do</div>
+              <ul className={styles.privacyList}>
+                {aiCanItems.map(item => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
+            <div className={styles.privacyWarnCard}>
+              <div className={styles.privacyCompareTitle}>What AI cannot do</div>
+              <ul className={styles.privacyList}>
+                {aiCantItems.map(item => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
           </div>
-          <div style={{ padding: 14, borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
-            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 8, color: '#ef4444' }}>✗ What AI cannot do</div>
-            <ul style={{ margin: 0, padding: '0 0 0 16px', fontSize: 'var(--text-xs)', color: 'var(--text-2)', lineHeight: 1.8 }}>
-              {aiCantItems.map(item => <li key={item}>{item}</li>)}
-            </ul>
-          </div>
-        </div>
 
-        {/* AI data mode */}
-        <div>
-          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 10 }}>Content sent to AI</div>
-          <div style={{ display: 'grid', gap: 8 }}>
-            {AI_MODES.map(mode => (
-              <button
-                key={mode.id}
-                onClick={() => saveAiMode(mode.id)}
-                style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px',
-                  borderRadius: 10, cursor: 'pointer', textAlign: 'left', width: '100%',
-                  border: aiMode === mode.id ? '2px solid var(--accent)' : '1.5px solid var(--border-2)',
-                  background: aiMode === mode.id ? 'var(--accent-subtle, color-mix(in srgb, var(--accent) 10%, var(--surface)))' : 'var(--surface-2)',
-                  transition: 'all 0.14s',
-                }}>
-                <span style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>{mode.icon}</span>
-                <div>
-                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, marginBottom: 2 }}>
-                    {mode.label}
-                    {aiMode === mode.id && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', marginLeft: 6 }}>● Active</span>}
+          <div className={styles.settingsFeatureCard}>
+            <div className={styles.settingsFeatureHead}>
+              <div>
+                <strong>Content sent to AI</strong>
+                <p>Pick the privacy mode first. Kivora will adapt the rest of the AI workflow around that choice.</p>
+              </div>
+              <span className="badge">{AI_MODES.find(mode => mode.id === aiMode)?.label ?? 'Unknown'}</span>
+            </div>
+            <div className={styles.privacyModeGrid}>
+              {AI_MODES.map(mode => (
+                <button
+                  key={mode.id}
+                  onClick={() => saveAiMode(mode.id)}
+                  className={`${styles.privacyModeCard} ${aiMode === mode.id ? styles.privacyModeCardActive : ''}`}
+                >
+                  <span style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>{mode.icon}</span>
+                  <div>
+                    <div className={styles.privacyModeTitle}>
+                      {mode.label}
+                      {aiMode === mode.id && <span className={styles.privacyActiveDot}>Active</span>}
+                    </div>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{mode.hint}</div>
                   </div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{mode.hint}</div>
-                </div>
-              </button>
-            ))}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </Section>
 
       <Section
-        title="📈 Telemetry & tracking"
+        title="Telemetry & tracking"
         subtitle="Control whether Kivora keeps local usage diagnostics and recent crash summaries for troubleshooting."
       >
-        <div style={{ display: 'grid', gap: 12 }}>
+        <div className={styles.toggleGrid}>
           {[
             {
               label: 'Usage analytics',
@@ -1902,73 +2003,58 @@ function PrivacySection() {
               onChange: toggleCrash,
             },
           ].map(item => (
-            <div key={item.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{item.label}</div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{item.hint}</div>
-              </div>
-              <button
-                onClick={() => item.onChange(!item.value)}
-                style={{
-                  width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
-                  background: item.value ? 'var(--accent)' : 'var(--border-2)',
-                  position: 'relative', flexShrink: 0, transition: 'background 0.2s',
-                }}
-                aria-label={`${item.value ? 'Disable' : 'Enable'} ${item.label}`}
-              >
-                <span style={{
-                  position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%',
-                  background: '#fff', transition: 'left 0.2s',
-                  left: item.value ? 22 : 2,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                }} />
-              </button>
-            </div>
+            <NotifToggleRow
+              key={item.label}
+              checked={item.value}
+              label={item.label}
+              hint={item.hint}
+              onToggle={() => item.onChange(!item.value)}
+            />
           ))}
         </div>
       </Section>
 
       <Section
-        title="📦 Data portability"
+        title="Data portability"
         subtitle="Export or delete all your Kivora data at any time. No lock-in."
       >
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Export everything</div>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>
-              Download a JSON file of all your folders, files metadata, library items, review sets, quiz history, and study plans.
+        <div className={styles.sectionStack}>
+          <div className={styles.settingsFeatureCard}>
+            <div className={styles.settingsFeatureHead}>
+              <div>
+                <strong>Export everything</strong>
+                <p>Download a JSON export of your folders, files metadata, library items, review sets, quiz history, and study plans.</p>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={exportData} disabled={exportLoading} style={{ flexShrink: 0 }}>
+                {exportLoading ? 'Exporting…' : 'Export my data'}
+              </button>
             </div>
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={exportData} disabled={exportLoading} style={{ flexShrink: 0 }}>
-            {exportLoading ? '⏳ Exporting…' : '⬇ Export my data'}
-          </button>
-        </div>
 
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, marginBottom: 6 }}>Delete all data</div>
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 10 }}>
-            Permanently removes all your folders, files metadata, library items, and account. This cannot be undone.
-            File content stored locally in your browser (IndexedDB) is also cleared.
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              value={deleteConfirm}
-              onChange={e => setDeleteConfirm(e.target.value)}
-              placeholder='Type "delete my data" to unlock'
-              style={{
-                flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 'var(--text-sm)',
-                border: `1.5px solid ${deleteConfirm.trim().toLowerCase() === 'delete my data' ? 'var(--danger)' : 'var(--border-2)'}`,
-                background: 'var(--surface)', color: 'var(--text)',
-              }}
-            />
-            <button
-              className="btn btn-sm"
-              style={{ background: 'var(--danger)', color: '#fff', border: 'none', flexShrink: 0 }}
-              disabled={deleteConfirm.trim().toLowerCase() !== 'delete my data' || deleteLoading}
-              onClick={deleteAllData}
-            >
-              {deleteLoading ? '⏳ Deleting…' : '🗑 Delete all'}
-            </button>
+          <div className={styles.deleteCard}>
+            <div className={styles.settingsFeatureHead}>
+              <div>
+                <strong>Delete all data</strong>
+                <p>Permanently removes your folders, files metadata, library items, and account. Local IndexedDB file content is cleared too.</p>
+              </div>
+              <span className="badge">Irreversible</span>
+            </div>
+            <div className={styles.deleteRow}>
+              <input
+                value={deleteConfirm}
+                onChange={e => setDeleteConfirm(e.target.value)}
+                placeholder='Type "delete my data" to unlock'
+                className={styles.deleteInput}
+              />
+              <button
+                className="btn btn-sm"
+                style={{ background: 'var(--danger)', color: '#fff', border: 'none', flexShrink: 0 }}
+                disabled={deleteConfirm.trim().toLowerCase() !== 'delete my data' || deleteLoading}
+                onClick={deleteAllData}
+              >
+                {deleteLoading ? 'Deleting…' : 'Delete all'}
+              </button>
+            </div>
           </div>
         </div>
       </Section>

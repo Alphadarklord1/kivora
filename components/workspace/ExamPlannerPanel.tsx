@@ -6,11 +6,12 @@ import { loadClientAiDataMode } from '@/lib/privacy/ai-data';
 
 interface Exam {
   id: string;
+  dbId?: string;          // server-side UUID from /api/study-plans
   name: string;
   subject: string;
-  date: string;         // ISO date string YYYY-MM-DD
-  topics: string;       // comma-separated topics
-  schedule?: string;    // AI-generated schedule markdown
+  date: string;           // ISO date string YYYY-MM-DD
+  topics: string;         // comma-separated topics
+  schedule?: string;      // AI-generated schedule markdown
 }
 
 const STORAGE_KEY = 'kivora-exam-planner';
@@ -32,9 +33,9 @@ function daysUntil(dateStr: string): number {
 }
 
 function urgencyColor(days: number): string {
-  if (days < 0)  return '#9ca3af'; // past
-  if (days <= 3) return '#ef4444';
-  if (days <= 7) return '#f59e0b';
+  if (days < 0)   return '#9ca3af';
+  if (days <= 3)  return '#ef4444';
+  if (days <= 7)  return '#f59e0b';
   if (days <= 14) return '#4f86f7';
   return '#52b788';
 }
@@ -51,38 +52,109 @@ function mdToHtml(md: string): string {
     .replace(/\n/g, '<br>');
 }
 
+// Map an Exam to /api/study-plans POST body
+function examToApiBody(exam: Exam) {
+  const topicList = exam.topics
+    ? exam.topics.split(',').map(t => ({ name: t.trim(), difficulty: 'medium', estimatedHours: 2, completed: false }))
+    : [{ name: exam.subject || exam.name, difficulty: 'medium', estimatedHours: 4, completed: false }];
+  return {
+    title: exam.subject ? `${exam.name} — ${exam.subject}` : exam.name,
+    examDate: exam.date + 'T00:00:00',
+    dailyMinutes: 60,
+    topics: topicList,
+    schedule: { content: exam.schedule ?? '', format: 'markdown' },
+  };
+}
+
 export function ExamPlannerPanel() {
   const [exams,      setExams]      = useState<Exam[]>([]);
   const [adding,     setAdding]     = useState(false);
   const [expanded,   setExpanded]   = useState<Record<string, boolean>>({});
-  const [generating, setGenerating] = useState<string | null>(null); // exam id being scheduled
+  const [generating, setGenerating] = useState<string | null>(null);
+  const [confirmDel, setConfirmDel] = useState<string | null>(null); // exam id pending delete
 
   // New exam form state
   const [form, setForm] = useState({ name: '', subject: '', date: '', topics: '' });
 
   const abortRef = useRef<AbortController | null>(null);
+  const syncing  = useRef(false);
 
-  useEffect(() => { setExams(loadExams()); }, []);
+  // Load: DB first, fall back to / merge with localStorage
+  useEffect(() => {
+    const local = loadExams();
+    setExams(local); // show immediately from cache
 
-  function addExam() {
+    fetch('/api/study-plans', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then((plans: Array<{ id: string; title: string; examDate: string; topics: unknown; schedule: { content?: string } | null }> | null) => {
+        if (!plans || !Array.isArray(plans)) return;
+        // Merge: prefer DB entries, supplement with local-only entries
+        const merged: Exam[] = plans.map(p => {
+          const existing = local.find(e => e.dbId === p.id);
+          const title = p.title ?? '';
+          const dashIdx = title.indexOf(' — ');
+          const name    = dashIdx > -1 ? title.slice(0, dashIdx) : title;
+          const subject = dashIdx > -1 ? title.slice(dashIdx + 3) : '';
+          const topicsArr = Array.isArray(p.topics) ? p.topics as Array<{ name: string }> : [];
+          return {
+            id:       existing?.id ?? `exam-${p.id}`,
+            dbId:     p.id,
+            name:     name || existing?.name || title,
+            subject:  subject || existing?.subject || '',
+            date:     (p.examDate ?? '').slice(0, 10),
+            topics:   topicsArr.map((t: { name: string }) => t.name).join(', ') || existing?.topics || '',
+            schedule: (p.schedule as { content?: string } | null)?.content ?? existing?.schedule,
+          };
+        });
+        // Append local-only entries not in DB (no dbId)
+        const localOnly = local.filter(e => !e.dbId);
+        const all = [...merged, ...localOnly].sort((a, b) => a.date.localeCompare(b.date));
+        setExams(all);
+        saveExams(all);
+      })
+      .catch(() => {}); // Network error — local data is still shown
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function addExam() {
     if (!form.name.trim() || !form.date) return;
     const exam: Exam = {
-      id: crypto.randomUUID(),
-      name: form.name.trim(),
+      id:      crypto.randomUUID(),
+      name:    form.name.trim(),
       subject: form.subject.trim(),
-      date: form.date,
-      topics: form.topics.trim(),
+      date:    form.date,
+      topics:  form.topics.trim(),
     };
     const next = [...exams, exam].sort((a, b) => a.date.localeCompare(b.date));
     setExams(next); saveExams(next);
     setForm({ name: '', subject: '', date: '', topics: '' });
     setAdding(false);
+
+    // Persist to DB (best-effort)
+    try {
+      const res = await fetch('/api/study-plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(examToApiBody(exam)),
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const created = await res.json() as { id: string };
+        const withDb = next.map(e => e.id === exam.id ? { ...e, dbId: created.id } : e);
+        setExams(withDb); saveExams(withDb);
+      }
+    } catch { /* DB unavailable — local-only is fine */ }
   }
 
-  function removeExam(id: string) {
-    if (!confirm('Remove this exam?')) return;
+  async function removeExam(id: string) {
+    setConfirmDel(null);
+    const exam = exams.find(e => e.id === id);
     const next = exams.filter(e => e.id !== id);
     setExams(next); saveExams(next);
+
+    if (exam?.dbId) {
+      fetch(`/api/study-plans/${exam.dbId}`, { method: 'DELETE', credentials: 'include' }).catch(() => {});
+    }
   }
 
   async function generateSchedule(exam: Exam) {
@@ -151,7 +223,20 @@ Requirements:
           } catch {}
         }
       }
+
       setExpanded(prev => ({ ...prev, [exam.id]: true }));
+
+      // Persist schedule to DB
+      const updated = exams.find(e => e.id === exam.id);
+      if (updated?.dbId && !syncing.current) {
+        syncing.current = true;
+        fetch(`/api/study-plans/${updated.dbId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ schedule: { content: schedule, format: 'markdown' } }),
+          credentials: 'include',
+        }).catch(() => {}).finally(() => { syncing.current = false; });
+      }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
     } finally {
@@ -240,6 +325,7 @@ Requirements:
         const color = urgencyColor(days);
         const isExp = expanded[exam.id];
         const isGen = generating === exam.id;
+        const isPendingDel = confirmDel === exam.id;
         return (
           <div key={exam.id} style={{ background: 'var(--surface)', border: `1px solid var(--border-2)`, borderRadius: 12, marginBottom: 12, overflow: 'hidden', borderLeft: `4px solid ${color}` }}>
             <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -264,9 +350,14 @@ Requirements:
                     Topics: {exam.topics}
                   </div>
                 )}
+                {exam.dbId && (
+                  <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <span style={{ color: '#52b788' }}>●</span> synced
+                  </div>
+                )}
               </div>
 
-              <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
                 {days >= 0 && (
                   <button
                     className="btn btn-primary btn-sm"
@@ -285,13 +376,34 @@ Requirements:
                     {isExp ? 'Hide' : 'View Plan'}
                   </button>
                 )}
-                <button
-                  className="btn-icon"
-                  style={{ color: 'var(--danger)', fontSize: 12, width: 24, height: 24 }}
-                  onClick={() => removeExam(exam.id)}
-                >
-                  ✕
-                </button>
+                {isPendingDel ? (
+                  <>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--danger)' }}>Remove?</span>
+                    <button
+                      className="btn btn-sm"
+                      style={{ background: 'var(--danger)', color: '#fff', border: 'none', fontSize: 11, padding: '2px 10px' }}
+                      onClick={() => removeExam(exam.id)}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: 11 }}
+                      onClick={() => setConfirmDel(null)}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="btn-icon"
+                    style={{ color: 'var(--danger)', fontSize: 12, width: 24, height: 24 }}
+                    onClick={() => setConfirmDel(exam.id)}
+                    title="Remove exam"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             </div>
 

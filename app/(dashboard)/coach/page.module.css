@@ -2919,6 +2919,25 @@ details[open] .detailsSummary::before {
   gap: 0.55rem;
 }
 
+.plxHeaderMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.plxHeaderSummary {
+  font-size: 0.76rem;
+  color: var(--text-muted, #64748b);
+}
+
+.plxHeaderLink {
+  font-size: 0.76rem;
+  color: var(--primary, #6366f1);
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .plxSearchRow {
   display: flex;
   gap: 0.55rem;
@@ -3110,6 +3129,15 @@ details[open] .detailsSummary::before {
   .plxResultLayout {
     grid-template-columns: 1fr;
   }
+
+  .plxSourcesPanel {
+    position: static;
+  }
+
+  .plxAnswer {
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+  }
 }
 
 /* Left — Answer column */
@@ -3119,6 +3147,11 @@ details[open] .detailsSummary::before {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+}
+
+.plxAnswerLead {
+  display: grid;
+  gap: 0.3rem;
 }
 
 .plxAnswerHead {
@@ -3137,6 +3170,21 @@ details[open] .detailsSummary::before {
   line-height: 1.25;
 }
 
+.plxEyebrow {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted, #64748b);
+}
+
+.plxAnswerMeta {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--text-muted, #64748b);
+  line-height: 1.5;
+}
+
 .plxAnswerActions {
   display: flex;
   gap: 0.4rem;
@@ -3151,6 +3199,67 @@ details[open] .detailsSummary::before {
   margin: 0;
 }
 
+.plxSignalRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.plxSignalCard {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 0.95rem;
+  background: color-mix(in srgb, var(--bg-surface, #fff) 94%, var(--bg-inset, #f8fafc));
+}
+
+.plxSignalCard p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.58;
+  color: var(--text-secondary, #475569);
+}
+
+.plxSignalLabel {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted, #64748b);
+}
+
+@media (max-width: 860px) {
+  .plxSignalRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.plxSection {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.plxSectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.plxSectionHead h3 {
+  margin: 0;
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+}
+
+.plxSectionHead span {
+  font-size: 0.76rem;
+  color: var(--text-muted, #64748b);
+}
+
 /* Key points */
 .plxKeyPoints {
   display: flex;
@@ -3162,6 +3271,11 @@ details[open] .detailsSummary::before {
   display: flex;
   gap: 0.75rem;
   align-items: flex-start;
+}
+
+.plxKeyPointBody {
+  display: grid;
+  gap: 0.35rem;
 }
 
 .plxCiteBadge {
@@ -3186,6 +3300,61 @@ details[open] .detailsSummary::before {
   line-height: 1.6;
   color: var(--text-primary, #0f172a);
   margin: 0;
+}
+
+.plxInlineCitation {
+  font-size: 0.77rem;
+  color: var(--primary, #6366f1);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.plxCitationGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.plxCitationCard {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 0.95rem;
+  background: var(--bg-surface, #fff);
+  text-decoration: none;
+  color: inherit;
+}
+
+.plxCitationCard strong {
+  font-size: 0.86rem;
+  color: var(--text-primary, #0f172a);
+  line-height: 1.4;
+}
+
+.plxCitationCard p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #475569);
+  line-height: 1.52;
+}
+
+.plxCitationHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.plxCitationMeta {
+  font-size: 0.72rem;
+  color: var(--text-muted, #64748b);
+}
+
+@media (max-width: 860px) {
+  .plxCitationGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Related questions */
@@ -3301,11 +3470,14 @@ details[open] .detailsSummary::before {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  position: sticky;
+  top: 0;
+  align-self: start;
 }
 
 .plxSourcesHead {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
 }
@@ -3317,6 +3489,13 @@ details[open] .detailsSummary::before {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted, #64748b);
+}
+
+.plxSourcesSubhead {
+  margin: 0.18rem 0 0;
+  font-size: 0.76rem;
+  color: var(--text-muted, #64748b);
+  line-height: 1.45;
 }
 
 .plxSourceCard {
@@ -3401,6 +3580,71 @@ details[open] .detailsSummary::before {
 .plxSourceTime {
   font-size: 0.68rem;
   color: var(--text-muted, #64748b);
+}
+
+.plxSidebarGroup {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.9rem;
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--bg-surface, #fff) 94%, var(--bg-inset, #f8fafc));
+}
+
+.plxSidebarHead {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted, #64748b);
+}
+
+.plxSidebarLinks {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.plxSidebarLink {
+  font-size: 0.82rem;
+  color: var(--text-primary, #0f172a);
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.plxSidebarText {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.52;
+  color: var(--text-secondary, #475569);
+}
+
+.plxFollowSection {
+  margin-top: 0.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle, #e2e8f0);
+}
+
+.plxFollowHint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--text-muted, #64748b);
+}
+
+.plxInlineBtn {
+  font-size: 0.78rem;
+  color: var(--text-muted, #64748b);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.plxPrimaryGhost {
+  border-color: color-mix(in srgb, var(--primary, #6366f1) 36%, transparent);
+  color: var(--primary, #6366f1);
 }
 
 /* Confidence pill */

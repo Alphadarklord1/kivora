@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useToast } from '@/providers/ToastProvider';
 
-// ── Focus / Pomodoro panel ─────────────────────────────────────────────────
+// ── Focus / Pomodoro panel ─────────────────────────────────────────────────────
 
 type PomPhase = 'work' | 'short-break' | 'long-break';
 
@@ -13,15 +13,39 @@ const POMODORO_PRESETS: Record<PomPhase, number> = {
   'long-break': 15,
 };
 
+const SESSIONS_KEY   = 'kivora_focus_sessions';
+const TOTAL_MINS_KEY = 'kivora_focus_total_mins';
+const GOAL_KEY       = 'kivora_focus_daily_goal';
+const DATE_KEY       = 'kivora_focus_date';
+
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+function loadDayState() {
+  if (typeof window === 'undefined') return { sessions: 0, totalMins: 0 };
+  // Reset counts if it's a new day
+  const stored = localStorage.getItem(DATE_KEY);
+  if (stored !== todayStr()) {
+    localStorage.setItem(DATE_KEY, todayStr());
+    localStorage.removeItem(SESSIONS_KEY);
+    localStorage.removeItem(TOTAL_MINS_KEY);
+    return { sessions: 0, totalMins: 0 };
+  }
+  return {
+    sessions:  parseInt(localStorage.getItem(SESSIONS_KEY)  ?? '0', 10) || 0,
+    totalMins: parseInt(localStorage.getItem(TOTAL_MINS_KEY) ?? '0', 10) || 0,
+  };
+}
+
 export function FocusPanel() {
   const { toast } = useToast();
   const [phase,         setPhase]         = useState<PomPhase>('work');
   const [customMins,    setCustomMins]     = useState<Record<PomPhase, number>>({ ...POMODORO_PRESETS });
   const [secsLeft,      setSecsLeft]       = useState(POMODORO_PRESETS.work * 60);
   const [running,       setRunning]        = useState(false);
-  const [sessions,      setSessions]       = useState(0);    // pomodoros completed today
-  const [todayTotal,    setTodayTotal]     = useState(0);    // total minutes studied today
-  const [task,          setTask]           = useState('');   // what are you studying?
+  const [sessions,      setSessions]       = useState(0);
+  const [todayTotal,    setTodayTotal]     = useState(0);
+  const [dailyGoal,     setDailyGoal]     = useState(4);
+  const [task,          setTask]           = useState('');
   const [showSettings,  setShowSettings]   = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -29,7 +53,16 @@ export function FocusPanel() {
   const progress     = Math.max(0, Math.min(100, ((totalSecs - secsLeft) / totalSecs) * 100));
   const mm           = String(Math.floor(secsLeft / 60)).padStart(2, '0');
   const ss           = String(secsLeft % 60).padStart(2, '0');
-  const circumference = 2 * Math.PI * 54; // radius 54 on SVG
+  const circumference = 2 * Math.PI * 54;
+
+  // Load persisted day state on mount
+  useEffect(() => {
+    const { sessions: s, totalMins: m } = loadDayState();
+    setSessions(s);
+    setTodayTotal(m);
+    const goal = parseInt(localStorage.getItem(GOAL_KEY) ?? '4', 10) || 4;
+    setDailyGoal(goal);
+  }, []);
 
   useEffect(() => {
     if (running) {
@@ -53,12 +86,29 @@ export function FocusPanel() {
 
   function handlePhaseEnd() {
     if (phase === 'work') {
-      const newSessions = sessions + 1;
-      setSessions(newSessions);
-      setTodayTotal(t => t + customMins.work);
-      toast(`🎉 Pomodoro #${newSessions} complete! Take a break.`, 'success');
-      const next: PomPhase = newSessions % 4 === 0 ? 'long-break' : 'short-break';
-      switchPhase(next);
+      setSessions(prev => {
+        const newSessions = prev + 1;
+        const newMins = todayTotal + customMins.work;
+
+        // Persist to localStorage
+        localStorage.setItem(SESSIONS_KEY, String(newSessions));
+        localStorage.setItem(TOTAL_MINS_KEY, String(newMins));
+        localStorage.setItem(DATE_KEY, todayStr());
+        setTodayTotal(newMins);
+
+        // Persist to DB (best-effort)
+        fetch('/api/srs/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ minutesStudied: customMins.work, cardsReviewed: 0 }),
+          credentials: 'include',
+        }).catch(() => {});
+
+        toast(`🎉 Pomodoro #${newSessions} complete! Take a break.`, 'success');
+        const next: PomPhase = newSessions % 4 === 0 ? 'long-break' : 'short-break';
+        switchPhase(next);
+        return newSessions;
+      });
     } else {
       toast('Break over — back to work!', 'info');
       switchPhase('work');
@@ -80,6 +130,11 @@ export function FocusPanel() {
     handlePhaseEnd();
   }
 
+  function saveGoal(goal: number) {
+    setDailyGoal(goal);
+    localStorage.setItem(GOAL_KEY, String(goal));
+  }
+
   const phaseColor: Record<PomPhase, string> = {
     'work': 'var(--accent)',
     'short-break': 'var(--success)',
@@ -87,6 +142,7 @@ export function FocusPanel() {
   };
 
   const strokeDash = circumference - (progress / 100) * circumference;
+  const goalPct    = dailyGoal > 0 ? Math.min(100, Math.round((sessions / dailyGoal) * 100)) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'auto' }}>
@@ -189,7 +245,7 @@ export function FocusPanel() {
           {[
             { label: 'Pomodoros', value: sessions, icon: '🍅' },
             { label: 'Min studied', value: todayTotal, icon: '⏱' },
-            { label: 'Goal today', value: '4 sessions', icon: '🎯' },
+            { label: 'Goal today', value: `${sessions}/${dailyGoal}`, icon: '🎯' },
           ].map(stat => (
             <div key={stat.label} style={{
               background: 'var(--surface)', border: '1px solid var(--border)',
@@ -202,26 +258,47 @@ export function FocusPanel() {
           ))}
         </div>
 
-        {/* Custom durations */}
+        {/* Goal progress bar */}
+        {dailyGoal > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+              <span>Daily goal progress</span>
+              <span style={{ color: goalPct >= 100 ? 'var(--success)' : 'var(--text-2)', fontWeight: 600 }}>{goalPct}%{goalPct >= 100 ? ' ✓' : ''}</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 3, background: 'var(--border-2)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${goalPct}%`, background: goalPct >= 100 ? 'var(--success)' : 'var(--accent)', borderRadius: 3, transition: 'width 0.5s ease' }} />
+            </div>
+          </div>
+        )}
+
+        {/* Custom durations + goal */}
         <div style={{ marginBottom: 16 }}>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 'var(--text-xs)', width: '100%', justifyContent: 'center' }}
             onClick={() => setShowSettings(s => !s)}>
-            {showSettings ? '▲ Hide settings' : '⚙ Customize durations'}
+            {showSettings ? '▲ Hide settings' : '⚙ Customize durations & goal'}
           </button>
           {showSettings && (
-            <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, padding: '14px', background: 'var(--surface)', borderRadius: 10 }}>
-              {(['work', 'short-break', 'long-break'] as PomPhase[]).map(p => (
-                <label key={p} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                  {p === 'work' ? 'Focus' : p === 'short-break' ? 'Short break' : 'Long break'} (min)
-                  <input type="number" value={customMins[p]} min={1} max={90}
-                    onChange={e => {
-                      const v = Math.max(1, +e.target.value);
-                      setCustomMins(prev => ({ ...prev, [p]: v }));
-                      if (phase === p) { setSecsLeft(v * 60); setRunning(false); }
-                    }}
-                    style={{ padding: '4px 8px', textAlign: 'center' }} />
-                </label>
-              ))}
+            <div style={{ marginTop: 12, padding: '14px', background: 'var(--surface)', borderRadius: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+                {(['work', 'short-break', 'long-break'] as PomPhase[]).map(p => (
+                  <label key={p} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                    {p === 'work' ? 'Focus' : p === 'short-break' ? 'Short break' : 'Long break'} (min)
+                    <input type="number" value={customMins[p]} min={1} max={90}
+                      onChange={e => {
+                        const v = Math.max(1, +e.target.value);
+                        setCustomMins(prev => ({ ...prev, [p]: v }));
+                        if (phase === p) { setSecsLeft(v * 60); setRunning(false); }
+                      }}
+                      style={{ padding: '4px 8px', textAlign: 'center' }} />
+                  </label>
+                ))}
+              </div>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                Daily pomodoro goal
+                <input type="number" value={dailyGoal} min={1} max={20}
+                  onChange={e => saveGoal(Math.max(1, Math.min(20, +e.target.value)))}
+                  style={{ padding: '4px 8px', textAlign: 'center', width: 80 }} />
+              </label>
             </div>
           )}
         </div>
@@ -232,8 +309,8 @@ export function FocusPanel() {
             💡 Pomodoro tips
           </div>
           <ul style={{ margin: 0, paddingLeft: 16, fontSize: 'var(--text-xs)', color: 'var(--text-3)', lineHeight: 1.7 }}>
-            <li>Work in 25-min focused bursts with no distractions</li>
-            <li>Every 4 pomodoros, take a longer 15-min break</li>
+            <li>Work in focused bursts with no distractions</li>
+            <li>Every 4 pomodoros, take a longer break</li>
             <li>Note what you studied each session to track progress</li>
           </ul>
         </div>

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getGroqApiKey } from '@/lib/ai/groq';
 
 const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://127.0.0.1:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'llama3.2-vision';
+const OLLAMA_MODEL = process.env.OLLAMA_OCR_MODEL ?? process.env.OLLAMA_MODEL ?? 'llava';
 
 export async function POST(req: NextRequest) {
   try {
@@ -61,15 +62,45 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Try Groq vision (gpt-4o-compatible endpoint)
+    const groqKey = getGroqApiKey();
+    if (groqKey) {
+      try {
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
+          body: JSON.stringify({
+            model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Extract the mathematical expression from this image. Return ONLY the math expression in plain text suitable for a math solver (use ^ for powers, * for multiplication, / for division). No explanation, just the expression.' },
+                { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
+              ],
+            }],
+            max_tokens: 200,
+          }),
+          signal: AbortSignal.timeout(20_000),
+        });
+
+        if (groqRes.ok) {
+          const data = await groqRes.json();
+          const expression = data.choices?.[0]?.message?.content?.trim();
+          if (expression) return NextResponse.json({ expression });
+        }
+      } catch {
+        // Groq vision failed — surface the final error below
+      }
+    }
+
     return NextResponse.json(
-      { error: 'OCR requires a local vision model (Ollama). For now, type your problem manually.' },
+      { error: 'Could not extract math from the image. Try typing the problem manually.' },
       { status: 503 },
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // Surface a friendly fallback rather than a raw error or silent crash
     return NextResponse.json(
-      { error: 'OCR requires a local vision model (Ollama). For now, type your problem manually.', detail: message },
+      { error: 'Could not extract math from the image. Try typing the problem manually.', detail: message },
       { status: 500 },
     );
   }

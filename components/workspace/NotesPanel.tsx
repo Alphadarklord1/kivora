@@ -67,10 +67,11 @@ export function NotesPanel({
   onGenerateFromSource,
   onOpenFiles,
 }: Props) {
-  const [content, setContent]     = useState('');
-  const [viewMode, setViewMode]   = useState<ViewMode>('edit');
-  const [noteMode, setNoteMode]   = useState<NoteMode>('plain');
-  const [saved, setSaved]         = useState(true);
+  const [content, setContent]       = useState('');
+  const [viewMode, setViewMode]     = useState<ViewMode>('edit');
+  const [noteMode, setNoteMode]     = useState<NoteMode>('plain');
+  const [saved, setSaved]           = useState(true);
+  const [confirmClear, setConfirmClear] = useState(false);
   const textareaRef               = useRef<HTMLTextAreaElement>(null);
   const saveTimer                 = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -161,9 +162,9 @@ export function NotesPanel({
   }
 
   function clearNotes() {
-    if (!confirm('Clear all notes for this folder? This cannot be undone.')) return;
     setContent('');
     setSaved(true);
+    setConfirmClear(false);
     if (typeof window !== 'undefined') localStorage.removeItem(storageKey);
   }
 
@@ -268,7 +269,15 @@ export function NotesPanel({
             {saved ? 'Saved' : 'Saving…'} · {wordCount} words
           </span>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={downloadNotes} title="Export as .md">⬇</button>
-          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, color: 'var(--danger)' }} onClick={clearNotes} title="Clear notes">✕</button>
+          {confirmClear ? (
+            <>
+              <span style={{ fontSize: 11, color: 'var(--danger)' }}>Clear notes?</span>
+              <button className="btn btn-sm" style={{ fontSize: 11, background: 'var(--danger)', color: '#fff', border: 'none', padding: '2px 8px' }} onClick={clearNotes}>Yes</button>
+              <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => setConfirmClear(false)}>No</button>
+            </>
+          ) : (
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, color: 'var(--danger)' }} onClick={() => setConfirmClear(true)} title="Clear notes">✕</button>
+          )}
         </div>
       </div>
 

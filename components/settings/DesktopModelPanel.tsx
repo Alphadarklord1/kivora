@@ -48,17 +48,17 @@ function formatSize(bytes: number) {
 const MODEL_LABELS: Record<string, { name: string; description: string; tag: string }> = {
   mini: {
     name: 'Mini — Qwen2.5 1.5B',
-    description: 'Bundled with the app. Fast, low RAM. Great for summaries, MCQ, and notes on any laptop.',
+    description: 'Mac-first default. If this desktop build was packaged correctly, Mini works offline immediately after install.',
     tag: 'Included',
   },
   balanced: {
     name: 'Balanced — Qwen2.5 3B',
-    description: 'Optional download. Noticeably smarter on essays and longer explanations. Needs 16 GB+ RAM.',
+    description: 'Optional in-app download. Stronger for essays, longer explanations, and denser study guides. Needs 16 GB+ RAM.',
     tag: '16 GB+ RAM',
   },
   pro: {
     name: 'Pro — Qwen2.5 7B',
-    description: 'Optional download. Best quality for complex questions and in-depth study guides. Needs 24 GB+ RAM.',
+    description: 'Largest optional download. Best quality for harder reasoning and long-form work on higher-memory Macs.',
     tag: '24 GB+ RAM',
   },
 };
@@ -179,8 +179,8 @@ export function DesktopModelPanel() {
     <div style={{ display: 'grid', gap: 12 }}>
       <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
         {bundledMiniInstalled
-          ? `Mini is included in this desktop build, so Kivora is ready for first-launch offline AI. Optional heavier models stay in your app data folder.${optionalDownloadsInstalled > 0 ? ` You already have ${optionalDownloadsInstalled} optional model${optionalDownloadsInstalled === 1 ? '' : 's'} installed.` : ''}`
-          : 'This build does not currently include the bundled Mini model, so first-launch offline AI is not ready yet. Install a local model or use Ollama until the 1.0 Mac bundle is staged correctly.'}
+          ? `Mini is bundled in this desktop build, so the Mac app should be ready for first-launch offline AI. Optional bigger models download into your app data only when you ask for them.${optionalDownloadsInstalled > 0 ? ` You already have ${optionalDownloadsInstalled} optional model${optionalDownloadsInstalled === 1 ? '' : 's'} installed.` : ''}`
+          : 'This build does not currently include the bundled Mini model. Mac offline AI will still need a model download until the desktop bundle is staged correctly.'}
       </p>
 
       {error && (
@@ -278,7 +278,7 @@ export function DesktopModelPanel() {
                   disabled={isBusy}
                   onClick={() => handleInstall(model.key)}
                 >
-                  {isBusy ? 'Starting…' : 'Download & use'}
+                  {isBusy ? 'Starting…' : model.key === 'mini' ? 'Install & use Mini' : 'Download optional model'}
                 </button>
               )}
               {model.isInstalled && !isActive && (

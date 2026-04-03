@@ -34,6 +34,7 @@ const FlashcardView  = dynamic(() => import('@/components/workspace/views/Flashc
 const ExamView       = dynamic(() => import('@/components/workspace/views/ExamView').then(m => ({ default: m.ExamView })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const FocusPanel     = dynamic(() => import('@/components/workspace/views/FocusPanel').then(m => ({ default: m.FocusPanel })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const DocumentPreview = dynamic(() => import('@/components/workspace/DocumentPreview').then(m => ({ default: m.DocumentPreview })), { ssr: false, loading: () => <div className="tool-loading" /> });
+const StudyAnalytics = dynamic(() => import('@/components/analytics/StudyAnalytics').then(m => ({ default: m.StudyAnalytics })), { ssr: false, loading: () => <div className="tool-loading" /> });
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -424,13 +425,6 @@ export function WorkspacePanel({
   const [streak,        setStreak]        = useState<number>(0);
   const [weekScore,     setWeekScore]     = useState<number | null>(null);
   const [weekQuizzes,   setWeekQuizzes]   = useState<number>(0);
-  const [analyticsData, setAnalyticsData] = useState<{
-    weakAreas: Array<{ topic: string; accuracy: number; attempts: number; suggestion: string }>;
-    totalQuizzes: number;
-    avgScore: number;
-  } | null>(null);
-  const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [showKnowledgeMap, setShowKnowledgeMap] = useState(false);
   const [notesInject,   setNotesInject]   = useState<string | undefined>(undefined);
   const [noteStyle,     setNoteStyle]     = useState<NoteStyle>('study');
   const abortRef    = useRef<AbortController | null>(null);
@@ -974,32 +968,23 @@ export function WorkspacePanel({
     } catch {}
   }, []);
 
-  // ── Analytics fetch (lazy, on tab open) ───────────────────────────────
+  // ── Analytics strip data (for generate tab header) ────────────────────
   useEffect(() => {
-    if (mainTab !== 'analytics' || analyticsData || analyticsLoading) return;
-    setAnalyticsLoading(true);
+    if (weekScore !== null) return; // already loaded
     fetch('/api/analytics?period=7', { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data) return;
         const qs = data.quizStats ?? {};
         const wScore = qs.averageScore ?? null;
-        const wCount = qs.totalAttempts ?? 0;
         setWeekScore(typeof wScore === 'number' ? Math.round(wScore) : null);
-        setWeekQuizzes(wCount);
-        setAnalyticsData({
-          weakAreas: (data.weakAreas ?? []).slice(0, 5),
-          totalQuizzes: wCount,
-          avgScore: wScore ?? 0,
-        });
-        // Keep streak in sync
+        setWeekQuizzes(qs.totalAttempts ?? 0);
         const s = data.activity?.currentStreak ?? 0;
         if (s > 0) { setStreak(s); try { localStorage.setItem('kivora_study_streak', String(s)); } catch {} }
       })
-      .catch(() => {})
-      .finally(() => setAnalyticsLoading(false));
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mainTab]);
+  }, []);
 
   async function saveToLibrary() {
     if (!output) return;
@@ -1668,8 +1653,8 @@ export function WorkspacePanel({
                     {!generating && streamSource === 'offline' && <span className="badge" style={{ fontSize: 10, opacity: 0.6 }}>offline</span>}
                     {!generating && streamSource === 'local' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(74,222,128,0.15)', color: '#4ade80', borderColor: 'rgba(74,222,128,0.3)' }}>● Local AI</span>}
                     {!generating && streamSource === 'openai' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(79,134,247,0.15)', color: '#4f86f7', borderColor: 'rgba(79,134,247,0.3)' }}>● Cloud AI</span>}
-                    {/* Edit toggle — only for text modes, not while streaming */}
-                    {!generating && (genMode === 'summarize' || genMode === 'notes' || genMode === 'outline' || genMode === 'quiz') && (
+                    {/* Edit toggle — available for all modes, not while streaming */}
+                    {!generating && (
                       <button
                         className={`btn btn-sm ${editMode ? 'btn-accent' : 'btn-ghost'}`}
                         style={{ marginLeft: 'auto', fontSize: 12 }}
@@ -1682,7 +1667,7 @@ export function WorkspacePanel({
                   </div>
 
                   {/* Output rendering */}
-                  {editMode && !generating && (genMode === 'summarize' || genMode === 'notes' || genMode === 'outline' || genMode === 'quiz')
+                  {editMode && !generating
                     ? (
                       <textarea
                         value={output}
@@ -1823,6 +1808,7 @@ export function WorkspacePanel({
               if (!nextFile) return;
               setSelFile(nextFile);
               setExtractedText('');
+              void extractFromFile(nextFile);
             }}
             onLoadSelectedFile={loadSelectedFileIntoChat}
             onClearContext={clearChatContext}
@@ -1856,124 +1842,8 @@ export function WorkspacePanel({
 
         {/* ─────────────────── ANALYTICS ─────────────────── */}
         {mainTab === 'analytics' && (
-          <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: 'var(--text-lg)' }}>Analytics</h3>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>Last 7 days · quiz attempts and review activity</div>
-              </div>
-              <a href="/coach" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>Full analysis in Scholar Hub ↗</a>
-            </div>
-
-            {/* Stat cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 20 }}>
-              {[
-                { label: 'Streak',     value: streak > 0 ? `🔥 ${streak}d` : '—', sub: 'days in a row' },
-                { label: 'Avg Score',  value: weekScore !== null ? `${weekScore}%` : analyticsLoading ? '…' : '—', sub: 'this week' },
-                { label: 'Quizzes',    value: analyticsLoading ? '…' : String(weekQuizzes), sub: 'this week' },
-                { label: 'Review Sets',value: String(srsDecks.length), sub: 'total decks' },
-              ].map(card => (
-                <div key={card.label} style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 12, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{card.label}</div>
-                  <div style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--text)' }}>{card.value}</div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>{card.sub}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Weak areas */}
-            {analyticsLoading ? (
-              [1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 56, marginBottom: 8, borderRadius: 10 }} />)
-            ) : analyticsData && analyticsData.weakAreas.length > 0 ? (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', marginBottom: 10 }}>⚠️ Weak Areas</div>
-                {analyticsData.weakAreas.map(area => {
-                  const pct = Math.round(area.accuracy);
-                  const color = pct < 40 ? 'var(--danger)' : pct < 65 ? 'var(--warning)' : 'var(--success)';
-                  return (
-                    <div key={area.topic} style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10, padding: '10px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 500, fontSize: 'var(--text-sm)' }}>{area.topic}</div>
-                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>{area.suggestion}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color }}>{pct}%</span>
-                          <div style={{ flex: 1, height: 5, background: 'var(--border-2)', borderRadius: 3, overflow: 'hidden' }}>
-                            <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3 }} />
-                          </div>
-                          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{area.attempts} attempts</span>
-                        </div>
-                      </div>
-                      <a href="/coach" style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none', whiteSpace: 'nowrap' }}>Practice in Scholar Hub →</a>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : analyticsData ? (
-              <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginBottom: 20, padding: '8px 0' }}>✔ No weak areas detected this week</div>
-            ) : null}
-
-            {/* Knowledge Map */}
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>Knowledge Map</div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>
-                    This visual can be heavy, so it now loads after the rest of Analytics is responsive.
-                  </div>
-                </div>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ fontSize: 11 }}
-                  onClick={() => setShowKnowledgeMap((value) => !value)}
-                >
-                  {showKnowledgeMap ? 'Hide map' : 'Show map'}
-                </button>
-              </div>
-              {showKnowledgeMap ? (
-                <KnowledgeMap />
-              ) : (
-                <div style={{ borderRadius: 12, border: '1px dashed var(--border-2)', padding: '18px 16px', color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>
-                  Loading the rest of Analytics first keeps this tab snappier. Open the map when you need the deeper visual view.
-                </div>
-              )}
-            </div>
-
-            {/* Library quick-access */}
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>🗂 Recent Saves</div>
-                <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => router.push('/library')}>See all in Library →</button>
-              </div>
-              {libLoad ? (
-                [1,2].map(i => <div key={i} className="skeleton" style={{ height: 52, marginBottom: 8, borderRadius: 8 }} />)
-              ) : libItems.length === 0 ? (
-                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', padding: '8px 0' }}>
-                  Nothing saved yet — generate something and click <strong>Save</strong>.
-                </div>
-              ) : (
-                libItems.slice(0, 5).map(item => {
-                  const tool = GENERATE_TABS.find(t => t.id === item.mode);
-                  return (
-                    <div key={item.id} style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 9, padding: '9px 12px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 16, flexShrink: 0 }}>{tool?.icon ?? '📄'}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.metadata?.title ?? item.mode}</div>
-                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{fmtDate(item.createdAt)}</div>
-                      </div>
-                      <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, flexShrink: 0 }}
-                        onClick={() => {
-                          setOutput(item.content);
-                          const match = GENERATE_TABS.find(t => t.id === item.mode);
-                          setGenMode(match ? item.mode as GenMode : 'summarize');
-                          setMainTab('generate');
-                        }}>Open ↗</button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <StudyAnalytics />
           </div>
         )}
 

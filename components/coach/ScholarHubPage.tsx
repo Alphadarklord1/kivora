@@ -7,17 +7,15 @@
  * All tab UI is delegated to sub-components in ./tabs/.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useToast } from '@/providers/ToastProvider';
 import { useAnalytics, type WeakArea } from '@/hooks/useAnalytics';
-import { InteractiveQuiz } from '@/components/workspace/InteractiveQuiz';
 import { writeCoachHandoff } from '@/lib/coach/handoff';
 import { buildCoachUrl } from '@/lib/coach/routes';
 import { loadDecks, type SRSDeck } from '@/lib/srs/sm2';
 import { persistDeckLocally } from '@/lib/srs/deck-utils';
-import type { GeneratedContent } from '@/lib/offline/generate';
 import type { TopicResearchResult } from '@/lib/coach/research';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 
@@ -42,9 +40,6 @@ const GuidelinesTab = dynamic(
 
 type CoachPanel   = 'review' | 'manage';
 type CoachSection = 'research' | 'write' | 'recovery' | 'guidelines';
-type CoachOutput  =
-  | { kind: 'quiz';      title: string; content: string; quiz: GeneratedContent; setId: string }
-  | { kind: 'generated'; title: string; content: string };
 
 const TAB_LABELS: Record<CoachSection, { label: string; icon: string }> = {
   research:   { label: 'Research',    icon: '🔍' },
@@ -75,9 +70,7 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
 
   const { data: analytics, loading: analyticsLoading, refresh: refreshAnalytics } = useAnalytics(30);
 
-  const outputRef = useRef<HTMLDivElement | null>(null);
-  const [activeSection,   setActiveSection]   = useState<CoachSection>('research');
-  const [output,          setOutput]          = useState<CoachOutput | null>(null);
+  const [activeSection, setActiveSection] = useState<CoachSection>('research');
 
   // Shared cross-tab state
   const [researchResult,  setResearchResult]  = useState<TopicResearchResult | null>(null);
@@ -278,7 +271,7 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
           </div>
         </div>
         <nav className={styles.tabNav}>
-          {(['research', 'write', 'recovery'] as CoachSection[]).map(id => (
+          {(['research', 'write', 'recovery', 'guidelines'] as CoachSection[]).map(id => (
             <button
               key={id}
               className={`${styles.tabBtn} ${activeSection === id ? styles.tabBtnActive : ''}`}
@@ -340,20 +333,6 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
             </button>
             <button className={styles.btnSecondary} onClick={closePanel}>Stay here</button>
           </div>
-        </div>
-      )}
-
-      {/* Output overlay */}
-      {output && (
-        <div className={styles.outputPanel} ref={outputRef}>
-          <div className={styles.outputPanelHead}>
-            <strong>{output.title}</strong>
-            <button className={styles.iconBtn} onClick={() => setOutput(null)}>✕</button>
-          </div>
-          {output.kind === 'quiz'
-            ? <InteractiveQuiz content={output.quiz} deckId={output.setId} onClose={() => setOutput(null)} />
-            : <pre className={styles.preText}>{output.content}</pre>
-          }
         </div>
       )}
 

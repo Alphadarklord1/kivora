@@ -157,7 +157,7 @@ export function ModelSetupWizard({ onComplete }: ModelSetupWizardProps) {
       <div className="model-setup-card" dir={isRTL ? 'rtl' : 'ltr'}>
         <h2>{t('Choose your local AI model')}</h2>
         <p>{bundledMiniInstalled
-          ? t('Mini is already included in this desktop download, so you can start locally from the first launch.')
+          ? t('Mini is already included in this Mac download, so you can start locally from the first launch and add bigger models later only if you want them.')
           : t('This build does not currently include bundled Mini, so local AI will not be ready from first launch until a model is installed.')
         }</p>
 
@@ -179,6 +179,11 @@ export function ModelSetupWizard({ onComplete }: ModelSetupWizardProps) {
                 <div className="meta">
                   {model.isInstalled ? t('Installed') : t('Not installed')}
                 </div>
+                {model.bundled && (
+                  <div className="meta">
+                    {t('Bundled with this app build')}
+                  </div>
+                )}
                 {model.isDownloading && (
                   <div className="progress-row">
                     <span>{t('Downloading')}</span>
@@ -192,7 +197,7 @@ export function ModelSetupWizard({ onComplete }: ModelSetupWizardProps) {
                 >
                   {busyModelKey === model.key
                     ? t('Working...')
-                    : model.isInstalled ? t('Use Now') : t('Install & Use')}
+                    : model.isInstalled ? t('Use Now') : model.key === 'mini' ? t('Use included Mini') : t('Download & Use')}
                 </button>
               </div>
             );

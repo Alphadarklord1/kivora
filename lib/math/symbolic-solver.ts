@@ -456,17 +456,36 @@ function solveQuadraticEquation(normalizedInput: string, category: MathCategoryI
   return solveEquation(normalizedInput, category);
 }
 
-function solveCubicEquation(problem: string): SolverResult | null {
-  // Matches: ax^3 + bx^2 + cx + d = 0
-  const match = problem.match(
-    /^([+-]?\s*\d*\.?\d*)\s*[x*]\^?\s*3\s*([+-]\s*\d*\.?\d*)\s*[x*]\^?\s*2\s*([+-]\s*\d*\.?\d*)\s*[x*]\s*([+-]\s*\d*\.?\d*)\s*=\s*0$/i,
-  );
-  if (!match) return null;
+function extractCubicCoefficients(lhs: string, rhs: string): { a: number; b: number; c: number; d: number } | null {
+  // Move rhs to lhs: f(x) = lhs - rhs
+  const expr = `(${lhs}) - (${rhs})`;
+  try {
+    const f = (x: number) => Number(math.evaluate(expr, { x }));
+    const f0 = f(0), f1 = f(1), fN1 = f(-1), f2 = f(2);
+    if (![f0, f1, fN1, f2].every(Number.isFinite)) return null;
+    // d = f(0), b = (f(1)+f(-1)-2d)/2, (a+c) = (f(1)-f(-1))/2
+    // 8a + 4b + 2c = f(2) - d  →  6a = f(2) - d - 4b - 2(a+c)
+    const d = f0;
+    const b = (f1 + fN1 - 2 * d) / 2;
+    const ac = (f1 - fN1) / 2;
+    const a = (f2 - d - 4 * b - 2 * ac) / 6;
+    const c = ac - a;
+    if (!Number.isFinite(a) || Math.abs(a) < 1e-9) return null;
+    return { a, b, c, d };
+  } catch {
+    return null;
+  }
+}
 
-  const a = parseFloat(match[1].replace(/\s/g, '') || '1') || 1;
-  const b = parseFloat(match[2].replace(/\s/g, '') || '0') || 0;
-  const c = parseFloat(match[3].replace(/\s/g, '') || '0') || 0;
-  const d = parseFloat(match[4].replace(/\s/g, '') || '0') || 0;
+function solveCubicEquation(problem: string): SolverResult | null {
+  if (!problem.includes('=')) return null;
+  const [lhs, rhs] = problem.split('=').map(s => s.trim());
+  if (!lhs || !rhs) return null;
+
+  const coeffs = extractCubicCoefficients(lhs, rhs);
+  if (!coeffs) return null;
+
+  const { a, b, c, d } = coeffs;
 
   // Use mathjs polynomial root finding
   try {
@@ -527,19 +546,43 @@ function solveCubicEquation(problem: string): SolverResult | null {
   }
 }
 
-function solveQuarticEquation(problem: string): SolverResult | null {
-  // Matches: ax^4 + bx^3 + cx^2 + dx + e = 0 (coefficients may be 0)
-  // Use companion matrix eigenvalue approach via numerical iteration
-  const match = problem.match(
-    /^([+-]?\s*\d*\.?\d*)\s*[x*]\^?\s*4\s*([+-]\s*\d*\.?\d*)\s*[x*]\^?\s*3\s*([+-]\s*\d*\.?\d*)\s*[x*]\^?\s*2\s*([+-]\s*\d*\.?\d*)\s*[x*]\s*([+-]\s*\d*\.?\d*)\s*=\s*0$/i,
-  );
-  if (!match) return null;
+function extractQuarticCoefficients(lhs: string, rhs: string): { a: number; b: number; c: number; d: number; e: number } | null {
+  const expr = `(${lhs}) - (${rhs})`;
+  try {
+    const f = (x: number) => Number(math.evaluate(expr, { x }));
+    // Evaluate at 5 points: 0,1,-1,2,-2
+    const f0 = f(0), f1 = f(1), fN1 = f(-1), f2 = f(2), fN2 = f(-2);
+    if (![f0, f1, fN1, f2, fN2].every(Number.isFinite)) return null;
+    // e = f(0)
+    // f(1)  = a + b + c + d + e
+    // f(-1) = a - b + c - d + e
+    // f(2)  = 16a + 8b + 4c + 2d + e
+    // f(-2) = 16a - 8b + 4c - 2d + e
+    const e = f0;
+    const ac = (f1 + fN1 - 2 * e) / 2;    // a + c
+    const bd = (f1 - fN1) / 2;             // b + d
+    const ac16 = (f2 + fN2 - 2 * e) / 2;  // 16a + 4c
+    const bd8 = (f2 - fN2) / 2;            // 8b + 2d
+    const a = (ac16 - 4 * ac) / 12;
+    const c = ac - a;
+    const b = (bd8 - 2 * bd) / 6;
+    const d = bd - b;
+    if (!Number.isFinite(a) || Math.abs(a) < 1e-9) return null;
+    return { a, b, c, d, e };
+  } catch {
+    return null;
+  }
+}
 
-  const a = parseFloat(match[1].replace(/\s/g, '') || '1') || 1;
-  const b = parseFloat(match[2].replace(/\s/g, '') || '0') || 0;
-  const c = parseFloat(match[3].replace(/\s/g, '') || '0') || 0;
-  const d = parseFloat(match[4].replace(/\s/g, '') || '0') || 0;
-  const e = parseFloat(match[5].replace(/\s/g, '') || '0') || 0;
+function solveQuarticEquation(problem: string): SolverResult | null {
+  if (!problem.includes('=')) return null;
+  const [lhs, rhs] = problem.split('=').map(s => s.trim());
+  if (!lhs || !rhs) return null;
+
+  const coeffs = extractQuarticCoefficients(lhs, rhs);
+  if (!coeffs) return null;
+
+  const { a, b, c, d, e } = coeffs;
 
   // Normalize: divide by a
   const B = b / a, C = c / a, D = d / a, E = e / a;
@@ -610,6 +653,127 @@ function flipInequality(sign: string) {
   return sign;
 }
 
+function latexSign(sign: string) {
+  return sign.replace('<=', '\\leq').replace('>=', '\\geq');
+}
+
+function solveQuadraticInequality(normalizedInput: string, lhs: string, sign: string, rhs: string): SolverResult | null {
+  const expr = `(${lhs}) - (${rhs})`;
+  const coefficients = extractQuadraticCoefficients(expr);
+  if (!coefficients) return null;
+
+  const { a, b, c } = coefficients;
+  const disc = b * b - 4 * a * c;
+
+  const result = baseResult('algebra', normalizedInput, 'hybrid');
+  result.steps.push({
+    step: 1,
+    description: 'Move everything to one side',
+    expression: `${expressionToLatex(expr)} ${sign} 0`,
+    explanation: 'Rearrange to f(x) ' + sign + ' 0 so we can analyse the sign of the quadratic.',
+  });
+  result.steps.push({
+    step: 2,
+    description: 'Identify the coefficients',
+    expression: `a = ${formatNumber(a)},\\; b = ${formatNumber(b)},\\; c = ${formatNumber(c)}`,
+    explanation: `a = ${formatNumber(a)}, b = ${formatNumber(b)}, c = ${formatNumber(c)} from standard form ax² + bx + c.`,
+  });
+  result.steps.push({
+    step: 3,
+    description: 'Compute the discriminant',
+    expression: `\\Delta = b^2 - 4ac = ${formatNumber(disc)}`,
+    explanation: 'The discriminant tells us how many real roots the parabola has and where it crosses zero.',
+  });
+
+  if (disc < -1e-9) {
+    // No real roots — parabola is always above or below the x-axis
+    const opens = a > 0 ? 'opens upward (always positive)' : 'opens downward (always negative)';
+    const satisfiedForAll = (sign === '>' || sign === '>=') ? a > 0 : a < 0;
+    const answer = satisfiedForAll ? 'All real numbers (x ∈ ℝ)' : 'No solution';
+    const answerLatex = satisfiedForAll ? 'x \\in \\mathbb{R}' : '\\emptyset';
+    result.steps.push({
+      step: 4,
+      description: 'No real roots — parabola never crosses x-axis',
+      expression: `\\Delta < 0,\\; \\text{parabola }${opens}`,
+      explanation: `With no real roots the quadratic keeps the same sign everywhere. ${satisfiedForAll ? 'The inequality holds for all x.' : 'The inequality is never satisfied.'}`,
+    });
+    result.answer = answer;
+    result.answerLatex = answerLatex;
+    result.explanation = satisfiedForAll
+      ? 'The quadratic has no real roots and is always ' + (a > 0 ? 'positive' : 'negative') + ', so the inequality holds for all real x.'
+      : 'The quadratic has no real roots and its sign never satisfies the inequality.';
+    return result;
+  }
+
+  if (Math.abs(disc) <= 1e-9) {
+    // One repeated root
+    const r = -b / (2 * a);
+    const strictSatisfied = sign === '<' || sign === '>';
+    const answer = strictSatisfied
+      ? (sign === '>' ? (a > 0 ? `x ≠ ${formatNumber(r)}` : 'No solution') : (a < 0 ? `x ≠ ${formatNumber(r)}` : 'No solution'))
+      : (sign === '>=' ? (a > 0 ? 'All real numbers' : `x = ${formatNumber(r)}`) : (a < 0 ? 'All real numbers' : `x = ${formatNumber(r)}`));
+    result.steps.push({
+      step: 4,
+      description: 'One repeated root (Δ = 0)',
+      expression: `x = ${expressionToLatex(formatNumber(r))}`,
+      explanation: 'The parabola just touches the x-axis at this point.',
+    });
+    result.answer = answer;
+    result.answerLatex = answer.replace('≠', '\\neq').replace('All real numbers', 'x \\in \\mathbb{R}').replace('No solution', '\\emptyset');
+    result.explanation = 'One repeated root — the parabola touches but does not cross the axis.';
+    return result;
+  }
+
+  // Two distinct real roots
+  const sqrtDisc = Math.sqrt(disc);
+  const r1 = (-b - sqrtDisc) / (2 * a);
+  const r2 = (-b + sqrtDisc) / (2 * a);
+  const lo = Math.min(r1, r2), hi = Math.max(r1, r2);
+
+  result.steps.push({
+    step: 4,
+    description: 'Find the roots using the quadratic formula',
+    expression: `x = ${expressionToLatex(formatNumber(lo))}, \\quad x = ${expressionToLatex(formatNumber(hi))}`,
+    explanation: 'The parabola crosses zero at these two points. They split the number line into three intervals.',
+  });
+
+  // Determine solution based on parabola opening direction and sign
+  const wantInside = (sign === '<' || sign === '<=') ? a > 0 : a < 0;
+  const strict = sign === '<' || sign === '>';
+  const bracket = strict ? ['(', ')'] : ['[', ']'];
+
+  let answer: string;
+  let answerLatex: string;
+
+  if (wantInside) {
+    answer = `${bracket[0]}${formatNumber(lo)}, ${formatNumber(hi)}${bracket[1]}`;
+    answerLatex = `${bracket[0]}${expressionToLatex(formatNumber(lo))},\\; ${expressionToLatex(formatNumber(hi))}${bracket[1]}`;
+    result.steps.push({
+      step: 5,
+      description: 'Identify the solution interval',
+      expression: `${expressionToLatex(formatNumber(lo))} ${sign} x ${sign} ${expressionToLatex(formatNumber(hi))}`,
+      explanation: `The parabola is ${a > 0 ? 'below' : 'above'} zero between the roots — this is where the inequality holds.`,
+    });
+  } else {
+    answer = `x < ${formatNumber(lo)} or x > ${formatNumber(hi)}`;
+    const loStr = `x ${strict ? '<' : '\\leq'} ${expressionToLatex(formatNumber(lo))}`;
+    const hiStr = `x ${strict ? '>' : '\\geq'} ${expressionToLatex(formatNumber(hi))}`;
+    answerLatex = `${loStr} \\text{ or } ${hiStr}`;
+    result.steps.push({
+      step: 5,
+      description: 'Identify the solution intervals',
+      expression: `x ${strict ? '<' : '\\leq'} ${expressionToLatex(formatNumber(lo))} \\text{ or } x ${strict ? '>' : '\\geq'} ${expressionToLatex(formatNumber(hi))}`,
+      explanation: `The parabola is ${a > 0 ? 'above' : 'below'} zero outside the roots — those two tails are the solution.`,
+    });
+  }
+
+  result.answer = answer;
+  result.answerLatex = answerLatex;
+  result.explanation = `Quadratic inequality solved by finding the roots and testing the sign of f(x) in each interval.`;
+  result.graphExpr = `(${lhs}) - (${rhs})`;
+  return result;
+}
+
 function solveInequality(normalizedInput: string): SolverResult {
   const result = baseResult('algebra', normalizedInput, 'hybrid');
   const match = normalizedInput.match(/^(.+?)\s*(<=|>=|<|>)\s*(.+)$/);
@@ -619,12 +783,19 @@ function solveInequality(normalizedInput: string): SolverResult {
       verified: false,
       answer: 'Unable to parse inequality',
       answerLatex: '\\text{Unable to parse inequality}',
-      explanation: 'Use a format like 2x + 5 <= 11.',
+      explanation: 'Use a format like 2x + 5 <= 11 or x^2 - 4 > 0.',
     };
   }
 
   const [, lhs, sign, rhs] = match;
   const standardExpression = `(${lhs.trim()}) - (${rhs.trim()})`;
+
+  // Try quadratic inequality first
+  if (/x\^2|x\*\*2/i.test(normalizedInput)) {
+    const quadResult = solveQuadraticInequality(normalizedInput, lhs.trim(), sign, rhs.trim());
+    if (quadResult) return quadResult;
+  }
+
   const coefficients = extractLinearCoefficients(standardExpression);
   if (!coefficients || isNearlyZero(coefficients.coefficient)) {
     return {
@@ -632,7 +803,7 @@ function solveInequality(normalizedInput: string): SolverResult {
       verified: false,
       answer: 'Inequality not supported yet',
       answerLatex: '\\text{Inequality not supported yet}',
-      explanation: 'Right now Kivora handles linear one-variable inequalities like 2x + 5 <= 11.',
+      explanation: 'Kivora handles linear inequalities (2x + 5 <= 11) and quadratic inequalities (x^2 - 4 > 0).',
     };
   }
 
@@ -670,7 +841,7 @@ function solveInequality(normalizedInput: string): SolverResult {
   }
 
   result.answer = `x ${finalSign} ${formatNumber(boundary)}`;
-  result.answerLatex = `x ${finalSign.replace('<=', '\\leq').replace('>=', '\\geq')} ${expressionToLatex(formatNumber(boundary))}`;
+  result.answerLatex = `x ${latexSign(finalSign)} ${expressionToLatex(formatNumber(boundary))}`;
   result.explanation = 'Solved the linear inequality by isolating x and preserving or reversing the inequality sign as needed.';
   return result;
 }
