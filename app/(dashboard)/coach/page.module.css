@@ -2609,6 +2609,32 @@ details[open] .detailsSummary::before {
   .setRowActions {
     width: 100%;
   }
+
+  /* Writing studio tab nav — stack on narrow screens */
+  .innerTabNav {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .innerTabNav > div:first-child {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .studioTabBtn {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .studioNavMeta {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* Section strip — hide long pills on mobile */
+  .sectionStripMeta {
+    display: none;
+  }
 }
 
 

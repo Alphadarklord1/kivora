@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useI18n } from '@/lib/i18n/useI18n';
 import Link from 'next/link';
 import {
   useAnalytics,
@@ -39,6 +40,7 @@ const SCORE_COLORS = {
 
 export function StudyAnalytics() {
   const { data, loading, error, refresh, setPeriod, period } = useAnalytics(30);
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<'overview' | 'scores' | 'activity' | 'retention' | 'goals'>('overview');
 
   if (loading) return <AnalyticsSkeleton />;
@@ -150,7 +152,7 @@ export function StudyAnalytics() {
             className={`an-tab${activeTab === tab ? ' active' : ''}`}
             onClick={() => setActiveTab(tab)}
           >
-            {tab.charAt(0).toUpperCase()+tab.slice(1)}
+            {t(tab.charAt(0).toUpperCase()+tab.slice(1))}
           </button>
         ))}
       </div>

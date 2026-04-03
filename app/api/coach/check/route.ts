@@ -13,8 +13,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAppAccess } from '@/lib/api/guard';
 import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { callAi } from '@/lib/ai/call';
-import { offlineGenerate } from '@/lib/offline/generate';
 import { redactForAi, resolveAiDataMode } from '@/lib/privacy/ai-data';
+import { analyseText, generateOfflineSuggestions, scoreTextOffline } from '@/lib/coach/writing';
 
 export interface WritingSuggestion {
   id: string;
@@ -102,12 +102,28 @@ export async function POST(req: NextRequest) {
     temperature: 0.2,
     aiPrefs: body.ai,
     privacyMode,
-    offlineFallback: () => JSON.stringify({
-      score: 70,
-      summary: 'AI unavailable — showing offline assessment.',
-      suggestions: [],
-      result: offlineGenerate('summarize', text),
-    }),
+    offlineFallback: () => {
+      const offlineSuggs = generateOfflineSuggestions(text);
+      const offlineScore = scoreTextOffline(text);
+      const offlineStats = analyseText(text);
+      const issueCount   = offlineSuggs.length;
+      let offlineSummary: string;
+      if (issueCount === 0) {
+        offlineSummary = `No obvious issues found. Readability score: ${offlineScore}/100 · average ${offlineStats.avgWordsPerSentence} words per sentence. Connect AI for comprehensive grammar and style analysis.`;
+      } else {
+        const found: string[] = [];
+        if (offlineStats.passiveCount > 0) found.push(`${offlineStats.passiveCount} passive voice instance${offlineStats.passiveCount !== 1 ? 's' : ''}`);
+        if (offlineStats.longSentenceCount > 0) found.push(`${offlineStats.longSentenceCount} long sentence${offlineStats.longSentenceCount !== 1 ? 's' : ''}`);
+        if (offlineStats.informalWordCount > 0) found.push(`${offlineStats.informalWordCount} informal word${offlineStats.informalWordCount !== 1 ? 's' : ''}`);
+        offlineSummary = `Found ${found.length > 0 ? found.join(', ') : `${issueCount} issue${issueCount !== 1 ? 's' : ''}`}. Readability score: ${offlineScore}/100 — connect AI for comprehensive grammar and style analysis.`;
+      }
+      return JSON.stringify({
+        score: offlineScore,
+        summary: offlineSummary,
+        suggestions: offlineSuggs,
+        result: '',
+      });
+    },
   });
 
   // Try to parse as structured JSON; fall back to text-only mode

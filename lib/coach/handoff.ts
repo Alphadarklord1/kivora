@@ -16,17 +16,17 @@ type StoredHandoff = CoachHandoff & { _writtenAt: number };
 export function writeCoachHandoff(payload: CoachHandoff) {
   if (typeof window === 'undefined') return;
   const stored: StoredHandoff = { ...payload, _writtenAt: Date.now() };
-  window.localStorage.setItem(COACH_HANDOFF_KEY, JSON.stringify(stored));
+  window.sessionStorage.setItem(COACH_HANDOFF_KEY, JSON.stringify(stored));
 }
 
 export function readCoachHandoff(): CoachHandoff | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(COACH_HANDOFF_KEY);
+    const raw = window.sessionStorage.getItem(COACH_HANDOFF_KEY);
     if (!raw) return null;
     const stored = JSON.parse(raw) as StoredHandoff;
     if (Date.now() - stored._writtenAt > HANDOFF_TTL_MS) {
-      window.localStorage.removeItem(COACH_HANDOFF_KEY);
+      window.sessionStorage.removeItem(COACH_HANDOFF_KEY);
       return null;
     }
     const { _writtenAt: _, ...payload } = stored;
@@ -38,5 +38,5 @@ export function readCoachHandoff(): CoachHandoff | null {
 
 export function clearCoachHandoff() {
   if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(COACH_HANDOFF_KEY);
+  window.sessionStorage.removeItem(COACH_HANDOFF_KEY);
 }

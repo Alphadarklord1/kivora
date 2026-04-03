@@ -12,7 +12,10 @@ export type ToolMode =
   | 'quiz'
   | 'mcq'
   | 'flashcards'
-  | 'assignment';
+  | 'assignment'
+  | 'outline'
+  | 'exam'
+  | 'practice';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -507,6 +510,115 @@ function generateAssignment(text: string, count = 5): string {
   ].join('\n');
 }
 
+function generateOutline(text: string): string {
+  const sents     = sentences(text);
+  const kws       = topKeywords(text, 12);
+  const paras     = paragraphs(text);
+  const freq      = termFrequency(text);
+
+  if (!sents.length) return 'Not enough content to generate an outline.';
+
+  // Build sections from paragraph clusters
+  const sectionSize = Math.max(1, Math.ceil(paras.length / 4));
+  const sections: Array<{ title: string; bullets: string[] }> = [];
+
+  for (let i = 0; i < paras.length; i += sectionSize) {
+    const chunk = paras.slice(i, i + sectionSize).join(' ');
+    const chunkSents = sentences(chunk);
+    const chunkKws = topKeywords(chunk, 3);
+    const title = chunkKws.length
+      ? chunkKws.map(k => k.charAt(0).toUpperCase() + k.slice(1)).join(' & ')
+      : `Section ${sections.length + 1}`;
+    const bullets = chunkSents
+      .sort((a, b) => scoreSentence(b, freq) - scoreSentence(a, freq))
+      .slice(0, 3)
+      .map(s => s.length > 120 ? s.slice(0, 117) + '…' : s);
+    if (bullets.length) sections.push({ title, bullets });
+  }
+
+  // Fall back to keyword grouping when paragraphs are unavailable
+  if (!sections.length) {
+    sections.push({ title: 'Key Concepts', bullets: kws.slice(0, 6).map(k => `${k.charAt(0).toUpperCase() + k.slice(1)} — covered in this material`) });
+  }
+
+  const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+  const bodyLines = sections.map((sec, i) =>
+    `## ${romanNumerals[i] ?? i + 1}. ${sec.title}\n${sec.bullets.map(b => `- ${b}`).join('\n')}`,
+  );
+
+  const objectives = sents
+    .sort((a, b) => scoreSentence(b, freq) - scoreSentence(a, freq))
+    .slice(0, 3)
+    .map(s => `- Understand: ${s.slice(0, 90)}${s.length > 90 ? '…' : ''}`);
+
+  return [
+    `# Outline\n`,
+    ...bodyLines,
+    `\n## Learning Objectives\n${objectives.join('\n')}`,
+  ].join('\n\n');
+}
+
+function generateExamQuestions(text: string, count = 5): string {
+  // Reuse MCQ generator output — ExamView uses the same Q1. parsing
+  const mcq = generateMCQ(text, count);
+  // Replace ## header for exam context
+  return mcq.replace(/^## Multiple Choice Questions/, '## Exam Questions');
+}
+
+function generatePractice(text: string): string {
+  const sents  = sentences(text);
+  const kws    = topKeywords(text, 8);
+  const freq   = termFrequency(text);
+  const defs   = extractDefinitions(text);
+
+  if (!sents.length) return '## Problem\n\nNot enough content to generate a practice problem.\n\n## Solution\n\nProvide source material and try again.';
+
+  // Pick the highest-scoring sentence as the problem focus
+  const keySents = extractKeySentences(text, 5);
+  const focusSent = keySents[0] ?? sents[0];
+  const focusKw   = kws[0] ?? 'this concept';
+  const focusKw2  = kws[1] ?? kws[0] ?? 'the material';
+
+  // Build problem statement
+  const problem = [
+    `Using the provided material, answer the following:\n`,
+    `**${focusSent.endsWith('?') ? focusSent : `Explain the role of **${focusKw}** and how it relates to **${focusKw2}** in this context.`}**`,
+    `\nYour answer should:\n- Reference at least two key concepts from the material\n- Give a specific example where possible\n- Be 100–200 words`,
+  ].join('\n');
+
+  // Hints derived from key sentences and definitions
+  const hintSents = keySents.slice(1, 4);
+  const hint1 = hintSents[0]
+    ? `Consider how this idea is described: _"${hintSents[0].slice(0, 100)}…"_`
+    : `Think about what **${focusKw}** means and its implications.`;
+  const hint2 = defs[0]
+    ? `Key definition — **${defs[0].term}**: ${defs[0].definition.slice(0, 120)}`
+    : hintSents[1]
+      ? `Another angle: _"${hintSents[1].slice(0, 100)}…"_`
+      : `Consider the relationship between **${focusKw}** and **${focusKw2}**.`;
+  const hint3 = kws.slice(2, 5).length
+    ? `Other relevant concepts to weave in: **${kws.slice(2, 5).join('**, **')}**`
+    : `Wrap up by stating a real-world application or implication.`;
+
+  // Solution built from top-scoring sentences
+  const solutionSents = sents
+    .sort((a, b) => scoreSentence(b, freq) - scoreSentence(a, freq))
+    .slice(0, 4);
+  const solution = [
+    `**Model answer** _(based on key passages in the source material)_:\n`,
+    solutionSents.join(' '),
+    defs[0] ? `\n\nDefinition: **${defs[0].term}** — ${defs[0].definition}` : '',
+  ].filter(Boolean).join('\n');
+
+  return [
+    `## Problem\n\n${problem}`,
+    `## Hint 1\n\n${hint1}`,
+    `## Hint 2\n\n${hint2}`,
+    `## Hint 3\n\n${hint3}`,
+    `## Solution\n\n${solution}`,
+  ].join('\n\n');
+}
+
 // ── Utility ──────────────────────────────────────────────────────────────────
 
 function shuffle<T>(arr: T[]): T[] {
@@ -576,12 +688,15 @@ export function getGeneratedContent(
   switch (mode) {
     case 'summarize':  displayText = generateSummary(text); break;
     case 'rephrase':   displayText = generateRephrase(text); break;
-    case 'explain':    displayText = generateSummary(text); break; // offline: best-effort via summary
+    case 'explain':    displayText = generateSummary(text); break;
     case 'notes':      displayText = generateNotes(text); break;
     case 'quiz':       displayText = generateQuiz(text, count); break;
     case 'mcq':        displayText = generateMCQ(text, count); break;
     case 'flashcards': displayText = generateFlashcards(text, count); break;
     case 'assignment': displayText = generateAssignment(text, count); break;
+    case 'outline':    displayText = generateOutline(text); break;
+    case 'exam':       displayText = generateExamQuestions(text, count); break;
+    case 'practice':   displayText = generatePractice(text); break;
     default:           displayText = generateSummary(text);
   }
   const kws = topKeywords(text);
@@ -612,12 +727,15 @@ export function offlineGenerate(
   switch (mode) {
     case 'summarize':  return generateSummary(text);
     case 'rephrase':   return generateRephrase(text);
-    case 'explain':    return generateSummary(text); // offline: best-effort via summary
+    case 'explain':    return generateSummary(text);
     case 'notes':      return generateNotes(text, noteStyle);
     case 'quiz':       return generateQuiz(text, count);
     case 'mcq':        return generateMCQ(text, count);
     case 'flashcards': return generateFlashcards(text, count);
     case 'assignment': return generateAssignment(text, count);
+    case 'outline':    return generateOutline(text);
+    case 'exam':       return generateExamQuestions(text, count);
+    case 'practice':   return generatePractice(text);
     default:           return generateSummary(text);
   }
 }

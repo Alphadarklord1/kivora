@@ -870,13 +870,47 @@ export function FlashcardView({
     const correct = graded.filter(g => g >= 2).length;
     const pct     = Math.round((correct / graded.length) * 100);
     const ns      = getDeckStats({ ...deck!, cards: deck!.cards });
+
+    // Grade breakdown counts
+    const againCount = graded.filter(g => g === 0).length;
+    const hardCount  = graded.filter(g => g === 1).length;
+    const goodCount  = graded.filter(g => g === 2).length;
+    const easyCount  = graded.filter(g => g === 3).length;
+
+    // Earliest upcoming due date (excluding already-due cards)
+    const today = new Date().toISOString().split('T')[0];
+    const futureDue = deck?.cards
+      .map(c => c.nextReview)
+      .filter((d): d is string => !!d && d > today)
+      .sort()[0];
+    const daysUntilNext = futureDue
+      ? Math.round((new Date(futureDue).getTime() - new Date(today).getTime()) / 86_400_000)
+      : null;
+
     return (
       <div style={{ textAlign: 'center', padding: '32px 20px', maxWidth: 480, margin: '0 auto' }}>
         <div style={{ fontSize: 48, marginBottom: 12 }}>{pct >= 80 ? '🎉' : pct >= 50 ? '📚' : '💪'}</div>
         <h3 style={{ margin: '0 0 6px' }}>{t('Session complete!')}</h3>
         <p style={{ color: 'var(--text-3)', margin: '0 0 8px' }}>{t('{correct}/{total} recalled ({percent}%)', { correct: formatNumber(correct), total: formatNumber(graded.length), percent: formatNumber(pct) })}</p>
         {streak > 0 && <p style={{ color: '#f59e0b', margin: '0 0 16px', fontSize: 'var(--text-xs)', fontWeight: 600 }}>🔥 {t('{count}-day streak!', { count: formatNumber(streak) })}</p>}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 24, fontSize: 'var(--text-sm)' }}>
+
+        {/* Grade breakdown pills */}
+        {graded.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+            {[
+              { label: t('Again'), count: againCount, color: '#e05252', show: againCount > 0 },
+              { label: t('Hard'),  count: hardCount,  color: '#f59e0b', show: hardCount  > 0 },
+              { label: t('Good'),  count: goodCount,  color: '#4f86f7', show: goodCount  > 0 },
+              { label: t('Easy'),  count: easyCount,  color: '#52b788', show: easyCount  > 0 },
+            ].filter(g => g.show).map(g => (
+              <span key={g.label} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 999, background: `${g.color}22`, color: g.color, fontWeight: 700 }}>
+                {g.count} {g.label}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16, fontSize: 'var(--text-sm)' }}>
           {[{ label:t('New'), val:ns.new, color:'#4f86f7' }, { label:t('Learning'), val:ns.learning, color:'#f59e0b' }, { label:t('Mature'), val:ns.mature, color:'#52b788' }].map(s => (
             <div key={s.label} style={{ background:'var(--surface)', border:'1px solid var(--border-2)', borderRadius:10, padding:'10px 8px' }}>
               <div style={{ fontWeight:700, fontSize:'var(--text-lg)', color:s.color }}>{formatNumber(s.val)}</div>
@@ -884,6 +918,16 @@ export function FlashcardView({
             </div>
           ))}
         </div>
+
+        {/* Next review date */}
+        {daysUntilNext !== null && (
+          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', margin: '0 0 12px' }}>
+            {daysUntilNext === 1
+              ? `📅 ${t('Next review due tomorrow')}`
+              : `📅 ${t('Next review in {count} days ({date})', { count: daysUntilNext, date: futureDue! })}`}
+          </p>
+        )}
+
         {/* Daily goal progress */}
         <div style={{ marginBottom: 16, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
           {t('{done}/{goal} cards today', { done: formatNumber(todayCards), goal: formatNumber(dailyGoal) })}

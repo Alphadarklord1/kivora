@@ -22,10 +22,10 @@ import { clearCoachHandoff, readCoachHandoff } from '@/lib/coach/handoff';
 import { clearScholarContext, readScholarContext, writeScholarContext, type ScholarContext } from '@/lib/coach/scholar-context';
 import { broadcastInvalidate, listenForInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
 import type { NoteStyle } from '@/components/workspace/NotesPanel';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 // ── Lazy-loaded tool panels (split into separate JS chunks) ────────────────────
 const ChatPanel      = dynamic(() => import('@/components/workspace/ChatPanel').then(m => ({ default: m.ChatPanel })), { ssr: false, loading: () => <div className="tool-loading" /> });
-const KnowledgeMap   = dynamic(() => import('@/components/tools/KnowledgeMap').then(m => ({ default: m.KnowledgeMap })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const NotesPanel     = dynamic(() => import('@/components/workspace/NotesPanel').then(m => ({ default: m.NotesPanel })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const ExamPlannerPanel = dynamic(() => import('@/components/workspace/ExamPlannerPanel').then(m => ({ default: m.ExamPlannerPanel })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const MCQView        = dynamic(() => import('@/components/workspace/views/MCQView').then(m => ({ default: m.MCQView })), { ssr: false, loading: () => <div className="tool-loading" /> });
@@ -388,6 +388,7 @@ export function WorkspacePanel({
   onToggleReports, reportsOpen,
 }: WorkspacePanelProps) {
   const { toast } = useToast();
+  const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
   const filePickerRef = useRef<HTMLInputElement>(null);
@@ -410,7 +411,6 @@ export function WorkspacePanel({
   const [generating,    setGenerating]    = useState(false);
   const [count,         setCount]         = useState(5);
   const [libItems,      setLibItems]      = useState<LibraryItemRecord[]>([]);
-  const [libLoad,       setLibLoad]       = useState(false);
   const [srsDecks,      setSrsDecks]      = useState<SRSDeck[]>([]);
   const [activeReviewSetId, setActiveReviewSetId] = useState<string | null>(null);
   const [requestedReviewPhase, setRequestedReviewPhase] = useState<ReviewSetPhase | null>(null);
@@ -540,12 +540,10 @@ export function WorkspacePanel({
   }, [files, selFile]);
 
   const loadLib = useCallback(() => {
-    setLibLoad(true);
     fetch('/api/library')
       .then(r => r.ok ? r.json() : [])
       .then(setLibItems)
-      .catch(() => setLibItems([]))
-      .finally(() => setLibLoad(false));
+      .catch(() => setLibItems([]));
   }, []);
 
   useEffect(() => {
@@ -1215,7 +1213,7 @@ export function WorkspacePanel({
             onClick={() => setMainTab(id)}>
             <span className="tab-btn-content">
               <span className="tab-btn-icon" aria-hidden="true">{icon}</span>
-              <span className="tab-btn-text">{label}</span>
+              <span className="tab-btn-text">{t(label)}</span>
               {meta && <span className="tab-btn-meta">{meta}</span>}
             </span>
           </button>
@@ -1496,21 +1494,21 @@ export function WorkspacePanel({
               {GENERATE_TAB_GROUPS.map((group, gi) => (
                 <div key={group.label} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: gi === 0 ? '9px 14px 5px' : '4px 14px 5px', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-3)', marginRight: 3, flexShrink: 0, minWidth: 42 }}>
-                    {group.label}
+                    {t(group.label)}
                   </span>
                   <span style={{ width: 1, height: 14, background: 'var(--border-2)', flexShrink: 0, marginRight: 3 }} />
-                  {GENERATE_TABS.filter(t => (group.ids as readonly string[]).includes(t.id)).map(t => (
-                    <button key={t.id} title={t.hint}
-                      onClick={() => { setGenMode(t.id); setOutput(''); }}
+                  {GENERATE_TABS.filter(tab => (group.ids as readonly string[]).includes(tab.id)).map(tab => (
+                    <button key={tab.id} title={tab.hint}
+                      onClick={() => { setGenMode(tab.id); setOutput(''); }}
                       style={{
                         padding: '4px 11px', borderRadius: 20, fontSize: 'var(--text-xs)',
-                        fontWeight: 500, border: `1.5px solid ${genMode === t.id ? 'var(--accent)' : 'var(--border-2)'}`,
+                        fontWeight: 500, border: `1.5px solid ${genMode === tab.id ? 'var(--accent)' : 'var(--border-2)'}`,
                         cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                        background: genMode === t.id ? 'var(--accent)' : 'var(--surface-2)',
-                        color: genMode === t.id ? '#fff' : 'var(--text-2)',
+                        background: genMode === tab.id ? 'var(--accent)' : 'var(--surface-2)',
+                        color: genMode === tab.id ? '#fff' : 'var(--text-2)',
                         transition: 'all 0.14s',
                       }}>
-                      {t.icon} {t.label}
+                      {tab.icon} {t(tab.label)}
                     </button>
                   ))}
                 </div>
@@ -1520,8 +1518,8 @@ export function WorkspacePanel({
             {/* Source row */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-                <button className={`btn btn-sm ${!pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setPasteMode(false)}>From file</button>
-                <button className={`btn btn-sm ${pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => { setPasteMode(true); setSelFile(null); if (!pasteMode) setExtractedText(''); }}>Paste text</button>
+                <button className={`btn btn-sm ${!pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setPasteMode(false)}>{t('From file')}</button>
+                <button className={`btn btn-sm ${pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => { setPasteMode(true); setSelFile(null); if (!pasteMode) setExtractedText(''); }}>{t('Paste text')}</button>
               </div>
 
               {!pasteMode && (
@@ -1719,10 +1717,10 @@ export function WorkspacePanel({
                   </div>
                   {/* Also show all other tools so user can pick without going back */}
                   <div style={{ marginTop: 20, display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
-                    {GENERATE_TABS.filter(t => t.id !== genMode).map(t => (
-                      <button key={t.id} className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
-                        onClick={() => { setGenMode(t.id); void runGenerate(t.id as ToolMode); }}>
-                        {t.icon} {t.label}
+                    {GENERATE_TABS.filter(tab => tab.id !== genMode).map(tab => (
+                      <button key={tab.id} className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
+                        onClick={() => { setGenMode(tab.id); void runGenerate(tab.id as ToolMode); }}>
+                        {tab.icon} {t(tab.label)}
                       </button>
                     ))}
                   </div>
@@ -1742,12 +1740,12 @@ export function WorkspacePanel({
                   </div>
                   {/* Quick-start tool buttons */}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 20 }}>
-                    {GENERATE_TABS.slice(0, 6).map(t => (
-                      <button key={t.id}
+                    {GENERATE_TABS.slice(0, 6).map(tab => (
+                      <button key={tab.id}
                         className={`btn btn-sm btn-ghost`}
                         style={{ fontSize: 12 }}
-                        onClick={() => { setGenMode(t.id); setPasteMode(true); }}>
-                        {t.icon} {t.label}
+                        onClick={() => { setGenMode(tab.id); setPasteMode(true); }}>
+                        {tab.icon} {t(tab.label)}
                       </button>
                     ))}
                   </div>

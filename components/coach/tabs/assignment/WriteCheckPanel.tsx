@@ -1,8 +1,9 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { WritingSuggestion } from '@/app/api/coach/check/route';
 import type { AssistAction } from '@/app/api/coach/assist/route';
+import { analyseText } from '@/lib/coach/writing';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 
 type SuggType = WritingSuggestion['type'];
@@ -137,6 +138,13 @@ export function WriteCheckPanel({
     ? Math.min(100, Math.round((writerWordCount / wordCountGoal) * 100))
     : null;
 
+  // Live readability stats — computed client-side, no AI needed
+  const textStats = useMemo(
+    () => writerWordCount > 20 ? analyseText(checkText) : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [checkText],
+  );
+
   return (
     <div className={styles.wordApp}>
 
@@ -257,6 +265,47 @@ export function WriteCheckPanel({
                 <span>{writerCharCount.toLocaleString()} chars</span>
               </div>
             </div>
+
+            {/* Readability stats strip */}
+            {textStats && (
+              <div className={styles.readabilityStrip}>
+                <span
+                  className={
+                    textStats.fleschScore >= 60 && textStats.fleschScore <= 70
+                      ? styles.readabilityGood
+                      : textStats.fleschScore < 30
+                        ? styles.readabilityWarn
+                        : ''
+                  }
+                  title="Flesch Reading Ease — 60–70 is ideal for academic writing; lower = denser"
+                >
+                  Readability {textStats.fleschScore}/100
+                </span>
+                <span className={styles.readabilityPipe}>·</span>
+                <span title="Average words per sentence — aim for under 25">
+                  Avg {textStats.avgWordsPerSentence}w/sentence
+                </span>
+                {textStats.passiveCount > 0 && (
+                  <>
+                    <span className={styles.readabilityPipe}>·</span>
+                    <span
+                      className={textStats.passiveCount > 3 ? styles.readabilityWarn : ''}
+                      title="Passive voice patterns detected"
+                    >
+                      {textStats.passiveCount} passive{textStats.passiveCount !== 1 ? 's' : ''}
+                    </span>
+                  </>
+                )}
+                {textStats.longSentenceCount > 0 && (
+                  <>
+                    <span className={styles.readabilityPipe}>·</span>
+                    <span className={styles.readabilityWarn} title="Sentences over 35 words">
+                      {textStats.longSentenceCount} long sentence{textStats.longSentenceCount !== 1 ? 's' : ''}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Word count goal bar */}
             {(wordCountGoal && wordCountGoal > 0) ? (

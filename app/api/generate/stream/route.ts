@@ -13,10 +13,10 @@ import { redactForAi, resolveAiDataMode } from '@/lib/privacy/ai-data';
 
 const OFFLINE_MODES: ToolMode[] = [
   'summarize', 'rephrase', 'explain', 'notes', 'quiz',
-  'mcq', 'flashcards', 'assignment',
+  'mcq', 'flashcards', 'assignment', 'outline', 'exam', 'practice',
 ];
 
-const VALID_MODES = [...OFFLINE_MODES, 'outline', 'exam', 'practice'] as const;
+const VALID_MODES = [...OFFLINE_MODES] as const;
 type AllModes = typeof VALID_MODES[number];
 
 /**

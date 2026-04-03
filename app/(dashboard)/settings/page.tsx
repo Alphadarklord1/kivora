@@ -1,10 +1,10 @@
 'use client';
 
 import type { CSSProperties, FormEvent, ReactNode } from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { requestNotificationPermission, getNotificationPermission } from '@/lib/notifications/scheduler';
 import { signOut, useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
 import { useSettings, type Density, type Theme } from '@/providers/SettingsProvider';
 import { AiRuntimeControls } from '@/components/models/AiRuntimeControls';
@@ -71,6 +71,7 @@ interface AccountState {
   createdAt: string;
   hasPassword: boolean;
   twoFactorEnabled: boolean;
+  emailVerified: string | null;
   isGuest: boolean;
   connectedAccounts: string[];
   stats: {
@@ -371,12 +372,13 @@ function DownloadCard({
   );
 }
 
-export default function SettingsPage() {
+function SettingsPageContent() {
   const { settings, updateSetting } = useSettings();
   const { data: session, update: updateSession } = useSession();
   const router = useRouter();
   const { toast } = useToast();
 
+  const { t } = useI18n();
   const [saved, setSaved] = useState(false);
   const [account, setAccount] = useState<AccountState | null>(null);
   const [accountLoading, setAccountLoading] = useState(true);
@@ -398,6 +400,21 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [sendingVerification, setSendingVerification] = useState(false);
+  const searchParams = useSearchParams();
+
+  // Handle ?verified=1 / ?verified=error from the email-verification redirect
+  useEffect(() => {
+    const v = searchParams.get('verified');
+    if (v === '1') {
+      toast('Email verified successfully', 'success');
+      setAccount(prev => prev ? { ...prev, emailVerified: new Date().toISOString() } : prev);
+      router.replace('/settings', { scroll: false });
+    } else if (v === 'error') {
+      toast('Verification link is invalid or has expired', 'error');
+      router.replace('/settings', { scroll: false });
+    }
+  }, [searchParams, toast, router]);
 
   useEffect(() => {
     if (!session?.user) {
@@ -760,7 +777,41 @@ export default function SettingsPage() {
               <AvatarPreview image={imageUrl || account.image} name={name || account.name} email={account.email} />
               <div style={{ flex: 1, minWidth: 220 }}>
                 <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)' }}>{account.name || account.email}</div>
-                <div style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', marginTop: 4 }}>{account.email}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                  <span style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>{account.email}</span>
+                  {account.emailVerified
+                    ? <span className="badge badge-success" style={{ fontSize: 'var(--text-xs)' }}>✓ Verified</span>
+                    : (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontSize: 'var(--text-xs)', padding: '2px 8px' }}
+                        disabled={sendingVerification || account.isGuest}
+                        onClick={async () => {
+                          setSendingVerification(true);
+                          try {
+                            const res = await fetch('/api/auth/send-verification', { method: 'POST' });
+                            const data = await res.json() as { ok?: boolean; dev?: boolean; devLink?: string; error?: string };
+                            if (data.ok) {
+                              if (data.dev) {
+                                toast(`Dev mode — check server console for verification link`, 'info');
+                              } else {
+                                toast(`Verification email sent to ${account.email}`, 'success');
+                              }
+                            } else {
+                              toast(data.error || 'Could not send verification email', 'error');
+                            }
+                          } catch {
+                            toast('Could not send verification email', 'error');
+                          } finally {
+                            setSendingVerification(false);
+                          }
+                        }}
+                      >
+                        {sendingVerification ? 'Sending…' : 'Verify email'}
+                      </button>
+                    )
+                  }
+                </div>
                 <div style={{ color: 'var(--text-3)', fontSize: 'var(--text-xs)', marginTop: 6 }}>
                   Member since {accountCreatedLabel || 'recently'}
                 </div>
@@ -775,7 +826,7 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div className={styles.accountActionStack}>
-                <button className="btn btn-danger btn-sm" onClick={handleSignOut}>Sign out</button>
+                <button className="btn btn-danger btn-sm" onClick={handleSignOut}>{t('Sign out')}</button>
                 <button className="btn btn-ghost btn-sm" onClick={copyPublicProfileLink} disabled={!publicProfileUrl}>
                   Copy public profile link
                 </button>
@@ -789,17 +840,17 @@ export default function SettingsPage() {
 
             <div className={styles.formGrid}>
               <div>
-                <label style={labelStyle}>Display name</label>
+                <label style={labelStyle}>{t('Display name')}</label>
                 <input style={fieldStyle} value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
               </div>
               <div>
-                <label style={labelStyle}>Profile picture URL</label>
+                <label style={labelStyle}>{t('Profile picture URL')}</label>
                 <input style={fieldStyle} value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." />
               </div>
             </div>
 
             <div>
-              <label style={labelStyle}>Short description</label>
+              <label style={labelStyle}>{t('Short description')}</label>
               <textarea
                 style={{ ...fieldStyle, minHeight: 96, resize: 'vertical' }}
                 value={bio}
@@ -808,13 +859,13 @@ export default function SettingsPage() {
                 maxLength={240}
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                <span>This shows up as your short profile description across the app.</span>
+                <span>{t('This shows up as your short profile description across the app.')}</span>
                 <span>{bio.trim().length}/240</span>
               </div>
             </div>
 
             <div>
-              <label style={labelStyle}>Study interests</label>
+              <label style={labelStyle}>{t('Study interests')}</label>
               <input
                 style={fieldStyle}
                 value={studyInterests}
@@ -823,17 +874,17 @@ export default function SettingsPage() {
                 maxLength={180}
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                <span>Separate topics with commas so they show up as profile tags.</span>
+                <span>{t('Separate topics with commas so they show up as profile tags.')}</span>
                 <span>{studyInterests.trim().length}/180</span>
               </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
-                Profile picture, display name, and description are saved to your account.
+                {t('Profile picture, display name, and description are saved to your account.')}
               </span>
               <button className="btn btn-primary" onClick={saveProfile} disabled={savingProfile}>
-                {savingProfile ? 'Saving…' : 'Save profile'}
+                {savingProfile ? 'Saving…' : t('Save profile')}
               </button>
             </div>
 
@@ -934,11 +985,31 @@ export default function SettingsPage() {
               {twoFactorSetup ? (
                 <div style={{ marginTop: 14, display: 'grid', gap: 12 }}>
                   <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
-                    Add this manual key in your authenticator app, then confirm with the current 6-digit code.
+                    On your phone, open Google Authenticator, 1Password, or any TOTP app and add a new account.
+                    Tap &ldquo;Enter setup key&rdquo; and paste the key below — or tap the button to open your authenticator app directly.
                   </div>
-                  <code style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--bg-2)', border: '1px solid var(--border-2)', overflowWrap: 'anywhere' }}>
-                    {twoFactorSetup.manualEntryKey}
-                  </code>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <code style={{ flex: 1, padding: '12px 14px', borderRadius: 12, background: 'var(--bg-2)', border: '1px solid var(--border-2)', overflowWrap: 'anywhere', fontSize: '0.85rem', letterSpacing: '0.05em' }}>
+                      {twoFactorSetup.manualEntryKey}
+                    </code>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <a
+                        href={twoFactorSetup.otpAuthUri}
+                        className="btn btn-primary btn-sm"
+                        style={{ textDecoration: 'none', textAlign: 'center', whiteSpace: 'nowrap' }}
+                        title="Opens your authenticator app on mobile"
+                      >
+                        📱 Open authenticator app
+                      </a>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => navigator.clipboard.writeText(twoFactorSetup!.manualEntryKey).then(() => toast('Key copied', 'success')).catch(() => {})}
+                        style={{ whiteSpace: 'nowrap' }}
+                      >
+                        📋 Copy key
+                      </button>
+                    </div>
+                  </div>
                   <input
                     style={fieldStyle}
                     value={twoFactorCode}
@@ -987,7 +1058,7 @@ export default function SettingsPage() {
               </div>
               {account.hasPassword ? (
                 <div>
-                  <label style={labelStyle}>Current password</label>
+                  <label style={labelStyle}>{t('Current password')}</label>
                   <input style={fieldStyle} type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Current password" />
                 </div>
               ) : (
@@ -997,11 +1068,11 @@ export default function SettingsPage() {
               )}
               <div className={styles.formGrid}>
                 <div>
-                  <label style={labelStyle}>New password</label>
+                  <label style={labelStyle}>{t('New password')}</label>
                   <input style={fieldStyle} type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="At least 6 characters" />
                 </div>
                 <div>
-                  <label style={labelStyle}>Confirm new password</label>
+                  <label style={labelStyle}>{t('Confirm password')}</label>
                   <input style={fieldStyle} type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Repeat new password" />
                 </div>
               </div>
@@ -1010,7 +1081,7 @@ export default function SettingsPage() {
                   Use at least one long password you are not reusing elsewhere.
                 </span>
                 <button className="btn btn-primary" type="submit" disabled={savingPassword || !newPassword || newPassword !== confirmPassword}>
-                  {savingPassword ? 'Saving…' : 'Change password'}
+                  {savingPassword ? 'Saving…' : t('Change password')}
                 </button>
               </div>
             </form>
@@ -2059,5 +2130,13 @@ function PrivacySection() {
         </div>
       </Section>
     </>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<main className={styles.page}><div className={styles.heroCard}><strong>Loading settings…</strong></div></main>}>
+      <SettingsPageContent />
+    </Suspense>
   );
 }

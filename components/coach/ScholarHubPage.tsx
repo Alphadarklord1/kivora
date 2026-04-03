@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useToast } from '@/providers/ToastProvider';
+import { useI18n } from '@/lib/i18n/useI18n';
 import { useAnalytics, type WeakArea } from '@/hooks/useAnalytics';
 import { writeCoachHandoff } from '@/lib/coach/handoff';
 import { buildCoachUrl } from '@/lib/coach/routes';
@@ -67,6 +68,7 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
   const router       = useRouter();
   const searchParams = useSearchParams();
   const { toast }    = useToast();
+  const { t }        = useI18n();
 
   const { data: analytics, loading: analyticsLoading, refresh: refreshAnalytics } = useAnalytics(30);
 
@@ -278,7 +280,7 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
               onClick={() => setActiveSection(id)}
             >
               <span>{TAB_LABELS[id].icon}</span>
-              {TAB_LABELS[id].label}
+              {t(TAB_LABELS[id].label)}
             </button>
           ))}
         </nav>
@@ -303,7 +305,7 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
 
       <div className={styles.sectionStrip} style={drawerMode ? { marginTop: 0 } : undefined}>
         <div className={styles.sectionStripCopy}>
-          <span className={styles.contextStripLabel}>{TAB_LABELS[activeSection].label}</span>
+          <span className={styles.contextStripLabel}>{t(TAB_LABELS[activeSection].label)}</span>
           <strong>{activeSectionSummary.title}</strong>
           <p>{activeSectionSummary.description}</p>
         </div>
@@ -329,9 +331,9 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
           </div>
           <div className={styles.overlayActions}>
             <button className={styles.btnPrimary} onClick={() => openPanel(selectedSet.id, panel === 'review' ? 'review' : 'manage', imported ? true : null)}>
-              Open in Workspace
+              {t('Open in Workspace')}
             </button>
-            <button className={styles.btnSecondary} onClick={closePanel}>Stay here</button>
+            <button className={styles.btnSecondary} onClick={closePanel}>{t('Stay here')}</button>
           </div>
         </div>
       )}

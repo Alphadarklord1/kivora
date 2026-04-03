@@ -6,6 +6,7 @@ import { PlanList } from '@/components/planner/PlanList';
 import { PlanForm } from '@/components/planner/PlanForm';
 import { generateStudySchedule } from '@/lib/planner/generate';
 import type { StudyPlan } from '@/lib/planner/study-plan-types';
+import { loadDecks, getWorkloadForecast } from '@/lib/srs/sm2';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,7 +68,6 @@ const LS_KEY = 'kivora-calendar-events';
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 function toDateStr(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
-function toTimeStr(d: Date) { return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 function parseDate(s: string): Date { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
 function addDays(d: Date, n: number) { const r = new Date(d); r.setDate(r.getDate()+n); return r; }
 function startOfWeek(d: Date) { const r = new Date(d); r.setDate(r.getDate()-r.getDay()); return r; }
@@ -211,14 +211,42 @@ export default function PlannerPage() {
         }
       }
     }
-      setEvents([...stored, ...planEvents]);
+      // Inject SRS due-card events from local decks (14-day horizon)
+      const srsEvents: CalendarEvent[] = [];
+      try {
+        const decks = loadDecks();
+        for (const deck of decks) {
+          const forecast = getWorkloadForecast(deck, 14);
+          forecast.forEach((count, dayOffset) => {
+            if (count === 0) return;
+            const d = new Date();
+            d.setDate(d.getDate() + dayOffset);
+            const dateStr = toDateStr(d);
+            const evtId = `srs_${deck.id}_${dateStr}`;
+            if (stored_ids.has(evtId)) return;
+            srsEvents.push({
+              id: evtId,
+              title: `🃏 ${deck.name} (${count} due)`,
+              type: 'revision',
+              date: dateStr,
+              startTime: '19:00',
+              endTime: '19:30',
+              description: `${count} flashcard${count !== 1 ? 's' : ''} due in "${deck.name}"`,
+            });
+          });
+        }
+      } catch { /* offline / localStorage unavailable */ }
+
+      setEvents([...stored, ...planEvents, ...srsEvents]);
     })();
     return () => { cancelled = true; };
   }, [plans]);
 
   const persistEvents = useCallback((updated: CalendarEvent[]) => {
-    // Only persist user-created events (not plan-injected)
-    const toSave = updated.filter(e => !e.id.startsWith('plan_') && !e.id.startsWith('exam_'));
+    // Only persist user-created events (not plan-injected or SRS-injected)
+    const toSave = updated.filter(
+      e => !e.id.startsWith('plan_') && !e.id.startsWith('exam_') && !e.id.startsWith('srs_'),
+    );
     saveEventsLocal(toSave);
     setEvents(updated);
   }, []);

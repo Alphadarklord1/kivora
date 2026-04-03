@@ -60,9 +60,14 @@ function buildTfidfGraph(items: LibraryItem[]): { nodes: Node[]; edges: Edge[] }
   const coCount = new Map<string, number>();
   const wordItemIds = new Map<string, string[]>();
 
+  // Sliding-window co-occurrence (window = 5 sentences) to avoid spurious
+  // edges between words that only share the same long document.
+  const WINDOW = 5;
+
   for (const item of items) {
-    const words = item.content.toLowerCase().match(/[a-z]{5,}/g) ?? [];
-    const unique = Array.from(new Set(words.filter(w => !STOP_WORDS.has(w))));
+    // TF-IDF: count unique terms per document
+    const docWords = item.content.toLowerCase().match(/[a-z]{5,}/g) ?? [];
+    const unique   = Array.from(new Set(docWords.filter(w => !STOP_WORDS.has(w))));
 
     for (const w of unique) {
       df.set(w, (df.get(w) ?? 0) + 1);
@@ -72,12 +77,20 @@ function buildTfidfGraph(items: LibraryItem[]): { nodes: Node[]; edges: Edge[] }
       wordItemIds.set(w, existing);
     }
 
-    for (let i = 0; i < unique.length; i++) {
-      for (let j = i + 1; j < unique.length; j++) {
-        const key = unique[i] < unique[j]
-          ? `${unique[i]}|${unique[j]}`
-          : `${unique[j]}|${unique[i]}`;
-        coCount.set(key, (coCount.get(key) ?? 0) + 1);
+    // Co-occurrence: slide a window over sentences, not the whole document
+    const itemSentences = item.content.match(/[^.!?\n]+[.!?\n]+/g) ?? [item.content];
+    for (let si = 0; si < itemSentences.length; si++) {
+      const windowText  = itemSentences.slice(si, si + WINDOW).join(' ').toLowerCase();
+      const windowWords = Array.from(
+        new Set((windowText.match(/[a-z]{5,}/g) ?? []).filter(w => !STOP_WORDS.has(w))),
+      );
+      for (let i = 0; i < windowWords.length; i++) {
+        for (let j = i + 1; j < windowWords.length; j++) {
+          const key = windowWords[i] < windowWords[j]
+            ? `${windowWords[i]}|${windowWords[j]}`
+            : `${windowWords[j]}|${windowWords[i]}`;
+          coCount.set(key, (coCount.get(key) ?? 0) + 1);
+        }
       }
     }
   }
@@ -109,7 +122,7 @@ function buildTfidfGraph(items: LibraryItem[]): { nodes: Node[]; edges: Edge[] }
 
   const edges: Edge[] = [];
   for (const [key, count] of coCount) {
-    if (count < 1) continue;
+    if (count < 2) continue; // require co-occurrence in ≥2 windows to form an edge
     const [a, b] = key.split('|');
     if (!topIds.has(a) || !topIds.has(b)) continue;
     edges.push({ from: a, to: b, coCount: count, isAiDerived: false });
@@ -369,7 +382,6 @@ export function KnowledgeMap() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
 
     fetch('/api/library?limit=30', { credentials: 'include' })
       .then(res => (res.ok ? res.json() : []))

@@ -1,37 +1,37 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserSupabaseClient } from '@/lib/supabase/client';
 import styles from '../auth.module.css';
 
-export default function ResetPasswordPage() {
+function ResetPasswordPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const customToken = searchParams.get('token'); // set by our /api/auth/forgot-password flow
+
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
-  const [sessionReady, setSessionReady] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
 
-  // Supabase puts the access_token in the URL hash after the redirect.
-  // detectSessionInUrl:true handles it automatically — we just wait.
+  // Supabase path: wait for session token in URL hash
+  const [supabaseSessionReady, setSupabaseSessionReady] = useState(false);
   useEffect(() => {
+    if (customToken) return; // using custom token path — skip Supabase
     const supabase = createBrowserSupabaseClient();
     if (!supabase) return;
-
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) setSessionReady(true);
+      if (data.session) setSupabaseSessionReady(true);
     });
-
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) setSessionReady(true);
+      if (session) setSupabaseSessionReady(true);
     });
-
     return () => { listener.subscription.unsubscribe(); };
-  }, []);
+  }, [customToken]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -46,16 +46,40 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    const supabase = createBrowserSupabaseClient();
-    if (!supabase) {
-      setError('Password reset is not available — Supabase is not configured.');
+    setLoading(true);
+
+    if (customToken) {
+      // Credential-auth path
+      try {
+        const res = await fetch('/api/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: customToken, password }),
+        });
+        const data = await res.json() as { ok?: boolean; error?: string };
+        if (data.ok) {
+          setDone(true);
+          setTimeout(() => router.replace('/login'), 2500);
+        } else {
+          setError(data.error || 'Could not reset password. The link may have expired.');
+        }
+      } catch {
+        setError('Something went wrong. Please try again.');
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
-    setLoading(true);
+    // Supabase path
+    const supabase = createBrowserSupabaseClient();
+    if (!supabase) {
+      setError('Password reset is not available — Supabase is not configured.');
+      setLoading(false);
+      return;
+    }
     const { error: sbErr } = await supabase.auth.updateUser({ password });
     setLoading(false);
-
     if (sbErr) {
       setError(sbErr.message || 'Could not update password. The link may have expired.');
     } else {
@@ -63,6 +87,8 @@ export default function ResetPasswordPage() {
       setTimeout(() => router.replace('/workspace'), 2500);
     }
   }
+
+  const sessionReady = customToken ? true : supabaseSessionReady;
 
   return (
     <div className={styles.shell} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
@@ -76,7 +102,7 @@ export default function ResetPasswordPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 8, textAlign: 'center' }}>
             <div style={{ fontSize: 48 }}>✅</div>
             <p style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: 14, margin: 0 }}>
-              Password updated! Redirecting you to your workspace…
+              Password updated! {customToken ? 'Redirecting to sign in…' : 'Redirecting to your workspace…'}
             </p>
           </div>
         ) : (
@@ -142,5 +168,13 @@ export default function ResetPasswordPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className={styles.shell} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}><div className={styles.card} style={{ width: '100%', maxWidth: 420, padding: '2.5rem' }}><div className={styles.cardHeader}><h1>Set new password</h1><p>Loading reset link…</p></div></div></div>}>
+      <ResetPasswordPageContent />
+    </Suspense>
   );
 }

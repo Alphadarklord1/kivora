@@ -110,6 +110,7 @@ export async function GET(request: NextRequest) {
         createdAt: users.createdAt,
         hasPassword: users.passwordHash,
         twoFactorEnabled: users.twoFactorEnabled,
+        emailVerified: users.emailVerified,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -158,6 +159,7 @@ export async function GET(request: NextRequest) {
       createdAt: user[0].createdAt,
       hasPassword: !!user[0].hasPassword,
       twoFactorEnabled: !!user[0].twoFactorEnabled,
+      emailVerified: user[0].emailVerified ? user[0].emailVerified.toISOString() : null,
       supabaseLinked: !!user[0].supabaseAuthId,
       isGuest: isDemoGuestEmail(user[0].email),
       connectedAccounts: connectedAccounts.map(a => a.provider),

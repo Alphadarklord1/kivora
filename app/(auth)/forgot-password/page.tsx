@@ -17,23 +17,35 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     const supabase = createBrowserSupabaseClient();
-    if (!supabase) {
-      setError('Password reset is not available — Supabase is not configured.');
+
+    if (supabase) {
+      // Supabase path
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const { error: sbErr } = await supabase.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        { redirectTo: `${origin}/reset-password` },
+      );
       setLoading(false);
-      return;
-    }
-
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const { error: sbErr } = await supabase.auth.resetPasswordForEmail(
-      email.trim().toLowerCase(),
-      { redirectTo: `${origin}/reset-password` },
-    );
-
-    setLoading(false);
-    if (sbErr) {
-      setError(sbErr.message || 'Something went wrong. Please try again.');
+      if (sbErr) {
+        setError(sbErr.message || 'Something went wrong. Please try again.');
+      } else {
+        setSent(true);
+      }
     } else {
-      setSent(true);
+      // Credential-auth path — custom API route
+      try {
+        await fetch('/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        });
+        // Always show success regardless of outcome to prevent enumeration
+        setSent(true);
+      } catch {
+        setError('Something went wrong. Please try again.');
+      } finally {
+        setLoading(false);
+      }
     }
   }
 

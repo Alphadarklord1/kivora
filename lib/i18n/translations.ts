@@ -86,6 +86,17 @@ export const GLOBAL_TRANSLATIONS: Record<string, Partial<Record<SupportedLocale,
   Profile:        { ar: 'الملف الشخصي', fr: 'Profil' },
   'Display name': { ar: 'الاسم المعروض', fr: 'Nom affiché' },
 
+  // Settings form labels
+  'Profile picture URL':  { ar: 'رابط صورة الملف الشخصي', fr: 'URL de photo de profil' },
+  'Short description':    { ar: 'وصف قصير',                 fr: 'Description courte' },
+  'Study interests':      { ar: 'الاهتمامات الدراسية',      fr: "Centres d'intérêt" },
+  'Save profile':         { ar: 'حفظ الملف الشخصي',         fr: 'Enregistrer le profil' },
+  'New password':         { ar: 'كلمة المرور الجديدة',      fr: 'Nouveau mot de passe' },
+  'Current password':     { ar: 'كلمة المرور الحالية',      fr: 'Mot de passe actuel' },
+  'Confirm password':     { ar: 'تأكيد كلمة المرور',        fr: 'Confirmer le mot de passe' },
+  'Change password':      { ar: 'تغيير كلمة المرور',        fr: 'Changer le mot de passe' },
+  'Verify email':         { ar: 'تأكيد البريد الإلكتروني', fr: 'Vérifier l\'e-mail' },
+
   // Settings section labels
   Security:                                          { ar: 'الأمان',             fr: 'Sécurité' },
   Notifications:                                     { ar: 'الإشعارات',          fr: 'Notifications' },
@@ -345,11 +356,260 @@ export const GLOBAL_TRANSLATIONS: Record<string, Partial<Record<SupportedLocale,
                                 fr: 'Une erreur est survenue. Veuillez réessayer.' },
   'Try Again':                { ar: 'حاول مرة أخرى',                    fr: 'Réessayer' },
 
+  // ─── Workspace main tabs (new entries only — duplicates kept at original locations) ──
+  Chat:       { ar: 'المحادثة',   fr: 'Discussion' },
+  Focus:      { ar: 'التركيز',    fr: 'Concentration' },
+
+  // ─── Workspace tool modes (new entries only) ──────────────────────────────
+  Written:      { ar: 'كتابي',              fr: 'Rédigé' },
+  MCQ:          { ar: 'أسئلة متعددة',       fr: 'QCM' },
+  'Exam Prep':  { ar: 'التحضير للامتحان',   fr: "Prép. d'examen" },
+  'From file':  { ar: 'من ملف',             fr: 'Depuis un fichier' },
+  'Paste text': { ar: 'لصق النص',           fr: 'Coller du texte' },
+
+  // ─── Analytics tab labels ─────────────────────────────────────────────────
+  Overview:   { ar: 'نظرة عامة',   fr: "Vue d'ensemble" },
+  Scores:     { ar: 'النتائج',      fr: 'Scores' },
+  Activity:   { ar: 'النشاط',       fr: 'Activité' },
+  Retention:  { ar: 'الاستبقاء',    fr: 'Rétention' },
+  Goals:      { ar: 'الأهداف',      fr: 'Objectifs' },
+
   // ─── Math ─────────────────────────────────────────────────────────────────
   Solve:        { ar: 'حل',            fr: 'Résoudre' },
   'Show steps': { ar: 'عرض الخطوات',  fr: 'Afficher les étapes' },
   Problem:      { ar: 'المسألة',       fr: 'Problème' },
   Solution:     { ar: 'الحل',          fr: 'Solution' },
+
+  // ─── Scholar Hub tab labels ───────────────────────────────────────────────
+  Research:       { ar: 'البحث',            fr: 'Recherche' },
+  Writing:        { ar: 'الكتابة',          fr: 'Rédaction' },
+  Recovery:       { ar: 'المراجعة',         fr: 'Récupération' },
+  'AI Policy':    { ar: 'سياسة الذكاء',     fr: 'Politique IA' },
+
+  // ─── Scholar Hub / Recovery UI ───────────────────────────────────────────
+  'Due Review':           { ar: 'المراجعة المستحقة',  fr: 'Révision due' },
+  'Weak Topics':          { ar: 'المواضيع الضعيفة',   fr: 'Points faibles' },
+  "Today's Mission":      { ar: 'مهمة اليوم',          fr: "Mission du jour" },
+  'Session progress':     { ar: 'تقدم الجلسة',         fr: 'Progression de session' },
+  'All caught up!':       { ar: 'أحسنت! كل شيء منجز', fr: 'Tout est à jour !' },
+  'Nothing due right now ✔': { ar: 'لا شيء مستحق الآن ✔', fr: 'Rien à faire pour l\'instant ✔' },
+  'No weak topics detected ✔': { ar: 'لا توضيع ضعيفة ✔', fr: 'Aucun point faible détecté ✔' },
+  'Manage all in Workspace →': { ar: 'إدارة الكل في مساحة العمل ←', fr: 'Tout gérer dans Espace de travail →' },
+  'Go to Workspace →':    { ar: 'انتقل إلى مساحة العمل ←', fr: 'Aller à Espace de travail →' },
+  'Open in Workspace':    { ar: 'فتح في مساحة العمل',  fr: "Ouvrir dans l'espace de travail" },
+  'Stay here':            { ar: 'البقاء هنا',           fr: 'Rester ici' },
+
+  // ─── SRS card actions ─────────────────────────────────────────────────────
+  Again:  { ar: 'مجددًا',  fr: 'À revoir' },
+  Hard:   { ar: 'صعب',     fr: 'Difficile' },
+  Good:   { ar: 'جيد',     fr: 'Bien' },
+  Easy:   { ar: 'سهل',     fr: 'Facile' },
+  Review: { ar: 'مراجعة',  fr: 'Réviser' },
+  Manage: { ar: 'إدارة',   fr: 'Gérer' },
+  Practice: { ar: 'تدريب', fr: 'Pratiquer' },
+  Explain:  { ar: 'شرح',   fr: 'Expliquer' },
+  Reading:  { ar: 'قراءة', fr: 'Lecture' },
+
+  // ─── Writing studio ───────────────────────────────────────────────────────
+  'Build Report':   { ar: 'بناء التقرير',  fr: 'Créer le rapport' },
+  'Write & Check':  { ar: 'كتابة ومراجعة', fr: 'Rédiger et vérifier' },
+  'Key Points':     { ar: 'النقاط الرئيسية', fr: 'Points clés' },
+  'Clear draft':    { ar: 'مسح المسودة',   fr: 'Effacer le brouillon' },
+  'Write Draft':    { ar: 'كتابة مسودة',   fr: 'Rédiger un brouillon' },
+  Outline:          { ar: 'مخطط',          fr: 'Plan' },
+
+  // ─── Workspace tool modes ─────────────────────────────────────────────────
+  Rephrase:   { ar: 'إعادة صياغة', fr: 'Reformuler' },
+  Assignment: { ar: 'الواجب',      fr: 'Devoir' },
+
+  // ─── Settings description / helper text ───────────────────────────────────
+  'This shows up as your short profile description across the app.': {
+    ar: 'يظهر هذا كوصف ملفك الشخصي القصير في جميع أنحاء التطبيق.',
+    fr: "Ceci apparaît comme votre courte description de profil dans toute l'application.",
+  },
+  'Separate topics with commas so they show up as profile tags.': {
+    ar: 'افصل المواضيع بفواصل لتظهر كوسوم الملف الشخصي.',
+    fr: 'Séparez les sujets par des virgules pour qu\'ils apparaissent comme tags de profil.',
+  },
+  'Profile picture, display name, and description are saved to your account.': {
+    ar: 'يتم حفظ صورة الملف الشخصي والاسم المعروض والوصف في حسابك.',
+    fr: 'La photo de profil, le nom affiché et la description sont enregistrés dans votre compte.',
+  },
+
+  // ─── Flashcard view — phases & actions ────────────────────────────────────
+  Preview:      { ar: 'معاينة',        fr: 'Aperçu' },
+  Learn:        { ar: 'تعلّم',         fr: 'Apprendre' },
+  Write:        { ar: 'كتابة',         fr: 'Écrire' },
+  Test:         { ar: 'اختبار',        fr: 'Tester' },
+  Stats:        { ar: 'الإحصاءات',     fr: 'Statistiques' },
+  Browse:       { ar: 'استعراض',       fr: 'Parcourir' },
+  Publish:      { ar: 'نشر',           fr: 'Publier' },
+  Publishing:   { ar: 'جارٍ النشر',    fr: 'Publication…' },
+  Public:       { ar: 'عام',           fr: 'Public' },
+  Retry:        { ar: 'أعد المحاولة',  fr: 'Réessayer' },
+  Shared:       { ar: 'تمت المشاركة', fr: 'Partagé' },
+  Restart:      { ar: 'إعادة البدء',   fr: 'Recommencer' },
+  Submit:       { ar: 'إرسال',         fr: 'Soumettre' },
+  Correct:      { ar: 'صحيح',          fr: 'Correct' },
+  Check:        { ar: 'تحقق',          fr: 'Vérifier' },
+  'Go back':    { ar: 'رجوع',          fr: 'Retourner' },
+  'Try again':  { ar: 'حاول مرة أخرى', fr: 'Réessayer' },
+  'Play again': { ar: 'العب مرة أخرى', fr: 'Rejouer' },
+  'Show answer':{ ar: 'أظهر الإجابة',  fr: 'Afficher la réponse' },
+
+  // Flashcard view — card types & states
+  New:          { ar: 'جديد',          fr: 'Nouveau' },
+  Learning:     { ar: 'قيد التعلّم',   fr: 'En cours' },
+  Mature:       { ar: 'متقن',           fr: 'Maîtrisé' },
+  Front:        { ar: 'الوجه الأمامي', fr: 'Recto' },
+  Tomorrow:     { ar: 'غداً',           fr: 'Demain' },
+
+  // Flashcard view — session end
+  'Session complete!':                   { ar: 'اكتملت الجلسة!',         fr: 'Session terminée !' },
+  '{correct}/{total} recalled ({percent}%)': { ar: 'تم تذكر {correct} من {total} ({percent}%)', fr: '{correct}/{total} rappelé ({percent}%)' },
+  '{count}-day streak!':                 { ar: 'سلسلة {count} أيام!',    fr: 'Série de {count} jours !' },
+  'Review {count} remaining':            { ar: 'راجع {count} متبقية',    fr: '{count} restant à réviser' },
+  'Browse all cards':                    { ar: 'تصفح كل البطاقات',       fr: 'Parcourir toutes les cartes' },
+  'Next review due tomorrow':            { ar: 'موعد المراجعة التالية غداً', fr: 'Prochaine révision demain' },
+  'Next review in {count} days ({date})':{ ar: 'المراجعة التالية خلال {count} أيام ({date})', fr: 'Prochaine révision dans {count} jours ({date})' },
+
+  // Flashcard view — grade hints
+  'Forgot — review soon':          { ar: 'نسيت — راجع قريباً',       fr: 'Oublié — revoir bientôt' },
+  'Recalled with effort':          { ar: 'تذكرته بصعوبة',             fr: 'Rappelé avec effort' },
+  'Recalled correctly':            { ar: 'تذكرته بشكل صحيح',         fr: 'Rappelé correctement' },
+  'Instant recall — longer gap':   { ar: 'تذكر فوري — فترة أطول',    fr: 'Rappel instantané — intervalle plus long' },
+  'Tap to reveal · swipe to grade':{ ar: 'اضغط للكشف · اسحب للتقييم', fr: 'Appuyer pour révéler · glisser pour noter' },
+
+  // Flashcard view — study modes
+  'Study all':                     { ar: 'ادرس الكل',                  fr: 'Tout étudier' },
+  'Study {count}':                 { ar: 'ادرس {count}',               fr: 'Étudier {count}' },
+  'Daily goal':                    { ar: 'الهدف اليومي',               fr: 'Objectif quotidien' },
+  '{done}/{goal} cards today':     { ar: '{done}/{goal} بطاقة اليوم',   fr: "{done}/{goal} cartes aujourd'hui" },
+  '{done}/{goal} today':           { ar: '{done}/{goal} اليوم',         fr: "{done}/{goal} aujourd'hui" },
+  '{count} due today':             { ar: '{count} مستحقة اليوم',       fr: "{count} dûes aujourd'hui" },
+  '{count} new':                   { ar: '{count} جديد',               fr: '{count} nouveau' },
+  '{count} learning':              { ar: '{count} قيد التعلّم',        fr: '{count} en cours' },
+  '{count} mature':                { ar: '{count} متقن',               fr: '{count} maîtrisé' },
+  '{count} day':                   { ar: '{count} يوم',                fr: '{count} jour' },
+  '{count} days':                  { ar: '{count} أيام',               fr: '{count} jours' },
+  '{count} cards':                 { ar: '{count} بطاقة',              fr: '{count} cartes' },
+
+  // Flashcard view — match game
+  'Match Game':                    { ar: 'لعبة المطابقة',              fr: 'Jeu de correspondance' },
+  '{matched}/{total} matched':     { ar: 'تمت مطابقة {matched}/{total}', fr: '{matched}/{total} correspondances' },
+  'All matched!':                  { ar: 'تمت المطابقة بالكامل!',      fr: 'Tout correspondance !' },
+  'Completed in {count} seconds':  { ar: 'اكتملت خلال {count} ثانية', fr: 'Terminé en {count} secondes' },
+  'Terms':                         { ar: 'المصطلحات',                  fr: 'Termes' },
+  'Definitions':                   { ar: 'التعريفات',                  fr: 'Définitions' },
+
+  // Flashcard view — write mode
+  'Write mode complete!':          { ar: 'اكتمل وضع الكتابة!',        fr: 'Mode écriture terminé !' },
+  'Review these ({count})':        { ar: 'راجع هذه ({count})',         fr: 'Réviser ceux-ci ({count})' },
+  'Write the definition':          { ar: 'اكتب التعريف',               fr: 'Écrire la définition' },
+  'Type your answer…':             { ar: 'اكتب إجابتك…',              fr: 'Tapez votre réponse…' },
+  'Type the answer':               { ar: 'اكتب الإجابة',               fr: 'Tapez la réponse' },
+  'Enter to check · Shift+Enter for newline': { ar: 'اضغط Enter للتحقق · Shift+Enter لسطر جديد', fr: 'Entrée pour vérifier · Maj+Entrée pour nouvelle ligne' },
+  'Correct answer':                { ar: 'الإجابة الصحيحة',            fr: 'Réponse correcte' },
+  'Looks correct!':                { ar: 'تبدو صحيحة!',               fr: 'Semble correct !' },
+  'Not quite right':               { ar: 'ليست صحيحة تماماً',         fr: 'Pas tout à fait correct' },
+  'Got wrong':                     { ar: 'إجابة خاطئة',               fr: 'Raté' },
+  'Got right':                     { ar: 'إجابة صحيحة',               fr: 'Réussi' },
+
+  // Flashcard view — test mode
+  'Mixed test':                    { ar: 'اختبار متنوع',              fr: 'Test mixte' },
+  'Test complete!':                { ar: 'اكتمل الاختبار!',           fr: 'Test terminé !' },
+  '{correct}/{total} correct ({percent}%)': { ar: '{correct}/{total} صحيحة ({percent}%)', fr: '{correct}/{total} correct ({percent}%)' },
+  'Your answer':                   { ar: 'إجابتك',                   fr: 'Votre réponse' },
+  '(no answer)':                   { ar: '(بدون إجابة)',              fr: '(pas de réponse)' },
+  'New test':                      { ar: 'اختبار جديد',              fr: 'Nouveau test' },
+  'Multiple Choice':               { ar: 'اختيار من متعدد',          fr: 'Choix multiple' },
+  'True / False':                  { ar: 'صح / خطأ',                 fr: 'Vrai / Faux' },
+  'Type your answer and press Enter…': { ar: 'اكتب إجابتك ثم اضغط Enter…', fr: 'Tapez votre réponse et appuyez sur Entrée…' },
+
+  // Flashcard view — learn mode
+  'Learn complete!':               { ar: 'اكتمل التعلم!',            fr: 'Apprentissage terminé !' },
+  'All {count} cards correct!':    { ar: 'صحّحت جميع البطاقات ({count})!', fr: 'Toutes les {count} cartes correctes !' },
+
+  // Flashcard view — deck management
+  'Flashcards ({count} cards)':    { ar: 'بطاقات تعليمية ({count} بطاقة)', fr: 'Cartes ({count} cartes)' },
+  'Imported deck':                 { ar: 'مجموعة مستوردة',            fr: 'Deck importé' },
+  'Imported ({count} cards)':      { ar: 'مستورد ({count} بطاقة)',    fr: 'Importé ({count} cartes)' },
+  'Deck description':              { ar: 'وصف المجموعة',              fr: 'Description du deck' },
+  'Public deck description':       { ar: 'وصف المجموعة العامة',       fr: 'Description du deck public' },
+  'Optional public deck description': { ar: 'وصف اختياري للمجموعة العامة', fr: 'Description optionnelle du deck public' },
+  'Add a short description for this deck': { ar: 'أضف وصفاً قصيراً لهذه المجموعة', fr: 'Ajouter une description courte pour ce deck' },
+  'Rename deck':                   { ar: 'إعادة تسمية المجموعة',      fr: 'Renommer le deck' },
+  'Double-click to rename':        { ar: 'انقر مرتين لإعادة التسمية', fr: 'Double-cliquer pour renommer' },
+  'TTS on flip':                   { ar: 'النطق الصوتي عند القلب',    fr: 'Synthèse vocale au retournement' },
+  'Deck settings':                 { ar: 'إعدادات المجموعة',          fr: 'Paramètres du deck' },
+  'Show settings':                 { ar: 'إظهار الإعدادات',           fr: 'Afficher les paramètres' },
+  'Hide settings':                 { ar: 'إخفاء الإعدادات',           fr: 'Masquer les paramètres' },
+  'Add card':                      { ar: 'إضافة بطاقة',               fr: 'Ajouter une carte' },
+  'Save card':                     { ar: 'حفظ البطاقة',               fr: 'Enregistrer la carte' },
+  'Edit card':                     { ar: 'تعديل البطاقة',             fr: 'Modifier la carte' },
+  'Add image':                     { ar: 'إضافة صورة',                fr: 'Ajouter une image' },
+  'Save changes':                  { ar: 'حفظ التغييرات',             fr: 'Enregistrer les modifications' },
+  'Term or question…':             { ar: 'المصطلح أو السؤال…',        fr: 'Terme ou question…' },
+  'Definition or answer…':        { ar: 'التعريف أو الإجابة…',       fr: 'Définition ou réponse…' },
+  '⌘↵ to save':                   { ar: '⌘↵ للحفظ',                  fr: '⌘↵ pour enregistrer' },
+  'Export CSV':                    { ar: 'تصدير CSV',                  fr: 'Exporter CSV' },
+  'Export Anki':                   { ar: 'تصدير Anki',                 fr: 'Exporter Anki' },
+  'Copy link':                     { ar: 'نسخ الرابط',                fr: 'Copier le lien' },
+
+  // Flashcard view — stats
+  'Total cards':                   { ar: 'إجمالي البطاقات',           fr: 'Total des cartes' },
+  Reviews:                         { ar: 'المراجعات',                  fr: 'Révisions' },
+  'Avg accuracy':                  { ar: 'متوسط الدقة',               fr: 'Précision moyenne' },
+  'Weak cards':                    { ar: 'بطاقات ضعيفة',              fr: 'Cartes faibles' },
+  '{count} weak':                  { ar: '{count} ضعيفة',             fr: '{count} faibles' },
+  '{count} reviews · next: {date}':{ ar: '{count} مراجعات · التالي: {date}', fr: '{count} révisions · prochain : {date}' },
+  'FSRS health':                   { ar: 'صحة FSRS',                   fr: 'Santé FSRS' },
+  'Avg recall confidence':         { ar: 'متوسط الثقة في التذكر',     fr: 'Confiance de rappel moyenne' },
+  'Average stability':             { ar: 'متوسط الثبات',              fr: 'Stabilité moyenne' },
+  'Image cards':                   { ar: 'بطاقات مصوّرة',             fr: 'Cartes avec images' },
+  'Recent reviews':                { ar: 'آخر المراجعات',             fr: 'Révisions récentes' },
+  'No review history yet':         { ar: 'لا يوجد سجل مراجعات بعد',  fr: "Pas encore d'historique de révision" },
+  'Next review: {date} · interval {count}d': { ar: 'المراجعة التالية: {date} · الفاصل {count} يوم', fr: 'Prochaine révision : {date} · intervalle {count}j' },
+  'Progress — {name}':             { ar: 'التقدم — {name}',           fr: 'Progression — {name}' },
+  'Due cards — next 14 days':      { ar: 'البطاقات المستحقة — خلال 14 يوماً', fr: 'Cartes dues — 14 prochains jours' },
+  'Due cards — next 7 days':       { ar: 'البطاقات المستحقة — خلال 7 أيام',   fr: 'Cartes dues — 7 prochains jours' },
+  'No cards due in the next week': { ar: 'لا توجد بطاقات مستحقة خلال الأسبوع القادم', fr: 'Aucune carte due la semaine prochaine' },
+  'Study activity':                { ar: 'نشاط الدراسة',              fr: "Activité d'étude" },
+  'Card performance':              { ar: 'أداء البطاقات',             fr: 'Performance des cartes' },
+  'Not yet reviewed':              { ar: 'لم تتم مراجعتها بعد',       fr: 'Pas encore révisé' },
+  'Next: {date} · {accuracy}% acc':{ ar: 'التالي: {date} · دقة {accuracy}%', fr: 'Prochaine : {date} · {accuracy}% préc.' },
+
+  // Flashcard view — activity heatmap
+  '{date}: {count} cards':         { ar: '{date}: {count} بطاقة',     fr: '{date} : {count} cartes' },
+  '{count} cards reviewed':        { ar: 'تمت مراجعة {count} بطاقة', fr: '{count} cartes révisées' },
+  '{count} active days':           { ar: '{count} أيام نشطة',        fr: '{count} jours actifs' },
+  Less:                            { ar: 'أقل',                        fr: 'Moins' },
+  More:                            { ar: 'أكثر',                       fr: 'Plus' },
+
+  // Flashcard view — import
+  'Loading decks…':                { ar: 'جارٍ تحميل المجموعات…',    fr: 'Chargement des decks…' },
+  'Search public decks':           { ar: 'ابحث في المجموعات العامة', fr: 'Rechercher des decks publics' },
+  'Import deck':                   { ar: 'استيراد المجموعة',          fr: 'Importer un deck' },
+  'Import cards':                  { ar: 'استيراد البطاقات',          fr: 'Importer des cartes' },
+  'Import link':                   { ar: 'استيراد الرابط',            fr: "Lien d'importation" },
+  'Import from a Kivora shared review-set link': { ar: 'استيراد من رابط Kivora مشترك لمجموعة مراجعة', fr: 'Importer depuis un lien de set de révision Kivora partagé' },
+  'One card per line. Separate term and definition with a comma or tab.': {
+    ar: 'بطاقة واحدة في كل سطر. افصل بين المصطلح والتعريف بفاصلة أو بعلامة تبويب.',
+    fr: 'Une carte par ligne. Séparez le terme et la définition avec une virgule ou une tabulation.',
+  },
+  'Could not parse. Use "term, definition" or tab-separated per line.': {
+    ar: 'تعذر التحليل. استخدم "المصطلح، التعريف" أو افصل بعلامة تبويب في كل سطر.',
+    fr: 'Impossible d\'analyser. Utilisez "terme, définition" ou séparation par tabulation par ligne.',
+  },
+  'No cards were found in that URL.': { ar: 'لم يتم العثور على بطاقات في هذا الرابط.', fr: 'Aucune carte trouvée dans cette URL.' },
+  'Import failed':                 { ar: 'فشل الاستيراد',             fr: "Échec de l'importation" },
+  '{count} line detected':         { ar: 'تم اكتشاف سطر واحد',       fr: '{count} ligne détectée' },
+  '{count} lines detected':        { ar: 'تم اكتشاف {count} أسطر',   fr: '{count} lignes détectées' },
+  'Public deck library':           { ar: 'مكتبة المجموعات العامة',    fr: 'Bibliothèque de decks publics' },
+  'No public decks found yet. Publish one from the preview screen to seed the library.': {
+    ar: 'لا توجد مجموعات عامة بعد. انشر مجموعة من شاشة المعاينة لبدء المكتبة.',
+    fr: "Aucun deck public trouvé. Publiez-en un depuis l'écran d'aperçu pour amorcer la bibliothèque.",
+  },
 };
 
 /**
