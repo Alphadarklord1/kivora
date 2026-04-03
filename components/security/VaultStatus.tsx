@@ -3,33 +3,10 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useVault } from '@/providers/VaultProvider';
 import { ENCRYPTION_DISABLED } from '@/lib/crypto/vault';
-import { useSettings } from '@/providers/SettingsProvider';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 export function VaultStatus() {
-  const { settings } = useSettings();
-  const isArabic = settings.language === 'ar';
-  const t = (key: string) => {
-    const ar: Record<string, string> = {
-      'Encryption paused': 'التشفير معطل في النسخة التجريبية',
-      'Encryption Paused': 'التشفير معطل في النسخة التجريبية',
-      'Encryption disabled for beta': 'التشفير معطل في النسخة التجريبية',
-      'Local vault password prompts are turned off until encryption returns in a later beta update.': 'تم إيقاف مطالبات كلمة مرور الخزنة المحلية حتى يعود التشفير في تحديث تجريبي لاحق.',
-      'Lock vault': 'قفل الخزنة',
-      'Vault locked': 'الخزنة مقفلة',
-      'Not Set Up': 'غير مُعد',
-      Encrypted: 'مشفّر',
-      Locked: 'مقفل',
-      'End-to-End Encrypted': 'تشفير طرفي كامل',
-      'Set up encryption to protect your data': 'قم بإعداد التشفير لحماية بياناتك',
-      'Your data is encrypted before leaving your device. Click to lock.': 'تُشفّر بياناتك قبل مغادرة جهازك. انقر للقفل.',
-      'Enter your password to access your encrypted data': 'أدخل كلمة المرور للوصول إلى بياناتك المشفرة',
-      'Client-side encryption': 'تشفير على جهاز العميل',
-      'Zero-knowledge architecture': 'بنية بدون معرفة مسبقة',
-      'AES-256 encryption': 'تشفير AES-256',
-      'Vault Locked': 'الخزنة مقفلة',
-    };
-    return isArabic ? (ar[key] || key) : key;
-  };
+  const { t, isRTL } = useI18n();
   const { isSetup, isUnlocked, lock, isLoading } = useVault();
   const [showTooltip, setShowTooltip] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);

@@ -5,6 +5,7 @@ import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import styles from '../auth.module.css';
+import { useSettings } from '@/providers/SettingsProvider';
 
 interface AuthCapabilities {
   googleConfigured: boolean;
@@ -20,6 +21,7 @@ interface AuthCapabilities {
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { settings } = useSettings();
   const [name, setName]         = useState('');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -88,7 +90,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className={styles.shell}>
+    <div className={styles.shell} dir={settings.language === 'ar' ? 'rtl' : 'ltr'}>
       <div className={styles.grid}>
         {/* Left panel — branding */}
         <div className={styles.panel}>

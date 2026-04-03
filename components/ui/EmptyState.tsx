@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useSettings } from '@/providers/SettingsProvider';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface EmptyStateProps {
   icon?: React.ReactNode;
@@ -201,74 +201,61 @@ export function EmptyState({
 
 // Pre-configured empty states for common scenarios
 export function NoFoldersState({ onCreateFolder }: { onCreateFolder: () => void }) {
-  const { settings } = useSettings();
-  const isArabic = settings.language === 'ar';
+  const { t } = useI18n();
   return (
     <EmptyState
       icon="folder"
-      title={isArabic ? 'لا توجد مجلدات بعد' : 'No folders yet'}
-      description={isArabic ? 'أنشئ مجلدًا لتنظيم موادك وملفاتك الدراسية.' : 'Create a folder to organize your study materials and files.'}
-      action={{ label: isArabic ? 'إنشاء مجلد' : 'Create Folder', onClick: onCreateFolder }}
+      title={t('No folders yet')}
+      description={t('Create a folder to organize your study materials and files.')}
+      action={{ label: t('Create Folder'), onClick: onCreateFolder }}
     />
   );
 }
 
 export function NoFilesState({ onUploadFile }: { onUploadFile: () => void }) {
-  const { settings } = useSettings();
-  const isArabic = settings.language === 'ar';
+  const { t } = useI18n();
   return (
     <EmptyState
       icon="file"
-      title={isArabic ? 'لا توجد ملفات في هذا المجلد' : 'No files in this folder'}
-      description={isArabic ? 'ارفع ملفات PDF أو مستندات، أو ألصق نصًا لبدء توليد مواد دراسية.' : 'Upload PDFs, documents, or paste text to start generating study materials.'}
-      action={{ label: isArabic ? 'رفع ملف' : 'Upload File', onClick: onUploadFile }}
+      title={t('No files in this folder')}
+      description={t('Upload PDFs, documents, or paste text to start generating study materials.')}
+      action={{ label: t('Upload File'), onClick: onUploadFile }}
     />
   );
 }
 
 export function NoSearchResultsState({ query, onClear }: { query: string; onClear: () => void }) {
-  const { settings } = useSettings();
-  const isArabic = settings.language === 'ar';
+  const { t } = useI18n();
   return (
     <EmptyState
       icon="search"
-      title={isArabic ? 'لا توجد نتائج' : 'No results found'}
-      description={
-        isArabic
-          ? `لم نعثر على نتائج مطابقة لـ "${query}". جرّب كلمات بحث مختلفة.`
-          : `We couldn't find anything matching "${query}". Try a different search term.`
-      }
-      action={{ label: isArabic ? 'مسح البحث' : 'Clear Search', onClick: onClear }}
+      title={t('No results found')}
+      description={t('No results for {query}. Try a different search term.', { query })}
+      action={{ label: t('Clear Search'), onClick: onClear }}
     />
   );
 }
 
 export function NoLibraryItemsState({ onGoToTools }: { onGoToTools: () => void }) {
-  const { settings } = useSettings();
-  const isArabic = settings.language === 'ar';
+  const { t } = useI18n();
   return (
     <EmptyState
       icon="library"
-      title={isArabic ? 'مكتبتك فارغة' : 'Your library is empty'}
-      description={
-        isArabic
-          ? 'احفظ المحتوى المُنشأ مثل الأسئلة والملخصات والملاحظات للوصول السريع.'
-          : 'Save generated content like MCQs, summaries, and notes to your library for easy access.'
-      }
-      action={{ label: isArabic ? 'الانتقال إلى الأدوات' : 'Go to Tools', onClick: onGoToTools }}
+      title={t('Your library is empty')}
+      description={t('Save generated content like MCQs, summaries, and notes to your library for easy access.')}
+      action={{ label: t('Go to Tools'), onClick: onGoToTools }}
     />
   );
 }
 
 export function ErrorState({ message, onRetry }: { message?: string; onRetry?: () => void }) {
-  const { settings } = useSettings();
-  const isArabic = settings.language === 'ar';
+  const { t } = useI18n();
   return (
     <EmptyState
       icon="error"
-      title={isArabic ? 'حدث خطأ ما' : 'Something went wrong'}
-      description={message || (isArabic ? 'واجهنا خطأ. يرجى المحاولة مرة أخرى.' : 'We encountered an error. Please try again.')}
-      action={onRetry ? { label: isArabic ? 'حاول مرة أخرى' : 'Try Again', onClick: onRetry } : undefined}
+      title={t('Something went wrong')}
+      description={message ?? t('We encountered an error. Please try again.')}
+      action={onRetry ? { label: t('Try Again'), onClick: onRetry } : undefined}
     />
   );
 }

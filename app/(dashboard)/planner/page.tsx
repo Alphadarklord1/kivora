@@ -73,7 +73,7 @@ function addDays(d: Date, n: number) { const r = new Date(d); r.setDate(r.getDat
 function startOfWeek(d: Date) { const r = new Date(d); r.setDate(r.getDate()-r.getDay()); return r; }
 function sameDay(a: Date, b: Date) { return toDateStr(a) === toDateStr(b); }
 
-function loadEvents(): CalendarEvent[] {
+function loadEventsLocal(): CalendarEvent[] {
   try {
     if (typeof window === 'undefined') return [];
     const raw = localStorage.getItem(LS_KEY);
@@ -81,8 +81,55 @@ function loadEvents(): CalendarEvent[] {
   } catch { return []; }
 }
 
-function saveEvents(events: CalendarEvent[]) {
+function saveEventsLocal(events: CalendarEvent[]) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(events)); } catch { /* noop */ }
+}
+
+async function fetchEventsFromApi(): Promise<CalendarEvent[] | null> {
+  try {
+    const res = await fetch('/api/planner/events');
+    if (!res.ok) return null;
+    const rows = await res.json() as Array<Record<string, unknown>>;
+    // Map DB column names back to camelCase interface
+    return rows.map(r => ({
+      id: r.id as string,
+      title: r.title as string,
+      type: r.type as CalendarEvent['type'],
+      date: r.date as string,
+      startTime: (r.startTime ?? r.start_time) as string,
+      endTime: (r.endTime ?? r.end_time) as string,
+      description: r.description as string | undefined,
+      planId: (r.planId ?? r.plan_id) as string | undefined,
+      completed: Boolean(r.completed),
+      color: r.color as string | undefined,
+    }));
+  } catch { return null; }
+}
+
+async function apiCreateEvent(evt: CalendarEvent): Promise<void> {
+  try {
+    await fetch('/api/planner/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(evt),
+    });
+  } catch { /* noop — localStorage already updated */ }
+}
+
+async function apiUpdateEvent(id: string, patch: Partial<CalendarEvent>): Promise<void> {
+  try {
+    await fetch(`/api/planner/events/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+  } catch { /* noop */ }
+}
+
+async function apiDeleteEvent(id: string): Promise<void> {
+  try {
+    await fetch(`/api/planner/events/${id}`, { method: 'DELETE' });
+  } catch { /* noop */ }
 }
 
 function uid() { return `evt_${Date.now()}_${Math.random().toString(36).slice(2,7)}`; }
@@ -115,10 +162,18 @@ export default function PlannerPage() {
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
-  // Load from localStorage + inject from study plans
+  // Load from API (falling back to localStorage) + inject from study plans
   useEffect(() => {
-    const stored = loadEvents();
-    const stored_ids = new Set(stored.map(e => e.id));
+    let cancelled = false;
+    void (async () => {
+      const apiEvents = await fetchEventsFromApi();
+      if (cancelled) return;
+      // If API returned data, sync to localStorage cache
+      if (apiEvents !== null) {
+        saveEventsLocal(apiEvents);
+      }
+      const stored = apiEvents ?? loadEventsLocal();
+      const stored_ids = new Set(stored.map(e => e.id));
 
     // Inject schedule days from study plans as events
     const planEvents: CalendarEvent[] = [];
@@ -156,13 +211,15 @@ export default function PlannerPage() {
         }
       }
     }
-    setEvents([...stored, ...planEvents]);
+      setEvents([...stored, ...planEvents]);
+    })();
+    return () => { cancelled = true; };
   }, [plans]);
 
   const persistEvents = useCallback((updated: CalendarEvent[]) => {
     // Only persist user-created events (not plan-injected)
     const toSave = updated.filter(e => !e.id.startsWith('plan_') && !e.id.startsWith('exam_'));
-    saveEvents(toSave);
+    saveEventsLocal(toSave);
     setEvents(updated);
   }, []);
 
@@ -207,12 +264,14 @@ export default function PlannerPage() {
   const saveEvent = useCallback(() => {
     if (!form.title.trim()) return;
     if (editingEvent) {
-      const updated = events.map(e => e.id === editingEvent.id
-        ? { ...e, ...form, title: form.title.trim() } : e);
+      const patch = { ...form, title: form.title.trim() };
+      const updated = events.map(e => e.id === editingEvent.id ? { ...e, ...patch } : e);
       persistEvents(updated);
+      void apiUpdateEvent(editingEvent.id, patch);
     } else {
       const newEvt: CalendarEvent = { id: uid(), ...form, title: form.title.trim() };
       persistEvents([...events, newEvt]);
+      void apiCreateEvent(newEvt);
     }
     setShowModal(false);
   }, [form, editingEvent, events, persistEvents]);
@@ -220,12 +279,16 @@ export default function PlannerPage() {
   const deleteEvent = useCallback((id: string) => {
     persistEvents(events.filter(e => e.id !== id));
     setSelectedEvent(null);
+    void apiDeleteEvent(id);
   }, [events, persistEvents]);
 
   const toggleComplete = useCallback((id: string) => {
-    const updated = events.map(e => e.id === id ? { ...e, completed: !e.completed } : e);
+    const evt = events.find(e => e.id === id);
+    const newCompleted = !evt?.completed;
+    const updated = events.map(e => e.id === id ? { ...e, completed: newCompleted } : e);
     persistEvents(updated);
-    setSelectedEvent(prev => prev?.id === id ? { ...prev, completed: !prev.completed } : prev);
+    setSelectedEvent(prev => prev?.id === id ? { ...prev, completed: newCompleted } : prev);
+    void apiUpdateEvent(id, { completed: newCompleted });
   }, [events, persistEvents]);
 
   const onEventDrop = useCallback((eventId: string, newDate: string, newHour: number) => {
@@ -241,9 +304,12 @@ export default function PlannerPage() {
         const newEnd = `${pad(Math.floor(endTotalMins / 60) % 24)}:${pad(endTotalMins % 60)}`;
         return { ...e, date: newDate, startTime: newStart, endTime: newEnd };
       });
-      localStorage.setItem(LS_KEY, JSON.stringify(
-        updated.filter(e => !e.id.startsWith('plan_') && !e.id.startsWith('exam_'))
-      ));
+      const toSave = updated.filter(e => !e.id.startsWith('plan_') && !e.id.startsWith('exam_'));
+      saveEventsLocal(toSave);
+      const dropped = updated.find(e => e.id === eventId);
+      if (dropped && !eventId.startsWith('plan_') && !eventId.startsWith('exam_')) {
+        void apiUpdateEvent(eventId, { date: dropped.date, startTime: dropped.startTime, endTime: dropped.endTime });
+      }
       return updated;
     });
   }, []);

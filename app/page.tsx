@@ -1,254 +1,410 @@
 import Link from 'next/link';
 import styles from './page.module.css';
+import { DemoChat } from '@/components/landing/DemoChat';
 
 export default function RootPage() {
   return (
     <div className={styles.pageShell}>
-      <div className={styles.backdrop} />
+      {/* Background layers */}
+      <div className={styles.bgGlow} aria-hidden="true" />
+      <div className={styles.bgGrid} aria-hidden="true" />
 
+      {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <header className={styles.topbar}>
         <Link href="/" className={styles.brand}>
           <span className={styles.brandMark}>K</span>
           <span className={styles.brandText}>Kivora</span>
         </Link>
 
+        <nav className={styles.topbarNav}>
+          <Link href="/workspace" className={styles.navLink}>Workspace</Link>
+          <Link href="/coach"     className={styles.navLink}>Scholar Hub</Link>
+          <Link href="/math"      className={styles.navLink}>Math</Link>
+          <Link href="/planner"   className={styles.navLink}>Planner</Link>
+        </nav>
+
         <div className={styles.topbarActions}>
-          <Link href="/settings#ai-models" className={styles.secondaryAction}>
-            Download Desktop
-          </Link>
-          <Link href="/login" className={styles.secondaryAction}>
-            Log In
-          </Link>
-          <Link href="/workspace" className={styles.primaryAction}>
-            Continue as Guest
-          </Link>
+          <Link href="/settings#ai-models" className={styles.ghostBtn}>Desktop App</Link>
+          <Link href="/login"              className={styles.ghostBtn}>Sign In</Link>
+          <Link href="/register"           className={styles.primaryBtn}>Get Started Free</Link>
         </div>
       </header>
 
       <main className={styles.main}>
+
+        {/* ── Hero ──────────────────────────────────────────────────────── */}
         <section className={styles.hero}>
           <div className={styles.heroCopy}>
-            <div className={styles.kickerRow}>
-              <span className={styles.kicker}>Welcome to Kivora</span>
-              <span className={styles.kickerMuted}>Study from one calm system instead of five scattered tools</span>
+            <div className={styles.badgeRow}>
+              <span className={styles.badge}>AI-Powered Study Platform</span>
+              <span className={styles.badgeDot} />
+              <span className={styles.badgeNote}>Offline-ready · Arabic · English · French</span>
             </div>
 
             <h1 className={styles.heroTitle}>
-              Start in the right place: Workspace, Scholar Hub, or Math.
+              Study smarter.<br />
+              <span className={styles.heroTitleAccent}>From one place.</span>
             </h1>
 
             <p className={styles.heroBody}>
-              Workspace is where you do the work, Scholar Hub is where you understand sources
-              and build reports, and Math is where technical problems stay clean and focused.
-              The homepage should feel like a launchpad, not a brochure.
+              Kivora brings your files, AI tools, research, and math into a single focused workspace.
+              No more juggling five tools — just the work.
             </p>
 
             <div className={styles.heroActions}>
-              <Link href="/workspace" className={styles.primaryActionLarge}>
+              <Link href="/workspace" className={styles.ctaPrimary}>
                 Open Workspace
+                <span className={styles.ctaArrow}>→</span>
               </Link>
-              <Link href="/coach" className={styles.secondaryActionLarge}>
-                Open Scholar Hub
-              </Link>
-              <Link href="/math" className={styles.secondaryActionLarge}>
-                Open Math
+              <Link href="/register" className={styles.ctaSecondary}>
+                Create Free Account
               </Link>
             </div>
 
-            <div className={styles.heroMeta}>
-              <span>Offline local models</span>
-              <span>Arabic + English</span>
-              <span>Source study + math</span>
-            </div>
-
-            <div className={styles.statRow}>
-              <article className={styles.statCard}>
-                <strong>Workspace</strong>
-                <span>Open files, chat with your material, generate notes and quizzes, and keep review sets in one execution space.</span>
-              </article>
-              <article className={styles.statCard}>
-                <strong>Scholar Hub</strong>
-                <span>Break down a source, understand the key ideas, build a report shape, and check writing against that source.</span>
-              </article>
-              <article className={styles.statCard}>
-                <strong>Math</strong>
-                <span>Use the solver, graphing, formulas, and units in a dedicated workflow instead of mixing math into everything else.</span>
-              </article>
+            <div className={styles.trustRow}>
+              <span className={styles.trustItem}>✓ No credit card needed</span>
+              <span className={styles.trustItem}>✓ Guest access instant</span>
+              <span className={styles.trustItem}>✓ Local AI — works offline</span>
             </div>
           </div>
 
-          <div className={styles.heroPanel}>
-            <div className={styles.appFrame}>
-              <div className={styles.appFrameHeader}>
-                <span className={styles.windowDot} />
-                <span className={styles.windowDot} />
-                <span className={styles.windowDot} />
-                <span className={styles.windowTitle}>Kivora Workspace</span>
+          {/* Mock app preview */}
+          <div className={styles.heroVisual}>
+            <div className={styles.mockWindow}>
+              <div className={styles.mockWindowBar}>
+                <span className={styles.dot} style={{ background: '#ff5f57' }} />
+                <span className={styles.dot} style={{ background: '#febc2e' }} />
+                <span className={styles.dot} style={{ background: '#28c840' }} />
+                <span className={styles.mockWindowTitle}>Kivora — Workspace</span>
               </div>
-
-              <div className={styles.appFrameBody}>
+              <div className={styles.mockLayout}>
+                {/* Sidebar */}
                 <aside className={styles.mockSidebar}>
-                  <div className={styles.mockSectionLabel}>Main</div>
-                  <div className={`${styles.mockNavItem} ${styles.mockNavItemActive}`}>Workspace</div>
-                  <div className={styles.mockNavItem}>Scholar Hub</div>
-                  <div className={styles.mockNavItem}>Math</div>
-
-                  <div className={styles.mockDivider} />
-
-                  <div className={styles.mockSectionLabel}>Tools</div>
-                  <div className={styles.mockTagRow}>
-                    <span className={styles.mockTag}>Summaries</span>
-                    <span className={styles.mockTag}>Rephrase</span>
-                    <span className={styles.mockTag}>Quiz</span>
-                    <span className={styles.mockTag}>Math</span>
-                    <span className={styles.mockTag}>MATLAB</span>
+                  <div className={styles.mockLogo}>
+                    <span className={styles.mockLogoMark}>K</span>
+                    <span className={styles.mockLogoText}>Kivora</span>
+                  </div>
+                  <div className={styles.mockNavGroup}>
+                    <div className={styles.mockNavLabel}>Core</div>
+                    <div className={`${styles.mockNavItem} ${styles.active}`}>📚 Workspace</div>
+                    <div className={styles.mockNavItem}>∑ Math</div>
+                    <div className={styles.mockNavItem}>🎓 Scholar Hub</div>
+                  </div>
+                  <div className={styles.mockNavGroup}>
+                    <div className={styles.mockNavLabel}>Tools</div>
+                    <div className={styles.mockNavItem}>🗂️ Library</div>
+                    <div className={styles.mockNavItem}>📅 Planner</div>
+                    <div className={styles.mockNavItem}>📊 Analytics</div>
+                  </div>
+                  <div className={styles.mockSidebarFooter}>
+                    <div className={styles.mockAiBadge}>● Local AI active</div>
                   </div>
                 </aside>
 
-                <div className={styles.mockMain}>
-                  <div className={styles.mockCardLarge}>
-                    <div className={styles.mockCardHeader}>
+                {/* Main panel */}
+                <div className={styles.mockContent}>
+                  <div className={styles.mockContentHeader}>
+                    <span className={styles.mockBreadcrumb}>Workspace · Calculus Notes</span>
+                    <span className={styles.mockStatusPill}>🔥 5-day streak</span>
+                  </div>
+
+                  <div className={styles.mockToolbar}>
+                    {['Summarize', 'Quiz', 'Notes', 'Flashcards', 'Math'].map(t => (
+                      <span key={t} className={`${styles.mockToolBtn}${t === 'Notes' ? ` ${styles.mockToolBtnActive}` : ''}`}>{t}</span>
+                    ))}
+                  </div>
+
+                  <div className={styles.mockOutput}>
+                    <div className={styles.mockOutputHeader}>
+                      <span className={styles.mockOutputBadge}>🗒️ Notes</span>
+                      <span className={styles.mockOutputMeta}>Generated · just now</span>
+                    </div>
+                    <div className={styles.mockOutputLine} style={{ width: '92%' }} />
+                    <div className={styles.mockOutputLine} style={{ width: '78%' }} />
+                    <div className={styles.mockOutputLine} style={{ width: '85%' }} />
+                    <div className={styles.mockOutputLine} style={{ width: '60%' }} />
+                    <div className={styles.mockOutputDivider} />
+                    <div className={styles.mockOutputLine} style={{ width: '88%' }} />
+                    <div className={styles.mockOutputLine} style={{ width: '72%' }} />
+                  </div>
+
+                  <div className={styles.mockCards}>
+                    <div className={styles.mockMiniCard}>
+                      <span className={styles.mockMiniCardIcon}>📝</span>
                       <div>
-                        <div className={styles.mockEyebrow}>Today</div>
-                        <strong>Exam prep plan</strong>
+                        <div className={styles.mockMiniCardTitle}>8 MCQs ready</div>
+                        <div className={styles.mockMiniCardSub}>from lecture slides</div>
                       </div>
-                      <span className={styles.mockPill}>Local AI active</span>
                     </div>
-
-                    <div className={styles.mockCalendarGrid}>
-                      <div className={styles.mockCalendarCellStrong}>Security notes summary</div>
-                      <div className={styles.mockCalendarCell}>Math problem set review</div>
-                      <div className={styles.mockCalendarCell}>Generate 10 MCQs</div>
-                      <div className={styles.mockCalendarCell}>Scholar Hub source check</div>
-                    </div>
-
-                    <div className={styles.mockBottomRow}>
-                      <div className={styles.mockCard}>
-                        <div className={styles.mockEyebrow}>Analytics</div>
-                        <strong>Weak area: calculus limits</strong>
-                        <p>Suggested next action: 20-minute review block and quiz retry.</p>
-                      </div>
-                      <div className={styles.mockCard}>
-                        <div className={styles.mockEyebrow}>Math</div>
-                        <strong>Integral sent to graphing</strong>
-                        <p>Solve, visualize, and reuse technical work without leaving the workspace.</p>
+                    <div className={styles.mockMiniCard}>
+                      <span className={styles.mockMiniCardIcon}>🃏</span>
+                      <div>
+                        <div className={styles.mockMiniCardTitle}>24 flashcards</div>
+                        <div className={styles.mockMiniCardSub}>3 due for review</div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Floating badges */}
+            <div className={`${styles.floatBadge} ${styles.floatBadge1}`}>
+              <span>🔬</span> Research saved to Library
+            </div>
+            <div className={`${styles.floatBadge} ${styles.floatBadge2}`}>
+              <span>✅</span> Exam in 3 days · Plan on track
+            </div>
           </div>
         </section>
 
-        <section className={styles.sectionGrid}>
-          <div className={styles.sectionIntro}>
-            <div className={styles.sectionEyebrow}>Quick start</div>
-            <h2>Pick the mode that matches the job you need to do right now.</h2>
-            <p>
-              The product is no longer meant to be explored as a maze of side pages.
-              Choose the pillar that matches the task, then stay in that flow until the work is done.
+        {/* ── Feature strip ─────────────────────────────────────────────── */}
+        <div className={styles.featureStrip}>
+          {[
+            { icon: '🧠', label: 'Local AI models', sub: 'Works offline' },
+            { icon: '📄', label: 'PDF · Word · PPT', sub: 'Any file type' },
+            { icon: '🔬', label: 'Scholar Hub', sub: 'Research & reports' },
+            { icon: '🧮', label: 'Math Solver', sub: 'Step-by-step' },
+            { icon: '🃏', label: 'Spaced Repetition', sub: 'FSRS-4.5 algorithm' },
+            { icon: '📅', label: 'Study Planner', sub: 'Exam countdown' },
+            { icon: '🌍', label: '3 Languages', sub: 'AR · EN · FR' },
+            { icon: '🔒', label: 'Encrypted', sub: 'Client-side vault' },
+          ].map(f => (
+            <div key={f.label} className={styles.featureStripItem}>
+              <span className={styles.featureStripIcon}>{f.icon}</span>
+              <div>
+                <div className={styles.featureStripLabel}>{f.label}</div>
+                <div className={styles.featureStripSub}>{f.sub}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Live AI demo ──────────────────────────────────────────────── */}
+        <section className={styles.demoSection}>
+          <DemoChat />
+        </section>
+
+        {/* ── Three pillars ─────────────────────────────────────────────── */}
+        <section className={styles.pillarsSection}>
+          <div className={styles.sectionHead}>
+            <span className={styles.eyebrow}>Three modes. One product.</span>
+            <h2 className={styles.sectionTitle}>Pick the mode that matches the job.</h2>
+            <p className={styles.sectionBody}>
+              Each pillar is built for a specific kind of work — not just a tab that opens the same thing.
             </p>
           </div>
 
           <div className={styles.pillarGrid}>
             <article className={styles.pillarCard}>
-              <div className={styles.cardEyebrow}>Workspace</div>
-              <h3>Do the work from real material</h3>
-              <p>Use files, notes, chat, saved outputs, and review sets from one stable working area.</p>
+              <div className={styles.pillarIcon}>📚</div>
+              <div className={styles.pillarEyebrow}>Workspace</div>
+              <h3 className={styles.pillarTitle}>Your main study hub</h3>
+              <p className={styles.pillarBody}>
+                Upload files, chat with your material, generate notes, quizzes, flashcards,
+                and summaries — all tied to one stable working area.
+              </p>
+              <div className={styles.pillarTools}>
+                {['Summarize', 'Quiz', 'MCQ', 'Notes', 'Flashcards', 'Assignment'].map(t => (
+                  <span key={t} className={styles.toolTag}>{t}</span>
+                ))}
+              </div>
+              <Link href="/workspace" className={styles.pillarLink}>Open Workspace →</Link>
             </article>
-            <article className={styles.pillarCard}>
-              <div className={styles.cardEyebrow}>Scholar Hub</div>
-              <h3>Understand sources before you write</h3>
-              <p>Analyze a URL, pasted text, or uploaded source file, then build a report path from it.</p>
+
+            <article className={`${styles.pillarCard} ${styles.pillarCardAccent}`}>
+              <div className={styles.pillarIcon}>🎓</div>
+              <div className={styles.pillarEyebrow}>Scholar Hub</div>
+              <h3 className={styles.pillarTitle}>Research before you write</h3>
+              <p className={styles.pillarBody}>
+                Search multiple sources, synthesize key ideas, get grounded citations,
+                then jump straight into writing a report from your findings.
+              </p>
+              <div className={styles.pillarTools}>
+                {['Research', 'Source Brief', 'Report Builder', 'Writer', 'Recovery'].map(t => (
+                  <span key={t} className={styles.toolTag}>{t}</span>
+                ))}
+              </div>
+              <Link href="/coach" className={styles.pillarLink}>Open Scholar Hub →</Link>
             </article>
+
             <article className={styles.pillarCard}>
-              <div className={styles.cardEyebrow}>Math</div>
-              <h3>Keep technical work in one dedicated flow</h3>
-              <p>Solve, graph, use formulas, convert units, and keep technical work separate from the rest of the app.</p>
+              <div className={styles.pillarIcon}>∑</div>
+              <div className={styles.pillarEyebrow}>Math</div>
+              <h3 className={styles.pillarTitle}>Technical work, kept clean</h3>
+              <p className={styles.pillarBody}>
+                Solve step-by-step, graph equations, use formula references, and convert
+                units — all without mixing math into your writing workflow.
+              </p>
+              <div className={styles.pillarTools}>
+                {['Math Solver', 'Graphing', 'MATLAB Lab', 'Formulas', 'Units'].map(t => (
+                  <span key={t} className={styles.toolTag}>{t}</span>
+                ))}
+              </div>
+              <Link href="/math" className={styles.pillarLink}>Open Math →</Link>
             </article>
           </div>
         </section>
 
-        <section className={styles.dualPanel}>
-          <article className={styles.featurePanelStrong}>
-            <div className={styles.sectionEyebrow}>What students can do</div>
-            <h2>Use one product for the real study loop.</h2>
-            <p>
-              Bring in a source, understand it, draft from it, check your own work, then move into review or math only when that is actually the next step.
+        {/* ── How it works ──────────────────────────────────────────────── */}
+        <section className={styles.howSection}>
+          <div className={styles.sectionHead}>
+            <span className={styles.eyebrow}>Flow</span>
+            <h2 className={styles.sectionTitle}>From source to submission.</h2>
+          </div>
+
+          <div className={styles.steps}>
+            {[
+              {
+                n: '01',
+                title: 'Bring in your material',
+                body: 'Upload a PDF, Word doc, or PowerPoint. Paste text or a URL. Kivora keeps it tied to the right tool.',
+                icon: '📂',
+              },
+              {
+                n: '02',
+                title: 'Generate what you need',
+                body: 'Summarize, quiz yourself, build flashcards, solve equations — or research a topic in Scholar Hub.',
+                icon: '⚡',
+              },
+              {
+                n: '03',
+                title: 'Review and keep going',
+                body: 'Spaced repetition schedules your reviews. The Planner tracks your exam. Library saves all outputs.',
+                icon: '🔄',
+              },
+            ].map(step => (
+              <article key={step.n} className={styles.stepCard}>
+                <div className={styles.stepTop}>
+                  <span className={styles.stepNum}>{step.n}</span>
+                  <span className={styles.stepIcon}>{step.icon}</span>
+                </div>
+                <h3 className={styles.stepTitle}>{step.title}</h3>
+                <p className={styles.stepBody}>{step.body}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Dual feature panels ───────────────────────────────────────── */}
+        <section className={styles.dualSection}>
+          <article className={styles.dualCardDark}>
+            <span className={styles.eyebrow}>AI routing</span>
+            <h2 className={styles.dualTitle}>Cloud AI online. Local AI offline.</h2>
+            <p className={styles.dualBody}>
+              Kivora uses Groq (cloud) for fast online generation and Qwen via Ollama for
+              fully offline local AI on desktop. You stay in control of which runs.
             </p>
-            <div className={styles.toolList}>
-              <span className={styles.toolChip}>Summarize</span>
-              <span className={styles.toolChip}>Rephrase</span>
-              <span className={styles.toolChip}>Notes</span>
-              <span className={styles.toolChip}>Quiz</span>
-              <span className={styles.toolChip}>Math Solver</span>
-              <span className={styles.toolChip}>Graphing</span>
-              <span className={styles.toolChip}>MATLAB Lab</span>
-              <span className={styles.toolChip}>Visual Analyzer</span>
+            <div className={styles.aiStack}>
+              <div className={styles.aiRow}>
+                <span className={styles.aiDot} style={{ background: '#22c55e' }} />
+                <span><strong>Online</strong> — Groq · Grok · OpenAI</span>
+              </div>
+              <div className={styles.aiRow}>
+                <span className={styles.aiDot} style={{ background: '#60a5fa' }} />
+                <span><strong>Offline</strong> — Qwen 2.5 via Ollama</span>
+              </div>
+              <div className={styles.aiRow}>
+                <span className={styles.aiDot} style={{ background: '#a78bfa' }} />
+                <span><strong>Desktop</strong> — Bundled Mini model</span>
+              </div>
             </div>
           </article>
 
-          <article className={styles.featurePanel}>
-            <div className={styles.sectionEyebrow}>How it runs</div>
-            <h2>Desktop-first, but still usable on the web.</h2>
-            <p>
-              Kivora is built to work with local open-source models on desktop first,
-              then fall back safely when needed. That keeps the app useful even when
-              cloud access is limited.
+          <article className={styles.dualCard}>
+            <span className={styles.eyebrow}>Privacy</span>
+            <h2 className={styles.dualTitle}>Your data stays yours.</h2>
+            <p className={styles.dualBody}>
+              File blobs live in your browser IndexedDB, never on our servers.
+              Content is encrypted client-side before sync. Blind indexes keep search fast without exposing data.
             </p>
-            <ul className={styles.bulletList}>
-              <li>Bundled Mini model for offline-first desktop use</li>
-              <li>Optional stronger models for more capable generation</li>
-              <li>Arabic and English study workflows supported</li>
+            <ul className={styles.checkList}>
+              <li>Client-side encryption vault</li>
+              <li>Files stored in browser — not uploaded</li>
+              <li>Blind indexes for encrypted search</li>
+              <li>Analytics and crash reports are opt-in</li>
             </ul>
           </article>
         </section>
 
-        <section className={styles.workflowSection}>
-          <div className={styles.sectionIntroCompact}>
-            <div className={styles.sectionEyebrow}>Flow</div>
-            <h2>A cleaner start-to-finish path.</h2>
+        {/* ── Tools grid ────────────────────────────────────────────────── */}
+        <section className={styles.toolsSection}>
+          <div className={styles.sectionHead}>
+            <span className={styles.eyebrow}>Everything included</span>
+            <h2 className={styles.sectionTitle}>Every tool you actually need.</h2>
           </div>
 
-          <div className={styles.workflowSteps}>
-            <article className={styles.workflowStep}>
-              <span className={styles.stepIndex}>01</span>
-              <h3>Bring in material</h3>
-              <p>Start from files, copied text, or a public source and keep the material tied to the right mode.</p>
-            </article>
-            <article className={styles.workflowStep}>
-              <span className={styles.stepIndex}>02</span>
-              <h3>Work in the right pillar</h3>
-              <p>Use Scholar Hub for sources, Workspace for outputs and review, and Math only when the problem becomes technical.</p>
-            </article>
-            <article className={styles.workflowStep}>
-              <span className={styles.stepIndex}>03</span>
-              <h3>Review and submit</h3>
-              <p>Check the writing, build review material in Workspace, and keep the final report or study set connected to the source.</p>
-            </article>
+          <div className={styles.toolsGrid}>
+            {[
+              { icon: '📝', name: 'Summarize',       desc: 'Distill any file into key points' },
+              { icon: '❓', name: 'MCQ Quiz',         desc: 'Generate multiple choice questions' },
+              { icon: '🗒️', name: 'Smart Notes',      desc: 'Structured notes from your material' },
+              { icon: '🃏', name: 'Flashcard SRS',    desc: 'FSRS-4.5 spaced repetition' },
+              { icon: '🧮', name: 'Math Solver',      desc: 'Step-by-step with LaTeX output' },
+              { icon: '📈', name: 'Graphing Calc',    desc: 'Plot equations interactively' },
+              { icon: '🔬', name: 'Scholar Research', desc: 'Multi-source synthesis + citations' },
+              { icon: '✍️', name: 'Writing Studio',   desc: 'AI-assisted report writing' },
+              { icon: '🖥️', name: 'MATLAB Lab',       desc: 'Scientific computing in-browser' },
+              { icon: '📅', name: 'Study Planner',    desc: 'Exam countdown + daily schedule' },
+              { icon: '📊', name: 'Analytics',        desc: 'Track weak areas and streaks' },
+              { icon: '🔗', name: 'Sharing',          desc: 'Share files and library items' },
+            ].map(tool => (
+              <div key={tool.name} className={styles.toolCard}>
+                <span className={styles.toolCardIcon}>{tool.icon}</span>
+                <strong className={styles.toolCardName}>{tool.name}</strong>
+                <span className={styles.toolCardDesc}>{tool.desc}</span>
+              </div>
+            ))}
           </div>
         </section>
 
-        <section className={styles.finalCta}>
-          <div>
-            <div className={styles.sectionEyebrow}>Start</div>
-            <h2>Open the pillar you need and get moving.</h2>
-            <p>
-              Use guest mode immediately, or sign in if you want synced settings, saved profiles, and connected providers.
+        {/* ── Final CTA ─────────────────────────────────────────────────── */}
+        <section className={styles.ctaSection}>
+          <div className={styles.ctaGlow} aria-hidden="true" />
+          <div className={styles.ctaContent}>
+            <span className={styles.eyebrow}>Start now</span>
+            <h2 className={styles.ctaTitle}>Ready to study smarter?</h2>
+            <p className={styles.ctaBody}>
+              Create a free account to sync your work across devices, or jump straight into
+              Workspace as a guest — no sign-up needed.
             </p>
-          </div>
-
-          <div className={styles.finalActions}>
-            <Link href="/workspace" className={styles.primaryActionLarge}>
-              Continue as Guest
-            </Link>
-            <Link href="/settings#ai-models" className={styles.secondaryActionLarge}>
-              Download Kivora
-            </Link>
+            <div className={styles.ctaActions}>
+              <Link href="/register" className={styles.ctaPrimary}>
+                Create Free Account
+                <span className={styles.ctaArrow}>→</span>
+              </Link>
+              <Link href="/workspace" className={styles.ctaGhost}>
+                Continue as Guest
+              </Link>
+              <Link href="/settings#ai-models" className={styles.ctaGhost}>
+                Download Desktop App
+              </Link>
+            </div>
           </div>
         </section>
+
       </main>
+
+      {/* ── Footer ────────────────────────────────────────────────────── */}
+      <footer className={styles.footer}>
+        <div className={styles.footerInner}>
+          <Link href="/" className={styles.footerBrand}>
+            <span className={styles.brandMark} style={{ width: '1.8rem', height: '1.8rem', fontSize: '0.8rem' }}>K</span>
+            <span className={styles.brandText} style={{ fontSize: '0.95rem' }}>Kivora</span>
+          </Link>
+          <div className={styles.footerLinks}>
+            <Link href="/workspace"     className={styles.footerLink}>Workspace</Link>
+            <Link href="/coach"         className={styles.footerLink}>Scholar Hub</Link>
+            <Link href="/math"          className={styles.footerLink}>Math</Link>
+            <Link href="/planner"       className={styles.footerLink}>Planner</Link>
+            <Link href="/library"       className={styles.footerLink}>Library</Link>
+            <Link href="/settings"      className={styles.footerLink}>Settings</Link>
+            <Link href="/login"         className={styles.footerLink}>Sign In</Link>
+            <Link href="/register"      className={styles.footerLink}>Register</Link>
+          </div>
+          <span className={styles.footerCopy}>© {new Date().getFullYear()} Kivora</span>
+        </div>
+      </footer>
     </div>
   );
 }

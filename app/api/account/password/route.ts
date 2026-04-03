@@ -7,6 +7,11 @@ import { getUserId, isDemoGuestEmail } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
 import { syncSupabaseAuthUser } from '@/lib/supabase/auth-admin';
 import { checkPasswordLimit } from '@/lib/api/auth-rate-limit';
+import {
+  findLocalAuthUserById,
+  isLocalAuthUserId,
+  updateLocalAuthUser,
+} from '@/lib/auth/local-auth-store';
 
 // PUT change password
 export async function PUT(request: NextRequest) {
@@ -33,6 +38,42 @@ export async function PUT(request: NextRequest) {
         errorCode: 'INVALID_PASSWORD',
         reason: 'New password must be at least 8 characters',
         requestId,
+      });
+    }
+
+    if (isLocalAuthUserId(userId)) {
+      const localUser = await findLocalAuthUserById(userId);
+      if (!localUser) {
+        return apiError(404, {
+          errorCode: 'ACCOUNT_NOT_FOUND',
+          reason: 'Local account not found on this device',
+          requestId,
+        });
+      }
+
+      if (!currentPassword) {
+        return apiError(400, {
+          errorCode: 'CURRENT_PASSWORD_REQUIRED',
+          reason: 'Current password is required',
+          requestId,
+        });
+      }
+
+      const isValid = await bcrypt.compare(currentPassword, localUser.passwordHash);
+      if (!isValid) {
+        return apiError(400, {
+          errorCode: 'INVALID_CURRENT_PASSWORD',
+          reason: 'Current password is incorrect',
+          requestId,
+        });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await updateLocalAuthUser(userId, { passwordHash: hashedPassword });
+      return NextResponse.json({
+        success: true,
+        message: 'Password updated for this device',
+        localOnly: true,
       });
     }
 

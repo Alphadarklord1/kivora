@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Modal, Button } from '@/components/ui/Modal';
 import { Input, Select } from '@/components/ui/Input';
 import { useToastHelpers } from '@/components/ui/Toast';
-import { useSettings } from '@/providers/SettingsProvider';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface ShareDialogProps {
   isOpen: boolean;
@@ -29,54 +29,7 @@ export function ShareDialog({
   resourceId,
   resourceName,
 }: ShareDialogProps) {
-  const { settings } = useSettings();
-  const isArabic = settings.language === 'ar';
-  const t = (key: string) => {
-    const ar: Record<string, string> = {
-      'Share file': 'مشاركة الملف',
-      'Share folder': 'مشاركة المجلد',
-      'Share topic': 'مشاركة المجلد الفرعي',
-      'Share library': 'مشاركة عنصر المكتبة',
-      'Email required': 'البريد الإلكتروني مطلوب',
-      'Please enter the email address to share with': 'يرجى إدخال البريد الإلكتروني للمشاركة معه',
-      'Failed to create share': 'تعذر إنشاء المشاركة',
-      'Share link created': 'تم إنشاء رابط المشاركة',
-      'Shared successfully': 'تمت المشاركة بنجاح',
-      'Failed to share': 'تعذر إتمام المشاركة',
-      'Link copied to clipboard': 'تم نسخ الرابط',
-      'Copy Link': 'نسخ الرابط',
-      'Only invited users can open this link.': 'يمكن للمستخدمين المدعوين فقط فتح هذا الرابط.',
-      'Anyone with this link can view this file.': 'يمكن لأي شخص يملك هذا الرابط عرض هذا الملف.',
-      'Anyone with this link can edit this file.': 'يمكن لأي شخص يملك هذا الرابط تعديل هذا الملف.',
-      'Anyone with this link can view this folder.': 'يمكن لأي شخص يملك هذا الرابط عرض هذا المجلد.',
-      'Anyone with this link can edit this folder.': 'يمكن لأي شخص يملك هذا الرابط تعديل هذا المجلد.',
-      'Anyone with this link can view this topic.': 'يمكن لأي شخص يملك هذا الرابط عرض هذا المجلد الفرعي.',
-      'Anyone with this link can edit this topic.': 'يمكن لأي شخص يملك هذا الرابط تعديل هذا المجلد الفرعي.',
-      'Anyone with this link can view this library.': 'يمكن لأي شخص يملك هذا الرابط عرض عنصر المكتبة.',
-      'Anyone with this link can edit this library.': 'يمكن لأي شخص يملك هذا الرابط تعديل عنصر المكتبة.',
-      'Link expires in {days} days.': 'تنتهي صلاحية الرابط خلال {days} أيام.',
-      'Create Another': 'إنشاء أخرى',
-      Done: 'تم',
-      'Share Link': 'رابط مشاركة',
-      'Share with User': 'مشاركة مع مستخدم',
-      'Email address': 'البريد الإلكتروني',
-      'Enter email to share with...': 'أدخل البريد الإلكتروني للمشاركة معه...',
-      Permission: 'الصلاحية',
-      'Can view': 'عرض فقط',
-      'Can edit': 'يمكن التعديل',
-      'Link expiration': 'انتهاء الرابط',
-      'Never expires': 'لا تنتهي الصلاحية',
-      '1 day': 'يوم واحد',
-      '7 days': '7 أيام',
-      '30 days': '30 يومًا',
-      '90 days': '90 يومًا',
-      Cancel: 'إلغاء',
-      'Creating...': 'جارٍ الإنشاء...',
-      'Create Link': 'إنشاء الرابط',
-      Share: 'مشاركة',
-    };
-    return isArabic ? (ar[key] || key) : key;
-  };
+  const { t } = useI18n();
   const toast = useToastHelpers();
   const [shareType, setShareType] = useState<ShareType>('link');
   const [permission, setPermission] = useState<Permission>('view');

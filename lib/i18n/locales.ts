@@ -1,4 +1,4 @@
-export const SUPPORTED_LOCALES = ['en', 'ar', 'fr', 'es', 'de', 'zh'] as const;
+export const SUPPORTED_LOCALES = ['en', 'ar', 'fr'] as const;
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
@@ -6,13 +6,11 @@ export const LOCALE_OPTIONS: Array<{
   id: SupportedLocale;
   label: string;
   hint: string;
+  rtl: boolean;
 }> = [
-  { id: 'en', label: 'English', hint: 'Default interface language' },
-  { id: 'ar', label: 'العربية', hint: 'Arabic with RTL layout' },
-  { id: 'fr', label: 'Français', hint: 'French interface labels' },
-  { id: 'es', label: 'Español', hint: 'Spanish interface labels' },
-  { id: 'de', label: 'Deutsch', hint: 'German interface labels' },
-  { id: 'zh', label: '中文', hint: 'Chinese interface labels' },
+  { id: 'en', label: 'English',  hint: 'Default interface language',  rtl: false },
+  { id: 'ar', label: 'العربية',  hint: 'Arabic — right-to-left layout', rtl: true  },
+  { id: 'fr', label: 'Français', hint: 'French interface labels',      rtl: false },
 ];
 
 export function sanitizeSupportedLocale(value: unknown): SupportedLocale {

@@ -3,6 +3,7 @@ import { cloudAccessAllowed, type AiDataMode } from '@/lib/privacy/ai-data';
 import {
   buildStaticSuggestions,
   fetchWikiSummary,
+  searchOpenAlex,
   searchSemanticScholar,
   searchWikipedia,
   type ArticleSuggestion,
@@ -191,7 +192,25 @@ async function fetchAutomaticSources(
   topic: string,
   options: { includeWeb: boolean; ranking: ResearchRanking },
 ): Promise<ResearchSource[]> {
-  const academic = await searchSemanticScholar(topic, options.ranking === 'academic-first' ? 4 : 2).catch(() => []);
+  const wantAcademic = options.ranking === 'academic-first' ? 4 : 2;
+
+  // Run Semantic Scholar and OpenAlex in parallel — if S2 rate-limits, OpenAlex fills in
+  const [s2Results, openAlexResults] = await Promise.all([
+    searchSemanticScholar(topic, wantAcademic).catch((): ArticleSuggestion[] => []),
+    searchOpenAlex(topic, wantAcademic).catch((): ArticleSuggestion[] => []),
+  ]);
+
+  // Merge academic results: prefer S2 when both return results, use OpenAlex to fill gaps
+  const seenTitles = new Set<string>();
+  const academic: ArticleSuggestion[] = [];
+  for (const item of [...s2Results, ...openAlexResults]) {
+    const key = item.title.slice(0, 60).toLowerCase();
+    if (!seenTitles.has(key) && academic.length < wantAcademic) {
+      seenTitles.add(key);
+      academic.push(item);
+    }
+  }
+
   const wikiTitles = options.includeWeb || academic.length === 0
     ? await searchWikipedia(topic, options.ranking === 'broad-web' ? 5 : 3).catch(() => [])
     : [];
@@ -214,7 +233,7 @@ async function fetchAutomaticSources(
       origin: 'automatic' as const,
       keyPoints: [item.excerpt],
       confidenceLabel: 'High' as const,
-      confidenceScore: 90,
+      confidenceScore: item.source === 'Semantic Scholar' ? 90 : 87,
       citationLabel: '',
     })),
     ...encyclopedia.map((item) => ({
@@ -307,11 +326,13 @@ export async function researchTopic(args: {
   }
 
   if (!cloudAccessAllowed(args.privacyMode)) {
-    throw new Error('Topic research needs internet. Use Source Brief with pasted text or uploaded files when you want to stay fully local.');
+    throw new Error('Topic research needs internet. Use the Writing Studio with uploaded files for fully local work.');
   }
 
   const manualSources = args.manualUrls.length
-    ? await Promise.all(args.manualUrls.map((url) => fetchManualSource(url)))
+    ? (await Promise.allSettled(args.manualUrls.map((url) => fetchManualSource(url))))
+        .filter((r): r is PromiseFulfilledResult<ResearchSource> => r.status === 'fulfilled')
+        .map((r) => r.value)
     : [];
   const automaticSources = args.mode === 'manual'
     ? []

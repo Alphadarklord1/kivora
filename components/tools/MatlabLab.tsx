@@ -39,27 +39,27 @@ type MatlabHistoryItem = {
   timestamp: string;
 };
 
-const DEMO_SCRIPT = 'A = [1 0 2 1; 2 1 3 0; 0 1 1 2]\nB = [1 2; 0 1; 3 0; 2 1]\nC = A * B\nC';
+const DEMO_SCRIPT = '% Matrix operations demo\nA = [2 1 0; 1 3 1; 0 1 2];\ndet(A)\ninv(A)\neig(A)\nrref([A eye(3)])\nlu(A)\n\n% Solve Ax = b\nb = [1; 2; 3];\nx = A\\b\nA * x';
 const CHIP_GROUPS = [
   {
     label: 'Matrices',
-    chips: ['A = [1 2; 3 4]', 'B = [5 6; 7 8]', 'A + B', 'A * B', 'transpose(A)', '3 * A'],
+    chips: ['A = [1 2; 3 4]', 'B = [5 6; 7 8]', 'A + B', 'A * B', 'A .* B', 'A / 2', "A'"],
   },
   {
     label: 'Linear Algebra',
-    chips: ['det(A)', 'inv(A)', 'eig(A)', 'eye(3)', 'zeros(3)', 'ones(2,3)'],
+    chips: ['det(A)', 'inv(A)', 'eig(A)', 'rref(A)', 'lu(A)', 'qr(A)', 'rank(A)', 'trace(A)'],
   },
   {
-    label: 'Rectangular',
-    chips: ['X = [1 0 2 1; 2 1 3 0; 0 1 1 2]', 'Y = [1 2; 0 1; 3 0; 2 1]', 'X * Y'],
+    label: 'Build & Index',
+    chips: ['eye(3)', 'zeros(3)', 'ones(2,3)', '1:5', '0:0.5:2', 'linspace(0,1,5)', 'A(1,2)', 'A(1,:)'],
   },
   {
     label: 'Vectors',
-    chips: ['u = [3 4]', 'v = [1 2]', 'dot(u,v)', 'cross([1 0 0],[0 1 0])'],
+    chips: ['v = [3 1 4 1 5]', 'sort(v)', 'cumsum(v)', 'diff(v)', 'dot(u,v)', 'cross([1 0 0],[0 1 0])'],
   },
   {
-    label: 'Utilities',
-    chips: ['sum(A)', 'mean(A)', 'size(A)', 'linspace(0,1,5)', 'plot(sin(x))'],
+    label: 'Solve & Stats',
+    chips: ['solve(A,b)', 'A\\b', 'sum(A)', 'mean(A)', 'max(A)', 'min(A)', 'prod(v)', 'norm(A)'],
   },
 ] as const;
 
@@ -348,6 +348,121 @@ function scalarFirstMatrixOp(scalar: number, matrix: Matrix, op: '+' | '-'): Mat
   return matrix.map(row => row.map(v => (op === '+' ? scalar + v : scalar - v)));
 }
 
+// ── New: rref ─────────────────────────────────────────────────────────────────
+function rref(matrix: Matrix): Matrix {
+  const m = matrix.map(row => [...row]);
+  const rows = m.length;
+  const cols = m[0]?.length ?? 0;
+  const eps = 1e-10;
+  let pivot = 0;
+  for (let col = 0; col < cols && pivot < rows; col++) {
+    let maxR = pivot;
+    for (let r = pivot + 1; r < rows; r++) {
+      if (Math.abs(m[r][col]) > Math.abs(m[maxR][col])) maxR = r;
+    }
+    if (Math.abs(m[maxR][col]) < eps) continue;
+    [m[pivot], m[maxR]] = [m[maxR], m[pivot]];
+    const scale = m[pivot][col];
+    for (let c = 0; c < cols; c++) m[pivot][c] /= scale;
+    for (let r = 0; r < rows; r++) {
+      if (r === pivot) continue;
+      const f = m[r][col];
+      for (let c = 0; c < cols; c++) m[r][c] -= f * m[pivot][c];
+    }
+    pivot++;
+  }
+  return m;
+}
+
+// ── New: QR decomposition (Gram-Schmidt) ──────────────────────────────────────
+function qrDecomp(A: Matrix): { Q: Matrix; R: Matrix } | null {
+  const m = A.length;
+  const n = A[0]?.length ?? 0;
+  if (!m || !n) return null;
+  const qCols: number[][] = [];
+  const R: number[][] = Array.from({ length: n }, () => Array(n).fill(0));
+  for (let j = 0; j < n; j++) {
+    let v = A.map(row => row[j]);
+    for (let i = 0; i < j; i++) {
+      const dot = v.reduce((s, x, k) => s + x * qCols[i][k], 0);
+      R[i][j] = dot;
+      v = v.map((x, k) => x - dot * qCols[i][k]);
+    }
+    const norm = Math.sqrt(v.reduce((s, x) => s + x * x, 0));
+    R[j][j] = norm;
+    qCols.push(norm < 1e-10 ? Array(m).fill(0) : v.map(x => x / norm));
+  }
+  const Q: Matrix = Array.from({ length: m }, (_, i) => qCols.map(col => col[i]));
+  return { Q, R };
+}
+
+// ── New: eig for nxn via QR iteration ────────────────────────────────────────
+function eigNxN(matrix: Matrix): number[] | null {
+  const n = matrix.length;
+  if (n !== matrix[0]?.length) return null;
+  if (n === 1) return [matrix[0][0]];
+  if (n === 2) { const r = eigen2x2(matrix); return r ? [r.lambda1, r.lambda2] : null; }
+  let A = matrix.map(row => [...row]);
+  for (let iter = 0; iter < 150 * n; iter++) {
+    const qr = qrDecomp(A);
+    if (!qr) break;
+    const rq = multiplyMatrices(qr.R, qr.Q);
+    if (!rq) break;
+    A = rq;
+  }
+  return A.map((row, i) => parseFloat(row[i].toFixed(8)));
+}
+
+// ── New: LU decomposition with partial pivoting ───────────────────────────────
+function luDecomp(matrix: Matrix): { L: Matrix; U: Matrix; P: Matrix } | null {
+  const n = matrix.length;
+  if (n !== matrix[0]?.length) return null;
+  const L = identityMatrix(n);
+  const U = matrix.map(row => [...row]);
+  const P = identityMatrix(n);
+  for (let col = 0; col < n; col++) {
+    let maxR = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(U[r][col]) > Math.abs(U[maxR][col])) maxR = r;
+    }
+    if (maxR !== col) {
+      [U[col], U[maxR]] = [U[maxR], U[col]];
+      [P[col], P[maxR]] = [P[maxR], P[col]];
+      for (let c = 0; c < col; c++) { const t = L[col][c]; L[col][c] = L[maxR][c]; L[maxR][c] = t; }
+    }
+    if (Math.abs(U[col][col]) < 1e-10) continue;
+    for (let r = col + 1; r < n; r++) {
+      L[r][col] = U[r][col] / U[col][col];
+      for (let c = col; c < n; c++) U[r][c] -= L[r][col] * U[col][c];
+    }
+  }
+  return { L, U, P };
+}
+
+// ── New: element-wise ops ─────────────────────────────────────────────────────
+function elemWiseMul(a: Matrix, b: Matrix): Matrix | null {
+  if (a.length !== b.length || (a[0]?.length ?? 0) !== (b[0]?.length ?? 0)) return null;
+  return a.map((row, i) => row.map((v, j) => v * b[i][j]));
+}
+function elemWiseDiv(a: Matrix, b: Matrix): Matrix | null {
+  if (a.length !== b.length || (a[0]?.length ?? 0) !== (b[0]?.length ?? 0)) return null;
+  return a.map((row, i) => row.map((v, j) => b[i][j] === 0 ? Infinity : v / b[i][j]));
+}
+function elemWisePow(a: Matrix, exp: number): Matrix {
+  return a.map(row => row.map(v => Math.pow(v, exp)));
+}
+
+// ── New: colon range ─────────────────────────────────────────────────────────
+function colonRange(start: number, step: number, stop: number): Matrix {
+  if (step === 0) return [[]];
+  const arr: number[] = [];
+  for (let v = start; step > 0 ? v <= stop + 1e-9 : v >= stop - 1e-9; v += step) {
+    arr.push(parseFloat(v.toFixed(10)));
+    if (arr.length > 10_000) break;
+  }
+  return [arr];
+}
+
 function explainMatrixFailure(expr: string, vars: Record<string, MatlabValue>): string | null {
   const trimmed = expr.trim();
 
@@ -428,6 +543,57 @@ function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValu
   const numberLiteral = Number(trimmed);
   if (!Number.isNaN(numberLiteral) && Number.isFinite(numberLiteral)) return numberLiteral;
 
+  // Built-in constants
+  if (trimmed === 'pi' || trimmed === 'PI') return Math.PI;
+  if (trimmed === 'e' && vars['e'] === undefined) return Math.E;
+  if (trimmed === 'inf' || trimmed === 'Inf' || trimmed === 'Infinity') return Infinity;
+  if (trimmed === 'nan' || trimmed === 'NaN') return NaN;
+  if (trimmed === 'true') return 1;
+  if (trimmed === 'false') return 0;
+
+  // Colon range: start:stop  or  start:step:stop
+  const colonParts = trimmed.split(':');
+  if (colonParts.length === 2 || colonParts.length === 3) {
+    const nums = colonParts.map(p => {
+      const v = vars[p.trim()];
+      if (v !== undefined && !isMatrix(v)) return v;
+      return Number(p.trim());
+    });
+    if (nums.every(n => !Number.isNaN(n) && Number.isFinite(n))) {
+      if (colonParts.length === 2) return colonRange(nums[0], 1, nums[1]);
+      return colonRange(nums[0], nums[1], nums[2]);
+    }
+  }
+
+  // Element indexing: varName(i,j) or varName(i) or varName(i,:) or varName(:,j)
+  const indexMatch = trimmed.match(/^([A-Za-z]\w*)\(([^)]+)\)$/);
+  if (indexMatch && !['zeros','ones','eye','linspace','mod','atan2','power','pow','cross','dot','diag','rref','eig','lu','qr','det','inv','trace','rank','norm','transpose','solve','sqrt','sin','cos','tan','asin','acos','atan','log','ln','log2','log10','exp','abs','floor','ceil','round','sign','sum','mean','max','min','size','length','numel','cumsum','prod','diff','sort','find','any','all','repmat','reshape'].includes(indexMatch[1].toLowerCase())) {
+    const varVal = vars[indexMatch[1]];
+    if (varVal && isMatrix(varVal)) {
+      const idxParts = splitArguments(indexMatch[2]).map(p => p.trim());
+      const ri = idxParts[0] === ':' ? null : Number(idxParts[0]) - 1;
+      const ci = idxParts.length > 1 ? (idxParts[1] === ':' ? null : Number(idxParts[1]) - 1) : null;
+      if (idxParts.length === 1 && ri !== null && !Number.isNaN(ri)) {
+        // Single index — treat matrix as column-major vector
+        const flat = varVal.flat();
+        return flat[ri] ?? null;
+      }
+      if (idxParts.length === 2) {
+        if (ri !== null && ci !== null && !Number.isNaN(ri) && !Number.isNaN(ci)) {
+          return varVal[ri]?.[ci] ?? null;
+        }
+        if (ri === null && ci !== null && !Number.isNaN(ci)) {
+          // (:, j) → column vector
+          return varVal.map(row => [row[ci]]);
+        }
+        if (ri !== null && !Number.isNaN(ri) && ci === null) {
+          // (i, :) → row vector
+          return [varVal[ri] ?? []];
+        }
+      }
+    }
+  }
+
   // transpose: A'
   if (/^[A-Za-z]\w*'$/.test(trimmed)) {
     const varName = trimmed.slice(0, -1);
@@ -479,11 +645,52 @@ function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValu
     if (fn === 'norm' && isMatrix(arg)) return matrixNormFro(arg);
     if (fn === 'inv' && isMatrix(arg)) return inverseMatrix(arg);
     if (fn === 'transpose' && isMatrix(arg)) return transposeMatrix(arg);
+    if (fn === 'rref' && isMatrix(arg)) return rref(arg);
     if (fn === 'eig' && isMatrix(arg)) {
-      const eig = eigen2x2(arg);
-      if (!eig) return null;
-      return [[eig.lambda1], [eig.lambda2]];
+      const vals = eigNxN(arg);
+      if (!vals) return null;
+      return vals.map(v => [v]);
     }
+    if (fn === 'lu' && isMatrix(arg)) {
+      const res = luDecomp(arg);
+      if (!res) return null;
+      // Return U; L and P printed in the output handler
+      return res.U;
+    }
+    if (fn === 'qr' && isMatrix(arg)) {
+      const res = qrDecomp(arg);
+      if (!res) return null;
+      return res.R; // Return R; Q printed in output handler
+    }
+    if (fn === 'cumsum' && isMatrix(arg)) {
+      const flat = arg.flat();
+      let acc = 0;
+      return [flat.map(v => { acc += v; return acc; })];
+    }
+    if (fn === 'prod' && isMatrix(arg)) {
+      return arg.flat().reduce((p, v) => p * v, 1);
+    }
+    if (fn === 'diff' && isMatrix(arg)) {
+      const flat = arg.flat();
+      if (flat.length < 2) return [[]];
+      return [flat.slice(1).map((v, i) => v - flat[i])];
+    }
+    if (fn === 'sort' && isMatrix(arg)) {
+      const flat = [...arg.flat()].sort((a, b) => a - b);
+      return [flat];
+    }
+    if (fn === 'find' && isMatrix(arg)) {
+      const indices: number[] = [];
+      arg.flat().forEach((v, i) => { if (v !== 0) indices.push(i + 1); });
+      return indices.length ? [indices] : [[]];
+    }
+    if (fn === 'any' && isMatrix(arg)) return arg.flat().some(v => v !== 0) ? 1 : 0;
+    if (fn === 'all' && isMatrix(arg)) return arg.flat().every(v => v !== 0) ? 1 : 0;
+    if (fn === 'fliplr' && isMatrix(arg)) return arg.map(row => [...row].reverse());
+    if (fn === 'flipud' && isMatrix(arg)) return [...arg].reverse();
+    if (fn === 'triu' && isMatrix(arg)) return arg.map((row, i) => row.map((v, j) => j >= i ? v : 0));
+    if (fn === 'tril' && isMatrix(arg)) return arg.map((row, i) => row.map((v, j) => j <= i ? v : 0));
+    if (fn === 'diag' && !isMatrix(arg)) return [[arg]]; // scalar → 1×1 matrix
     // Scalar math functions
     if (!isMatrix(arg)) {
       if (fn === 'sqrt') return Math.sqrt(arg);
@@ -600,28 +807,102 @@ function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValu
       const v2 = vars[argRaw2] ?? evaluateCommandExpression(argRaw2, vars);
       if (isMatrix(v2)) {
         if (v2.length === 1) {
-          // row vector → diagonal matrix
           const n2 = v2[0].length;
           return Array.from({ length: n2 }, (_, i) => Array.from({ length: n2 }, (_, j) => i === j ? v2[0][i] : 0));
         }
-        // matrix → extract main diagonal as column vector
         const diag2 = Math.min(v2.length, v2[0]?.length ?? 0);
         return Array.from({ length: diag2 }, (_, i) => [v2[i][i]]);
       }
     }
+    // reshape(A, r, c)
+    if (fn2 === 'reshape') {
+      const rawParts = splitArguments(argRaw2);
+      const mVal = vars[rawParts[0]?.trim() ?? ''] ?? evaluateCommandExpression(rawParts[0]?.trim() ?? '', vars);
+      const rVal = parts[1]; const cVal = parts[2];
+      if (mVal && isMatrix(mVal) && rVal !== null && cVal !== null) {
+        const flat = mVal.flat();
+        if (flat.length !== rVal * cVal) return null;
+        const out: Matrix = [];
+        for (let i = 0; i < rVal; i++) out.push(flat.slice(i * cVal, (i + 1) * cVal));
+        return out;
+      }
+    }
+    // repmat(A, r, c)
+    if (fn2 === 'repmat') {
+      const rawParts = splitArguments(argRaw2);
+      const mVal = vars[rawParts[0]?.trim() ?? ''] ?? evaluateCommandExpression(rawParts[0]?.trim() ?? '', vars);
+      const rVal = parts[1]; const cVal = parts[2] ?? parts[1];
+      if (mVal && isMatrix(mVal) && rVal !== null && cVal !== null) {
+        const rowTile: Matrix = mVal.map(row => Array.from({ length: cVal }, () => row).flat());
+        return Array.from({ length: rVal }, () => rowTile).flat();
+      }
+    }
+    // horzcat(A, B) or vertcat(A, B)
+    if (fn2 === 'horzcat' || fn2 === 'vertcat') {
+      const rawParts = splitArguments(argRaw2);
+      const mats = rawParts.map(p => { const v = vars[p.trim()] ?? evaluateCommandExpression(p.trim(), vars); return v && isMatrix(v) ? v : null; });
+      if (mats.every(Boolean)) {
+        if (fn2 === 'horzcat') {
+          const rows = mats[0]!.length;
+          if (mats.every(m => m!.length === rows)) return mats[0]!.map((row, i) => mats.flatMap(m => m![i]));
+        } else {
+          const cols = mats[0]![0]?.length ?? 0;
+          if (mats.every(m => (m![0]?.length ?? 0) === cols)) return mats.flat() as Matrix;
+        }
+      }
+    }
   }
 
-  const binary = trimmed.match(/^(.+)\s*([+\-*])\s*(.+)$/);
+  // Backslash left division: A\b  (solve Ax = b)
+  const backslashMatch = trimmed.match(/^(.+?)\\(.+)$/);
+  if (backslashMatch) {
+    const lv = evaluateCommandExpression(backslashMatch[1].trim(), vars);
+    const rv = evaluateCommandExpression(backslashMatch[2].trim(), vars);
+    if (lv && isMatrix(lv) && rv) {
+      const bVec = isMatrix(rv)
+        ? rv.length === 1 ? [...rv[0]] : rv[0]?.length === 1 ? rv.map(r => r[0]) : null
+        : [rv];
+      if (bVec) {
+        const sol = solveLinearSystem(lv, bVec);
+        return sol ? sol.map(v => [v]) : null;
+      }
+    }
+  }
+
+  // Element-wise ops: A .* B, A ./ B, A .^ n
+  const elemPowMatch = trimmed.match(/^(.+?)\s*\.\^s*(.+)$/);
+  if (elemPowMatch) {
+    const lv = evaluateCommandExpression(elemPowMatch[1].trim(), vars);
+    const rv = evaluateCommandExpression(elemPowMatch[2].trim(), vars);
+    if (lv && isMatrix(lv) && rv !== null && !isMatrix(rv)) return elemWisePow(lv, rv);
+    if (lv && isMatrix(lv) && rv && isMatrix(rv)) return lv.map((row, i) => row.map((v, j) => Math.pow(v, rv[i][j])));
+  }
+  const elemMulMatch = trimmed.match(/^(.+?)\s*\.\*\s*(.+)$/);
+  if (elemMulMatch) {
+    const lv = evaluateCommandExpression(elemMulMatch[1].trim(), vars);
+    const rv = evaluateCommandExpression(elemMulMatch[2].trim(), vars);
+    if (lv && rv && isMatrix(lv) && isMatrix(rv)) return elemWiseMul(lv, rv);
+    if (lv && rv && !isMatrix(lv) && !isMatrix(rv)) return lv * rv;
+  }
+  const elemDivMatch = trimmed.match(/^(.+?)\s*\.\s*\/\s*(.+)$/);
+  if (elemDivMatch) {
+    const lv = evaluateCommandExpression(elemDivMatch[1].trim(), vars);
+    const rv = evaluateCommandExpression(elemDivMatch[2].trim(), vars);
+    if (lv && rv && isMatrix(lv) && isMatrix(rv)) return elemWiseDiv(lv, rv);
+  }
+
+  const binary = trimmed.match(/^(.+)\s*([+\-*/])\s*(.+)$/);
   if (binary) {
     const left = evaluateCommandExpression(binary[1], vars);
     const right = evaluateCommandExpression(binary[3], vars);
-    const op = binary[2] as '+' | '-' | '*';
+    const op = binary[2] as '+' | '-' | '*' | '/';
     if (left == null || right == null) return null;
 
     if (!isMatrix(left) && !isMatrix(right)) {
       if (op === '+') return left + right;
       if (op === '-') return left - right;
-      return left * right;
+      if (op === '*') return left * right;
+      if (op === '/') return right === 0 ? NaN : left / right;
     }
     if (isMatrix(left) && isMatrix(right)) {
       if (op === '+') return addMatrices(left, right);
@@ -629,7 +910,10 @@ function evaluateCommandExpression(expr: string, vars: Record<string, MatlabValu
       return multiplyMatrices(left, right);
     }
     if (isMatrix(left) && !isMatrix(right)) {
-      if (op === '*' || op === '+' || op === '-') return scalarMatrixOp(left, right, op);
+      if (op === '*') return scalarMatrixOp(left, right, '*');
+      if (op === '+') return scalarMatrixOp(left, right, '+');
+      if (op === '-') return scalarMatrixOp(left, right, '-');
+      if (op === '/') return right === 0 ? null : left.map(row => row.map(v => v / right));
     }
     if (!isMatrix(left) && isMatrix(right)) {
       if (op === '+') return scalarFirstMatrixOp(left, right, '+');
@@ -769,32 +1053,97 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
   }, []);
 
   const runSingleCommand = useCallback((rawCommand: string, source: 'command' | 'script' = 'command'): MatlabHistoryItem => {
-    const text = rawCommand.trim();
-    if (!text) {
-      return {
-        command: rawCommand,
-        output: '',
-        timestamp: new Date().toISOString(),
-      };
-    }
+    const ts = new Date().toISOString();
+    // Semicolon suppression — trailing ; silences output
+    const silent = rawCommand.trimEnd().endsWith(';');
+    const text = rawCommand.trim().replace(/;$/, '').trim();
+    if (!text) return { command: rawCommand, output: '', timestamp: ts };
 
     if (text.toLowerCase() === 'clear') {
       runtimeVarsRef.current = {};
       setRuntimeVars({});
       setSelectedVar(null);
-      return { command: rawCommand, output: 'Workspace cleared.', timestamp: new Date().toISOString() };
+      return { command: rawCommand, output: silent ? '' : 'Workspace cleared.', timestamp: ts };
     }
-
     if (text.toLowerCase() === 'clc') {
       setHistory([]);
-      return { command: rawCommand, output: 'Output cleared.', timestamp: new Date().toISOString() };
+      return { command: rawCommand, output: '', timestamp: ts };
     }
+    if (text.toLowerCase() === 'help') {
+      const helpText = [
+        'Available commands:',
+        '  Arithmetic:   + - * / ^ (and .* ./ .^ for element-wise)',
+        '  Matrices:     det(A)  inv(A)  transpose(A)  rank(A)  trace(A)  norm(A)',
+        '  Decomp:       rref(A)  eig(A)  lu(A)  qr(A)',
+        '  Solve:        solve(A,b)  A\\b',
+        '  Build:        zeros(r,c)  ones(r,c)  eye(n)  linspace(a,b,n)',
+        '  Vectors:      dot(u,v)  cross(u,v)  cumsum(v)  diff(v)  sort(v)  find(v)',
+        '  Stats:        sum(A)  mean(A)  max(A)  min(A)  prod(A)',
+        '  Logic:        any(A)  all(A)',
+        '  Reshape:      diag(A)  triu(A)  tril(A)  reshape(A,r,c)  repmat(A,r,c)',
+        '  Concat:       horzcat(A,B)  vertcat(A,B)',
+        '  Indexing:     A(i,j)  A(i,:)  A(:,j)',
+        '  Range:        1:5  0:0.5:2',
+        '  Constants:    pi  e  inf',
+        '  Plot:         plot(expr)',
+        '  Control:      clear  clc  help',
+        '  Semicolons:   append ; to suppress output',
+      ].join('\n');
+      return { command: rawCommand, output: helpText, timestamp: ts };
+    }
+
+    // disp(expr)
+    const dispMatch = text.match(/^disp\((.+)\)$/i);
+    if (dispMatch) {
+      const val = evaluateCommandExpression(dispMatch[1].trim(), runtimeVarsRef.current);
+      return { command: rawCommand, output: val !== null ? formatValue(val) : `${dispMatch[1].trim()} = (undefined)`, timestamp: ts };
+    }
+    // fprintf(fmt, ...) — just evaluate the first arg if it's a string-like
+    const fprintfMatch = text.match(/^fprintf\((.+)\)$/i);
+    if (fprintfMatch) {
+      const val = evaluateCommandExpression(fprintfMatch[1].trim(), runtimeVarsRef.current);
+      return { command: rawCommand, output: val !== null ? formatValue(val) : '', timestamp: ts };
+    }
+    // format short/long — acknowledge silently
+    if (/^format\b/i.test(text)) return { command: rawCommand, output: silent ? '' : '(format command acknowledged)', timestamp: ts };
 
     const plotMatch = text.match(/^plot\((.+)\)$/i);
     if (plotMatch) {
       const plotExpr = plotMatch[1].trim();
       onGraphExpression?.(plotExpr);
-      return { command: rawCommand, output: `Sent "${plotExpr}" to Graph tab.`, timestamp: new Date().toISOString() };
+      return { command: rawCommand, output: silent ? '' : `Sent "${plotExpr}" to Graph tab.`, timestamp: ts };
+    }
+
+    // lu(A) — show L, U, P
+    const luPrintMatch = text.match(/^lu\((.+)\)$/i);
+    if (luPrintMatch) {
+      const val = runtimeVarsRef.current[luPrintMatch[1].trim()] ?? evaluateCommandExpression(luPrintMatch[1].trim(), runtimeVarsRef.current);
+      if (val && isMatrix(val)) {
+        const res = luDecomp(val);
+        if (res) {
+          if (!silent) {
+            runtimeVarsRef.current = { ...runtimeVarsRef.current, L: res.L, U: res.U, P: res.P };
+            setRuntimeVars({ ...runtimeVarsRef.current });
+          }
+          return { command: rawCommand, output: silent ? '' : `L =\n${formatMatrix(res.L)}\n\nU =\n${formatMatrix(res.U)}\n\nP =\n${formatMatrix(res.P)}`, timestamp: ts };
+        }
+      }
+    }
+
+    // qr(A) — show Q, R
+    const qrPrintMatch = text.match(/^qr\((.+)\)$/i);
+    if (qrPrintMatch) {
+      const val = runtimeVarsRef.current[qrPrintMatch[1].trim()] ?? evaluateCommandExpression(qrPrintMatch[1].trim(), runtimeVarsRef.current);
+      if (val && isMatrix(val)) {
+        const res = qrDecomp(val);
+        if (res) {
+          if (!silent) {
+            runtimeVarsRef.current = { ...runtimeVarsRef.current, Q: res.Q, R: res.R };
+            setRuntimeVars({ ...runtimeVarsRef.current });
+          }
+          return { command: rawCommand, output: silent ? '' : `Q =\n${formatMatrix(res.Q)}\n\nR =\n${formatMatrix(res.R)}`, timestamp: ts };
+        }
+      }
     }
 
     const assignMatch = text.match(/^([A-Za-z]\w*)\s*=\s*(.+)$/);
@@ -804,29 +1153,22 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
       const computed = evaluateCommandExpression(expr, runtimeVarsRef.current);
       if (computed === null) {
         const detail = explainMatrixFailure(expr, runtimeVarsRef.current) ?? explainVectorFailure(expr, runtimeVarsRef.current);
-        return {
-          command: rawCommand,
-          output: detail ?? (source === 'script' ? `Line failed: "${rawCommand}"` : `Cannot evaluate: ${expr}`),
-          error: true,
-          timestamp: new Date().toISOString(),
-        };
+        return { command: rawCommand, output: detail ?? (source === 'script' ? `Line failed: "${rawCommand}"` : `Cannot evaluate: ${expr}`), error: true, timestamp: ts };
       }
       runtimeVarsRef.current = { ...runtimeVarsRef.current, [varName]: computed };
       setRuntimeVars({ ...runtimeVarsRef.current });
-      return { command: rawCommand, output: `${varName} =\n${formatValue(computed)}`, timestamp: new Date().toISOString() };
+      return { command: rawCommand, output: silent ? '' : `${varName} =\n${formatValue(computed)}`, timestamp: ts };
     }
 
     const evaluated = evaluateCommandExpression(text, runtimeVarsRef.current);
     if (evaluated === null) {
       const detail = explainMatrixFailure(text, runtimeVarsRef.current) ?? explainVectorFailure(text, runtimeVarsRef.current);
-      return {
-        command: rawCommand,
-        output: detail ?? (source === 'script' ? `Line failed: "${rawCommand}"` : `Unknown command: ${text}`),
-        error: true,
-        timestamp: new Date().toISOString(),
-      };
+      return { command: rawCommand, output: detail ?? (source === 'script' ? `Line failed: "${rawCommand}"` : `Unknown command: ${text}`), error: true, timestamp: ts };
     }
-    return { command: rawCommand, output: `ans =\n${formatValue(evaluated)}`, timestamp: new Date().toISOString() };
+    // Track `ans`
+    runtimeVarsRef.current = { ...runtimeVarsRef.current, ans: evaluated };
+    setRuntimeVars({ ...runtimeVarsRef.current });
+    return { command: rawCommand, output: silent ? '' : `ans =\n${formatValue(evaluated)}`, timestamp: ts };
   }, [onGraphExpression]);
 
   const runCommand = useCallback(() => {
@@ -1000,7 +1342,7 @@ export function MatlabLab({ onGraphExpression }: MatlabLabProps = {}) {
               <button className="ml-run-btn" onClick={runCommand}>Run</button>
               <button className="ml-clr-btn" onClick={clearOutput} title="Clear output">✕</button>
             </div>
-            <div className="ml-hint-bar">↑/↓ recalls history · <code>clear</code> wipes workspace · <code>clc</code> clears output</div>
+            <div className="ml-hint-bar">↑/↓ recalls history · <code>clear</code> wipes workspace · <code>clc</code> clears output · append <code>;</code> to suppress output · type <code>help</code> for all commands</div>
           </div>
 
           {/* Script editor (collapsible) */}

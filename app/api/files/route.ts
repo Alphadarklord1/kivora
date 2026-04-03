@@ -195,26 +195,47 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const [file] = await db.insert(files).values({
-    id: body.id,
-    userId,
-    folderId: body.folderId,
-    topicId: body.topicId,
-    name: sanitizeFilename(body.name.trim()),
-    type: body.type,
-    content: body.content,
-    localBlobId: body.localBlobId,
-    mimeType: body.upload?.type || body.mimeType,
-    fileSize: body.upload?.size || body.fileSize,
-    storageProvider: storagePath ? 'supabase' : null,
-    storageBucket,
-    storagePath,
-    storageUploadedAt: storagePath ? new Date() : null,
-  }).returning();
+  try {
+    const [file] = await db.insert(files).values({
+      id: body.id,
+      userId,
+      folderId: body.folderId,
+      topicId: body.topicId,
+      name: sanitizeFilename(body.name.trim()),
+      type: body.type,
+      content: body.content,
+      localBlobId: body.localBlobId,
+      mimeType: body.upload?.type || body.mimeType,
+      fileSize: body.upload?.size || body.fileSize,
+      storageProvider: storagePath ? 'supabase' : null,
+      storageBucket,
+      storagePath,
+      storageUploadedAt: storagePath ? new Date() : null,
+    }).returning();
 
-  return NextResponse.json({
-    ...file,
-    storageBacked: Boolean(storagePath),
-    storageWarning: storageWarning ? 'File saved locally but cloud sync failed. It will sync when connection is restored.' : undefined,
-  }, { status: 201 });
+    return NextResponse.json({
+      ...file,
+      storageBacked: Boolean(storagePath),
+      storageWarning: storageWarning ? 'File saved locally but cloud sync failed. It will sync when connection is restored.' : undefined,
+    }, { status: 201 });
+  } catch (error) {
+    console.error('[files] POST failed, falling back to local-only file', error);
+    return NextResponse.json({
+      id: body.id,
+      userId,
+      folderId: body.folderId,
+      topicId: body.topicId,
+      name: sanitizeFilename(body.name.trim()),
+      type: body.type,
+      content: body.content,
+      localBlobId: body.localBlobId,
+      mimeType: body.upload?.type || body.mimeType,
+      fileSize: body.upload?.size || body.fileSize,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      storageBacked: false,
+      storageWarning: 'File saved locally because cloud storage is unavailable right now.',
+      localOnly: true,
+    }, { status: 201 });
+  }
 }

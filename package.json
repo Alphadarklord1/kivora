@@ -81,11 +81,14 @@
       }
     ],
     "afterPack": "scripts/after-pack-mac.js",
+    "afterSign": "electron/notarize.js",
     "mac": {
       "category": "public.app-category.education",
       "icon": "public/icons/icon.png",
-      "identity": null,
+      "hardenedRuntime": true,
       "gatekeeperAssess": false,
+      "entitlements": "electron/entitlements.mac.plist",
+      "entitlementsInherit": "electron/entitlements.mac.plist",
       "target": [
         {
           "target": "dmg",
@@ -194,6 +197,7 @@
     "concurrently": "^9.2.1",
     "drizzle-kit": "^0.31.8",
     "electron": "^40.0.0",
+    "@electron/notarize": "^2.5.0",
     "electron-builder": "^26.4.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.4",

@@ -10,6 +10,7 @@ import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 import { syncSupabaseAuthUser } from '@/lib/supabase/auth-admin';
+import { isDatabaseUnreachableError, verifyLocalAuthCredentials } from '@/lib/auth/local-auth-store';
 
 const authSecret =
   process.env.AUTH_SECRET ||
@@ -86,34 +87,62 @@ export const authConfig: NextAuthConfig = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!isDatabaseConfigured) return null;
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await db.query.users.findFirst({
-          where: eq(users.email, (credentials.email as string).toLowerCase().trim()),
-        });
+        const normalizedEmail = (credentials.email as string).toLowerCase().trim();
+        const password = credentials.password as string;
 
-        if (!user?.passwordHash) return null;
+        const localAuthUser = await verifyLocalAuthCredentials(normalizedEmail, password);
 
-        const valid = await bcrypt.compare(credentials.password as string, user.passwordHash);
-        if (!valid) return null;
-
-        const syncedAuthId = await syncSupabaseAuthUser({
-          supabaseAuthId: user.supabaseAuthId,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-          bio: user.bio,
-          emailConfirmed: true,
-        });
-
-        if (syncedAuthId && syncedAuthId !== user.supabaseAuthId) {
-          await db.update(users)
-            .set({ supabaseAuthId: syncedAuthId, updatedAt: new Date() })
-            .where(eq(users.id, user.id));
+        if (!isDatabaseConfigured) {
+          return localAuthUser
+            ? { id: localAuthUser.id, email: localAuthUser.email, name: localAuthUser.name, image: localAuthUser.image }
+            : null;
         }
 
-        return { id: user.id, email: user.email, name: user.name, image: user.image };
+        try {
+          const user = await db.query.users.findFirst({
+            where: eq(users.email, normalizedEmail),
+          });
+
+          if (user?.passwordHash) {
+            const valid = await bcrypt.compare(password, user.passwordHash);
+            if (valid) {
+              const syncedAuthId = await syncSupabaseAuthUser({
+                supabaseAuthId: user.supabaseAuthId,
+                email: user.email,
+                name: user.name,
+                image: user.image,
+                bio: user.bio,
+                emailConfirmed: true,
+              });
+
+              if (syncedAuthId && syncedAuthId !== user.supabaseAuthId) {
+                await db.update(users)
+                  .set({ supabaseAuthId: syncedAuthId, updatedAt: new Date() })
+                  .where(eq(users.id, user.id));
+              }
+
+              return { id: user.id, email: user.email, name: user.name, image: user.image };
+            }
+          }
+
+          return localAuthUser
+            ? { id: localAuthUser.id, email: localAuthUser.email, name: localAuthUser.name, image: localAuthUser.image }
+            : null;
+        } catch (error) {
+          if (isDatabaseUnreachableError(error) && localAuthUser) {
+            return {
+              id: localAuthUser.id,
+              email: localAuthUser.email,
+              name: localAuthUser.name,
+              image: localAuthUser.image,
+            };
+          }
+
+          console.error('[auth] credentials sign-in failed', error);
+          return null;
+        }
       },
     }),
     ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET

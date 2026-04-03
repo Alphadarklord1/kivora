@@ -14,12 +14,10 @@ import { useToast } from '@/providers/ToastProvider';
 import { useAnalytics, type WeakArea } from '@/hooks/useAnalytics';
 import { InteractiveQuiz } from '@/components/workspace/InteractiveQuiz';
 import { writeCoachHandoff } from '@/lib/coach/handoff';
-import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
 import { buildCoachUrl } from '@/lib/coach/routes';
 import { loadDecks, type SRSDeck } from '@/lib/srs/sm2';
-import { persistDeckLocally, syncDeckToCloud } from '@/lib/srs/deck-utils';
+import { persistDeckLocally } from '@/lib/srs/deck-utils';
 import type { GeneratedContent } from '@/lib/offline/generate';
-import type { SourceBrief } from '@/lib/coach/source-brief';
 import type { TopicResearchResult } from '@/lib/coach/research';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 
@@ -37,17 +35,22 @@ const RecoveryTab = dynamic(
   () => import('./tabs/RecoveryTab').then((mod) => mod.RecoveryTab),
   { ssr: false, loading: () => tabLoadingFallback },
 );
+const GuidelinesTab = dynamic(
+  () => import('./tabs/GuidelinesTab').then((mod) => mod.GuidelinesTab),
+  { ssr: false, loading: () => tabLoadingFallback },
+);
 
 type CoachPanel   = 'review' | 'manage';
-type CoachSection = 'research' | 'write' | 'recovery';
+type CoachSection = 'research' | 'write' | 'recovery' | 'guidelines';
 type CoachOutput  =
   | { kind: 'quiz';      title: string; content: string; quiz: GeneratedContent; setId: string }
   | { kind: 'generated'; title: string; content: string };
 
 const TAB_LABELS: Record<CoachSection, { label: string; icon: string }> = {
-  research: { label: 'Research Workspace', icon: '🔍' },
-  write: { label: 'Writing Studio', icon: '✍️' },
-  recovery: { label: 'Recovery', icon: '📊' },
+  research:   { label: 'Research',    icon: '🔍' },
+  write:      { label: 'Writing',     icon: '✍️' },
+  recovery:   { label: 'Recovery',    icon: '📊' },
+  guidelines: { label: 'AI Policy',   icon: '📋' },
 };
 
 function mergeSets(local: SRSDeck[], remote: SRSDeck[]): SRSDeck[] {
@@ -77,13 +80,11 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
   const [output,          setOutput]          = useState<CoachOutput | null>(null);
 
   // Shared cross-tab state
-  const [sourceBrief]                      = useState<SourceBrief | null>(null);
   const [researchResult,  setResearchResult]  = useState<TopicResearchResult | null>(null);
   /** Topic to pre-load in Research tab (e.g. from Recovery "Reading" button) */
   const [researchPreload, setResearchPreload] = useState<string | undefined>(undefined);
-
-  // Source action loading state (shared between research handoff and WriterTab)
-  const [sourceActionLoading, setSourceActionLoading] = useState<'notes' | 'quiz' | 'flashcards' | null>(null);
+  /** Topic to pre-fill in the Write tab when navigating from Research */
+  const [writePreload,    setWritePreload]    = useState<string | undefined>(undefined);
 
   // ── SRS state ──────────────────────────────────────────────────────────────
 
@@ -165,66 +166,16 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
 
   useEffect(() => { void refreshReviewSets(); }, [refreshReviewSets]);
 
-  // ── Source actions (shared between Source + Writer tabs) ───────────────────
-
-  async function handleSourceAction(mode: 'notes' | 'quiz' | 'flashcards') {
-    if (!sourceBrief || sourceActionLoading) return;
-    setSourceActionLoading(mode);
-    try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode, text: sourceBrief.extractedText,
-          options: { count: mode === 'quiz' ? 8 : 10 },
-          ai: { model: 'default' },
-          privacyMode: 'cloud',
-        }),
-      });
-      const payload = await res.json().catch(() => null) as { content?: string; error?: string } | null;
-      if (!res.ok || typeof payload?.content !== 'string')
-        throw new Error(payload?.error ?? `Could not create ${mode}`);
-
-      if (mode === 'flashcards') {
-        const { buildImportedDeck } = await import('@/lib/srs/deck-utils');
-        const set = buildImportedDeck({
-          title: sourceBrief.title, description: sourceBrief.summary,
-          content: payload.content, sourceType: 'manual',
-          sourceLabel: 'Source Brief import', creatorName: 'You',
-        });
-        if (!set) throw new Error('Could not turn this source into review cards.');
-        persistDeckLocally(set);
-        const synced = await syncDeckToCloud(set);
-        await fetch('/api/library', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode, content: payload.content, metadata: { title: `Review set — ${sourceBrief.title}`, sourceTitle: sourceBrief.title } }) });
-        broadcastInvalidate(LIBRARY_CHANNEL);
-        await refreshReviewSets();
-        refreshAnalytics();
-        toast(synced ? `Created review set "${set.name}"` : `Created "${set.name}" locally`, synced ? 'success' : 'warning');
-        openPanel(set.id, 'manage', true);
-        return;
-      }
-
-      await fetch('/api/library', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode, content: payload.content, metadata: { title: `${mode === 'quiz' ? 'Quiz' : 'Notes'} — ${sourceBrief.title}`, sourceTitle: sourceBrief.title } }) });
-      broadcastInvalidate(LIBRARY_CHANNEL);
-      setOutput({ kind: 'generated', title: `${mode === 'quiz' ? 'Quiz' : 'Notes'} — ${sourceBrief.title}`, content: payload.content });
-      outputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } catch (err) {
-      toast(err instanceof Error ? err.message : `Could not create ${mode}`, 'error');
-    } finally {
-      setSourceActionLoading(null);
-    }
-  }
-
   // ── Today's Mission ────────────────────────────────────────────────────────
 
   const topWeakAreas = useMemo(() => analytics?.weakAreas?.slice(0, 3) ?? [], [analytics?.weakAreas]);
   const contextStats = useMemo(() => {
-    const activeSource = sourceBrief?.title ?? researchResult?.topic ?? null;
+    const activeSource = researchResult?.topic ?? null;
     const sourceCount = researchResult?.sources.length ?? 0;
     const citationCount = researchResult?.citations.length ?? 0;
     const dueCount = dueReviewSets.reduce((sum, set) => sum + getSetDue(set), 0);
     return { activeSource, sourceCount, citationCount, dueCount };
-  }, [sourceBrief?.title, researchResult?.topic, researchResult?.sources.length, researchResult?.citations.length, dueReviewSets, getSetDue]);
+  }, [researchResult?.topic, researchResult?.sources.length, researchResult?.citations.length, dueReviewSets, getSetDue]);
 
   const activeSectionSummary = useMemo(() => {
     if (activeSection === 'research') {
@@ -243,11 +194,11 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
     if (activeSection === 'write') {
       return {
         title: 'Writing studio',
-        description: researchResult || sourceBrief
-          ? 'Use your current source and research context to build stronger drafts, outlines, and revisions.'
-          : 'Bring in a source first, then turn it into a report structure, draft, or checked paragraph.',
+        description: researchResult
+          ? 'Use your current research context to build stronger drafts, outlines, and revisions.'
+          : 'Load a file or run a research topic first, then turn it into a report structure, draft, or checked paragraph.',
         pills: [
-          researchResult ? 'Research context connected' : 'Works from source context',
+          researchResult ? 'Research context connected' : 'Upload a file to get started',
           'Draft · report · check',
         ],
       };
@@ -262,7 +213,7 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
         topWeakAreas[0] ? `Top weak area: ${topWeakAreas[0].topic}` : 'Weak-area insights ready',
       ],
     };
-  }, [activeSection, contextStats.dueCount, dueReviewSets.length, researchResult, sourceBrief, topWeakAreas]);
+  }, [activeSection, contextStats.dueCount, dueReviewSets.length, researchResult, topWeakAreas]);
 
   const mission = useMemo(() => {
     if (dueReviewSets[0]) {
@@ -324,11 +275,6 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
           <span className={styles.brandGlyph}>🎓</span>
           <div className={styles.brandText}>
             <span className={styles.brandName}>Scholar Hub</span>
-            {sourceBrief && (
-              <span className={styles.sourceIndicator}>
-                📄 {sourceBrief.title.slice(0, 45)}{sourceBrief.title.length > 45 ? '…' : ''}
-              </span>
-            )}
           </div>
         </div>
         <nav className={styles.tabNav}>
@@ -418,11 +364,14 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
           <div className={styles.researchWorkspaceStack}>
             <section className={styles.researchWorkspaceSection}>
               <ResearchTab
-                sourceBrief={sourceBrief}
                 researchResult={researchResult}
                 onResearchResult={setResearchResult}
                 preloadTopic={researchPreload}
                 onPreloadConsumed={() => setResearchPreload(undefined)}
+                onNavigateToWrite={() => {
+                  setWritePreload(researchResult?.topic);
+                  setActiveSection('write');
+                }}
               />
             </section>
           </div>
@@ -430,11 +379,10 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
 
         {activeSection === 'write' && (
           <AssignmentWriterTab
-            sourceBrief={sourceBrief}
             researchResult={researchResult}
             onNavigateToResearch={navigateToResearch}
-            sourceActionLoading={sourceActionLoading}
-            onSourceAction={mode => void handleSourceAction(mode)}
+            preloadTopic={writePreload}
+            onPreloadConsumed={() => setWritePreload(undefined)}
           />
         )}
 
@@ -455,6 +403,8 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
             onLoadRelatedReading={topic => { setResearchPreload(topic); setActiveSection('research'); }}
           />
         )}
+
+        {activeSection === 'guidelines' && <GuidelinesTab />}
 
       </div>
     </div>

@@ -19,6 +19,7 @@ import {
   usageAnalyticsEnabledClient,
 } from '@/lib/privacy/preferences';
 import { LOCALE_OPTIONS } from '@/lib/i18n/locales';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 const THEME_OPTIONS: { id: Theme; label: string; hint: string }[] = [
   { id: 'system', label: 'System', hint: 'Follow your device preference' },
@@ -293,13 +294,14 @@ function SettingsRail({
   activeSection: SettingsSectionId;
   onSelect: (section: SettingsSectionId) => void;
 }) {
+  const { t } = useI18n();
   const current = SETTINGS_SECTIONS.find((section) => section.id === activeSection) ?? SETTINGS_SECTIONS[0];
   return (
     <aside className={styles.settingsRail}>
       <div className={styles.railIntro}>
-        <span className={styles.railEyebrow}>Settings</span>
-        <h2>{current.title}</h2>
-        <p>{current.description}</p>
+        <span className={styles.railEyebrow}>{t('Settings')}</span>
+        <h2>{t(current.title)}</h2>
+        <p>{t(current.description)}</p>
       </div>
       <nav className={styles.railNav}>
         {SETTINGS_SECTIONS.map((section) => (
@@ -311,9 +313,9 @@ function SettingsRail({
           >
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{section.icon}</span>
-              <strong>{section.label}</strong>
+              <strong>{t(section.label)}</strong>
             </div>
-            <span>{section.description}</span>
+            <span>{t(section.description)}</span>
           </button>
         ))}
       </nav>
@@ -1134,12 +1136,70 @@ export default function SettingsPage() {
           </div>
         </div>
       </Section>
-      <Section title="Language" subtitle="Switch the interface language and text direction.">
-        <ChoiceButtons
-          options={LOCALE_OPTIONS}
-          value={settings.language}
-          onChange={value => set('language', value)}
-        />
+      <Section title="Language" subtitle="Switch the interface language. Changes take effect immediately across the whole app.">
+        <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(3, 1fr)' }}>
+          {LOCALE_OPTIONS.map(opt => {
+            const active = settings.language === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => set('language', opt.id)}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: opt.rtl ? 'flex-end' : 'flex-start',
+                  gap: 6,
+                  padding: '14px 16px',
+                  borderRadius: 14,
+                  border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border-2)'}`,
+                  background: active
+                    ? 'color-mix(in srgb, var(--accent) 10%, var(--bg-surface))'
+                    : 'var(--bg-surface)',
+                  cursor: 'pointer',
+                  textAlign: opt.rtl ? 'right' : 'left',
+                  transition: 'border-color 0.15s, background 0.15s',
+                  boxShadow: active ? '0 0 0 3px var(--accent-glow)' : 'none',
+                }}
+              >
+                <span style={{
+                  fontSize: '1.05rem',
+                  fontWeight: 700,
+                  color: active ? 'var(--accent)' : 'var(--text)',
+                  direction: opt.rtl ? 'rtl' : 'ltr',
+                }}>
+                  {opt.label}
+                </span>
+                <span style={{
+                  fontSize: '11px',
+                  color: active ? 'var(--accent)' : 'var(--text-3)',
+                }}>
+                  {opt.hint}
+                </span>
+                {opt.rtl && (
+                  <span style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    padding: '2px 6px',
+                    borderRadius: 5,
+                    background: active
+                      ? 'color-mix(in srgb, var(--accent) 20%, transparent)'
+                      : 'var(--bg-inset)',
+                    color: active ? 'var(--accent)' : 'var(--text-3)',
+                  }}>
+                    RTL
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {settings.language !== 'en' && (
+          <p style={{ margin: '10px 0 0', fontSize: '12px', color: 'var(--text-3)' }}>
+            Some labels may fall back to English when a translation is not yet available.
+          </p>
+        )}
       </Section>
       </div>
       )}

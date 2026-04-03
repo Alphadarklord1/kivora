@@ -24,7 +24,7 @@ interface SelectionRegion {
   height: number;
 }
 
-function ScanQuestionsResult({ content }: { content: string }) {
+function ScanQuestionsResult({ content, onSendToSolver }: { content: string; onSendToSolver?: (q: string) => void }) {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
   const questions = content
@@ -46,8 +46,12 @@ function ScanQuestionsResult({ content }: { content: string }) {
   };
 
   const handleSendToMath = (text: string) => {
-    localStorage.setItem('math_pending_problem', text);
-    window.location.href = '/math';
+    if (onSendToSolver) {
+      onSendToSolver(text);
+    } else {
+      localStorage.setItem('math_pending_problem', text);
+      window.location.href = '/math';
+    }
   };
 
   return (
@@ -100,7 +104,16 @@ function ScanQuestionsResult({ content }: { content: string }) {
   );
 }
 
-export function VisualAnalyzer() {
+interface VisualAnalyzerProps {
+  /** When true: hides describe/explain modes, adds paste support, shows a quick-upload strip first */
+  mathMode?: boolean;
+  /** Called when a question is extracted and user clicks "Send to solver" — stays in-page instead of navigating */
+  onSendToSolver?: (question: string) => void;
+}
+
+export function VisualAnalyzer({ mathMode = false, onSendToSolver }: VisualAnalyzerProps = {}) {
+  // In math mode, set default analysis mode to solve-math
+  const defaultMode: AnalysisMode = mathMode ? 'solve-math' : 'describe';
   const { t, locale } = useI18n({
     'Analysis failed': 'فشل التحليل',
     'Please select an image file (PNG, JPG, etc.)': 'يرجى اختيار ملف صورة (PNG أو JPG وغيرها)',
@@ -172,12 +185,39 @@ export function VisualAnalyzer() {
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
 
   // Analysis state
-  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('describe');
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>(defaultMode);
   const [analyzing, setAnalyzing] = useState(false);
   const [results, setResults] = useState<AnalysisResult[]>([]);
 
   // Refs
   const imageContainerRef = useRef<HTMLDivElement>(null);
+  const directUploadRef = useRef<HTMLInputElement>(null);
+
+  // Clipboard paste support
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (!file) continue;
+          const reader = new FileReader();
+          reader.onload = () => {
+            setSelectedImageUrl(reader.result as string);
+            setSelection(null);
+            setError('');
+            setPages([]);
+          };
+          reader.readAsDataURL(file);
+          e.preventDefault();
+          break;
+        }
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, []);
 
   // Store data
   const { folders, topics, files } = useFoldersStore();
@@ -432,6 +472,10 @@ export function VisualAnalyzer() {
     e.target.value = '';
   };
 
+  const visibleModes: AnalysisMode[] = mathMode
+    ? ['solve-math', 'scan-questions', 'extract-text']
+    : ['describe', 'explain', 'extract-text', 'solve-math', 'scan-questions'];
+
   const modeLabels: Record<AnalysisMode, { label: string; icon: string; description: string }> = {
     describe: {
       label: t('Describe'),
@@ -465,7 +509,7 @@ export function VisualAnalyzer() {
       {/* Header */}
       <div style={{ marginBottom: 'var(--space-4)' }}>
         <h3 style={{ marginBottom: 'var(--space-1)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-          <span>{t('Visual Analyzer')}</span>
+          <span>{mathMode ? 'Math Vision' : t('Visual Analyzer')}</span>
           <span style={{
             fontSize: 'var(--font-tiny)',
             background: 'var(--primary-muted)',
@@ -477,12 +521,44 @@ export function VisualAnalyzer() {
           </span>
         </h3>
         <p style={{ fontSize: 'var(--font-meta)', color: 'var(--text-muted)', margin: 0 }}>
-          {t('Analyze diagrams, charts, equations, and images from your PDFs')}
-        </p>
-        <p style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)', margin: 'var(--space-2) 0 0' }}>
-          {t('Visual analysis currently supports PDFs and images only.')}
+          {mathMode
+            ? 'Paste or upload a photo of a math problem — get a full solution or extract all questions.'
+            : t('Analyze diagrams, charts, equations, and images from your PDFs')}
         </p>
       </div>
+
+      {/* Math mode: quick paste / upload strip */}
+      {mathMode && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-3)',
+          padding: 'var(--space-3) var(--space-4)',
+          background: 'var(--bg-inset)',
+          border: '1.5px dashed var(--border-subtle)',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: 'var(--space-4)',
+          cursor: 'pointer',
+        }}
+          onClick={() => directUploadRef.current?.click()}
+        >
+          <span style={{ fontSize: '1.5em' }}>📷</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 'var(--font-meta)', fontWeight: 600 }}>
+              Drop, paste, or upload an image
+            </div>
+            <div style={{ fontSize: 'var(--font-tiny)', color: 'var(--text-muted)', marginTop: 2 }}>
+              Ctrl+V to paste from clipboard · PNG, JPG, up to 4 MB
+            </div>
+          </div>
+          <label style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--primary)', color: '#fff', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-tiny)', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <input ref={directUploadRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={handleDirectImageUpload} style={{ display: 'none' }} />
+            Choose file
+          </label>
+        </div>
+      )}
 
       {/* Error Display */}
       {error && (
@@ -785,7 +861,7 @@ export function VisualAnalyzer() {
                 gridTemplateColumns: '1fr 1fr',
                 gap: 'var(--space-2)',
               }}>
-                {(Object.keys(modeLabels) as AnalysisMode[]).map((mode) => (
+                {visibleModes.map((mode) => (
                   <button
                     key={mode}
                     onClick={() => setAnalysisMode(mode)}
@@ -877,7 +953,7 @@ export function VisualAnalyzer() {
                         {result.mode === 'solve-math' ? (
                           <MathText>{result.content}</MathText>
                         ) : result.mode === 'scan-questions' ? (
-                          <ScanQuestionsResult content={result.content} />
+                          <ScanQuestionsResult content={result.content} onSendToSolver={onSendToSolver} />
                         ) : (
                           result.content
                         )}
@@ -959,7 +1035,7 @@ export function VisualAnalyzer() {
             <div style={{ marginBottom: 'var(--space-4)' }}>
               <h4 style={{ fontSize: 'var(--font-meta)', marginBottom: 'var(--space-2)' }}>{t('Analysis Mode')}</h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
-                {(Object.keys(modeLabels) as AnalysisMode[]).map((mode) => (
+                {visibleModes.map((mode) => (
                   <button key={mode} onClick={() => setAnalysisMode(mode)} className={`btn ${analysisMode === mode ? '' : 'ghost'}`}
                     style={{ padding: 'var(--space-2)', fontSize: 'var(--font-tiny)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-1)' }}>
                     <span style={{ fontSize: '1.2em' }}>{modeLabels[mode].icon}</span>
@@ -991,7 +1067,7 @@ export function VisualAnalyzer() {
                         {result.mode === 'solve-math' ? (
                           <MathText>{result.content}</MathText>
                         ) : result.mode === 'scan-questions' ? (
-                          <ScanQuestionsResult content={result.content} />
+                          <ScanQuestionsResult content={result.content} onSendToSolver={onSendToSolver} />
                         ) : (
                           result.content
                         )}

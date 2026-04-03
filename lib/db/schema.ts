@@ -315,3 +315,21 @@ export const studyPlansRelations = relations(studyPlans, ({ one }) => ({
     references: [folders.id],
   }),
 }));
+
+// ============ CALENDAR EVENTS ============
+
+export const calendarEvents = pgTable('calendar_events', {
+  id:          text('id').primaryKey(),          // client-generated, e.g. evt_xxx
+  userId:      uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title:       text('title').notNull(),
+  type:        text('type').notNull(),           // 'study' | 'exam' | 'deadline' | 'class' | 'break' | 'revision'
+  date:        text('date').notNull(),           // YYYY-MM-DD
+  startTime:   text('start_time').notNull(),     // HH:MM
+  endTime:     text('end_time').notNull(),       // HH:MM
+  description: text('description'),
+  planId:      uuid('plan_id').references(() => studyPlans.id, { onDelete: 'set null' }),
+  completed:   boolean('completed').default(false),
+  color:       text('color'),
+  createdAt:   timestamp('created_at').defaultNow().notNull(),
+  updatedAt:   timestamp('updated_at').defaultNow().notNull(),
+});

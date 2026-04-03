@@ -7,8 +7,9 @@ import 'katex/dist/katex.min.css';
 import * as math from 'mathjs';
 import { extractTextFromBlob } from '@/lib/pdf/extract';
 import { readMathContext } from '@/lib/math/context';
-import { MathText } from '@/components/math/MathRenderer';
+import { MathRenderer, MathText } from '@/components/math/MathRenderer';
 import { MATH_CATEGORIES, MATH_CATEGORY_ORDER } from '@/lib/math/catalog';
+import { detectMathCategory } from '@/lib/math/symbolic-solver';
 import type { MathCategoryId } from '@/lib/math/types';
 import { isCustomFuncDefinition, normalizeGraphExpression, buildSharedScope } from '@/lib/math/graph-utils';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
@@ -93,7 +94,7 @@ const PRIMARY_TOPICS = TOPICS.filter(
 );
 
 type TopicId = MathCategoryId;
-type SpecialView = 'formulas' | 'graph' | 'units' | 'scan' | 'visual' | 'matlab';
+type SpecialView = 'formulas' | 'graph' | 'units' | 'scan' | 'visual' | 'matlab' | 'write';
 type ActiveView = TopicId | SpecialView;
 
 const DEFAULT_ACCENT = 'var(--primary)';
@@ -174,6 +175,19 @@ const SPECIAL_VIEW_META: Record<SpecialView, { title: string; subtitle: string; 
       { label: 'Run the script', detail: 'Execute the code in the browser-based engine and see results instantly.' },
       { label: 'Inspect outputs', detail: 'View numeric results, matrices, and generated plots side by side.' },
       { label: 'Send a graph expression', detail: 'Route any expression from the output to the Graph Plotter for visualization.' },
+    ],
+  },
+  write: {
+    title: 'Write a Question',
+    subtitle: 'Compose any math question with live LaTeX preview — then send straight to the solver or save as a practice question.',
+    icon: '✍️',
+    accent: '#f43f5e',
+    workflowTitle: 'Question writer workflow',
+    workflow: [
+      { label: 'Pick a topic', detail: 'Select the math area so the solver knows which method to apply.' },
+      { label: 'Write your question', detail: 'Use plain text or x^2 notation — LaTeX renders live as you type.' },
+      { label: 'Add context', detail: 'Optionally describe what you have tried, or paste in given values.' },
+      { label: 'Solve or save', detail: 'Send to the solver with one click, or save as a Library practice question.' },
     ],
   },
 };
@@ -742,6 +756,87 @@ const GEOMETRY_FORM_GROUPS: Record<string, string> = {
   sphere: 'Volume & solids',
   cylinder: 'Volume & solids',
   cone: 'Volume & solids',
+};
+
+const CATEGORY_FORM_GROUPS: Record<string, Record<string, string>> = {
+  algebra: {
+    quadratic: 'Equations',
+    linear: 'Equations',
+    factor: 'Expressions',
+    system2: 'Systems',
+    'complete-square': 'Expressions',
+    logarithmic: 'Equations',
+    exponential: 'Equations',
+    inequality: 'Inequalities',
+    rational: 'Expressions',
+  },
+  geometry: GEOMETRY_FORM_GROUPS,
+  calculus: {
+    derivative: 'Derivatives',
+    integral: 'Integrals',
+    limit: 'Limits',
+    critical: 'Analysis',
+    'second-derivative': 'Derivatives',
+    'definite-integral': 'Integrals',
+    lhopital: 'Limits',
+  },
+  trigonometry: {
+    'solve-trig': 'Equations',
+    'exact-trig': 'Identities & values',
+    'triangle-solver': 'Triangles',
+    'trig-simplify': 'Identities & values',
+    'trig-eval': 'Identities & values',
+    'law-sines': 'Triangles',
+    'law-cosines': 'Triangles',
+    'deg-rad': 'Angle conversion',
+    'amp-period': 'Graphs & transformations',
+  },
+  statistics: {
+    'mean-sd': 'Descriptive statistics',
+    binomial: 'Probability',
+    ci: 'Inference',
+    variance: 'Descriptive statistics',
+    'median-mode-range': 'Descriptive statistics',
+    combinatorics: 'Counting',
+  },
+  'sequences-series': {
+    'arith-nth': 'Arithmetic',
+    'arith-sum': 'Arithmetic',
+    'geom-nth': 'Geometric',
+    'geom-sum': 'Geometric',
+    'geom-infinite': 'Geometric',
+    'seq-type': 'Patterns',
+  },
+  'differential-equations': {
+    '2nd-order': 'Second-order',
+    'separable': 'First-order',
+    'slope-field': 'First-order',
+    linear: 'First-order',
+    decay: 'Applications',
+    'non-homogeneous': 'Second-order',
+  },
+  discrete: {
+    gcd: 'Number theory',
+    comb: 'Counting',
+    perm: 'Counting',
+    fibonacci: 'Sequences',
+    modpow: 'Number theory',
+    lcm: 'Number theory',
+    factorise: 'Number theory',
+    'floor-ceil': 'Integer functions',
+  },
+  physics: {
+    suvat: 'Motion',
+    ke: 'Energy',
+    projectile: 'Motion',
+    wave: 'Waves',
+    force: 'Mechanics',
+    pe: 'Energy',
+    momentum: 'Mechanics',
+    hooke: 'Mechanics',
+    power: 'Energy',
+    pressure: 'Mechanics',
+  },
 };
 
 // ── buildMatrix ─────────────────────────────────────────────────────────────
@@ -1851,6 +1946,117 @@ function autoWrapMath(raw: string): string {
   }).join('\n');
 }
 
+type QuestionInputSymbol = {
+  label: string;
+  insert: string;
+  cursorOffset?: number;
+};
+
+const QUESTION_INPUT_SYMBOLS: QuestionInputSymbol[] = [
+  { label: '^', insert: '^' },
+  { label: '√', insert: 'sqrt()', cursorOffset: -1 },
+  { label: '/', insert: '/' },
+  { label: 'π', insert: 'pi' },
+  { label: 'θ', insert: 'theta' },
+  { label: 'α', insert: 'alpha' },
+  { label: 'β', insert: 'beta' },
+  { label: 'λ', insert: 'lambda' },
+  { label: '∞', insert: 'inf' },
+  { label: '∂', insert: 'derivative of ' },
+  { label: '∫', insert: 'integral of  dx', cursorOffset: -3 },
+  { label: 'sin', insert: 'sin()', cursorOffset: -1 },
+  { label: 'cos', insert: 'cos()', cursorOffset: -1 },
+  { label: 'tan', insert: 'tan()', cursorOffset: -1 },
+  { label: 'ln', insert: 'ln()', cursorOffset: -1 },
+  { label: 'log', insert: 'log()', cursorOffset: -1 },
+  { label: 'e^x', insert: 'exp()', cursorOffset: -1 },
+  { label: '|x|', insert: 'abs()', cursorOffset: -1 },
+  { label: '≤', insert: ' <= ' },
+  { label: '≥', insert: ' >= ' },
+  { label: '≠', insert: ' != ' },
+  { label: '[[]]', insert: '[[1,2],[3,4]]' },
+  { label: "y'", insert: "y'" },
+  { label: "y''", insert: "y''" },
+  { label: 'Σ', insert: 'sum()', cursorOffset: -1 },
+  { label: 'det', insert: 'det()', cursorOffset: -1 },
+  { label: 'inv', insert: 'inv()', cursorOffset: -1 },
+];
+
+function insertQuestionSymbol(
+  currentValue: string,
+  insert: string,
+  textarea: HTMLTextAreaElement | null,
+  setValue: (value: string) => void,
+  cursorOffset = 0,
+) {
+  if (!textarea) {
+    setValue(`${currentValue}${insert}`);
+    return;
+  }
+
+  const start = textarea.selectionStart ?? currentValue.length;
+  const end = textarea.selectionEnd ?? currentValue.length;
+  const nextValue = `${currentValue.slice(0, start)}${insert}${currentValue.slice(end)}`;
+  const nextCursor = Math.max(start, start + insert.length + cursorOffset);
+  setValue(nextValue);
+
+  setTimeout(() => {
+    textarea.focus();
+    textarea.setSelectionRange(nextCursor, nextCursor);
+  }, 0);
+}
+
+function shouldRenderMathPreview(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+
+  if (/^(integral|derivative|limit)\b/i.test(trimmed)) return true;
+  if (/^(sqrt|sin|cos|tan|ln|log|exp|abs|det|inv|transpose|dot|cross|norm)\s*\(/i.test(trimmed)) return true;
+  if (/[=^√πθαβλ∞≤≥≠∫Σ]/.test(trimmed)) return true;
+  if (/\b(?:alpha|beta|theta|lambda|pi|inf)\b/i.test(trimmed)) return true;
+  if (/\[\[.*\]\]|\[[^\]]+\]/.test(trimmed)) return true;
+
+  return /^[\d\s()+\-*/.,xya-zA-Z'\\]+$/.test(trimmed);
+}
+
+function shouldOfferGraphFromSolver(problem: string, category: string, graphExpr: string | null | undefined) {
+  if (!graphExpr?.trim()) return false;
+
+  if (
+    category === 'statistics' ||
+    category === 'discrete' ||
+    category === 'physics' ||
+    category === 'sequences-series' ||
+    category === 'differential-equations' ||
+    category === 'vectors' ||
+    category === 'matrices' ||
+    category === 'linear-algebra'
+  ) {
+    return false;
+  }
+
+  const lower = problem.trim().toLowerCase();
+  if (!lower) return true;
+
+  if (/^(solve|find|evaluate|calculate|determine|simplify|factor|expand|complete(?:ing)? the square|integral|integrate|derivative|differentiate|limit|prove|show)\b/.test(lower)) {
+    return false;
+  }
+
+  if (/\barea\b|\bvolume\b|\bhypotenuse\b|\bmidpoint\b|\bdistance\b/.test(lower)) {
+    return false;
+  }
+
+  return /(^|\s)(y\s*=|x\s*=)/i.test(problem) || (!/[?]/.test(problem) && /x/.test(graphExpr));
+}
+
+function solverTopicForQuestion(problem: string): TopicId {
+  const detected = detectMathCategory(problem);
+  if (detected === 'vectors' || detected === 'matrices' || detected === 'linear-algebra') {
+    return 'algebra';
+  }
+  return detected;
+}
+
 export function MathSolverPage() {
   const [active, setActive] = useState<ActiveView>('algebra');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
@@ -1882,8 +2088,10 @@ export function MathSolverPage() {
   const [scanBusy, setScanBusy] = useState(false);
   const [scanError, setScanError] = useState('');
   const [scanExtracted, setScanExtracted] = useState('');
-  const [scanMode,   setScanMode]   = useState<'upload' | 'type'>('upload');
   const [typeInput,  setTypeInput]  = useState('');
+  const [writeContext, setWriteContext] = useState('');
+  const [writeTopicOverride, setWriteTopicOverride] = useState<TopicId | ''>('');
+  const [writeSavedToast, setWriteSavedToast] = useState('');
 
 
   // Unit converter state
@@ -2036,7 +2244,7 @@ export function MathSolverPage() {
         setHistory(prev => { const next = [item, ...prev.filter(h => h.problem !== p)]; saveHistory(next); return next; });
       }
       // Auto-populate graph if solver provides expression
-      if (data.graphExpr) {
+      if (data.graphExpr && shouldOfferGraphFromSolver(p, data.category, data.graphExpr)) {
         replaceGraphWith(data.graphExpr);
       }
     } catch {
@@ -2094,7 +2302,7 @@ export function MathSolverPage() {
   const currentAccent = currentTopic?.color ?? specialMeta?.accent ?? DEFAULT_ACCENT;
   const activeTitle = currentTopic?.label ?? specialMeta?.title ?? 'Math';
   const activeSubtitle = currentTopic
-    ? `Focus on ${currentCategoryConfig?.supportedActions.slice(0, 4).join(' · ') ?? 'step-by-step problem solving'}.`
+    ? `Focus on ${currentCategoryConfig?.supportedActions.slice(0, 4).join(' · ') ?? 'solving problems'}.`
     : active === 'matlab'
       ? 'Run matrix, vector, and linear algebra workflows together in one MATLAB-style workspace.'
       : specialMeta?.subtitle ?? '';
@@ -2183,18 +2391,34 @@ export function MathSolverPage() {
             </div>
           )}
           {PRIMARY_TOPICS.map(t => <NavItem key={t.id} id={t.id} icon={t.icon} label={t.label} color={t.color} />)}
+
           <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
           {sidebarOpen && (
             <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '2px 20px 4px', opacity: 0.6 }}>
-              Tools
+              Input
             </div>
           )}
-          <NavItem id="formulas"  icon="📚" label="Formula Sheets" />
-          <NavItem id="graph"     icon="📈" label="Graph Plotter"  color="#22c55e" />
-          <NavItem id="units"     icon="⚖" label="Unit Converter" color="#f59e0b" />
-          <NavItem id="scan"      icon="🧾" label="Question Scan"  color="#38bdf8" />
-          <NavItem id="visual"    icon="🔬" label="Visual Analyzer"  color="#a78bfa" />
-          <NavItem id="matlab"    icon="🧮" label="MATLAB Lab"       color="#f97316" />
+          <NavItem id="write"  icon="✍️" label="Write a Question" color="#f43f5e" />
+          <NavItem id="scan"   icon="🧾" label="Question Scan"    color="#38bdf8" />
+          <NavItem id="visual" icon="🔬" label="Visual Analyzer"  color="#a78bfa" />
+
+          <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
+          {sidebarOpen && (
+            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '2px 20px 4px', opacity: 0.6 }}>
+              Visualize
+            </div>
+          )}
+          <NavItem id="graph"  icon="📈" label="Graph Plotter" color="#22c55e" />
+          <NavItem id="matlab" icon="🧮" label="MATLAB Lab"    color="#f97316" />
+
+          <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
+          {sidebarOpen && (
+            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '2px 20px 4px', opacity: 0.6 }}>
+              Reference
+            </div>
+          )}
+          <NavItem id="formulas" icon="📚" label="Formula Sheets" />
+          <NavItem id="units"    icon="⚖"  label="Unit Converter" color="#f59e0b" />
         </div>
       </aside>
 
@@ -2263,7 +2487,7 @@ export function MathSolverPage() {
               {contextName
                 ? `Connected to ${contextName}. You can keep this file in context while solving, graphing, or exploring formulas.`
                 : currentTopic
-                  ? `Use structured forms, quick examples, and step-by-step solving without leaving the current topic.`
+                  ? `Use structured forms and quick examples without leaving the current topic.`
                   : `Switch between graphing, scanning, formulas, units, visual analysis, and MATLAB-style work from the same space.`}
             </span>
           </div>
@@ -2381,35 +2605,15 @@ export function MathSolverPage() {
               </div>
             )}
 
-            {currentCategoryConfig && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {currentCategoryConfig.supportedActions.map((action) => (
-                  <span
-                    key={action}
-                    style={{
-                      padding: '4px 10px',
-                      borderRadius: 999,
-                      border: `1px solid ${currentAccent}26`,
-                      background: `${currentAccent}10`,
-                      color: currentAccent,
-                      fontSize: 11,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {action}
-                  </span>
-                ))}
-              </div>
-            )}
-
             {/* ── Structured form (all solver categories) ── */}
             {(() => {
               const forms = CATEGORY_FORMS[String(active)];
               if (!forms?.length) return null;
               const pf = forms.find(f => f.id === structFormType) ?? forms[0];
-              const groupedForms = active === 'geometry'
+              const groupConfig = CATEGORY_FORM_GROUPS[String(active)];
+              const groupedForms = groupConfig
                 ? forms.reduce<Record<string, StructForm[]>>((acc, form) => {
-                    const key = GEOMETRY_FORM_GROUPS[form.id] ?? 'Other';
+                    const key = groupConfig[form.id] ?? 'Other';
                     acc[key] = [...(acc[key] ?? []), form];
                     return acc;
                   }, {})
@@ -2704,7 +2908,6 @@ export function MathSolverPage() {
                     {/* Steps */}
                     {result.steps.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 2 }}>Step-by-step solution</div>
                         {result.steps.map((step, i) => {
                           const expr = step.expression ?? '';
                           let exprLatex = expr;
@@ -2743,7 +2946,7 @@ export function MathSolverPage() {
                     )}
 
                     {/* Graph CTA */}
-                    {result.graphExpr && (
+                    {shouldOfferGraphFromSolver(input, result.category, result.graphExpr) && (
                       <button onClick={() => {
                         // Normalize graphExpr: prefix "y = " if it's a bare function with no "=" sign
                         const rawExpr = result.graphExpr!;
@@ -3087,67 +3290,214 @@ export function MathSolverPage() {
 
                 {/* ── QUESTION SCAN ── */}
         {active === 'scan' && (
-          <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 900 }}>
+          <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 900, overflowY: 'auto' }}>
             <WorkflowCard accent={SPECIAL_VIEW_META.scan.accent} title={SPECIAL_VIEW_META.scan.workflowTitle} steps={SPECIAL_VIEW_META.scan.workflow} />
-            <div style={{ display: 'flex', gap: 6, padding: '3px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', width: 'fit-content' }}>
-              {(['upload', 'type'] as const).map(mode => (
-                <button key={mode} onClick={() => setScanMode(mode)} style={{ padding: '7px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'background 0.15s, color 0.15s', background: scanMode === mode ? '#38bdf8' : 'transparent', color: scanMode === mode ? '#fff' : 'var(--text-secondary)' }}>
-                  {mode === 'upload' ? '📷 Upload file' : '✏️ Write question'}
+            <div style={{ padding: '14px 16px', borderRadius: 12, border: '1px dashed var(--border-subtle)', background: 'var(--bg-2)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Upload a screenshot or PDF</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                Best for photos of worksheets, textbook pages, or exam papers.{' '}
+                <button
+                  onClick={() => setActive('write')}
+                  style={{ background: 'none', border: 'none', color: '#38bdf8', fontWeight: 600, fontSize: 12, cursor: 'pointer', padding: 0 }}
+                >
+                  Prefer to type? Use Write a Question →
                 </button>
-              ))}
+              </div>
+              <input type="file" accept="image/*,.pdf" style={{ fontSize: 13 }} onChange={e => { const f = e.target.files?.[0]; if (f) loadQuestionFromFile(f); }} />
             </div>
-            {scanMode === 'upload' && (
-              <>
-                <div style={{ padding: '14px 16px', borderRadius: 12, border: '1px dashed var(--border-subtle)', background: 'var(--bg-2)' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Upload math-question files</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>Best for screenshots, worksheets, or PDFs.</div>
-                  <input type="file" accept="image/*,.pdf" style={{ fontSize: 13 }} onChange={e => { const f = e.target.files?.[0]; if (f) loadQuestionFromFile(f); }} />
-                </div>
-                {scanBusy && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>⏳ Reading…</div>}
-                {scanError && <div style={{ fontSize: 13, color: '#f87171' }}>⚠️ {scanError}</div>}
-                {scanExtracted && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => { setInput(scanExtracted); setActive('algebra'); inputRef.current?.focus(); }} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: 'var(--bg-3)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Use in solver</button>
-                      <button onClick={() => { setInput(scanExtracted); setActive('algebra'); setTimeout(() => { void solve(scanExtracted, 'algebra'); }, 0); }} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Solve now</button>
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Extracted text</div>
-                    <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 13, color: 'var(--text-secondary)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>{scanExtracted}</div>
-                  </div>
-                )}
-              </>
-            )}
-            {scanMode === 'type' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>Type any math question. Use <code>x^2</code>, <code>sqrt(x)</code>, <code>[[1,2],[3,4]]</code>. Preview renders live as you type.</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  {([{label:'^',insert:'^'},{label:'√',insert:'sqrt()'},{label:'/',insert:'/'},{label:'π',insert:'pi'},{label:'θ',insert:'theta'},{label:'α',insert:'alpha'},{label:'β',insert:'beta'},{label:'λ',insert:'lambda'},{label:'∞',insert:'inf'},{label:'∂',insert:'d/dx'},{label:'∫',insert:'integrate()'},{label:'sin',insert:'sin()'},{label:'cos',insert:'cos()'},{label:'tan',insert:'tan()'},{label:'ln',insert:'ln()'},{label:'log',insert:'log()'},{label:'e^x',insert:'exp()'},{label:'|x|',insert:'abs()'},{label:'≤',insert:' <= '},{label:'≥',insert:' >= '},{label:'≠',insert:' != '},{label:'[[]]',insert:'[[1,2],[3,4]]'},{label:"y'",insert:"y'"},{label:"y''",insert:"y''"},{label:'Σ',insert:'sum()'},{label:'det',insert:'det()'},{label:'inv',insert:'inv()'}] as Array<{label:string;insert:string}>).map(sym => (
-                    <button key={sym.label+sym.insert} onClick={() => { const ta=document.getElementById('math-question-input') as HTMLTextAreaElement|null; if(!ta){setTypeInput(prev=>prev+sym.insert);return;} const s=ta.selectionStart??typeInput.length,e2=ta.selectionEnd??typeInput.length; setTypeInput(typeInput.slice(0,s)+sym.insert+typeInput.slice(e2)); setTimeout(()=>{ta.focus();ta.setSelectionRange(s+sym.insert.length,s+sym.insert.length);},0); }} style={{ padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace' }}>{sym.label}</button>
-                  ))}
-                </div>
-                <textarea id="math-question-input" value={typeInput} onChange={e => setTypeInput(e.target.value)}
-                  placeholder="e.g.  solve x^2 - 5x + 6 = 0  or  det([[1,2],[3,4]])  or  derivative of sin(x^2)"
-                  rows={4} style={{ padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 14, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.6, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' as const }} />
-                {typeInput.trim() && (
-                  <div style={{ padding: '12px 16px', borderRadius: 12, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', minHeight: 48 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 8 }}>Preview</div>
-                    <MathText>{autoWrapMath(typeInput)}</MathText>
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button disabled={!typeInput.trim()} onClick={() => { setInput(typeInput); setActive('algebra'); inputRef.current?.focus(); }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}>Use in solver</button>
-                  <button disabled={!typeInput.trim()} onClick={() => { const q=typeInput.trim(); setInput(q); setActive('algebra'); setTimeout(()=>{ void solve(q,'algebra'); },0); }} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}>Solve now</button>
-                  <button disabled={!typeInput.trim()} onClick={() => setTypeInput('')} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}>Clear</button>
+            {scanBusy && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>⏳ Reading file…</div>}
+            {scanError && <div style={{ fontSize: 13, color: '#f87171', padding: '10px 14px', borderRadius: 10, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>⚠️ {scanError}</div>}
+            {scanExtracted && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Extracted question</div>
+                <div style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 13, color: 'var(--text-secondary)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.65 }}>{scanExtracted}</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); inputRef.current?.focus(); }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Open in solver</button>
+                  <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); setTimeout(() => { void solve(scanExtracted, nextTopic); }, 0); }} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Solve now</button>
+                  <button onClick={() => setScanExtracted('')} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>Clear</button>
                 </div>
               </div>
             )}
           </div>
         )}
 
+        {/* ── WRITE A QUESTION ── */}
+        {active === 'write' && (() => {
+          const accent = SPECIAL_VIEW_META.write.accent;
+          const resolvedTopic = writeTopicOverride || solverTopicForQuestion(typeInput);
+          const topicColor = TOPICS.find(t => t.id === resolvedTopic)?.color ?? accent;
+          return (
+            <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 860, overflowY: 'auto' }}>
+              <WorkflowCard accent={accent} title={SPECIAL_VIEW_META.write.workflowTitle} steps={SPECIAL_VIEW_META.write.workflow} />
+
+              {/* Topic override */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Topic (optional — auto-detected if blank)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  <button
+                    onClick={() => setWriteTopicOverride('')}
+                    style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: `1.5px solid ${writeTopicOverride === '' ? accent : 'var(--border-subtle)'}`, background: writeTopicOverride === '' ? `${accent}18` : 'var(--bg-2)', color: writeTopicOverride === '' ? accent : 'var(--text-secondary)', cursor: 'pointer' }}
+                  >
+                    Auto
+                  </button>
+                  {PRIMARY_TOPICS.map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => setWriteTopicOverride(t.id)}
+                      style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: `1.5px solid ${writeTopicOverride === t.id ? t.color : 'var(--border-subtle)'}`, background: writeTopicOverride === t.id ? `${t.color}18` : 'var(--bg-2)', color: writeTopicOverride === t.id ? t.color : 'var(--text-secondary)', cursor: 'pointer' }}
+                    >
+                      {t.icon} {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Symbol keyboard */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Question</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '8px 10px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)' }}>
+                  {QUESTION_INPUT_SYMBOLS.map((sym) => (
+                    <button
+                      key={sym.label + sym.insert}
+                      onClick={() => {
+                        const el = document.getElementById('write-question-input') as HTMLTextAreaElement | null;
+                        insertQuestionSymbol(typeInput, sym.insert, el, setTypeInput, sym.cursorOffset ?? 0);
+                      }}
+                      style={{ padding: '4px 9px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace' }}
+                    >
+                      {sym.label}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  id="write-question-input"
+                  value={typeInput}
+                  onChange={e => setTypeInput(e.target.value)}
+                  placeholder={`e.g.  solve x^2 - 5x + 6 = 0\n     find the derivative of sin(x^2)\n     integrate 1/(1 + x^2) dx`}
+                  rows={5}
+                  style={{ padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${typeInput.trim() ? `${topicColor}40` : 'var(--border-subtle)'}`, background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 14, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.65, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' as const, transition: 'border-color 0.15s' }}
+                />
+              </div>
+
+              {/* Context / notes */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Context / what you tried <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></label>
+                <textarea
+                  value={writeContext}
+                  onChange={e => setWriteContext(e.target.value)}
+                  placeholder="e.g.  I tried factoring but couldn't find the roots..."
+                  rows={2}
+                  style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 13, lineHeight: 1.6, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' as const }}
+                />
+              </div>
+
+              {/* Live preview */}
+              {typeInput.trim() && (
+                <div style={{ padding: '12px 16px', borderRadius: 12, background: `${topicColor}06`, border: `1px solid ${topicColor}22`, minHeight: 52 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: topicColor, marginBottom: 8, opacity: 0.8 }}>Preview</div>
+                  {shouldRenderMathPreview(typeInput) ? (
+                    <MathRenderer math={typeInput.trim()} display />
+                  ) : (
+                    <MathText>{autoWrapMath(typeInput)}</MathText>
+                  )}
+                  {!writeTopicOverride && (
+                    <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                      Auto-detected topic: <span style={{ color: topicColor, fontWeight: 600 }}>{TOPICS.find(t => t.id === resolvedTopic)?.label ?? resolvedTopic}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button
+                  disabled={!typeInput.trim()}
+                  onClick={() => {
+                    const q = typeInput.trim();
+                    const topic = (writeTopicOverride || solverTopicForQuestion(q)) as TopicId;
+                    const full = writeContext.trim() ? `${q}\n\nContext: ${writeContext.trim()}` : q;
+                    setInput(full);
+                    setActive(topic);
+                    inputRef.current?.focus();
+                  }}
+                  style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}
+                >
+                  Open in solver
+                </button>
+                <button
+                  disabled={!typeInput.trim()}
+                  onClick={() => {
+                    const q = typeInput.trim();
+                    const topic = (writeTopicOverride || solverTopicForQuestion(q)) as TopicId;
+                    const full = writeContext.trim() ? `${q}\n\nContext: ${writeContext.trim()}` : q;
+                    setInput(full);
+                    setActive(topic);
+                    setTimeout(() => { void solve(full, topic); }, 0);
+                  }}
+                  style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}
+                >
+                  Solve now
+                </button>
+                <button
+                  disabled={!typeInput.trim()}
+                  onClick={async () => {
+                    const q = typeInput.trim();
+                    if (!q) return;
+                    try {
+                      await fetch('/api/library', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          mode: 'notes',
+                          title: q.length > 60 ? q.slice(0, 60) + '…' : q,
+                          content: writeContext.trim() ? `Question:\n${q}\n\nContext:\n${writeContext.trim()}` : `Question:\n${q}`,
+                        }),
+                      });
+                      broadcastInvalidate(LIBRARY_CHANNEL);
+                      setWriteSavedToast('Saved to Library!');
+                      setTimeout(() => setWriteSavedToast(''), 2800);
+                    } catch {
+                      setWriteSavedToast('Could not save — try again.');
+                      setTimeout(() => setWriteSavedToast(''), 2800);
+                    }
+                  }}
+                  style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}
+                >
+                  📚 Save to Library
+                </button>
+                <button
+                  disabled={!typeInput.trim() && !writeContext.trim()}
+                  onClick={() => { setTypeInput(''); setWriteContext(''); setWriteTopicOverride(''); }}
+                  style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: (typeInput.trim() || writeContext.trim()) ? 'pointer' : 'default', opacity: (typeInput.trim() || writeContext.trim()) ? 1 : 0.4 }}
+                >
+                  Clear
+                </button>
+                {writeSavedToast && (
+                  <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>{writeSavedToast}</span>
+                )}
+              </div>
+
+              {/* Shortcut to scan */}
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
+                Have a photo or PDF instead?{' '}
+                <button onClick={() => setActive('scan')} style={{ background: 'none', border: 'none', color: '#38bdf8', fontWeight: 600, fontSize: 12, cursor: 'pointer', padding: 0 }}>
+                  Use Question Scan →
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── VISUAL ANALYZER ── */}
         {active === 'visual' && (
           <div style={{ flex: 1, overflow: 'auto' }}>
-            <VisualAnalyzer />
+            <VisualAnalyzer
+              mathMode={true}
+              onSendToSolver={(q) => {
+                setTypeInput(q);
+                setActive('write');
+              }}
+            />
           </div>
         )}
 

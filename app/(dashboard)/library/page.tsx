@@ -30,6 +30,7 @@ const MODE_META: Record<string, { label: string; color: string; icon: string }> 
   summarize:       { label: 'Summarize',     color: 'var(--accent, #3b82f6)',  icon: '📝' },
   rephrase:        { label: 'Rephrase',       color: 'var(--cyan, #06b6d4)',   icon: '🔄' },
   notes:           { label: 'Notes',          color: 'var(--success, #22c55e)',icon: '🗒️' },
+  research:        { label: 'Research',       color: '#0ea5e9',                icon: '🔬' },
   quiz:            { label: 'Quiz',           color: 'var(--warning, #f59e0b)',icon: '❓' },
   mcq:             { label: 'MCQ',            color: '#8b5cf6',                icon: '☑️' },
   flashcards:      { label: 'Flashcards',     color: 'var(--danger, #ef4444)', icon: '🃏' },
@@ -113,6 +114,7 @@ const LOCAL_AR: Record<string, string> = {
   'Copied!':          '\u062a\u0645 \u0627\u0644\u0646\u0633\u062e!',
   'Print':            '\u0637\u0628\u0627\u0639\u0629',
   'Export all':       '\u062a\u0635\u062f\u064a\u0631 \u0627\u0644\u0643\u0644',
+  'Word':             'Word',
   'Share':            '\u0645\u0634\u0627\u0631\u0643\u0629',
 };
 
@@ -127,6 +129,9 @@ export default function LibraryPage() {
   const [search, setSearch]   = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [expanded, setExpanded]     = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [editingId,   setEditingId]   = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
 
   const [loadError, setLoadError] = useState('');
 
@@ -181,7 +186,7 @@ export default function LibraryPage() {
       .catch(() => toast('Copy failed — try selecting the text manually.', 'error'));
   }
 
-  function exportItem(item: LibItem) {
+  async function exportItem(item: LibItem) {
     if (typeof item.content !== 'string') {
       toast('Loading the full item first…', 'info');
       void ensureFullItem(item).then(exportItem).catch(() => {
@@ -189,15 +194,65 @@ export default function LibraryPage() {
       });
       return;
     }
-    const meta = MODE_META[item.mode] ?? { label: item.mode, color: '', icon: '' };
-    const name = (item.metadata?.title || item.metadata?.problem || meta.label)
-      .replace(/[^a-z0-9_\-\s]/gi, '').trim().slice(0, 40).replace(/\s+/g, '_');
-    const blob = new Blob([item.content], { type: 'text/plain' });
-    const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), { href: url, download: `${name || 'export'}.txt` });
-    a.click();
-    URL.revokeObjectURL(url);
-    toast('Saved to downloads.', 'success');
+    const meta  = MODE_META[item.mode] ?? { label: item.mode, color: '', icon: '' };
+    const title = (item.metadata?.title || item.metadata?.problem || meta.label).trim().slice(0, 60);
+    const name  = title.replace(/[^a-z0-9_\-\s]/gi, '').trim().replace(/\s+/g, '_') || 'export';
+    try {
+      const { generateDocx } = await import('@/lib/export/docx');
+      const blob = await generateDocx({ title, content: item.content });
+      const url  = URL.createObjectURL(blob);
+      Object.assign(document.createElement('a'), { href: url, download: `${name}.docx` }).click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast('Word document saved to downloads.', 'success');
+    } catch {
+      toast('Could not export to Word.', 'error');
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function bulkDelete() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const prev = items;
+    setItems(p => p.filter(i => !ids.includes(i.id)));
+    setSelectedIds(new Set());
+    try {
+      await Promise.all(ids.map(id => fetch(`/api/library/${id}`, { method: 'DELETE' })));
+      broadcastInvalidate(LIBRARY_CHANNEL);
+      toast(`Deleted ${ids.length} item${ids.length === 1 ? '' : 's'}`, 'info');
+    } catch {
+      setItems(prev);
+      toast('Some items could not be deleted.', 'error');
+    }
+  }
+
+  async function renameItem(id: string, newTitle: string) {
+    const trimmed = newTitle.trim();
+    setEditingId(null);
+    if (!trimmed) return;
+    setItems(prev => prev.map(item =>
+      item.id === id
+        ? { ...item, metadata: { ...(item.metadata ?? {}), title: trimmed } }
+        : item,
+    ));
+    try {
+      const res = await fetch(`/api/library/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ metadata: { title: trimmed } }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      toast('Could not rename item.', 'error');
+      void load();
+    }
   }
 
   const countByType = useMemo(() => {
@@ -266,6 +321,14 @@ export default function LibraryPage() {
           <section className="lib-controls-card">
             <div className="lib-controls-head">
               <strong>Browse</strong>
+              {selectedIds.size > 0 && (
+                <button
+                  className="lib-btn lib-btn-ghost lib-btn-sm lib-btn-danger"
+                  onClick={() => void bulkDelete()}
+                >
+                  🗑️ Delete selected ({selectedIds.size})
+                </button>
+              )}
               {filtered.length > 0 && (
                 <button
                   className="lib-btn lib-btn-ghost lib-btn-sm lib-export-all-btn"
@@ -385,15 +448,41 @@ export default function LibraryPage() {
               <div key={item.id} className="lib-card" style={{ borderLeft: `3px solid ${meta.color}` }}>
                 {/* Card header */}
                 <div className="lib-card-header">
+                  <input
+                    type="checkbox"
+                    className="lib-card-check"
+                    checked={selectedIds.has(item.id)}
+                    onChange={() => toggleSelect(item.id)}
+                    aria-label="Select item"
+                    onClick={(e) => e.stopPropagation()}
+                  />
                   <span className="lib-card-badge" style={{
                     color: meta.color,
                     background: `color-mix(in srgb, ${meta.color} 12%, var(--bg-inset))`,
                   }}>
                     {meta.icon} {meta.label}
                   </span>
-                  <strong className="lib-card-title">
-                    <Highlight text={title} tokens={searchTokens} />
-                  </strong>
+                  {editingId === item.id ? (
+                    <input
+                      className="lib-title-input"
+                      value={editingTitle}
+                      autoFocus
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onBlur={() => void renameItem(item.id, editingTitle)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void renameItem(item.id, editingTitle);
+                        if (e.key === 'Escape') setEditingId(null);
+                      }}
+                    />
+                  ) : (
+                    <strong
+                      className="lib-card-title lib-card-title-editable"
+                      title="Click to rename"
+                      onClick={() => { setEditingId(item.id); setEditingTitle(title); }}
+                    >
+                      <Highlight text={title} tokens={searchTokens} />
+                    </strong>
+                  )}
                   <span className="lib-card-date">
                     {formatDate(item.createdAt, { month: 'short', day: 'numeric', year: 'numeric' })}
                   </span>
@@ -474,8 +563,8 @@ export default function LibraryPage() {
                   }}>
                     {'\uD83D\uDCCB'} {t('Copy')}
                   </button>
-                  <button className="lib-btn lib-btn-ghost lib-btn-sm" onClick={() => exportItem(item)}>
-                    {'\u2B07'} {t('Export')}
+                  <button className="lib-btn lib-btn-ghost lib-btn-sm" onClick={() => void exportItem(item)}>
+                    📄 {t('Word')}
                   </button>
                   <button
                     className="lib-btn lib-btn-ghost lib-btn-sm lib-btn-share"
@@ -579,7 +668,12 @@ export default function LibraryPage() {
           padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700;
           text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
         }
+        .lib-card-check { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
         .lib-card-title { font-size: var(--text-sm); font-weight: 600; flex: 1; min-width: 0; }
+        .lib-card-title-editable { cursor: text; }
+        .lib-card-title-editable:hover { text-decoration: underline; text-decoration-style: dotted; }
+        .lib-title-input { font-size: var(--text-sm); font-weight: 600; flex: 1; min-width: 0; padding: 2px 6px; border: 1px solid var(--accent); border-radius: 5px; background: var(--bg-surface); color: var(--text); outline: none; }
+        .lib-btn-danger:hover { border-color: var(--danger) !important; color: var(--danger) !important; }
         .lib-card-date { font-size: 11px; color: var(--text-3); margin-left: auto; white-space: nowrap; }
         .lib-icon-btn {
           background: none; border: none; cursor: pointer; color: var(--text-3);
