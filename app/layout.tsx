@@ -77,8 +77,59 @@ const guestSessionScript = `
 `;
 
 export const metadata: Metadata = {
-  title: 'Kivora',
-  description: 'Your study workspace — organize materials, generate summaries, quizzes, and more.',
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://study-alpha-three.vercel.app'),
+  ),
+  title: {
+    default: 'Kivora',
+    template: '%s — Kivora',
+  },
+  description: 'The research-grade study workspace for grad students. Search PubMed, arXiv & Semantic Scholar, import papers by DOI, export BibTeX, and review with FSRS-4.5 spaced repetition — private, encrypted, and offline-capable.',
+  applicationName: 'Kivora',
+  keywords: [
+    'grad student study workspace',
+    'PubMed search',
+    'arXiv research tool',
+    'DOI resolver',
+    'BibTeX export',
+    'academic research assistant',
+    'flashcards spaced repetition',
+    'FSRS algorithm',
+    'study planner',
+    'math solver',
+    'private study app',
+    'offline AI study tool',
+    'encrypted notes',
+  ],
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    type: 'website',
+    siteName: 'Kivora',
+    title: 'Kivora — Research. Review. Submit.',
+    description: 'The study workspace built for grad students. Search PubMed, arXiv & Semantic Scholar, import papers by DOI, export BibTeX, generate flashcards, and plan your exam — private, encrypted, offline-capable.',
+    url: '/',
+    images: [
+      {
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: 'Kivora study workspace preview',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Kivora — Research. Review. Submit.',
+    description: 'The study workspace built for grad students. PubMed · arXiv · DOI import · BibTeX export · FSRS flashcards · Encrypted & offline-capable.',
+    images: ['/twitter-image'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export const viewport: Viewport = {

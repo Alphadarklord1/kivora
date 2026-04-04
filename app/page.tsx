@@ -1,6 +1,24 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import styles from './page.module.css';
 import { DemoChat } from '@/components/landing/DemoChat';
+
+export const metadata: Metadata = {
+  title: 'Research, Review, Submit',
+  description:
+    'Search sources, turn them into flashcards and notes, solve math, and plan your study flow in one private workspace.',
+  openGraph: {
+    title: 'Kivora — Research, Review, Submit',
+    description:
+      'Search sources, turn them into flashcards and notes, solve math, and plan your study flow in one private workspace.',
+    url: '/',
+  },
+  twitter: {
+    title: 'Kivora — Research, Review, Submit',
+    description:
+      'Search sources, turn them into flashcards and notes, solve math, and plan your study flow in one private workspace.',
+  },
+};
 
 export default function RootPage() {
   return (
@@ -36,24 +54,24 @@ export default function RootPage() {
         <section className={styles.hero}>
           <div className={styles.heroCopy}>
             <div className={styles.badgeRow}>
-              <span className={styles.badge}>AI-Powered Study Platform</span>
+              <span className={styles.badge}>Built for grad students &amp; serious researchers</span>
               <span className={styles.badgeDot} />
-              <span className={styles.badgeNote}>Offline-ready · Arabic · English · French</span>
+              <span className={styles.badgeNote}>Private · Offline-ready · AR · EN · FR</span>
             </div>
 
             <h1 className={styles.heroTitle}>
-              Study smarter.<br />
-              <span className={styles.heroTitleAccent}>From one place.</span>
+              Research. Review.<br />
+              <span className={styles.heroTitleAccent}>Submit.</span>
             </h1>
 
             <p className={styles.heroBody}>
-              Kivora brings your files, AI tools, research, and math into a single focused workspace.
-              No more juggling five tools — just the work.
+              Search PubMed, arXiv, and Semantic Scholar. Import papers by DOI. Export BibTeX.
+              Turn your sources into flashcards, notes, and study plans — in one private workspace your institution can&apos;t see.
             </p>
 
             <div className={styles.heroActions}>
-              <Link href="/workspace" className={styles.ctaPrimary}>
-                Open Workspace
+              <Link href="/coach" className={styles.ctaPrimary}>
+                Start Researching
                 <span className={styles.ctaArrow}>→</span>
               </Link>
               <Link href="/register" className={styles.ctaSecondary}>
@@ -62,9 +80,9 @@ export default function RootPage() {
             </div>
 
             <div className={styles.trustRow}>
-              <span className={styles.trustItem}>✓ No credit card needed</span>
-              <span className={styles.trustItem}>✓ Guest access instant</span>
-              <span className={styles.trustItem}>✓ Local AI — works offline</span>
+              <span className={styles.trustItem}>✓ Files stay in your browser</span>
+              <span className={styles.trustItem}>✓ Client-side encrypted</span>
+              <span className={styles.trustItem}>✓ Works offline with local AI</span>
             </div>
           </div>
 
@@ -161,14 +179,14 @@ export default function RootPage() {
         {/* ── Feature strip ─────────────────────────────────────────────── */}
         <div className={styles.featureStrip}>
           {[
-            { icon: '🧠', label: 'Local AI models', sub: 'Works offline' },
-            { icon: '📄', label: 'PDF · Word · PPT', sub: 'Any file type' },
-            { icon: '🔬', label: 'Scholar Hub', sub: 'Research & reports' },
-            { icon: '🧮', label: 'Math Solver', sub: 'Step-by-step' },
+            { icon: '🔬', label: 'PubMed · arXiv · Semantic Scholar', sub: 'Multi-source search' },
+            { icon: '📎', label: 'DOI · arXiv resolver', sub: 'Paste ID → import paper' },
+            { icon: '📚', label: 'BibTeX export', sub: 'Reference library' },
             { icon: '🃏', label: 'Spaced Repetition', sub: 'FSRS-4.5 algorithm' },
-            { icon: '📅', label: 'Study Planner', sub: 'Exam countdown' },
-            { icon: '🌍', label: '3 Languages', sub: 'AR · EN · FR' },
-            { icon: '🔒', label: 'Encrypted', sub: 'Client-side vault' },
+            { icon: '🧮', label: 'Math Solver', sub: 'Step-by-step + LaTeX' },
+            { icon: '🔒', label: 'Client-side encrypted', sub: 'Files never leave your browser' },
+            { icon: '🧠', label: 'Local AI', sub: 'Works offline' },
+            { icon: '🌍', label: 'AR · EN · FR', sub: 'Full RTL support' },
           ].map(f => (
             <div key={f.label} className={styles.featureStripItem}>
               <span className={styles.featureStripIcon}>{f.icon}</span>
@@ -183,6 +201,36 @@ export default function RootPage() {
         {/* ── Live AI demo ──────────────────────────────────────────────── */}
         <section className={styles.demoSection}>
           <DemoChat />
+        </section>
+
+        {/* ── Pipeline strip ────────────────────────────────────────────── */}
+        <section className={styles.pipelineSection}>
+          <div className={styles.sectionHead}>
+            <span className={styles.eyebrow}>One connected flow</span>
+            <h2 className={styles.sectionTitle}>Research → Flashcards → Exam-ready.</h2>
+            <p className={styles.sectionBody}>
+              Each step feeds the next. No copy-pasting between tabs, no lost context.
+            </p>
+          </div>
+          <div className={styles.pipeline}>
+            {[
+              { icon: '🔬', step: 'Scholar Hub', action: 'Search PubMed, arXiv, Wikipedia', sub: 'Paste DOI → import paper instantly' },
+              { icon: '💾', step: 'Reference Library', action: 'Save & export sources', sub: 'BibTeX for citations, notes per paper' },
+              { icon: '⚡', step: 'Workspace', action: 'Generate from your material', sub: 'Flashcards, summaries, MCQs in one click' },
+              { icon: '🃏', step: 'Spaced Repetition', action: 'Review with FSRS-4.5', sub: 'Struggle cards return sooner — like Anki' },
+              { icon: '📅', step: 'Planner', action: 'Exam countdown + daily plan', sub: 'Auto-schedules based on your load' },
+            ].map((item, i, arr) => (
+              <div key={item.step} className={styles.pipelineItem}>
+                <div className={styles.pipelineCard}>
+                  <span className={styles.pipelineIcon}>{item.icon}</span>
+                  <strong className={styles.pipelineStep}>{item.step}</strong>
+                  <span className={styles.pipelineAction}>{item.action}</span>
+                  <span className={styles.pipelineSub}>{item.sub}</span>
+                </div>
+                {i < arr.length - 1 && <span className={styles.pipelineArrow}>→</span>}
+              </div>
+            ))}
+          </div>
         </section>
 
         {/* ── Three pillars ─────────────────────────────────────────────── */}
@@ -215,13 +263,13 @@ export default function RootPage() {
             <article className={`${styles.pillarCard} ${styles.pillarCardAccent}`}>
               <div className={styles.pillarIcon}>🎓</div>
               <div className={styles.pillarEyebrow}>Scholar Hub</div>
-              <h3 className={styles.pillarTitle}>Research before you write</h3>
+              <h3 className={styles.pillarTitle}>Academic research, built in</h3>
               <p className={styles.pillarBody}>
-                Search multiple sources, synthesize key ideas, get grounded citations,
-                then jump straight into writing a report from your findings.
+                Search PubMed, arXiv, and Semantic Scholar simultaneously. Import papers by DOI or arXiv ID.
+                Save to a personal reference library and export BibTeX for your paper.
               </p>
               <div className={styles.pillarTools}>
-                {['Research', 'Source Brief', 'Report Builder', 'Writer', 'Recovery'].map(t => (
+                {['PubMed', 'arXiv', 'DOI import', 'BibTeX export', 'Report Builder'].map(t => (
                   <span key={t} className={styles.toolTag}>{t}</span>
                 ))}
               </div>
@@ -249,29 +297,29 @@ export default function RootPage() {
         {/* ── How it works ──────────────────────────────────────────────── */}
         <section className={styles.howSection}>
           <div className={styles.sectionHead}>
-            <span className={styles.eyebrow}>Flow</span>
-            <h2 className={styles.sectionTitle}>From source to submission.</h2>
+            <span className={styles.eyebrow}>The research-to-submission pipeline</span>
+            <h2 className={styles.sectionTitle}>From literature to exam-ready — one flow.</h2>
           </div>
 
           <div className={styles.steps}>
             {[
               {
                 n: '01',
-                title: 'Bring in your material',
-                body: 'Upload a PDF, Word doc, or PowerPoint. Paste text or a URL. Kivora keeps it tied to the right tool.',
-                icon: '📂',
+                title: 'Search & import sources',
+                body: 'Search PubMed, arXiv, Wikipedia, and Semantic Scholar at once. Paste a DOI or arXiv ID to import any paper directly. Save to your reference library and export BibTeX.',
+                icon: '🔬',
               },
               {
                 n: '02',
-                title: 'Generate what you need',
-                body: 'Summarize, quiz yourself, build flashcards, solve equations — or research a topic in Scholar Hub.',
+                title: 'Generate study material',
+                body: 'Upload lecture slides or your saved papers. Kivora generates summaries, flashcard decks, MCQs, and structured notes in seconds — all saved to your Library.',
                 icon: '⚡',
               },
               {
                 n: '03',
-                title: 'Review and keep going',
-                body: 'Spaced repetition schedules your reviews. The Planner tracks your exam. Library saves all outputs.',
-                icon: '🔄',
+                title: 'Review with spaced repetition',
+                body: 'Flashcard decks use FSRS-4.5 — the algorithm behind Anki. Cards you struggle with come back sooner. The Planner keeps your exam date in view. Share decks with study groups.',
+                icon: '🃏',
               },
             ].map(step => (
               <article key={step.n} className={styles.stepCard}>
@@ -362,22 +410,22 @@ export default function RootPage() {
         <section className={styles.ctaSection}>
           <div className={styles.ctaGlow} aria-hidden="true" />
           <div className={styles.ctaContent}>
-            <span className={styles.eyebrow}>Start now</span>
-            <h2 className={styles.ctaTitle}>Ready to study smarter?</h2>
+            <span className={styles.eyebrow}>Free. Private. No credit card.</span>
+            <h2 className={styles.ctaTitle}>Your research stays yours.</h2>
             <p className={styles.ctaBody}>
-              Create a free account to sync your work across devices, or jump straight into
-              Workspace as a guest — no sign-up needed.
+              Files live in your browser. Content is encrypted client-side. No institution, no advertiser, no one
+              sees your work. Create a free account to sync across devices, or start immediately as a guest.
             </p>
             <div className={styles.ctaActions}>
               <Link href="/register" className={styles.ctaPrimary}>
                 Create Free Account
                 <span className={styles.ctaArrow}>→</span>
               </Link>
-              <Link href="/workspace" className={styles.ctaGhost}>
-                Continue as Guest
+              <Link href="/coach" className={styles.ctaGhost}>
+                Try Scholar Hub
               </Link>
-              <Link href="/settings#ai-models" className={styles.ctaGhost}>
-                Download Desktop App
+              <Link href="/workspace" className={styles.ctaGhost}>
+                Open Workspace
               </Link>
             </div>
           </div>
