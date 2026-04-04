@@ -15,6 +15,8 @@ export interface ScholarContext {
   label:           string;
   /** Full extracted text — used to pre-fill Workspace tools */
   sourceText?:     string;
+  /** Prebuilt flashcard/import text — used to open Workspace review flows directly */
+  reviewSetContent?: string;
   /** URL of the source, if applicable */
   sourceUrl?:      string;
   /** Research overview text */

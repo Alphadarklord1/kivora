@@ -430,6 +430,7 @@ export function WorkspacePanel({
   const abortRef    = useRef<AbortController | null>(null);
   const pasteRef    = useRef<HTMLTextAreaElement>(null);
   const handledReviewImportRef = useRef<string | null>(null);
+  const handledScholarActionRef = useRef<string | null>(null);
 
   function requestCreateFolder() {
     if (typeof window !== 'undefined') {
@@ -1090,6 +1091,40 @@ export function WorkspacePanel({
     router.replace('/workspace');
   }, [createWorkspaceReviewSet, router, searchParams, toast]);
 
+  useEffect(() => {
+    const scholarAction = searchParams.get('scholarAction');
+    if (!scholarAction || !scholarCtx) return;
+
+    const actionKey = `${scholarAction}:${scholarCtx.writtenAt}`;
+    if (handledScholarActionRef.current === actionKey) return;
+    handledScholarActionRef.current = actionKey;
+
+    if (scholarAction === 'flashcards' && scholarCtx.reviewSetContent) {
+      setMainTab('flashcards');
+      setOutput(scholarCtx.reviewSetContent);
+      setSelFile(null);
+      setViewFile(null);
+      setPasteMode(false);
+      setActiveReviewSetId(null);
+      setRequestedReviewPhase(null);
+      toast(`"${scholarCtx.label}" is ready in Flashcards`, 'success');
+      router.replace('/workspace?tab=flashcards');
+      return;
+    }
+
+    if (scholarAction === 'generate' && scholarCtx.sourceText) {
+      setMainTab('generate');
+      setPasteMode(true);
+      setSelFile(null);
+      setViewFile(null);
+      setExtractedText(scholarCtx.sourceText);
+      setOutput('');
+      setGenMode('summarize');
+      toast(`"${scholarCtx.label}" is ready in Tools`, 'success');
+      router.replace('/workspace?tab=generate');
+    }
+  }, [router, scholarCtx, searchParams, toast]);
+
   const breadcrumb = [selectedFolderName, selectedTopicName].filter(Boolean).join(' › ');
   const currentGen = GENERATE_TABS.find(t => t.id === genMode)!;
   const currentSourceLabel = pasteMode ? 'Pasted text' : selFile?.name ?? null;
@@ -1185,6 +1220,23 @@ export function WorkspacePanel({
                 Use as source ↓
               </button>
             )}
+            {scholarCtx.reviewSetContent && (
+              <button
+                className="btn btn-sm btn-secondary"
+                style={{ fontSize: 11, padding: '2px 8px' }}
+                onClick={() => {
+                  setMainTab('flashcards');
+                  setOutput(scholarCtx.reviewSetContent!);
+                  setSelFile(null);
+                  setViewFile(null);
+                  setPasteMode(false);
+                  setActiveReviewSetId(null);
+                  setRequestedReviewPhase(null);
+                }}
+              >
+                Build review set ↓
+              </button>
+            )}
             <a
               href="/coach"
               className="btn btn-sm btn-ghost"
@@ -1234,18 +1286,24 @@ export function WorkspacePanel({
               // On mobile, hide list when viewer is open
             }} className={viewFile ? 'file-list-panel file-list-panel--has-viewer' : 'file-list-panel'}>
               {!selectedFolder ? (
-                <div className="empty-state" style={{ flex: 1 }}>
-                  <div className="empty-icon">📂</div>
-                  <h3>No folder selected</h3>
-                  <p>Start by creating a folder, then drop in a file and send it straight into Tools.</p>
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-                    <button className="btn btn-primary btn-sm" onClick={requestCreateFolder}>
-                      Create first folder
+                <div className="empty-state" style={{ flex: 1, gap: 20, padding: '28px 16px' }}>
+                  <div className="empty-icon">📚</div>
+                  <h3 style={{ marginBottom: 4 }}>Pick a starting point</h3>
+                  <p style={{ marginBottom: 8 }}>Create a folder to organize files, or jump straight into a tool.</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 240 }}>
+                    <button className="btn btn-primary btn-sm" onClick={requestCreateFolder} style={{ justifyContent: 'flex-start', gap: 8 }}>
+                      📂 Create a folder
                     </button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setMainTab('generate')}>
-                      Open tools
+                    <button className="btn btn-secondary btn-sm" onClick={() => setMainTab('generate')} style={{ justifyContent: 'flex-start', gap: 8 }}>
+                      ⚡ Use tools without a file
                     </button>
+                    <a href="/coach" className="btn btn-secondary btn-sm" style={{ justifyContent: 'flex-start', gap: 8, textDecoration: 'none' }}>
+                      🔬 Search research sources
+                    </a>
                   </div>
+                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 4 }}>
+                    Tip: ⌘K searches all your decks, library items, and saved sources.
+                  </p>
                 </div>
               ) : (
                 <>

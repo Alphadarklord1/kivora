@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
 import { useI18n } from '@/lib/i18n/useI18n';
 import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
@@ -97,6 +98,9 @@ const LOCAL_AR: Record<string, string> = {
   'Synthesized from {sources} ranked sources with {citations} visible citations': 'تمت صياغتها من {sources} مصادر مرتبة مع {citations} استشهادات ظاهرة',
   'Saving…': 'جارٍ الحفظ…',
   'Save': 'حفظ',
+  'Send to Workspace': 'إرسال إلى Workspace',
+  'Research handoff ready in Workspace': 'أصبح تسليم البحث جاهزًا في Workspace',
+  'Source handoff ready in Workspace': 'أصبح تسليم المصدر جاهزًا في Workspace',
   'Exporting…': 'جارٍ التصدير…',
   'Word': 'Word',
   'Open Writing Studio with this topic pre-filled': 'افتح Writing Studio مع تعبئة هذا الموضوع مسبقًا',
@@ -164,6 +168,7 @@ export function ResearchTab({
 }: Props) {
   const { toast }       = useToast();
   const { t } = useI18n(LOCAL_AR);
+  const router = useRouter();
   const privacyMode     = loadClientAiDataMode();
 
   const [researchTopic,      setResearchTopic]      = useState(preloadTopic ?? '');
@@ -201,6 +206,60 @@ export function ResearchTab({
   const [doiMsg,            setDoiMsg]            = useState('');
 
   const topCitations = researchResult?.citations.slice(0, 4) ?? [];
+
+  const buildResearchDeck = useCallback((result: TopicResearchResult) => {
+    const cards: string[] = [];
+    cards.push(`Front: What is ${result.topic}? | Back: ${result.overview}`);
+    result.keyIdeas.slice(0, 6).forEach((idea, index) => {
+      const citation = result.citations[index];
+      const back = citation ? `${idea} (${citation.label}: ${citation.title})` : idea;
+      cards.push(`Front: Key idea ${index + 1} about ${result.topic} | Back: ${back}`);
+    });
+    return cards.join('\n');
+  }, []);
+
+  const sendResearchToWorkspace = useCallback((result: TopicResearchResult) => {
+    writeScholarContext({
+      label: result.topic,
+      sourceText: `Topic: ${result.topic}\n\nOverview: ${result.overview}\n\nKey ideas:\n${result.keyIdeas.map((k) => `- ${k}`).join('\n')}`,
+      reviewSetContent: buildResearchDeck(result),
+      researchOverview: result.overview,
+      kind: 'research',
+    });
+    toast(t('Research handoff ready in Workspace'), 'success');
+    router.push('/workspace?tab=flashcards&scholarAction=flashcards');
+  }, [buildResearchDeck, router, t, toast]);
+
+  const sendSourceToWorkspace = useCallback((source: {
+    title: string;
+    url: string;
+    excerpt?: string | null;
+    abstract?: string | null;
+    authors?: string | null;
+    journal?: string | null;
+    year?: number | null;
+    sourceType?: string | null;
+  }) => {
+    const sourceBody = [
+      `Title: ${source.title}`,
+      source.authors ? `Authors: ${source.authors}` : null,
+      source.journal ? `Journal: ${source.journal}` : null,
+      source.year ? `Year: ${source.year}` : null,
+      source.sourceType ? `Type: ${source.sourceType}` : null,
+      `URL: ${source.url}`,
+      '',
+      source.abstract ?? source.excerpt ?? 'No abstract available.',
+    ].filter(Boolean).join('\n');
+
+    writeScholarContext({
+      label: source.title,
+      sourceText: sourceBody,
+      sourceUrl: source.url,
+      kind: 'source',
+    });
+    toast(t('Source handoff ready in Workspace'), 'success');
+    router.push('/workspace?tab=generate&scholarAction=generate');
+  }, [router, t, toast]);
 
   const loadSavedSources = useCallback(async () => {
     try {
@@ -532,14 +591,20 @@ export function ResearchTab({
   }
 
   const SUGGESTED_TOPICS = [
-    'Photosynthesis explained',
-    'Causes of World War I',
-    'Quadratic equations',
-    'Cell division — mitosis vs meiosis',
-    'French Revolution timeline',
-    'Newton\'s laws of motion',
-    'DNA replication process',
-    'Supply and demand economics',
+    // Research / graduate tier
+    'CRISPR-Cas9 off-target effects',
+    'Transformer attention mechanisms explained',
+    'mRNA vaccine lipid nanoparticle delivery',
+    'RLHF and LLM alignment techniques',
+    'Quantum error correction — surface codes',
+    'Keynesian vs Austrian fiscal policy',
+    'Mitochondrial dynamics in apoptosis',
+    'Sovereign debt sustainability analysis',
+    // Accessible graduate-adjacent
+    'DNA replication — leading vs lagging strand',
+    'Bayesian inference vs frequentist statistics',
+    'Supply chain resilience post-COVID',
+    'Neuroplasticity and long-term potentiation',
   ];
 
   return (
@@ -729,6 +794,13 @@ export function ResearchTab({
                 )}
                 <button type="button" className={styles.plxAdvancedToggle} disabled={docxExporting} onClick={() => void downloadResearchDocx()}>
                   {docxExporting ? t('Exporting…') : t('Word')}
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.plxAdvancedToggle} ${styles.plxPrimaryGhost}`}
+                  onClick={() => sendResearchToWorkspace(researchResult)}
+                >
+                  {t('Send to Workspace')}
                 </button>
                 {onNavigateToWrite && (
                   <button
@@ -1007,6 +1079,18 @@ export function ResearchTab({
                     >
                       {alreadySaved ? `✓ ${t('Saved')}` : `🔖 ${t('Save source')}`}
                     </button>
+                    <button
+                      type="button"
+                      style={{ fontSize: '0.72rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary)', padding: 0 }}
+                      onClick={() => sendSourceToWorkspace({
+                        title: source.title,
+                        url: source.url,
+                        excerpt: source.excerpt,
+                        sourceType: source.type,
+                      })}
+                    >
+                      ↗ {t('Send to Workspace')}
+                    </button>
                   </div>
                 </div>
               );
@@ -1072,6 +1156,22 @@ export function ResearchTab({
                             onClick={() => void copyBibTeX(s)}
                           >
                             {bibCopiedId === s.id ? `✓ ${t('BibTeX copied')}` : t('Copy BibTeX')}
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.plxAdvancedToggle}
+                            style={{ padding: '0.1rem 0.4rem', fontSize: '0.7rem' }}
+                            onClick={() => sendSourceToWorkspace({
+                              title: s.title,
+                              url: s.url,
+                              abstract: s.abstract,
+                              authors: s.authors,
+                              journal: s.journal,
+                              year: s.year,
+                              sourceType: s.sourceType,
+                            })}
+                          >
+                            {t('Send to Workspace')}
                           </button>
                           <button
                             type="button"
