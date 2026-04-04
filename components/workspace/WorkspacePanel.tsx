@@ -287,16 +287,16 @@ function FileViewer({
         </div>
 
         <div className="workspace-file-actions" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button className="btn btn-primary btn-sm" onClick={useForTools} title="Load into Generate tab">
+          <button className="btn btn-primary btn-sm" onClick={useForTools} title="Load into Generate tab" aria-label={`Use ${file.name} in Tools`}>
             ⚡ Tools
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={useForNotes} title="Load into Notes tab">
+          <button className="btn btn-secondary btn-sm" onClick={useForNotes} title="Load into Notes tab" aria-label={`Use ${file.name} in Notes`}>
             📓 Notes
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={useForChat} title="Load into Chat tab">
+          <button className="btn btn-secondary btn-sm" onClick={useForChat} title="Load into Chat tab" aria-label={`Use ${file.name} in Chat`}>
             💬 Chat
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={useInMath} title="Send this file into Math">
+          <button className="btn btn-secondary btn-sm" onClick={useInMath} title="Send this file into Math" aria-label={`Use ${file.name} in Math`}>
             ∑ Math
           </button>
         </div>
@@ -1380,6 +1380,7 @@ export function WorkspacePanel({
                                       className="btn btn-primary btn-sm"
                                       style={{ fontSize: 11, padding: '2px 8px' }}
                                       title="Extract text and open in Generate"
+                                      aria-label={`Use ${file.name} in Tools`}
                                       onClick={async () => {
                                         const text = await extractFromFile(file);
                                         if (text) {
@@ -1393,6 +1394,7 @@ export function WorkspacePanel({
                                       className="btn btn-secondary btn-sm"
                                       style={{ fontSize: 11, padding: '2px 8px' }}
                                       title="Extract text and open in Chat"
+                                      aria-label={`Use ${file.name} in Chat`}
                                       onClick={async () => {
                                         const text = await extractFromFile(file);
                                         if (text) {
@@ -1406,6 +1408,7 @@ export function WorkspacePanel({
                                       className="btn btn-secondary btn-sm"
                                       style={{ fontSize: 11, padding: '2px 8px' }}
                                       title="Extract text and open PDF to Notes"
+                                      aria-label={`Use ${file.name} in Notes`}
                                       onClick={async () => {
                                         const text = await extractFromFile(file);
                                         if (text) {
@@ -1418,6 +1421,7 @@ export function WorkspacePanel({
                                       className="btn btn-secondary btn-sm"
                                       style={{ fontSize: 11, padding: '2px 8px' }}
                                       title="Send this file into Math"
+                                      aria-label={`Use ${file.name} in Math`}
                                       onClick={async () => {
                                         const text = await extractFromFile(file);
                                         if (text) {
@@ -1427,6 +1431,7 @@ export function WorkspacePanel({
                                       ∑ Math
                                     </button>
                                     <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}
+                                      aria-label={`${viewFile?.id === file.id ? 'Close preview for' : 'View'} ${file.name}`}
                                       onClick={() => {
                                         void markRecentFile(file.id);
                                         setViewFile(v => v?.id === file.id ? null : file);
@@ -1437,6 +1442,7 @@ export function WorkspacePanel({
                                 )}
                                 <button className="btn-icon" style={{ color: 'var(--danger)', width: 26, height: 26 }}
                                   title={`Delete "${file.name}"`}
+                                  aria-label={`Delete ${file.name}`}
                                   onClick={e => deleteFile(e, file)}>✕</button>
                               </div>
                             </div>
@@ -1790,11 +1796,27 @@ export function WorkspacePanel({
                   <div className="empty-icon">⚡</div>
                   <h3>AI Tools</h3>
                   <p style={{ marginBottom: 18 }}>
-                    Open a file in <strong>Files</strong> and click <strong>⚡ Use</strong>, or switch to <strong>Paste text</strong> above.
+                    Open a file in <strong>Files</strong>, paste text, or jump in with a starter path below.
                   </p>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
                     <button className="btn btn-primary btn-sm" onClick={() => setMainTab('files')}>Open files</button>
                     <button className="btn btn-secondary btn-sm" onClick={() => setPasteMode(true)}>Paste text</button>
+                  </div>
+                  <div style={{ display: 'grid', gap: 8, width: '100%', maxWidth: 520, margin: '0 auto 18px', textAlign: 'left' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3)', fontWeight: 700 }}>
+                      Starter paths
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <a href="/coach?starter=cell%20respiration&section=research" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
+                        🔬 Start from a topic
+                      </a>
+                      <a href="/planner" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
+                        📅 Build a study plan
+                      </a>
+                      <a href="/library" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
+                        🗂 Browse saved work
+                      </a>
+                    </div>
                   </div>
                   {/* Quick-start tool buttons */}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 20 }}>

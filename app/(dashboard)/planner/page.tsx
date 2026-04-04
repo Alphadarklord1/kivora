@@ -489,6 +489,36 @@ export default function PlannerPage() {
           </div>
         </header>
 
+        {plans.length === 0 && events.length === 0 && (
+          <div style={{
+            margin: '0 20px 16px',
+            padding: '18px 20px',
+            borderRadius: 16,
+            border: '1px dashed var(--border-subtle)',
+            background: 'var(--bg-surface)',
+            display: 'grid',
+            gap: 10,
+          }}>
+            <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', fontWeight: 700 }}>
+              Planner setup
+            </span>
+            <strong style={{ fontSize: '1rem', color: 'var(--text)' }}>
+              Start with one exam or deadline and Kivora will build the study blocks around it.
+            </strong>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn btn-primary btn-sm" onClick={() => setShowPlanForm(true)}>
+                Create first plan
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => openNewEvent()}>
+                Add event
+              </button>
+              <a href="/workspace" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
+                Open Workspace
+              </a>
+            </div>
+          </div>
+        )}
+
         {/* Views */}
         {view === 'month' && (
           <MonthView

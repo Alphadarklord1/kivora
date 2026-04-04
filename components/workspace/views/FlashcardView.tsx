@@ -107,6 +107,7 @@ function ShareToGroupButton({ deck, t }: { deck: SRSDeck; t: (k: string) => stri
     if (!selectedCode) return;
     setStatus('sharing');
     try {
+      const selectedGroup = groups.find((group) => group.joinCode === selectedCode);
       const res = await fetch(`/api/groups/${selectedCode}/decks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -118,7 +119,7 @@ function ShareToGroupButton({ deck, t }: { deck: SRSDeck; t: (k: string) => stri
       });
       const data = await res.json() as { ok?: boolean; error?: string };
       if (data.ok) {
-        setStatus('done'); setMsg(t('Deck shared!'));
+        setStatus('done'); setMsg(selectedGroup ? `${t('Deck shared!')} ${selectedGroup.name}` : t('Deck shared!'));
         setTimeout(close, 1800);
       } else { setStatus('error'); setMsg(data.error ?? t('Failed.')); }
     } catch { setStatus('error'); setMsg(t('Network error.')); }

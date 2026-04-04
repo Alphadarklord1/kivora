@@ -447,6 +447,8 @@ export default function RootPage() {
             <Link href="/planner"       className={styles.footerLink}>Planner</Link>
             <Link href="/library"       className={styles.footerLink}>Library</Link>
             <Link href="/settings"      className={styles.footerLink}>Settings</Link>
+            <Link href="/privacy"       className={styles.footerLink}>Privacy</Link>
+            <Link href="/terms"         className={styles.footerLink}>Terms</Link>
             <Link href="/login"         className={styles.footerLink}>Sign In</Link>
             <Link href="/register"      className={styles.footerLink}>Register</Link>
           </div>

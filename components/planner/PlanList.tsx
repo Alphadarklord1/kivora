@@ -25,6 +25,8 @@ export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPl
     Active: 'نشطة',
     Done: 'منتهية',
     'No plans yet': 'لا توجد خطط بعد',
+    'Create your first plan to turn an exam date into daily study blocks.': 'أنشئ خطتك الأولى لتحويل موعد الاختبار إلى جلسات دراسة يومية.',
+    'Create first plan': 'أنشئ أول خطة',
     'No {filter} plans': 'لا توجد خطط {filter}',
     active: 'نشطة',
     completed: 'منتهية',
@@ -79,6 +81,14 @@ export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPl
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
           </svg>
           <p>{filter === 'all' ? t('No plans yet') : t('No {filter} plans', { filter: t(filter) })}</p>
+          {filter === 'all' && (
+            <>
+              <span className="plan-list-empty-copy">{t('Create your first plan to turn an exam date into daily study blocks.')}</span>
+              <button className="btn btn-primary btn-sm" onClick={onNewPlan}>
+                {t('Create first plan')}
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <div className="plans-scroll">
@@ -248,6 +258,12 @@ export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPl
           color: var(--text-muted);
           text-align: center;
           padding: var(--space-5);
+        }
+        .plan-list-empty-copy {
+          max-width: 24ch;
+          font-size: 0.82rem;
+          line-height: 1.45;
+          color: var(--text-muted);
         }
         .plan-card {
           display: flex;
