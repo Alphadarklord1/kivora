@@ -830,6 +830,74 @@
   line-height: 1.7;
 }
 
+/* ── Pipeline section ───────────────────────────────────────────────────── */
+.pipelineSection {
+  margin-top: 5rem;
+}
+
+.pipeline {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  margin-top: 2.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.pipelineItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  flex: 1;
+  min-width: 160px;
+}
+
+.pipelineCard {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 1.4rem 1.2rem;
+  background: rgba(6, 12, 24, 0.7);
+  border: 1px solid rgba(100, 130, 200, 0.15);
+  border-radius: 1.2rem;
+}
+
+.pipelineIcon {
+  font-size: 1.8rem;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.pipelineStep {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #7eb3ff;
+  letter-spacing: 0.04em;
+}
+
+.pipelineAction {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #dce9ff;
+  line-height: 1.3;
+}
+
+.pipelineSub {
+  font-size: 0.82rem;
+  color: #5a7a9a;
+  line-height: 1.5;
+}
+
+.pipelineArrow {
+  flex-shrink: 0;
+  font-size: 1.3rem;
+  color: rgba(100, 130, 200, 0.4);
+  padding: 0 0.4rem;
+  margin-top: 2.2rem;
+  align-self: flex-start;
+}
+
 /* ── Dual panels ────────────────────────────────────────────────────────── */
 .dualSection {
   display: grid;
@@ -1150,6 +1218,25 @@
     display: none;
   }
 
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 64px;
+    padding-block: 0.75rem;
+    gap: 0.75rem;
+  }
+
+  .topbarActions {
+    width: 100%;
+    justify-content: stretch;
+    gap: 0.5rem;
+  }
+
+  .topbarActions > * {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
   .featureStrip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1169,6 +1256,21 @@
 
   .heroActions {
     flex-direction: column;
+  }
+
+  .heroBody {
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+
+  .badgeRow {
+    gap: 0.45rem;
+    margin-bottom: 1rem;
+  }
+
+  .badgeNote {
+    width: 100%;
+    font-size: 0.8rem;
   }
 
   .ctaPrimary,
@@ -1196,5 +1298,31 @@
 
   .floatBadge {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .brandText {
+    font-size: 0.92rem;
+  }
+
+  .ghostBtn,
+  .primaryBtn {
+    height: 2.5rem;
+    padding-inline: 0.8rem;
+    font-size: 0.82rem;
+  }
+
+  .hero {
+    padding: 2rem 0 2.25rem;
+    gap: 1.25rem;
+  }
+
+  .heroTitle {
+    font-size: clamp(2.2rem, 11vw, 3rem);
+  }
+
+  .heroVisual {
+    margin-inline: -0.15rem;
   }
 }

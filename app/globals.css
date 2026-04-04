@@ -1885,6 +1885,53 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
     height: auto !important;
   }
 
+  .flashcard-mobile-header {
+    align-items: flex-start !important;
+  }
+
+  .flashcard-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .flashcard-toolbar-row {
+    align-items: stretch !important;
+  }
+
+  .flashcard-toolbar-row > * {
+    flex: 1 1 9rem;
+  }
+
+  .flashcard-toolbar-row label {
+    margin-left: 0 !important;
+    justify-content: space-between;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--border-2);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+
+  .flashcard-review-top {
+    gap: 0.5rem !important;
+  }
+
+  .flashcard-review-top > :first-child {
+    width: 100%;
+    order: 1;
+  }
+
+  .flashcard-review-top > :nth-child(2) {
+    order: 2;
+  }
+
+  .flashcard-review-top > :last-child {
+    order: 3;
+    margin-left: auto;
+  }
+
+  .flashcard-grade-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
   /* Sharing cards: full-width */
   .share-card {
     flex-direction: column !important;
@@ -1898,6 +1945,17 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   /* Quick-action toolbar: icon-only on mobile */
   .toolbar-label {
     display: none !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .flashcard-action-grid,
+  .flashcard-grade-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .flashcard-toolbar-row > * {
+    flex-basis: 100%;
   }
 }
 

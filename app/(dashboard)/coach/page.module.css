@@ -2563,12 +2563,26 @@ details[open] .detailsSummary::before {
     gap: 0.5rem;
   }
 
+  .brand {
+    margin-right: 0.5rem;
+  }
+
+  .brandText {
+    display: none;
+  }
+
   .tabNav {
     order: 3;
     width: 100%;
     overflow-x: auto;
     border-top: 1px solid var(--border-subtle, #e2e8f0);
     padding-top: 0.25rem;
+  }
+
+  .appHeader > div:last-child {
+    width: 100%;
+    margin-left: 0 !important;
+    justify-content: space-between;
   }
 
   .wordPage {

@@ -1027,7 +1027,7 @@ export function FlashcardView({
     return (
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
         {/* Deck header with rename */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div className="flashcard-mobile-header" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
           {renaming ? (
             <input value={nameInput} onChange={e => setNameInput(e.target.value)}
               onKeyDown={e => {
@@ -1073,7 +1073,7 @@ export function FlashcardView({
         )}
 
         {/* ── Action grid: 4×2, perfectly symmetric ─── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
+        <div className="flashcard-action-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 6, marginBottom: 10 }}>
           <button className="btn btn-primary btn-sm" onClick={() => launchPhase('review')}>
             {stats.due > 0 ? `▶ ${t('Study {count}', { count: formatNumber(stats.due) })}` : `▶ ${t('Study all')}`}
           </button>
@@ -1091,7 +1091,7 @@ export function FlashcardView({
         </div>
 
         {/* ── Compact tools / share row ─── */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="flashcard-toolbar-row" style={{ display: 'flex', gap: 6, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => exportDeckCsv(deck)}>⬇ {t('Export CSV')}</button>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { void exportDeckApkg(deck); }}>📦 {t('Export Anki')}</button>
           <ShareToGroupButton deck={deck} t={t} />
@@ -1763,7 +1763,7 @@ export function FlashcardView({
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14, maxWidth:540, margin:'0 auto' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+      <div className="flashcard-review-top" style={{ display:'flex', alignItems:'center', gap:10, flexWrap: 'wrap' }}>
         <div style={{ flex:1, height:5, borderRadius:3, background:'var(--surface-2)', overflow:'hidden' }}><div style={{ width:`${revPct}%`, height:'100%', borderRadius:3, background:'var(--accent)', transition:'width 0.4s' }} /></div>
         <span style={{ fontSize:'var(--text-xs)', color:'var(--text-3)', whiteSpace:'nowrap' }}>{sessionIdx+1}/{totalSession}</span>
         <button className="btn-icon" style={{ fontSize:11, color:'var(--text-3)' }} onClick={() => setPhase('preview')}>✕</button>
@@ -1796,7 +1796,7 @@ export function FlashcardView({
       </div>
 
       {flip ? (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
+        <div className="flashcard-grade-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(110px,1fr))', gap:8 }}>
           {GRADES.map((g, gi) => (
             <button key={g.grade} onClick={() => doGrade(g.grade)} title={t(g.hint)}
               style={{ border:`1.5px solid ${g.color}40`, borderRadius:10, padding:'10px 4px 8px', cursor:'pointer', background:`${g.color}14`, color:g.color, fontWeight:700, fontSize:'var(--text-sm)', transition:'all 0.12s', lineHeight:1.2 }}
