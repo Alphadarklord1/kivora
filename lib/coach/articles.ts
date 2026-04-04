@@ -213,6 +213,150 @@ export async function searchOpenAlex(query: string, limit = 3): Promise<ArticleS
     });
 }
 
+// ── PubMed / NCBI Entrez ──────────────────────────────────────────────────────
+
+interface PubMedSearchResult {
+  esearchresult: { idlist: string[] };
+}
+
+interface PubMedSummaryRecord {
+  title: string;
+  authors: { name: string }[];
+  fulljournalname: string;
+  pubdate: string;
+  articleids: { idtype: string; value: string }[];
+}
+
+interface PubMedSummaryResult {
+  result: Record<string, PubMedSummaryRecord>;
+}
+
+/**
+ * Search PubMed (NCBI Entrez) for biomedical / scientific literature.
+ * Free API — no key required (rate-limited to 3 req/s without key).
+ */
+export async function searchPubMed(query: string, limit = 3): Promise<ArticleSuggestion[]> {
+  const searchParams = new URLSearchParams({
+    db: 'pubmed', term: query, retmax: String(limit),
+    retmode: 'json', usehistory: 'n',
+    tool: 'Kivora', email: 'support@kivora.app',
+  });
+  const searchRes = await fetch(
+    `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?${searchParams}`,
+    { headers: { 'User-Agent': 'Kivora/1.0 (https://kivora.app; study assistant)' }, signal: AbortSignal.timeout(10_000) },
+  );
+  if (!searchRes.ok) return [];
+  const searchData = await searchRes.json() as PubMedSearchResult;
+  const ids = (searchData?.esearchresult?.idlist ?? []).slice(0, limit);
+  if (!ids.length) return [];
+
+  const summaryParams = new URLSearchParams({
+    db: 'pubmed', id: ids.join(','), retmode: 'json',
+    tool: 'Kivora', email: 'support@kivora.app',
+  });
+  const summaryRes = await fetch(
+    `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?${summaryParams}`,
+    { headers: { 'User-Agent': 'Kivora/1.0 (https://kivora.app; study assistant)' }, signal: AbortSignal.timeout(10_000) },
+  );
+  if (!summaryRes.ok) return [];
+  const summaryData = await summaryRes.json() as PubMedSummaryResult;
+  const result = summaryData?.result ?? {};
+
+  return ids.flatMap((id): ArticleSuggestion[] => {
+    const article = result[id];
+    if (!article?.title) return [];
+    const doi = article.articleids?.find(a => a.idtype === 'doi')?.value;
+    const url = doi ? `https://doi.org/${doi}` : `https://pubmed.ncbi.nlm.nih.gov/${id}/`;
+    const authors = article.authors?.slice(0, 2).map(a => a.name).join(', ') ?? '';
+    const year = article.pubdate?.match(/\d{4}/)?.[0] ?? '';
+    const journal = article.fulljournalname || 'a peer-reviewed journal';
+    return [{
+      title: `${article.title}${year ? ` (${year})` : ''}${authors ? ` — ${authors}` : ''}`,
+      url,
+      source: 'PubMed',
+      excerpt: `Published in ${journal}. Indexed by NCBI PubMed.`,
+      readingMinutes: 8,
+      type: 'academic',
+    }];
+  });
+}
+
+// ── arXiv ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Search arXiv for preprint papers (physics, math, CS, biology, economics).
+ * Free API — no key required.
+ */
+export async function searchArxiv(query: string, limit = 3): Promise<ArticleSuggestion[]> {
+  const params = new URLSearchParams({
+    search_query: `all:${query}`,
+    max_results: String(limit),
+    sortBy: 'relevance',
+    sortOrder: 'descending',
+  });
+  const res = await fetch(`https://export.arxiv.org/api/query?${params}`, {
+    headers: { 'User-Agent': 'Kivora/1.0 (https://kivora.app; study assistant)' },
+    signal: AbortSignal.timeout(12_000),
+  });
+  if (!res.ok) return [];
+  const xml = await res.text();
+
+  const entries = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)];
+  return entries.slice(0, limit).flatMap(([, body]): ArticleSuggestion[] => {
+    const title   = body.match(/<title>([\s\S]*?)<\/title>/)?.[1]?.replace(/\s+/g, ' ').trim() ?? '';
+    const summary = body.match(/<summary>([\s\S]*?)<\/summary>/)?.[1]?.replace(/\s+/g, ' ').trim() ?? '';
+    const absLink = body.match(/<id>([^<]+)<\/id>/)?.[1]?.trim() ?? '';
+    const pdfLink = body.match(/<link[^>]+title="pdf"[^>]+href="([^"]+)"/)?.[1]
+      ?? absLink.replace('/abs/', '/pdf/');
+    const authorNames = [...body.matchAll(/<name>([^<]+)<\/name>/g)].slice(0, 2).map(m => m[1]).join(', ');
+    const year = body.match(/<published>(\d{4})/)?.[1] ?? '';
+
+    if (!title || !summary || !absLink) return [];
+    const excerpt = summary.slice(0, 200) + (summary.length > 200 ? '…' : '');
+    return [{
+      title: `${title}${year ? ` (${year})` : ''}${authorNames ? ` — ${authorNames}` : ''}`,
+      url: pdfLink || absLink,
+      source: 'arXiv',
+      excerpt,
+      readingMinutes: Math.max(5, Math.ceil(summary.split(/\s+/).length / 220) + 10),
+      type: 'academic',
+    }];
+  });
+}
+
+// ── Brave Web Search (optional — requires BRAVE_SEARCH_API_KEY) ───────────────
+
+interface BraveWebResult { title: string; url: string; description: string; }
+interface BraveSearchResponse { web?: { results: BraveWebResult[] } }
+
+/**
+ * Real web search via Brave Search API.
+ * Pass apiKey = process.env.BRAVE_SEARCH_API_KEY.
+ * Returns empty array when no key is configured.
+ */
+export async function searchBraveWeb(query: string, limit: number, apiKey: string): Promise<ArticleSuggestion[]> {
+  if (!apiKey) return [];
+  const params = new URLSearchParams({ q: query, count: String(limit), safesearch: 'moderate' });
+  const res = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
+    headers: {
+      Accept: 'application/json',
+      'X-Subscription-Token': apiKey,
+      'User-Agent': 'Kivora/1.0 (https://kivora.app; study assistant)',
+    },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) return [];
+  const data = await res.json() as BraveSearchResponse;
+  return (data?.web?.results ?? []).slice(0, limit).map(r => ({
+    title: r.title,
+    url: r.url,
+    source: 'Web',
+    excerpt: (r.description ?? '').slice(0, 200) || 'A web result relevant to your topic.',
+    readingMinutes: 3,
+    type: 'educational' as const,
+  }));
+}
+
 /**
  * Build static "further reading" suggestions for a topic — links to curated
  * educational platforms that don't require scraping.

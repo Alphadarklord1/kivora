@@ -3,7 +3,10 @@ import { cloudAccessAllowed, type AiDataMode } from '@/lib/privacy/ai-data';
 import {
   buildStaticSuggestions,
   fetchWikiSummary,
+  searchArxiv,
+  searchBraveWeb,
   searchOpenAlex,
+  searchPubMed,
   searchSemanticScholar,
   searchWikipedia,
   type ArticleSuggestion,
@@ -195,20 +198,25 @@ async function fetchManualSource(urlValue: string): Promise<ResearchSource> {
 
 async function fetchAutomaticSources(
   topic: string,
-  options: { includeWeb: boolean; ranking: ResearchRanking },
+  options: { includeWeb: boolean; ranking: ResearchRanking; braveKey?: string },
 ): Promise<ResearchSource[]> {
-  const wantAcademic = options.ranking === 'academic-first' ? 4 : 2;
+  const wantS2 = options.ranking === 'academic-first' ? 3 : 2;
+  const wantPubMed = options.ranking === 'broad-web' ? 1 : 2;
+  const wantArxiv = options.ranking === 'broad-web' ? 1 : 2;
 
-  // Run Semantic Scholar and OpenAlex in parallel — if S2 rate-limits, OpenAlex fills in
-  const [s2Results, openAlexResults] = await Promise.all([
-    searchSemanticScholar(topic, wantAcademic).catch((): ArticleSuggestion[] => []),
-    searchOpenAlex(topic, wantAcademic).catch((): ArticleSuggestion[] => []),
+  // Run all academic sources in parallel
+  const [s2Results, openAlexResults, pubMedResults, arxivResults] = await Promise.all([
+    searchSemanticScholar(topic, wantS2).catch((): ArticleSuggestion[] => []),
+    searchOpenAlex(topic, wantS2).catch((): ArticleSuggestion[] => []),
+    searchPubMed(topic, wantPubMed).catch((): ArticleSuggestion[] => []),
+    searchArxiv(topic, wantArxiv).catch((): ArticleSuggestion[] => []),
   ]);
 
-  // Merge academic results: prefer S2 when both return results, use OpenAlex to fill gaps
+  // Merge academic results; prefer S2/OpenAlex, fill with PubMed/arXiv
+  const wantAcademic = options.ranking === 'academic-first' ? 6 : 4;
   const seenTitles = new Set<string>();
   const academic: ArticleSuggestion[] = [];
-  for (const item of [...s2Results, ...openAlexResults]) {
+  for (const item of [...s2Results, ...openAlexResults, ...pubMedResults, ...arxivResults]) {
     const key = item.title.slice(0, 60).toLowerCase();
     if (!seenTitles.has(key) && academic.length < wantAcademic) {
       seenTitles.add(key);
@@ -222,42 +230,36 @@ async function fetchAutomaticSources(
   const wikiSummaries = await Promise.all(
     wikiTitles.slice(0, options.ranking === 'broad-web' ? 4 : 2).map((title) => fetchWikiSummary(title).catch(() => null)),
   );
+  const encyclopedia = wikiSummaries.filter((item): item is NonNullable<typeof item> => Boolean(item));
 
-  const encyclopedia = wikiSummaries
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  // Brave web search for broad-web ranking
+  const webResults: ArticleSuggestion[] = options.ranking === 'broad-web' && options.braveKey
+    ? await searchBraveWeb(topic, 4, options.braveKey).catch(() => [])
+    : [];
 
-  const all = [
-    ...academic.map((item) => ({
-      id: item.url,
-      title: item.title,
-      url: item.url,
-      source: item.source,
-      type: item.type,
-      excerpt: item.excerpt,
-      readingMinutes: item.readingMinutes,
-      origin: 'automatic' as const,
-      keyPoints: [item.excerpt],
-      confidenceLabel: 'High' as const,
-      confidenceScore: item.source === 'Semantic Scholar' ? 90 : 87,
-      citationLabel: '',
+  function toSource(item: ArticleSuggestion, conf: { label: ResearchSource['confidenceLabel']; score: number }): ResearchSource {
+    return {
+      id: item.url, title: item.title, url: item.url, source: item.source,
+      type: item.type, excerpt: item.excerpt, readingMinutes: item.readingMinutes,
+      origin: 'automatic' as const, keyPoints: [item.excerpt],
+      confidenceLabel: conf.label, confidenceScore: conf.score, citationLabel: '',
+    };
+  }
+
+  const all: ResearchSource[] = [
+    ...academic.map(item => toSource(item, {
+      label: 'High',
+      score: item.source === 'Semantic Scholar' ? 90 : item.source === 'PubMed' ? 88 : item.source === 'arXiv' ? 85 : 87,
     })),
-    ...encyclopedia.map((item) => ({
-      id: item.url,
-      title: item.title,
-      url: item.url,
-      source: item.source,
-      type: item.type,
-      excerpt: item.excerpt,
-      readingMinutes: item.readingMinutes,
-      origin: 'automatic' as const,
-      keyPoints: [item.excerpt],
-      confidenceLabel: options.ranking === 'broad-web' ? 'Baseline' as const : 'Medium' as const,
-      confidenceScore: options.ranking === 'broad-web' ? 58 : 70,
-      citationLabel: '',
+    ...encyclopedia.map(item => toSource(item, {
+      label: options.ranking === 'broad-web' ? 'Baseline' : 'Medium',
+      score: options.ranking === 'broad-web' ? 58 : 70,
     })),
+    ...webResults.map(item => toSource(item, { label: 'Baseline', score: 55 })),
   ];
 
-  return rankSources(all, options.ranking).slice(0, options.ranking === 'broad-web' ? 5 : 4);
+  const maxSources = options.ranking === 'broad-web' ? 8 : options.ranking === 'academic-first' ? 6 : 5;
+  return rankSources(all, options.ranking).slice(0, maxSources);
 }
 
 function rankSources(sources: ResearchSource[], ranking: ResearchRanking) {
@@ -322,6 +324,7 @@ export async function researchTopic(args: {
   manualUrls: string[];
   aiPrefs?: unknown;
   privacyMode: AiDataMode;
+  braveKey?: string;
 }): Promise<TopicResearchResult> {
   const topic = args.topic.trim().slice(0, 140);
   if (!topic) throw new Error('Enter a topic to research.');
@@ -341,8 +344,9 @@ export async function researchTopic(args: {
     : [];
   const automaticSources = args.mode === 'manual'
     ? []
-    : await fetchAutomaticSources(topic, { includeWeb: args.includeWeb, ranking: args.ranking });
-  const sources = attachCitationLabels(rankSources([...manualSources, ...automaticSources], args.ranking).slice(0, 6));
+    : await fetchAutomaticSources(topic, { includeWeb: args.includeWeb, ranking: args.ranking, braveKey: args.braveKey });
+  const maxSources = args.ranking === 'broad-web' ? 8 : args.ranking === 'academic-first' ? 7 : 6;
+  const sources = attachCitationLabels(rankSources([...manualSources, ...automaticSources], args.ranking).slice(0, maxSources));
 
   if (sources.length === 0) {
     throw new Error('No readable sources were found for this topic yet.');

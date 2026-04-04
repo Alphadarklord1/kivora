@@ -80,6 +80,86 @@ function speak(text: string) {
   window.speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance(text), { rate: 0.92 }));
 }
 
+// ── Share to Group button ─────────────────────────────────────────────────────
+
+function ShareToGroupButton({ deck, t }: { deck: SRSDeck; t: (k: string) => string }) {
+  const [open, setOpen] = useState(false);
+  const [groups, setGroups] = useState<{ id: string; name: string; joinCode: string }[]>([]);
+  const [selectedCode, setSelectedCode] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading-groups' | 'sharing' | 'done' | 'error'>('idle');
+  const [msg, setMsg] = useState('');
+
+  async function openPicker() {
+    setOpen(true);
+    setStatus('loading-groups');
+    try {
+      const res = await fetch('/api/groups', { credentials: 'include' });
+      const data = await res.json() as { id: string; name: string; joinCode: string }[];
+      setGroups(Array.isArray(data) ? data : []);
+      setSelectedCode(Array.isArray(data) && data.length > 0 ? data[0].joinCode : '');
+    } catch { setGroups([]); }
+    setStatus('idle');
+  }
+
+  function close() { setOpen(false); setStatus('idle'); setMsg(''); setSelectedCode(''); setGroups([]); }
+
+  async function share() {
+    if (!selectedCode) return;
+    setStatus('sharing');
+    try {
+      const res = await fetch(`/api/groups/${selectedCode}/decks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deckName: deck.name,
+          cardCount: deck.cards.length,
+          content: deck.cards.map(c => `${c.front} | ${c.back}`).join('\n'),
+        }),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (data.ok) {
+        setStatus('done'); setMsg(t('Deck shared!'));
+        setTimeout(close, 1800);
+      } else { setStatus('error'); setMsg(data.error ?? t('Failed.')); }
+    } catch { setStatus('error'); setMsg(t('Network error.')); }
+  }
+
+  if (!open) {
+    return (
+      <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => void openPicker()}>
+        👥 {t('Groups')}
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface-2)', borderRadius: 8, padding: '4px 8px' }}>
+      {status === 'loading-groups' ? (
+        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>…</span>
+      ) : groups.length === 0 ? (
+        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('No groups — create or join one first.')}</span>
+      ) : (
+        <select
+          value={selectedCode}
+          onChange={e => setSelectedCode(e.target.value)}
+          style={{ padding: '3px 6px', borderRadius: 6, border: '1px solid var(--border-2)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13 }}
+        >
+          {groups.map(g => (
+            <option key={g.id} value={g.joinCode}>{g.name}</option>
+          ))}
+        </select>
+      )}
+      {groups.length > 0 && (
+        <button className="btn btn-primary btn-xs" disabled={status === 'sharing' || status === 'done'} onClick={() => void share()}>
+          {status === 'sharing' ? '…' : status === 'done' ? '✓' : t('Share')}
+        </button>
+      )}
+      <button className="btn btn-ghost btn-xs" onClick={close}>✕</button>
+      {msg && <span style={{ fontSize: 11, color: status === 'error' ? '#ef4444' : '#22c55e' }}>{msg}</span>}
+    </div>
+  );
+}
+
 // ── Sync helpers ──────────────────────────────────────────────────────────────
 const syncCache = new Map<string, number>(); // deckId → last sync timestamp
 
@@ -1014,6 +1094,7 @@ export function FlashcardView({
         <div style={{ display: 'flex', gap: 6, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => exportDeckCsv(deck)}>⬇ {t('Export CSV')}</button>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { void exportDeckApkg(deck); }}>📦 {t('Export Anki')}</button>
+          <ShareToGroupButton deck={deck} t={t} />
           {showPublicActions && (
             <>
               <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px', color: shareStatus==='done'?'#52b788':shareStatus==='error'?'#ef4444':undefined }} disabled={shareStatus==='loading'} onClick={handleShare}>

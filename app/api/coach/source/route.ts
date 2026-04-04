@@ -1,6 +1,7 @@
 import { requireAppAccess } from '@/lib/api/guard';
 import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { NextRequest, NextResponse } from 'next/server';
+import { isYouTubeUrl, fetchYouTubeTranscript, extractYouTubeVideoId } from '@/lib/coach/youtube';
 import { offlineGenerate } from '@/lib/offline/generate';
 import { callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
 import { callGroqChat, isGroqConfigured } from '@/lib/ai/groq';
@@ -182,6 +183,49 @@ export async function POST(req: NextRequest) {
   }
 
   let brief: SourceBrief;
+
+  // ── YouTube transcript path ───────────────────────────────────────────────
+  if (rawUrl.trim() && isYouTubeUrl(rawUrl.trim())) {
+    const videoId = extractYouTubeVideoId(rawUrl.trim())!;
+    try {
+      const yt = await fetchYouTubeTranscript(videoId);
+      const durationLabel = yt.durationSeconds
+        ? `${Math.floor(yt.durationSeconds / 60)}m ${yt.durationSeconds % 60}s`
+        : null;
+      const metaText = [
+        yt.transcript,
+        yt.channelName ? `Channel: ${yt.channelName}` : '',
+        durationLabel ? `Duration: ${durationLabel}` : '',
+      ].filter(Boolean).join('\n\n');
+
+      const meta = extractSourceMetaFromText(metaText, yt.title);
+      brief = buildFallbackSourceBrief(
+        { ...meta, wordCount: yt.wordCount },
+        rawUrl.trim(),
+        'url',
+        `YouTube — ${yt.channelName || 'video'}`,
+      );
+      // Enrich with AI if allowed
+      if (privacyMode === 'full') {
+        try {
+          const generated = await generateSourceBrief({ ...brief, extractedText: yt.transcript.slice(0, 12_000) }, ai);
+          const summary = parseSummary(generated).replace(/^summary:\s*/i, '').trim();
+          const keyPoints = parseKeyPoints(generated, summary);
+          brief = {
+            ...brief,
+            summary: summary || brief.summary,
+            keyPoints: keyPoints.length ? keyPoints : brief.keyPoints,
+          };
+        } catch { /* use fallback */ }
+      }
+      return NextResponse.json(brief);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Could not fetch transcript for this YouTube video.' },
+        { status: 400 },
+      );
+    }
+  }
 
   if (rawText.trim()) {
     try {

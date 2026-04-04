@@ -49,8 +49,6 @@ const TIER_FILL: Record<number, string> = {
   2: 'rgba(245,158,11,0.18)',
 };
 
-const TIER_RADIUS: Record<number, number> = { 0: 20, 1: 35, 2: 46 };
-
 // ── TF-IDF fallback ───────────────────────────────────────────────────────────
 
 function buildTfidfGraph(items: LibraryItem[]): { nodes: Node[]; edges: Edge[] } {
@@ -298,72 +296,91 @@ function buildAiGraph(
   return { nodes, edges };
 }
 
-// ── Positions ─────────────────────────────────────────────────────────────────
+// ── Force-directed layout ─────────────────────────────────────────────────────
+
+/** Seeded LCG pseudo-random — same nodes always produce the same layout. */
+function seededRng(seed: number): () => number {
+  let s = (seed ^ 0xdeadbeef) >>> 0;
+  return () => {
+    s = Math.imul(s ^ (s >>> 16), 0x45d9f3b);
+    s = Math.imul(s ^ (s >>> 16), 0x45d9f3b);
+    s ^= (s >>> 16);
+    return (s >>> 0) / 0xffffffff;
+  };
+}
 
 function computePositions(
   nodes: Node[],
   edges: Edge[],
 ): Record<string, { x: number; y: number }> {
-  const tiers: Record<number, Node[]> = { 0: [], 1: [], 2: [] };
-  for (const node of nodes) tiers[node.tier].push(node);
+  if (!nodes.length) return {};
 
-  // Build adjacency: nodeId → set of connected nodeIds
-  const adj = new Map<string, Set<string>>();
-  for (const node of nodes) adj.set(node.id, new Set());
-  for (const edge of edges) {
-    adj.get(edge.from)?.add(edge.to);
-    adj.get(edge.to)?.add(edge.from);
+  // Deterministic seed from sorted node IDs so the same graph always produces the same layout
+  const seed = nodes.map(n => n.id).sort().join('').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const rng = seededRng(seed);
+
+  // Initialize positions in the center 40% of the canvas
+  const state: Record<string, { x: number; y: number; vx: number; vy: number }> = {};
+  for (const node of nodes) {
+    state[node.id] = { x: 30 + rng() * 40, y: 30 + rng() * 40, vx: 0, vy: 0 };
   }
 
-  const pos: Record<string, { x: number; y: number }> = {};
+  const ITERATIONS = 180;
+  const REPULSION  = 600;
+  const SPRING     = 0.04;
+  const IDEAL_DIST = 22;
+  const GRAVITY    = 0.012;
+  const DAMPING    = 0.82;
 
-  // Place tier 0 first (inner ring)
-  const t0 = tiers[0];
-  const r0 = TIER_RADIUS[0];
-  t0.forEach((node, i) => {
-    const angle = (i / Math.max(t0.length, 1)) * Math.PI * 2 - Math.PI / 2;
-    pos[node.id] = { x: 50 + Math.cos(angle) * r0, y: 50 + Math.sin(angle) * r0 };
-  });
+  for (let iter = 0; iter < ITERATIONS; iter++) {
+    const cooling = 1 - iter / ITERATIONS;
 
-  // Place tier 1: sort so nodes connected to the same tier-0 node cluster together
-  const t1 = [...tiers[1]].sort((a, b) => {
-    const aConn = [...(adj.get(a.id) ?? [])].find(id => tiers[0].some(n => n.id === id));
-    const bConn = [...(adj.get(b.id) ?? [])].find(id => tiers[0].some(n => n.id === id));
-    const aAngle = aConn && pos[aConn] ? Math.atan2(pos[aConn].y - 50, pos[aConn].x - 50) : 0;
-    const bAngle = bConn && pos[bConn] ? Math.atan2(pos[bConn].y - 50, pos[bConn].x - 50) : 0;
-    return aAngle - bAngle;
-  });
-  const r1 = TIER_RADIUS[1];
-  t1.forEach((node, i) => {
-    const angle = (i / Math.max(t1.length, 1)) * Math.PI * 2 - Math.PI / 2;
-    pos[node.id] = { x: 50 + Math.cos(angle) * r1, y: 50 + Math.sin(angle) * r1 };
-  });
-
-  // Place tier 2: position each sub-node near its parent's angle
-  const t2 = tiers[2];
-  const r2 = TIER_RADIUS[2];
-  t2.forEach((node, i) => {
-    const parentId = [...(adj.get(node.id) ?? [])].find(id =>
-      tiers[0].some(n => n.id === id) || tiers[1].some(n => n.id === id),
-    );
-    let baseAngle = (i / Math.max(t2.length, 1)) * Math.PI * 2 - Math.PI / 2;
-    if (parentId && pos[parentId]) {
-      baseAngle = Math.atan2(pos[parentId].y - 50, pos[parentId].x - 50);
-      // Spread siblings slightly
-      const siblings = t2.filter(n => {
-        const pId = [...(adj.get(n.id) ?? [])].find(id =>
-          tiers[0].some(x => x.id === id) || tiers[1].some(x => x.id === id),
-        );
-        return pId === parentId;
-      });
-      const sibIdx = siblings.findIndex(n => n.id === node.id);
-      const spread = (Math.PI / 5) * (sibIdx - (siblings.length - 1) / 2);
-      baseAngle += spread;
+    // Dampen velocities
+    for (const id of Object.keys(state)) {
+      state[id].vx *= DAMPING;
+      state[id].vy *= DAMPING;
     }
-    pos[node.id] = { x: 50 + Math.cos(baseAngle) * r2, y: 50 + Math.sin(baseAngle) * r2 };
-  });
 
-  return pos;
+    // Repulsion between every pair
+    const ids = Object.keys(state);
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const a = state[ids[i]], b = state[ids[j]];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+        const f = (REPULSION / (dist * dist)) * cooling;
+        const fx = (dx / dist) * f, fy = (dy / dist) * f;
+        a.vx -= fx; a.vy -= fy;
+        b.vx += fx; b.vy += fy;
+      }
+    }
+
+    // Spring attraction along edges
+    for (const edge of edges) {
+      const a = state[edge.from], b = state[edge.to];
+      if (!a || !b) continue;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+      const f = SPRING * (dist - IDEAL_DIST);
+      const fx = (dx / dist) * f, fy = (dy / dist) * f;
+      a.vx += fx; a.vy += fy;
+      b.vx -= fx; b.vy -= fy;
+    }
+
+    // Gravity toward center (50, 50)
+    for (const id of Object.keys(state)) {
+      state[id].vx += (50 - state[id].x) * GRAVITY;
+      state[id].vy += (50 - state[id].y) * GRAVITY;
+    }
+
+    // Apply and clamp inside [6, 94]
+    for (const id of Object.keys(state)) {
+      state[id].x = Math.max(6, Math.min(94, state[id].x + state[id].vx));
+      state[id].y = Math.max(6, Math.min(94, state[id].y + state[id].vy));
+    }
+  }
+
+  return Object.fromEntries(Object.keys(state).map(id => [id, { x: state[id].x, y: state[id].y }]));
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────

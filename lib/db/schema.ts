@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, boolean, integer, real, jsonb, primaryKey, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, boolean, integer, real, jsonb, primaryKey, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import type { RAGIndex } from '@/lib/rag/retrieve';
 
@@ -173,6 +173,42 @@ export const shares = pgTable('shares', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// ============ STUDY GROUPS ============
+
+export const studyGroups = pgTable('study_groups', {
+  id:          uuid('id').defaultRandom().primaryKey(),
+  ownerId:     uuid('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name:        text('name').notNull(),
+  description: text('description'),
+  joinCode:    text('join_code').notNull().unique(), // 6-char uppercase alphanumeric
+  createdAt:   timestamp('created_at').defaultNow().notNull(),
+});
+
+export const studyGroupMembers = pgTable('study_group_members', {
+  id:       uuid('id').defaultRandom().primaryKey(),
+  groupId:  uuid('group_id').notNull().references(() => studyGroups.id, { onDelete: 'cascade' }),
+  userId:   uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role:     text('role').notNull().default('member'), // 'owner' | 'member'
+  joinedAt: timestamp('joined_at').defaultNow().notNull(),
+}, (table) => ({
+  groupUserUnique: uniqueIndex('study_group_members_group_user_uq').on(table.groupId, table.userId),
+  userIdx: index('study_group_members_user_idx').on(table.userId),
+}));
+
+export const studyGroupDecks = pgTable('study_group_decks', {
+  id:         uuid('id').defaultRandom().primaryKey(),
+  groupId:    uuid('group_id').notNull().references(() => studyGroups.id, { onDelete: 'cascade' }),
+  deckName:   text('deck_name').notNull(),
+  cardCount:  integer('card_count').notNull().default(0),
+  content:    text('content').notNull(), // "Front: X | Back: Y" lines
+  shareToken: text('share_token'),       // link to public library entry if published
+  addedBy:    uuid('added_by').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  addedAt:    timestamp('added_at').defaultNow().notNull(),
+}, (table) => ({
+  groupIdx: index('study_group_decks_group_idx').on(table.groupId),
+  addedByIdx: index('study_group_decks_added_by_idx').on(table.addedBy),
+}));
+
 // ============ QUIZ ATTEMPTS ============
 
 export const quizAttempts = pgTable('quiz_attempts', {
@@ -200,6 +236,24 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   files: many(files),
   libraryItems: many(libraryItems),
   shares: many(shares),
+  ownedGroups: many(studyGroups),
+  groupMemberships: many(studyGroupMembers),
+}));
+
+export const studyGroupsRelations = relations(studyGroups, ({ one, many }) => ({
+  owner: one(users, { fields: [studyGroups.ownerId], references: [users.id] }),
+  members: many(studyGroupMembers),
+  decks: many(studyGroupDecks),
+}));
+
+export const studyGroupMembersRelations = relations(studyGroupMembers, ({ one }) => ({
+  group: one(studyGroups, { fields: [studyGroupMembers.groupId], references: [studyGroups.id] }),
+  user: one(users, { fields: [studyGroupMembers.userId], references: [users.id] }),
+}));
+
+export const studyGroupDecksRelations = relations(studyGroupDecks, ({ one }) => ({
+  group: one(studyGroups, { fields: [studyGroupDecks.groupId], references: [studyGroups.id] }),
+  addedByUser: one(users, { fields: [studyGroupDecks.addedBy], references: [users.id] }),
 }));
 
 export const foldersRelations = relations(folders, ({ one, many }) => ({

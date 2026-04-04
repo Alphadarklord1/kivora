@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
       manualUrls: parseManualUrls(manualUrlsRaw),
       aiPrefs: ai,
       privacyMode,
+      braveKey: process.env.BRAVE_SEARCH_API_KEY ?? '',
     });
     return NextResponse.json(result);
   } catch (error) {
