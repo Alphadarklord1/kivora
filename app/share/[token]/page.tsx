@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface ShareData {
   id: string;
@@ -17,7 +18,42 @@ interface ShareData {
   expiresAt?: string;
 }
 
+const LOCAL_AR: Record<string, string> = {
+  'Saved': 'تم الحفظ',
+  'Save failed': 'فشل الحفظ',
+  'Saved to your library! Open Workspace → Library to view it.': 'تم حفظ نسخة في مكتبتك. افتح Workspace ثم Library لرؤيتها.',
+  'Sign in to save this to your library.': 'سجّل الدخول لحفظ هذا العنصر في مكتبتك.',
+  'Fork failed': 'فشل حفظ النسخة',
+  'Invalid share link': 'رابط المشاركة غير صالح',
+  'This link is missing its share token.': 'هذا الرابط يفتقد رمز المشاركة.',
+  'Go to Kivora': 'الانتقال إلى Kivora',
+  'Try Kivora free →': 'جرّب Kivora مجانًا ←',
+  'Loading shared content…': 'جارٍ تحميل المحتوى المشترك…',
+  'Share not found': 'تعذر العثور على المشاركة',
+  'Shared by': 'تمت المشاركة بواسطة',
+  'Can edit': 'يمكن التعديل',
+  'View only': 'عرض فقط',
+  'Expires': 'ينتهي في',
+  'You have edit access — changes you save update the shared document for everyone.': 'لديك صلاحية تعديل — أي تغييرات تحفظها ستُحدّث المستند المشترك للجميع.',
+  'This link opens as a shared review-set preview. To study it inside Kivora, import it into Workspace review sets.': 'هذا الرابط يفتح كمعاينة لمجموعة مراجعة مشتركة. للدراسة داخل Kivora، قم باستيرادها إلى مجموعات المراجعة في Workspace.',
+  'Import into Workspace': 'استيراد إلى Workspace',
+  'Content': 'المحتوى',
+  'Copied': 'تم النسخ',
+  'Copy': 'نسخ',
+  'Saving…': 'جارٍ الحفظ…',
+  'Save': 'حفظ',
+  'This share link points to a file. Sign in to Kivora to view it.': 'يشير رابط المشاركة هذا إلى ملف. سجّل الدخول إلى Kivora لعرضه.',
+  'Sign in to view →': 'سجّل الدخول للعرض ←',
+  'Save a copy to your library': 'احفظ نسخة في مكتبتك',
+  'Adds this content to your own Kivora workspace so you can study, edit, and build on it.': 'يضيف هذا المحتوى إلى مساحة Kivora الخاصة بك لتتمكن من دراسته وتعديله والبناء عليه.',
+  'Save to my library': 'حفظ في مكتبتي',
+  'Want to generate your own study content?': 'هل تريد إنشاء محتوى دراسي خاص بك؟',
+  'Kivora uses AI to create quizzes, summaries, and flashcards from your uploaded files — fully offline.': 'يستخدم Kivora الذكاء الاصطناعي لإنشاء اختبارات وملخصات وبطاقات من ملفاتك المرفوعة — بالكامل دون اتصال.',
+  'Try for free →': 'جرّب مجانًا ←',
+};
+
 export default function ShareViewerPage() {
+  const { t, isRTL, formatDate } = useI18n(LOCAL_AR);
   const params = useParams();
   const token = params?.token as string;
   const hasToken = Boolean(token);
@@ -44,9 +80,9 @@ export default function ShareViewerPage() {
         setData(d);
         setEditContent(d.content ?? '');
       })
-      .catch((e: unknown) => setError(String(e) || 'Share not found or expired.'))
+      .catch((e: unknown) => setError(String(e) || t('Share not found')))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, t]);
 
   function copyContent() {
     const text = data?.permission === 'edit' ? editContent : data?.content;
@@ -69,13 +105,13 @@ export default function ShareViewerPage() {
         body: JSON.stringify({ content: editContent }),
       });
       if (res.ok) {
-        setSaveMsg('Saved');
+        setSaveMsg(t('Saved'));
       } else {
         const d = await res.json() as { reason?: string };
-        setSaveMsg(d.reason ?? 'Save failed');
+        setSaveMsg(d.reason ?? t('Save failed'));
       }
     } catch {
-      setSaveMsg('Save failed');
+      setSaveMsg(t('Save failed'));
     } finally {
       setSaving(false);
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -93,17 +129,17 @@ export default function ShareViewerPage() {
         credentials: 'include',
       });
       if (res.ok) {
-        setForkMsg('Saved to your library! Open Workspace → Library to view it.');
+        setForkMsg(t('Saved to your library! Open Workspace → Library to view it.'));
       } else {
         const d = await res.json() as { reason?: string };
         if (res.status === 401) {
-          setForkMsg('Sign in to save this to your library.');
+          setForkMsg(t('Sign in to save this to your library.'));
         } else {
-          setForkMsg(d.reason ?? 'Fork failed');
+          setForkMsg(d.reason ?? t('Fork failed'));
         }
       }
     } catch {
-      setForkMsg('Fork failed');
+      setForkMsg(t('Fork failed'));
     } finally {
       setForking(false);
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -120,13 +156,13 @@ export default function ShareViewerPage() {
 
   if (!hasToken) {
     return (
-      <div className="sv-shell">
+      <div className="sv-shell" dir={isRTL ? 'rtl' : 'ltr'}>
         <div className="sv-content">
           <div className="sv-error">
             <div className="sv-error-icon">🔗</div>
-            <h2>Invalid share link</h2>
-            <p>This link is missing its share token.</p>
-            <Link href="/" className="sv-cta">Go to Kivora</Link>
+            <h2>{t('Invalid share link')}</h2>
+            <p>{t('This link is missing its share token.')}</p>
+            <Link href="/" className="sv-cta">{t('Go to Kivora')}</Link>
           </div>
         </div>
         <style jsx>{`
@@ -141,30 +177,30 @@ export default function ShareViewerPage() {
   }
 
   return (
-    <div className="sv-shell">
+    <div className="sv-shell" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Brand header */}
       <div className="sv-header">
         <div className="sv-logo">
           <span className="sv-logo-mark">K</span>
           <span className="sv-logo-name">Kivora</span>
         </div>
-        <Link href="/" className="sv-signup">Try Kivora free →</Link>
+        <Link href="/" className="sv-signup">{t('Try Kivora free →')}</Link>
       </div>
 
       <div className="sv-content">
         {loading && (
           <div className="sv-loading">
             <div className="sv-spinner" />
-            <p>Loading shared content…</p>
+            <p>{t('Loading shared content…')}</p>
           </div>
         )}
 
         {!loading && error && (
           <div className="sv-error">
             <div className="sv-error-icon">🔒</div>
-            <h2>Share not found</h2>
+            <h2>{t('Share not found')}</h2>
             <p>{error}</p>
-            <Link href="/" className="sv-cta">Go to Kivora</Link>
+            <Link href="/" className="sv-cta">{t('Go to Kivora')}</Link>
           </div>
         )}
 
@@ -176,26 +212,26 @@ export default function ShareViewerPage() {
               </span>
               <h1 className="sv-title">{data.resourceName}</h1>
               {data.ownerName && (
-                <p className="sv-owner">Shared by <strong>{data.ownerName}</strong></p>
+                <p className="sv-owner">{t('Shared by')} <strong>{data.ownerName}</strong></p>
               )}
               <div className="sv-badges">
                 <span className={`sv-badge${isEdit ? ' sv-badge-edit' : ''}`}>
-                  {isEdit ? '✏️ Can edit' : '👁 View only'}
+                  {isEdit ? `✏️ ${t('Can edit')}` : `👁 ${t('View only')}`}
                 </span>
-                <span className="sv-badge">{new Date(data.createdAt).toLocaleDateString()}</span>
+                <span className="sv-badge">{formatDate(data.createdAt)}</span>
                 {data.expiresAt && (
-                  <span className="sv-badge exp">Expires {new Date(data.expiresAt).toLocaleDateString()}</span>
+                  <span className="sv-badge exp">{t('Expires')} {formatDate(data.expiresAt)}</span>
                 )}
               </div>
               {isEdit && (
                 <div className="sv-edit-notice">
-                  ✏️ You have edit access — changes you save update the shared document for everyone.
+                  ✏️ {t('You have edit access — changes you save update the shared document for everyone.')}
                 </div>
               )}
               {data.resourceType === 'flashcards' && (
                 <div className="sv-import-bar">
-                  <span>This link opens as a shared review-set preview. To study it inside Kivora, import it into Workspace review sets.</span>
-                  <Link href={importDeckHref} className="sv-import-btn">Import into Workspace</Link>
+                  <span>{t('This link opens as a shared review-set preview. To study it inside Kivora, import it into Workspace review sets.')}</span>
+                  <Link href={importDeckHref} className="sv-import-btn">{t('Import into Workspace')}</Link>
                 </div>
               )}
             </div>
@@ -203,17 +239,17 @@ export default function ShareViewerPage() {
             {data.content !== undefined ? (
               <div className="sv-card">
                 <div className="sv-card-header">
-                  <span>Content</span>
+                  <span>{t('Content')}</span>
                   <div className="sv-card-actions">
                     {isEdit && saveMsg && (
-                      <span className={`sv-save-msg${saveMsg === 'Saved' ? ' ok' : ' err'}`}>{saveMsg}</span>
+                      <span className={`sv-save-msg${saveMsg === t('Saved') ? ' ok' : ' err'}`}>{saveMsg}</span>
                     )}
                     <button className="sv-copy" onClick={copyContent}>
-                      {copied ? '✓ Copied' : '📋 Copy'}
+                      {copied ? `✓ ${t('Copied')}` : `📋 ${t('Copy')}`}
                     </button>
                     {isEdit && (
                       <button className="sv-save-btn" onClick={() => void handleSave()} disabled={saving}>
-                        {saving ? 'Saving…' : '💾 Save'}
+                        {saving ? t('Saving…') : `💾 ${t('Save')}`}
                       </button>
                     )}
                   </div>
@@ -233,8 +269,8 @@ export default function ShareViewerPage() {
               </div>
             ) : (
               <div className="sv-no-content">
-                <p>This share link points to a file. Sign in to Kivora to view it.</p>
-                <Link href="/login" className="sv-cta">Sign in to view →</Link>
+                <p>{t('This share link points to a file. Sign in to Kivora to view it.')}</p>
+                <Link href="/login" className="sv-cta">{t('Sign in to view →')}</Link>
               </div>
             )}
 
@@ -242,15 +278,15 @@ export default function ShareViewerPage() {
             {data.content !== undefined && (
               <div className="sv-fork-bar">
                 <div>
-                  <strong>Save a copy to your library</strong>
-                  <p>Adds this content to your own Kivora workspace so you can study, edit, and build on it.</p>
+                  <strong>{t('Save a copy to your library')}</strong>
+                  <p>{t('Adds this content to your own Kivora workspace so you can study, edit, and build on it.')}</p>
                 </div>
                 <button
                   className="sv-fork-btn"
                   onClick={() => void handleFork()}
                   disabled={forking}
                 >
-                  {forking ? 'Saving…' : '📥 Save to my library'}
+                  {forking ? t('Saving…') : `📥 ${t('Save to my library')}`}
                 </button>
                 {forkMsg && <p className="sv-fork-msg">{forkMsg}</p>}
               </div>
@@ -259,10 +295,10 @@ export default function ShareViewerPage() {
             <div className="sv-promo">
               <div className="sv-promo-icon">🎓</div>
               <div>
-                <strong>Want to generate your own study content?</strong>
-                <p>Kivora uses AI to create quizzes, summaries, and flashcards from your uploaded files — fully offline.</p>
+                <strong>{t('Want to generate your own study content?')}</strong>
+                <p>{t('Kivora uses AI to create quizzes, summaries, and flashcards from your uploaded files — fully offline.')}</p>
               </div>
-              <Link href="/" className="sv-promo-btn">Try for free →</Link>
+              <Link href="/" className="sv-promo-btn">{t('Try for free →')}</Link>
             </div>
           </>
         )}

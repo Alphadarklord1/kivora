@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 export type NoteStyle = 'study' | 'summary' | 'revision' | 'cornell';
 
@@ -17,6 +18,47 @@ interface Props {
 }
 
 const STORAGE_PREFIX = 'kivora-notes-';
+
+const LOCAL_AR: Record<string, string> = {
+  'Study': 'دراسة',
+  'Headings, bullets, key terms': 'عناوين ونقاط ومصطلحات أساسية',
+  'Summary': 'ملخص',
+  'Fast overview and takeaways': 'نظرة سريعة وأهم الخلاصات',
+  'Revision': 'مراجعة',
+  'Exam cues, definitions, recall prompts': 'تلميحات للامتحان وتعريفات وأسئلة استرجاع',
+  'Cornell': 'كورنيل',
+  'Cue column, notes, review summary': 'عمود للتلميحات وملاحظات وملخص للمراجعة',
+  'Bold (Ctrl+B)': 'عريض (Ctrl+B)',
+  'Italic (Ctrl+I)': 'مائل (Ctrl+I)',
+  'Heading 1': 'عنوان 1',
+  'Heading 2': 'عنوان 2',
+  'Heading 3': 'عنوان 3',
+  'Bullet list': 'قائمة نقطية',
+  'Numbered list': 'قائمة مرقمة',
+  'Inline code': 'كود داخل السطر',
+  'Divider': 'فاصل',
+  'Note': 'ملاحظة',
+  'PDF → Notes': 'PDF ← ملاحظات',
+  'Edit': 'تحرير',
+  'Preview': 'معاينة',
+  'Split': 'تقسيم',
+  'Saved': 'تم الحفظ',
+  'Saving…': 'جارٍ الحفظ…',
+  'words': 'كلمات',
+  'Export as .md': 'تصدير بصيغة .md',
+  'Clear notes?': 'مسح الملاحظات؟',
+  'Yes': 'نعم',
+  'No': 'لا',
+  'Clear notes': 'مسح الملاحظات',
+  'Source': 'المصدر',
+  'No file selected': 'لم يتم اختيار ملف',
+  'Change': 'تغيير',
+  'Choose file': 'اختيار ملف',
+  'Style': 'النمط',
+  'Generate notes': 'إنشاء ملاحظات',
+  'Choose a file first': 'اختر ملفًا أولًا',
+  'Preview appears here as you type.': 'ستظهر المعاينة هنا أثناء الكتابة.',
+};
 
 const NOTE_STYLES: Array<{ id: NoteStyle; label: string; hint: string }> = [
   { id: 'study',    label: 'Study',    hint: 'Headings, bullets, key terms' },
@@ -67,6 +109,7 @@ export function NotesPanel({
   onGenerateFromSource,
   onOpenFiles,
 }: Props) {
+  const { t } = useI18n(LOCAL_AR);
   const [content, setContent]       = useState('');
   const [viewMode, setViewMode]     = useState<ViewMode>('edit');
   const [noteMode, setNoteMode]     = useState<NoteMode>('plain');
@@ -79,18 +122,24 @@ export function NotesPanel({
 
   useEffect(() => {
     const savedValue = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null;
-    setContent(savedValue ?? '');
-    setSaved(true);
+    const frame = window.requestAnimationFrame(() => {
+      setContent(savedValue ?? '');
+      setSaved(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [storageKey]);
 
   useEffect(() => {
     if (!injectContent) return;
-    setContent((prev) => {
-      const divider = prev.trim() ? '\n\n---\n\n' : '';
-      return prev + divider + injectContent;
+    const frame = window.requestAnimationFrame(() => {
+      setContent((prev) => {
+        const divider = prev.trim() ? '\n\n---\n\n' : '';
+        return prev + divider + injectContent;
+      });
+      setSaved(false);
+      onInjectConsumed?.();
     });
-    setSaved(false);
-    onInjectConsumed?.();
+    return () => window.cancelAnimationFrame(frame);
   }, [injectContent, onInjectConsumed]);
 
   const debouncedSave = useCallback((text: string) => {
@@ -214,7 +263,7 @@ export function NotesPanel({
               fontWeight: noteMode === m ? 600 : 400,
             }}
           >
-            {m === 'plain' ? 'Note' : 'PDF → Notes'}
+            {m === 'plain' ? t('Note') : t('PDF → Notes')}
           </button>
         ))}
 
@@ -224,7 +273,7 @@ export function NotesPanel({
         {TOOLBAR_BTNS.map((btn) => (
           <button
             key={btn.label}
-            title={btn.title}
+            title={t(btn.title)}
             onClick={toolbarActions[btn.actionKey]}
             style={{
               padding: '2px 7px',
@@ -260,23 +309,23 @@ export function NotesPanel({
               textTransform: 'capitalize',
             }}
           >
-            {m === 'edit' ? 'Edit' : m === 'preview' ? 'Preview' : 'Split'}
+            {m === 'edit' ? t('Edit') : m === 'preview' ? t('Preview') : t('Split')}
           </button>
         ))}
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
           <span style={{ fontSize: 10, color: 'var(--text-3)' }}>
-            {saved ? 'Saved' : 'Saving…'} · {wordCount} words
+            {saved ? t('Saved') : t('Saving…')} · {wordCount} {t('words')}
           </span>
-          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={downloadNotes} title="Export as .md">⬇</button>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={downloadNotes} title={t('Export as .md')}>⬇</button>
           {confirmClear ? (
             <>
-              <span style={{ fontSize: 11, color: 'var(--danger)' }}>Clear notes?</span>
-              <button className="btn btn-sm" style={{ fontSize: 11, background: 'var(--danger)', color: '#fff', border: 'none', padding: '2px 8px' }} onClick={clearNotes}>Yes</button>
-              <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => setConfirmClear(false)}>No</button>
+              <span style={{ fontSize: 11, color: 'var(--danger)' }}>{t('Clear notes?')}</span>
+              <button className="btn btn-sm" style={{ fontSize: 11, background: 'var(--danger)', color: '#fff', border: 'none', padding: '2px 8px' }} onClick={clearNotes}>{t('Yes')}</button>
+              <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => setConfirmClear(false)}>{t('No')}</button>
             </>
           ) : (
-            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, color: 'var(--danger)' }} onClick={() => setConfirmClear(true)} title="Clear notes">✕</button>
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, color: 'var(--danger)' }} onClick={() => setConfirmClear(true)} title={t('Clear notes')}>✕</button>
           )}
         </div>
       </div>
@@ -295,7 +344,7 @@ export function NotesPanel({
         }}>
           {/* Source info */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Source</span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{t('Source')}</span>
             <span style={{
               fontSize: 12,
               fontWeight: 500,
@@ -305,7 +354,7 @@ export function NotesPanel({
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
             }}>
-              {sourceLabel ?? 'No file selected'}
+              {sourceLabel ?? t('No file selected')}
             </span>
             {sourceWordCount && (
               <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
@@ -314,7 +363,7 @@ export function NotesPanel({
             )}
             {onOpenFiles && (
               <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, flexShrink: 0 }} onClick={onOpenFiles}>
-                {sourceLabel ? 'Change' : 'Choose file'}
+                {sourceLabel ? t('Change') : t('Choose file')}
               </button>
             )}
           </div>
@@ -323,12 +372,12 @@ export function NotesPanel({
 
           {/* Style selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>Style</span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{t('Style')}</span>
             <div style={{ display: 'flex', gap: 4 }}>
               {NOTE_STYLES.map((s) => (
                 <button
                   key={s.id}
-                  title={s.hint}
+                  title={t(s.hint)}
                   onClick={() => onNoteStyleChange?.(s.id)}
                   style={{
                     padding: '2px 9px',
@@ -342,7 +391,7 @@ export function NotesPanel({
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {s.label}
+                  {t(s.label)}
                 </button>
               ))}
             </div>
@@ -354,9 +403,9 @@ export function NotesPanel({
             style={{ marginLeft: 'auto', flexShrink: 0 }}
             disabled={!sourceReady}
             onClick={onGenerateFromSource}
-            title={sourceReady ? `Generate ${activeStyle.label.toLowerCase()} notes` : 'Choose a file first'}
+            title={sourceReady ? `${t('Generate notes')}: ${t(activeStyle.label)}` : t('Choose a file first')}
           >
-            Generate notes
+            {t('Generate notes')}
           </button>
         </div>
       )}
@@ -370,8 +419,8 @@ export function NotesPanel({
             onChange={handleChange}
             placeholder={
               noteMode === 'pdf'
-                ? '# Notes\n\nChoose a file above and click Generate notes — your notes will appear here and you can edit them freely.'
-                : '# My Notes\n\nStart typing in Markdown…\n\n- Use **bold** or *italic*\n- Add headings with # / ## / ###\n- Use `code` for inline code'
+                ? `# ${t('PDF → Notes')}\n\n${t('Choose file')} → ${t('Generate notes')}`
+                : `# ${t('Note')}\n\nMarkdown`
             }
             spellCheck
             style={{
@@ -399,7 +448,7 @@ export function NotesPanel({
             dangerouslySetInnerHTML={{
               __html: content.trim()
                 ? mdToHtml(content)
-                : '<p style="color:var(--text-3);font-style:italic">Preview appears here as you type.</p>',
+                : `<p style="color:var(--text-3);font-style:italic">${t('Preview appears here as you type.')}</p>`,
             }}
           />
         )}
