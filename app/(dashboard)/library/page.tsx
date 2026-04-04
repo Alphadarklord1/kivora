@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { useToast } from '@/providers/ToastProvider';
 import { useI18n } from '@/lib/i18n/useI18n';
 import { printContent, printMultiple } from '@/lib/utils/print';
@@ -42,6 +43,33 @@ const MODE_META: Record<string, { label: string; color: string; icon: string }> 
 
 const ALL_TYPE_KEYS = ['all', ...Object.keys(MODE_META)] as const;
 type TypeFilter = typeof ALL_TYPE_KEYS[number];
+
+const STARTER_COLLECTIONS = [
+  {
+    title: 'Start with a research topic',
+    description: 'Open Scholar Hub with a guided topic so you can research first and save the useful outputs later.',
+    href: '/coach?starter=cell%20respiration&section=research',
+    badge: 'Research',
+  },
+  {
+    title: 'Build a writing scaffold',
+    description: 'Open Writing Studio with a starter essay topic instead of facing a blank draft.',
+    href: '/coach?starter=causes%20of%20World%20War%20I&section=write',
+    badge: 'Writing',
+  },
+  {
+    title: 'Generate notes from your own material',
+    description: 'Go to Workspace when you already have a PDF, slide deck, or notes file to transform.',
+    href: '/workspace',
+    badge: 'Workspace',
+  },
+  {
+    title: 'Start a study plan first',
+    description: 'Open Planner when the best next move is building structure before content.',
+    href: '/planner',
+    badge: 'Planner',
+  },
+] as const;
 
 // ── Search helpers ────────────────────────────────────────────────────────────
 
@@ -116,6 +144,17 @@ const LOCAL_AR: Record<string, string> = {
   'Export all':       '\u062a\u0635\u062f\u064a\u0631 \u0627\u0644\u0643\u0644',
   'Word':             'Word',
   'Share':            '\u0645\u0634\u0627\u0631\u0643\u0629',
+  'Starter paths': '\u0645\u0633\u0627\u0631\u0627\u062a \u062c\u0627\u0647\u0632\u0629',
+  'You do not need a saved deck marketplace to begin. These guided entry points open the right part of Kivora so you can create useful study material fast.': '\u0644\u0627 \u062a\u062d\u062a\u0627\u062c \u0625\u0644\u0649 \u0633\u0648\u0642 \u0645\u062d\u062a\u0648\u0649 \u0645\u062d\u0641\u0648\u0638 \u0644\u062a\u0628\u062f\u0623. \u062a\u0641\u062a\u062d \u0647\u0630\u0647 \u0627\u0644\u0645\u0633\u0627\u0631\u0627\u062a \u0627\u0644\u0645\u0648\u062c\u0647\u0629 \u0627\u0644\u062c\u0632\u0621 \u0627\u0644\u0645\u0646\u0627\u0633\u0628 \u0645\u0646 Kivora \u0644\u062a\u0628\u0646\u064a \u0645\u0648\u0627\u062f \u062f\u0631\u0627\u0633\u064a\u0629 \u0645\u0641\u064a\u062f\u0629 \u0628\u0633\u0631\u0639\u0629.',
+  'Start with a research topic': '\u0627\u0628\u062f\u0623 \u0628\u0645\u0648\u0636\u0648\u0639 \u0628\u062d\u062b\u064a',
+  'Open Scholar Hub with a guided topic so you can research first and save the useful outputs later.': '\u0627\u0641\u062a\u062d Scholar Hub \u0628\u0645\u0648\u0636\u0648\u0639 \u0645\u0648\u062c\u0647 \u062d\u062a\u0649 \u062a\u0628\u062f\u0623 \u0628\u0627\u0644\u0628\u062d\u062b \u0623\u0648\u0644\u064b\u0627 \u062b\u0645 \u062a\u062d\u0641\u0638 \u0627\u0644\u0645\u062e\u0631\u062c\u0627\u062a \u0627\u0644\u0645\u0641\u064a\u062f\u0629 \u0644\u0627\u062d\u0642\u064b\u0627.',
+  'Build a writing scaffold': '\u0627\u0628\u0646\u0650 \u0647\u064a\u0643\u0644\u064b\u0627 \u0623\u0648\u0644\u064a\u064b\u0627 \u0644\u0644\u0643\u062a\u0627\u0628\u0629',
+  'Open Writing Studio with a starter essay topic instead of facing a blank draft.': '\u0627\u0641\u062a\u062d \u0627\u0633\u062a\u0648\u062f\u064a\u0648 \u0627\u0644\u0643\u062a\u0627\u0628\u0629 \u0628\u0645\u0648\u0636\u0648\u0639 \u0628\u062f\u0627\u064a\u0654\u064a \u0628\u062f\u0644\u064b\u0627 \u0645\u0646 \u0645\u0648\u0627\u062c\u0647\u0629 \u0645\u0633\u0648\u062f\u0629 \u0641\u0627\u0631\u063a\u0629.',
+  'Generate notes from your own material': '\u0623\u0646\u0634\u0626 \u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0645\u0646 \u0645\u0648\u0627\u062f\u0643',
+  'Go to Workspace when you already have a PDF, slide deck, or notes file to transform.': '\u0627\u0630\u0647\u0628 \u0625\u0644\u0649 \u0645\u0633\u0627\u062d\u0629 \u0627\u0644\u0639\u0645\u0644 \u0639\u0646\u062f\u0645\u0627 \u064a\u0643\u0648\u0646 \u0644\u062f\u064a\u0643 PDF \u0623\u0648 \u0639\u0631\u0636 \u0634\u0631\u0627\u0626\u062d \u0623\u0648 \u0645\u0644\u0641 \u0645\u0644\u0627\u062d\u0638\u0627\u062a \u062c\u0627\u0647\u0632 \u0644\u0644\u062a\u062d\u0648\u064a\u0644.',
+  'Start a study plan first': '\u0627\u0628\u062f\u0623 \u0628\u062e\u0637\u0629 \u062f\u0631\u0627\u0633\u0629 \u0623\u0648\u0644\u064b\u0627',
+  'Open Planner when the best next move is building structure before content.': '\u0627\u0641\u062a\u062d \u0627\u0644\u0645\u062e\u0637\u0637 \u0639\u0646\u062f\u0645\u0627 \u064a\u0643\u0648\u0646 \u0623\u0641\u0636\u0644 \u062e\u0637\u0648\u0629 \u062a\u0627\u0644\u064a\u0629 \u0647\u064a \u0628\u0646\u0627\u0621 \u0627\u0644\u0647\u064a\u0643\u0644 \u0642\u0628\u0644 \u0627\u0644\u0645\u062d\u062a\u0648\u0649.',
+  'Open path': '\u0627\u0641\u062a\u062d \u0627\u0644\u0645\u0633\u0627\u0631',
 };
 
 export default function LibraryPage() {
@@ -393,6 +432,24 @@ export default function LibraryPage() {
             )}
           </section>
         </div>
+
+        <section className="lib-starter">
+          <div className="lib-starter-copy">
+            <span className="lib-eyebrow">{t('Starter paths')}</span>
+            <strong>Start with a useful lane, not a blank library</strong>
+            <p>{t('You do not need a saved deck marketplace to begin. These guided entry points open the right part of Kivora so you can create useful study material fast.')}</p>
+          </div>
+          <div className="lib-starter-grid">
+            {STARTER_COLLECTIONS.map((entry) => (
+              <Link key={entry.title} className="lib-starter-card" href={entry.href}>
+                <span className="lib-starter-badge">{entry.badge}</span>
+                <strong>{t(entry.title)}</strong>
+                <p>{t(entry.description)}</p>
+                <span className="lib-starter-link">{t('Open path')} →</span>
+              </Link>
+            ))}
+          </div>
+        </section>
       </div>
 
       {/* Load error */}
@@ -616,6 +673,45 @@ export default function LibraryPage() {
         .lib-stat-label { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; }
         .lib-stat-card strong { font-size: 20px; color: var(--text); }
         .lib-controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .lib-starter {
+          display: grid;
+          gap: 14px;
+          padding: 16px 18px;
+          border: 1px solid var(--border-2);
+          border-radius: 18px;
+          background:
+            linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 92%, transparent), color-mix(in srgb, var(--bg-inset) 92%, transparent));
+        }
+        .lib-starter-copy { display: grid; gap: 6px; }
+        .lib-starter-copy strong { font-size: 1.05rem; color: var(--text); }
+        .lib-starter-copy p { margin: 0; color: var(--text-2); line-height: 1.6; max-width: 56rem; }
+        .lib-starter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+        .lib-starter-card {
+          display: grid;
+          gap: 8px;
+          min-height: 150px;
+          padding: 14px;
+          border-radius: 14px;
+          border: 1px solid var(--border-2);
+          background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+          color: inherit;
+          text-decoration: none;
+        }
+        .lib-starter-card strong { color: var(--text); }
+        .lib-starter-card p { margin: 0; color: var(--text-2); font-size: 13px; line-height: 1.6; }
+        .lib-starter-badge {
+          width: fit-content;
+          padding: 3px 9px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--accent) 14%, transparent);
+          border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+          color: var(--accent);
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+        }
+        .lib-starter-link { margin-top: auto; color: var(--accent); font-size: 12px; font-weight: 700; }
         .lib-controls-card {
           display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 16px;
           border: 1px solid var(--border-2); background: var(--bg-surface);
@@ -700,7 +796,8 @@ export default function LibraryPage() {
         .lib-btn-share:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
         @media (max-width: 900px) {
           .lib-hero,
-          .lib-controls-grid { grid-template-columns: 1fr; }
+          .lib-controls-grid,
+          .lib-starter-grid { grid-template-columns: 1fr; }
           .lib-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media (max-width: 640px) {

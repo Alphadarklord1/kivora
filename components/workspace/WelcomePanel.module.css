@@ -205,10 +205,88 @@
   color: var(--text-primary);
 }
 
+.starterSection {
+  display: grid;
+  gap: 1rem;
+  padding: 1.4rem;
+  border-radius: 1.6rem;
+  border: 1px solid var(--border-subtle);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 94%, transparent), color-mix(in srgb, var(--bg-inset) 94%, transparent));
+  box-shadow: var(--surface-stroke), var(--shadow-md);
+}
+
+.starterHeading {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.starterHeading h2 {
+  margin: 0;
+  font-family: "Fraunces", serif;
+  font-size: clamp(1.5rem, 2.8vw, 2.1rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+.starterHeading p {
+  margin: 0;
+  max-width: 48rem;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.starterGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.starterCard {
+  display: grid;
+  gap: 0.7rem;
+  min-height: 11.5rem;
+  padding: 1rem;
+  border-radius: 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--border-default) 74%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
+}
+
+.starterCard strong {
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.starterCard p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.65;
+  font-size: 0.93rem;
+}
+
+.starterLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: auto;
+  width: fit-content;
+  min-height: 2.4rem;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+  background: color-mix(in srgb, var(--primary-muted) 84%, transparent);
+  color: var(--primary-text);
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
 @media (max-width: 980px) {
   .heroCard,
   .cardGrid,
-  .bottomGrid {
+  .bottomGrid,
+  .starterGrid {
     grid-template-columns: 1fr;
   }
 }

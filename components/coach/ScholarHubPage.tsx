@@ -93,6 +93,8 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
   const panel         = searchParams.get('panel') === 'review' ? 'review'
                       : searchParams.get('panel') === 'manage' ? 'manage'
                       : null;
+  const starterTopic  = searchParams.get('starter');
+  const starterSection = searchParams.get('section');
 
   const getSetDue = useCallback(
     (s: SRSDeck) => s.cards.filter(c => c.nextReview && c.nextReview <= today).length,
@@ -160,6 +162,17 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
   }, []);
 
   useEffect(() => { void refreshReviewSets(); }, [refreshReviewSets]);
+
+  useEffect(() => {
+    if (!starterTopic) return;
+    setResearchPreload(starterTopic);
+    if (starterSection === 'write') {
+      setWritePreload(starterTopic);
+      setActiveSection('write');
+      return;
+    }
+    setActiveSection('research');
+  }, [starterSection, starterTopic]);
 
   // ── Today's Mission ────────────────────────────────────────────────────────
 

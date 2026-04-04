@@ -9,7 +9,7 @@ export function GuidelinesTab() {
         <h2>AI Guidelines</h2>
         <p>
           Kivora AI is a study assistant — not a search engine, ghostwriter, or general chatbot.
-          Read this once so you know what it's great at, where its limits are, and how to use it responsibly.
+          Read this once so you know what it&apos;s great at, where its limits are, and how to use it responsibly.
         </p>
       </div>
 
@@ -31,7 +31,6 @@ export function GuidelinesTab() {
               'Rephrase writing in a formal or concise tone',
               'Research topics across academic sources',
               'Extract questions from images and PDFs',
-              'Build knowledge maps from study material',
             ].map(item => (
               <div key={item} className={styles.guidelineItem}>
                 <span className={`${styles.guidelineItemDot} ${styles.guidelineItemDotGreen}`} />
@@ -77,12 +76,12 @@ export function GuidelinesTab() {
           <h3>Academic integrity</h3>
         </div>
         <div className={styles.guidelinesCallout + ' ' + styles.guidelinesCalloutWarning}>
-          <strong>Important:</strong> AI-generated content is a starting point — not a finished submission. Submitting AI output as your own original work without disclosure may violate your institution's academic integrity policy. Always verify facts, add your own analysis, and follow your school's rules on AI use.
+          <strong>Important:</strong> AI-generated content is a starting point — not a finished submission. Submitting AI output as your own original work without disclosure may violate your institution&apos;s academic integrity policy. Always verify facts, add your own analysis, and follow your school&apos;s rules on AI use.
         </div>
         <div className={styles.guidelinesCard} style={{ marginTop: '0.65rem' }}>
           <div className={styles.guidelineItem}>
             <span className={`${styles.guidelineItemDot} ${styles.guidelineItemDotBlue}`} />
-            Use summaries to understand material faster — don't use them to skip reading entirely.
+            Use summaries to understand material faster — don&apos;t use them to skip reading entirely.
           </div>
           <div className={styles.guidelineItem}>
             <span className={`${styles.guidelineItemDot} ${styles.guidelineItemDotBlue}`} />
@@ -94,7 +93,7 @@ export function GuidelinesTab() {
           </div>
           <div className={styles.guidelineItem}>
             <span className={`${styles.guidelineItemDot} ${styles.guidelineItemDotBlue}`} />
-            Use Scholar Hub research to find sources — always read and cite the original source, not Kivora's summary.
+            Use Scholar Hub research to find sources — always read and cite the original source, not Kivora&apos;s summary.
           </div>
         </div>
       </div>
@@ -138,7 +137,7 @@ export function GuidelinesTab() {
           {[
             'Knowledge cutoff: the model may not know about events after its training date.',
             'Math: complex symbolic algebra or multi-step proofs may contain errors — verify with a calculator or textbook.',
-            "Citations: Scholar Hub citations point to real sources but the AI's excerpt may simplify or paraphrase.",
+            'Citations: Scholar Hub citations point to real sources but the AI excerpt may simplify or paraphrase.',
             'Languages: English and Arabic are best supported. Other languages may have reduced quality.',
             'Images: Vision analysis works best on clear, high-contrast photos. Blurry or hand-written content may be misread.',
           ].map(item => (

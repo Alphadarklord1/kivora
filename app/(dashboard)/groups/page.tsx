@@ -16,6 +16,15 @@ interface GroupDeck {
   addedByMe: boolean;
 }
 
+interface GroupNote {
+  id: string;
+  content: string;
+  postedAt: string;
+  authorName: string;
+  isOwn: boolean;
+  isGroupOwner: boolean;
+}
+
 interface Group {
   id: string;
   name: string;
@@ -45,6 +54,14 @@ export default function GroupsPage() {
   const [joinCode, setJoinCode] = useState('');
   const [joining, setJoining] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
+
+  // Per-group tab: 'decks' | 'notes'
+  const [groupTab, setGroupTab] = useState<Record<string, 'decks' | 'notes'>>({});
+  // Notes state: notes per group id, loading, draft
+  const [groupNotes, setGroupNotes] = useState<Record<string, GroupNote[]>>({});
+  const [notesLoading, setNotesLoading] = useState<Record<string, boolean>>({});
+  const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
+  const [notePosting, setNotePosting] = useState<Record<string, boolean>>({});
 
   const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
 
@@ -132,6 +149,46 @@ export default function GroupsPage() {
     else { notify(data.error ?? t('Failed.'), 'err'); }
   }
 
+  async function loadNotes(group: Group) {
+    setNotesLoading(p => ({ ...p, [group.id]: true }));
+    try {
+      const res = await fetch(`/api/groups/${group.joinCode}/notes`, { credentials: 'include' });
+      if (res.ok) { const notes = await res.json() as GroupNote[]; setGroupNotes(p => ({ ...p, [group.id]: notes })); }
+    } finally { setNotesLoading(p => ({ ...p, [group.id]: false })); }
+  }
+
+  function switchTab(groupId: string, tab: 'decks' | 'notes', group: Group) {
+    setGroupTab(p => ({ ...p, [groupId]: tab }));
+    if (tab === 'notes' && !groupNotes[groupId]) void loadNotes(group);
+  }
+
+  async function postNote(group: Group) {
+    const content = noteDraft[group.id]?.trim();
+    if (!content) return;
+    setNotePosting(p => ({ ...p, [group.id]: true }));
+    try {
+      const res = await fetch(`/api/groups/${group.joinCode}/notes`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (data.ok) {
+        setNoteDraft(p => ({ ...p, [group.id]: '' }));
+        await loadNotes(group);
+      } else { notify(data.error ?? t('Failed.'), 'err'); }
+    } finally { setNotePosting(p => ({ ...p, [group.id]: false })); }
+  }
+
+  async function deleteNote(group: Group, noteId: string) {
+    const res = await fetch(`/api/groups/${group.joinCode}/notes?noteId=${noteId}`, {
+      method: 'DELETE', credentials: 'include',
+    });
+    const data = await res.json() as { ok?: boolean; error?: string };
+    if (data.ok) await loadNotes(group);
+    else notify(data.error ?? t('Failed.'), 'err');
+  }
+
   async function importDeck(deck: GroupDeck) {
     const cards = parseFlashcards(deck.content);
     if (!cards.length) { notify(t('No cards found in this deck.'), 'err'); return; }
@@ -165,7 +222,7 @@ export default function GroupsPage() {
         <div>
           <h1 style={{ margin: 0, fontSize: 'var(--text-2xl)', fontWeight: 800 }}>{t('Study Groups')}</h1>
           <p style={{ margin: '4px 0 0', color: 'var(--text-3)', fontSize: 14 }}>
-            {t('Share decks and study together with classmates.')}
+            {t('Share decks, group notes, and async study handoffs with classmates.')}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -299,45 +356,118 @@ export default function GroupsPage() {
                 </div>
               </div>
 
-              {/* Expanded deck list */}
+              {/* Expanded panel */}
               {expanded === group.id && (
-                <div style={{ borderTop: '1px solid var(--border)', padding: '12px 18px' }}>
-                  {group.decks.length === 0 ? (
-                    <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 14, padding: '8px 0' }}>
-                      {t('No decks shared yet. Open a deck in Flashcards and use "Share to Group" to add one.')}
-                    </p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {group.decks.map(deck => (
-                        <div key={deck.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, fontSize: 14 }}>{deck.deckName}</div>
-                            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                              {t('{count} cards', { count: deck.cardCount })}
-                              {' · '}
-                              {t('Shared by {name}', { name: deck.addedByName })}
+                <div style={{ borderTop: '1px solid var(--border)' }}>
+                  {/* Tab bar */}
+                  <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)' }}>
+                    {(['decks', 'notes'] as const).map(tab => (
+                      <button
+                        key={tab}
+                        className="btn btn-ghost btn-sm"
+                        style={{
+                          borderRadius: 0, fontWeight: (groupTab[group.id] ?? 'decks') === tab ? 700 : 400,
+                          borderBottom: (groupTab[group.id] ?? 'decks') === tab ? '2px solid var(--primary)' : '2px solid transparent',
+                          fontSize: 13, padding: '8px 16px',
+                        }}
+                        onClick={() => switchTab(group.id, tab, group)}
+                      >
+                        {tab === 'decks' ? `🃏 ${t('Decks')} (${group.decks.length})` : `📝 ${t('Notes')}`}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Decks tab */}
+                  {(groupTab[group.id] ?? 'decks') === 'decks' && (
+                    <div style={{ padding: '12px 18px' }}>
+                      {group.decks.length === 0 ? (
+                        <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 14, padding: '8px 0' }}>
+                          {t('No decks shared yet. Open a deck in Flashcards and use "Share to Group" to add one.')}
+                        </p>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {group.decks.map(deck => (
+                            <div key={deck.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 600, fontSize: 14 }}>{deck.deckName}</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                                  {t('{count} cards', { count: deck.cardCount })}
+                                  {' · '}
+                                  {t('Shared by {name}', { name: deck.addedByName })}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                                <button className="btn btn-primary btn-xs" onClick={() => void importDeck(deck)}>
+                                  {t('Import')}
+                                </button>
+                                {(deck.addedByMe || group.isOwner) && (
+                                  <button
+                                    className="btn btn-ghost btn-xs"
+                                    style={{ color: 'var(--error, #ef4444)' }}
+                                    onClick={() => void removeDeck(group, deck)}
+                                    title={t('Remove deck')}
+                                  >✕</button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                            <button
-                              className="btn btn-primary btn-xs"
-                              onClick={() => void importDeck(deck)}
-                            >
-                              {t('Import')}
-                            </button>
-                            {(deck.addedByMe || group.isOwner) && (
-                              <button
-                                className="btn btn-ghost btn-xs"
-                                style={{ color: 'var(--error, #ef4444)' }}
-                                onClick={() => void removeDeck(group, deck)}
-                                title={t('Remove deck')}
-                              >
-                                ✕
-                              </button>
-                            )}
-                          </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
+                    </div>
+                  )}
+
+                  {/* Notes tab */}
+                  {groupTab[group.id] === 'notes' && (
+                    <div style={{ padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {/* Post new note */}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <textarea
+                          style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13, resize: 'vertical', minHeight: 60 }}
+                          placeholder={t('Write a note for the group…')}
+                          value={noteDraft[group.id] ?? ''}
+                          maxLength={2000}
+                          onChange={e => setNoteDraft(p => ({ ...p, [group.id]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void postNote(group); }}
+                        />
+                        <button
+                          className="btn btn-primary btn-sm"
+                          style={{ alignSelf: 'flex-end' }}
+                          disabled={!noteDraft[group.id]?.trim() || notePosting[group.id]}
+                          onClick={() => void postNote(group)}
+                        >
+                          {notePosting[group.id] ? '…' : t('Post')}
+                        </button>
+                      </div>
+
+                      {/* Notes list */}
+                      {notesLoading[group.id] ? (
+                        <p style={{ color: 'var(--text-3)', fontSize: 13 }}>{t('Loading…')}</p>
+                      ) : (groupNotes[group.id] ?? []).length === 0 ? (
+                        <p style={{ color: 'var(--text-3)', fontSize: 13, padding: '4px 0' }}>
+                          {t('No notes yet. Be the first to post one.')}
+                        </p>
+                      ) : (
+                        (groupNotes[group.id] ?? []).map(note => (
+                          <div key={note.id} style={{ background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)', padding: '10px 14px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>{note.authorName}</span>
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                                  {new Date(note.postedAt).toLocaleDateString()}
+                                </span>
+                                {(note.isOwn || note.isGroupOwner) && (
+                                  <button
+                                    className="btn btn-ghost btn-xs"
+                                    style={{ color: 'var(--error, #ef4444)', padding: '1px 6px' }}
+                                    onClick={() => void deleteNote(group, note.id)}
+                                  >✕</button>
+                                )}
+                              </div>
+                            </div>
+                            <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{note.content}</p>
+                          </div>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
