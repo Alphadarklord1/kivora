@@ -9,18 +9,26 @@ import { extractTextFromBlob } from '@/lib/pdf/extract';
 import { readMathContext } from '@/lib/math/context';
 import { MathRenderer, MathText } from '@/components/math/MathRenderer';
 import { MATH_CATEGORIES, MATH_CATEGORY_ORDER } from '@/lib/math/catalog';
+import { useI18n } from '@/lib/i18n/useI18n';
 import { detectMathCategory } from '@/lib/math/symbolic-solver';
 import type { MathCategoryId } from '@/lib/math/types';
 import { isCustomFuncDefinition, normalizeGraphExpression, buildSharedScope } from '@/lib/math/graph-utils';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
 
+function staticMathLabel(key: string) {
+  if (typeof document !== 'undefined' && document.documentElement.lang === 'ar') {
+    return LOCAL_AR[key] ?? key;
+  }
+  return key;
+}
+
 const VisualAnalyzer = dynamic(
   () => import('@/components/tools/VisualAnalyzer').then((mod) => mod.VisualAnalyzer),
-  { ssr: false, loading: () => <div className="tool-loading">Loading visual analyzer…</div> },
+  { ssr: false, loading: () => <div className="tool-loading">{staticMathLabel('Loading visual analyzer…')}</div> },
 );
 const MatlabLab = dynamic(
   () => import('@/components/tools/MatlabLab').then((mod) => mod.MatlabLab),
-  { ssr: false, loading: () => <div className="tool-loading">Loading MATLAB Lab…</div> },
+  { ssr: false, loading: () => <div className="tool-loading">{staticMathLabel('Loading MATLAB Lab…')}</div> },
 );
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -61,6 +69,258 @@ interface WorkflowStep {
   label: string;
   detail: string;
 }
+
+const LOCAL_AR: Record<string, string> = {
+  'Loading visual analyzer…': 'جارٍ تحميل المحلل البصري…',
+  'Loading MATLAB Lab…': 'جارٍ تحميل مختبر MATLAB…',
+  'Algebra': 'الجبر',
+  'Geometry': 'الهندسة',
+  'Calculus': 'التفاضل والتكامل',
+  'Trigonometry': 'حساب المثلثات',
+  'Sequences & Series': 'المتتاليات والمتسلسلات',
+  'Statistics': 'الإحصاء',
+  'Linear Algebra': 'الجبر الخطي',
+  'Vectors': 'المتجهات',
+  'Matrices': 'المصفوفات',
+  'Differential Equations': 'المعادلات التفاضلية',
+  'Discrete Math': 'الرياضيات المتقطعة',
+  'Physics': 'الفيزياء',
+  'Formula Sheets': 'ملخصات القوانين',
+  'Graph Plotter': 'راسم المنحنيات',
+  'Unit Converter': 'محول الوحدات',
+  'Question Scan': 'مسح السؤال',
+  'Visual Analyzer': 'المحلل البصري',
+  'MATLAB Lab': 'مختبر MATLAB',
+  'Write a Question': 'اكتب سؤالًا',
+  'Formula-sheet workflow': 'سير عمل ملخصات القوانين',
+  'Graph workflow': 'سير عمل الرسم البياني',
+  'Unit-converter workflow': 'سير عمل تحويل الوحدات',
+  'Question-scan workflow': 'سير عمل مسح السؤال',
+  'Visual analyzer workflow': 'سير عمل المحلل البصري',
+  'MATLAB Lab workflow': 'سير عمل مختبر MATLAB',
+  'Question writer workflow': 'سير عمل كتابة السؤال',
+  'Quick-reference formulas organized by topic, ready to review before homework or exams.': 'قوانين مرجعية سريعة منظمة حسب الموضوع، جاهزة للمراجعة قبل الواجب أو الاختبارات.',
+  'Plot functions, parametric curves, implicit relations, and reusable custom functions.': 'ارسم الدوال والمنحنيات البارامترية والعلاقات الضمنية والدوال المخصصة القابلة لإعادة الاستخدام.',
+  'Convert the common units students need most, with a simpler focused tool.': 'حوّل الوحدات الشائعة التي يحتاجها الطلاب أكثر باستخدام أداة أبسط وأكثر تركيزًا.',
+  'Upload a screenshot or PDF of a math question, extract it, and send it to the solver. OCR now follows your selected app language where possible.': 'حمّل لقطة شاشة أو PDF لسؤال رياضيات، واستخرج النص، ثم أرسله إلى المحلل. يتبع OCR الآن لغة التطبيق المختارة عندما يكون ذلك ممكنًا.',
+  'Upload images or diagrams to extract and analyze visual math content with AI.': 'حمّل صورًا أو مخططات لاستخراج وتحليل المحتوى الرياضي البصري باستخدام الذكاء الاصطناعي.',
+  'Run MATLAB-style numeric computations, matrix operations, and plotting — all in the browser.': 'شغّل الحسابات العددية وعمليات المصفوفات والرسم بأسلوب MATLAB — كل ذلك داخل المتصفح.',
+  'Compose any math question with live LaTeX preview — then send straight to the solver or save as a practice question.': 'اكتب أي سؤال رياضيات مع معاينة LaTeX مباشرة — ثم أرسله فورًا إلى المحلل أو احفظه كسؤال تدريب.',
+  'Choose a topic': 'اختر موضوعًا',
+  'Jump into the formula group that matches the class or chapter you are studying.': 'انتقل إلى مجموعة القوانين التي تطابق الصف أو الفصل الذي تدرسه.',
+  'Review the pattern': 'راجع النمط',
+  'Use these as quick revision cards before homework, quizzes, or an exam.': 'استخدمها كبطاقات مراجعة سريعة قبل الواجب أو الاختبارات القصيرة أو الامتحان.',
+  'Send one to the solver': 'أرسل أحدها إلى المحلل',
+  'Click any formula card when you want a worked explanation or an example problem.': 'اضغط أي بطاقة قانون عندما تريد شرحًا محلولًا أو مسألة مثال.',
+  'Enter a relation': 'أدخل علاقة',
+  'Use forms like y = x^2, x = 2, x^2 + y^2 = 25, or parametric x = cos(t), y = sin(t).': 'استخدم صيغًا مثل y = x^2 أو x = 2 أو x^2 + y^2 = 25 أو الصيغ البارامترية x = cos(t), y = sin(t).',
+  'Define custom functions': 'عرّف دوال مخصصة',
+  'Add a row like f(x) = x^2 + 1 — then use f(x) in any other expression row.': 'أضف سطرًا مثل f(x) = x^2 + 1 — ثم استخدم f(x) في أي سطر تعبير آخر.',
+  'Plot it': 'ارسمها',
+  'Hit Plot to render everything together: functions, relations, and parametric curves.': 'اضغط رسم لإظهار كل شيء معًا: الدوال والعلاقات والمنحنيات البارامترية.',
+  'Compare expressions': 'قارن التعبيرات',
+  'Add extra rows to overlay multiple curves and see how they interact.': 'أضف أسطرًا إضافية لمقارنة عدة منحنيات ومعرفة كيف تتفاعل.',
+  'Choose a category': 'اختر فئة',
+  'Pick the measurement family you need first, like length, mass, or speed.': 'اختر أولًا فئة القياس التي تحتاجها، مثل الطول أو الكتلة أو السرعة.',
+  'Set from and to units': 'حدد وحدتي التحويل',
+  'Choose your source unit and the unit you want to end up with.': 'اختر وحدة البداية والوحدة التي تريد التحويل إليها.',
+  'Enter a value': 'أدخل قيمة',
+  'Type one value and let the converter return a clean answer immediately.': 'أدخل قيمة واحدة واترك المحول يعرض نتيجة واضحة فورًا.',
+  'Swap when needed': 'بدّل عند الحاجة',
+  'Use the swap control to reverse the conversion without re-entering everything.': 'استخدم زر التبديل لعكس التحويل دون إعادة إدخال كل شيء.',
+  'Upload a screenshot or PDF': 'حمّل لقطة شاشة أو PDF',
+  'This tab only accepts images and PDFs that contain math questions.': 'يقبل هذا التبويب فقط الصور وملفات PDF التي تحتوي على أسئلة رياضيات.',
+  'Extract the question text': 'استخرج نص السؤال',
+  'Images use OCR and PDFs use text extraction so we can turn the file into solver-ready input, with OCR guided by the current interface language.': 'تستخدم الصور OCR بينما تستخدم ملفات PDF استخراج النص حتى نتمكن من تحويل الملف إلى إدخال جاهز للمحلل، مع توجيه OCR بلغة الواجهة الحالية.',
+  'Review what was captured': 'راجع ما تم التقاطه',
+  'Check the extracted question before sending it into the solver.': 'راجع السؤال المستخرج قبل إرساله إلى المحلل.',
+  'Solve it step by step': 'حلّه خطوة بخطوة',
+  'Use “Solve now” to move the extracted text straight into the Solver tab.': 'استخدم «حل الآن» لنقل النص المستخرج مباشرة إلى تبويب المحلل.',
+  'Upload an image or diagram': 'حمّل صورة أو مخططًا',
+  'Provide a photo, screenshot, or drawn diagram containing math or data.': 'قدّم صورة أو لقطة شاشة أو مخططًا مرسومًا يحتوي على رياضيات أو بيانات.',
+  'AI analyzes the content': 'يحلل الذكاء الاصطناعي المحتوى',
+  'The visual analyzer identifies equations, graphs, tables, and other mathematical structures.': 'يحدد المحلل البصري المعادلات والرسوم البيانية والجداول والبنى الرياضية الأخرى.',
+  'Review the analysis': 'راجع التحليل',
+  'Inspect the extracted information and see a structured breakdown of what was found.': 'افحص المعلومات المستخرجة وشاهد تفصيلًا منظمًا لما تم العثور عليه.',
+  'Send to solver': 'أرسله إلى المحلل',
+  'Use any identified expression directly in the math solver for step-by-step working.': 'استخدم أي تعبير تم التعرف عليه مباشرة في محلل الرياضيات للحصول على خطوات الحل.',
+  'Write MATLAB-style code': 'اكتب كودًا بأسلوب MATLAB',
+  'Use familiar MATLAB syntax for matrices, loops, functions, and numeric operations.': 'استخدم صياغة MATLAB المألوفة للمصفوفات والحلقات والدوال والعمليات العددية.',
+  'Run the script': 'شغّل السكربت',
+  'Execute the code in the browser-based engine and see results instantly.': 'نفّذ الكود في المحرك داخل المتصفح وشاهد النتائج فورًا.',
+  'Inspect outputs': 'افحص المخرجات',
+  'View numeric results, matrices, and generated plots side by side.': 'اعرض النتائج العددية والمصفوفات والرسوم الناتجة جنبًا إلى جنب.',
+  'Send a graph expression': 'أرسل تعبيرًا للرسم',
+  'Route any expression from the output to the Graph Plotter for visualization.': 'أرسل أي تعبير من المخرجات إلى راسم المنحنيات لعرضه بصريًا.',
+  'Pick a topic': 'اختر موضوعًا',
+  'Select the math area so the solver knows which method to apply.': 'اختر المجال الرياضي حتى يعرف المحلل الطريقة المناسبة.',
+  'Write your question': 'اكتب سؤالك',
+  'Use plain text or x^2 notation — LaTeX renders live as you type.': 'استخدم نصًا عاديًا أو صيغة x^2 — وستظهر LaTeX مباشرة أثناء الكتابة.',
+  'Add context': 'أضف سياقًا',
+  'Optionally describe what you have tried, or paste in given values.': 'يمكنك اختياريًا وصف ما جرّبته أو لصق القيم المعطاة.',
+  'Solve or save': 'حل أو احفظ',
+  'Send to the solver with one click, or save as a Library practice question.': 'أرسل إلى المحلل بنقرة واحدة أو احفظه كسؤال تدريب في المكتبة.',
+  'Categories': 'الفئات',
+  'Collapse': 'طي',
+  'Expand': 'توسيع',
+  'Solver Topics': 'موضوعات المحلل',
+  'Input': 'الإدخال',
+  'Visualize': 'التصور',
+  'Reference': 'المرجع',
+  'History': 'السجل',
+  'Math': 'الرياضيات',
+  'Math focus': 'تركيز الرياضيات',
+  'Solver': 'المحلل',
+  'Solver mode': 'وضع المحلل',
+  'Tool mode': 'وضع الأداة',
+  'recent problems': 'مسائل حديثة',
+  'supported actions': 'إجراءات مدعومة',
+  'Recent Problems': 'المسائل الحديثة',
+  'Clear all': 'مسح الكل',
+  'No history yet': 'لا يوجد سجل بعد',
+  'Use structured forms and quick examples without leaving the current topic.': 'استخدم نماذج منظمة وأمثلة سريعة دون مغادرة الموضوع الحالي.',
+  'Run matrix, vector, and linear algebra workflows together in one MATLAB-style workspace.': 'شغّل مسارات المصفوفات والمتجهات والجبر الخطي معًا في مساحة عمل واحدة بأسلوب MATLAB.',
+  'Switch between graphing, scanning, formulas, units, visual analysis, and MATLAB-style work from the same space.': 'انتقل بين الرسم والمسح والقوانين والوحدات والتحليل البصري والعمل بأسلوب MATLAB من نفس المساحة.',
+  'Connected to {name}. You can keep this file in context while solving, graphing, or exploring formulas.': 'متصل بـ {name}. يمكنك إبقاء هذا الملف ضمن السياق أثناء الحل أو الرسم أو استكشاف القوانين.',
+  'Hide topics': 'إخفاء الموضوعات',
+  'Show topics': 'إظهار الموضوعات',
+  'Best for: one problem, one result, and clear working steps.': 'مثالي لمسألة واحدة ونتيجة واحدة وخطوات حل واضحة.',
+  'Press Enter to solve, Shift + Enter for a new line.': 'اضغط Enter للحل، وShift + Enter لسطر جديد.',
+  'Linked workspace file:': 'ملف Workspace المرتبط:',
+  'Problem type': 'نوع المسألة',
+  'Search formulas…': 'ابحث في القوانين…',
+  'formulas across': 'قوانين عبر',
+  'topics': 'موضوعات',
+  'Click any card to explain in solver →': 'اضغط أي بطاقة لشرحها في المحلل ←',
+  'No formulas match “{query}”': 'لا توجد قوانين تطابق “{query}”',
+  'Home': 'الصفحة الرئيسية',
+  'Zoom in': 'تكبير',
+  'Zoom out': 'تصغير',
+  'Supported:': 'المدعوم:',
+  'y = x^2, x = 2, x^2 + y^2 = 25, line equations, and geometry results from the solver.': '‏y = x^2 و x = 2 و x^2 + y^2 = 25 ومعادلات الخطوط ونتائج الهندسة القادمة من المحلل.',
+  'Window': 'النافذة',
+  'Hide expression': 'إخفاء التعبير',
+  'Show expression': 'إظهار التعبير',
+  'On': 'تشغيل',
+  'Off': 'إيقاف',
+  'Empty': 'فارغ',
+  'Definition': 'تعريف',
+  'Parametric': 'بارامتري',
+  'Function': 'دالة',
+  'Relation': 'علاقة',
+  '+ Add expression': '+ أضف تعبيرًا',
+  'Plot': 'ارسم',
+  'Use this tab for quick conversions only — one value, one category, one clean result.': 'استخدم هذا التبويب للتحويلات السريعة فقط — قيمة واحدة وفئة واحدة ونتيجة واضحة.',
+  'Length': 'الطول',
+  'Mass': 'الكتلة',
+  'Temperature': 'الحرارة',
+  'Speed': 'السرعة',
+  'Area': 'المساحة',
+  'Volume': 'الحجم',
+  'From': 'من',
+  'To': 'إلى',
+  'Val': 'القيمة',
+  'Result': 'النتيجة',
+  'Swap units': 'بدّل الوحدات',
+  'Best for photos of worksheets, textbook pages, or exam papers.': 'مناسب لصور أوراق العمل أو صفحات الكتب أو أوراق الاختبارات.',
+  'Prefer to type? Use Write a Question →': 'تفضل الكتابة؟ استخدم اكتب سؤالًا ←',
+  'Reading file…': 'جارٍ قراءة الملف…',
+  'Extracted question': 'السؤال المستخرج',
+  'Open in solver': 'افتح في المحلل',
+  'Solve now': 'حل الآن',
+  'Clear': 'مسح',
+  'Topic (optional — auto-detected if blank)': 'الموضوع (اختياري — يُكتشف تلقائيًا عند تركه فارغًا)',
+  'Auto': 'تلقائي',
+  'Math tools': 'أدوات الرياضيات',
+  'workspace': 'مساحة عمل',
+  'problem-solving': 'حل المسائل',
+  'solving problems': 'حل المسائل',
+  'Focus on {actions}.': 'ركّز على {actions}.',
+  'Upload a screenshot image or a PDF that contains a math question.': 'حمّل لقطة شاشة أو ملف PDF يحتوي على سؤال رياضيات.',
+  'Could not read the image.': 'تعذر قراءة الصورة.',
+  'Could not extract a math expression from the screenshot.': 'تعذر استخراج تعبير رياضي من لقطة الشاشة.',
+  'The PDF did not contain readable text.': 'ملف PDF لا يحتوي على نص قابل للقراءة.',
+  'Could not process this file.': 'تعذر معالجة هذا الملف.',
+  'Network error — check that the AI model is running.': 'خطأ في الشبكة — تأكد من أن نموذج الذكاء الاصطناعي يعمل.',
+  'Question': 'السؤال',
+  'Preview': 'المعاينة',
+  'Context / what you tried': 'السياق / ما الذي جرّبته',
+  'optional': 'اختياري',
+  'Save to Library': 'احفظ في المكتبة',
+  'Saved to Library!': 'تم الحفظ في المكتبة!',
+  'Have a photo or PDF instead?': 'هل لديك صورة أو PDF بدلًا من ذلك؟',
+  'Use Question Scan →': 'استخدم مسح السؤال ←',
+  'Saved to flashcards!': 'تم الحفظ في البطاقات التعليمية!',
+  'Save as flashcard': 'احفظ كبطاقة تعليمية',
+  'Could not save — try again.': 'تعذر الحفظ — حاول مرة أخرى.',
+  'Could not solve this problem': 'تعذر حل هذه المسألة',
+  'Try rephrasing your input, checking for typos, or switching to a different problem type.': 'جرّب إعادة صياغة الإدخال أو التحقق من الأخطاء الكتابية أو اختيار نوع مسألة مختلف.',
+  'Answer': 'الإجابة',
+  'symbolic': 'رمزي',
+  'Input:': 'الإدخال:',
+  'Plot this in Graph Plotter': 'ارسم هذا في راسم المنحنيات',
+  'Clear result': 'امسح النتيجة',
+  'Solving…': 'جارٍ الحل…',
+  'Solve': 'حل',
+  'Recent:': 'حديثًا:',
+  'Auto-detected topic:': 'الموضوع المكتشف تلقائيًا:',
+  'formula': 'قانون',
+  'formulas': 'قوانين',
+  'Click to explain "{title}" in the solver': 'اضغط لشرح "{title}" في المحلل',
+  'Meters': 'أمتار',
+  'Kilometers': 'كيلومترات',
+  'Centimeters': 'سنتيمترات',
+  'Millimeters': 'مليمترات',
+  'Inches': 'بوصات',
+  'Feet': 'أقدام',
+  'Miles': 'أميال',
+  'Kilograms': 'كيلوغرامات',
+  'Grams': 'غرامات',
+  'Milligrams': 'مليغرامات',
+  'Pounds': 'أرطال',
+  'Ounces': 'أونصات',
+  '°Celsius': 'درجة مئوية',
+  '°Fahrenheit': 'درجة فهرنهايت',
+  'Kelvin': 'كلفن',
+  'Knots': 'عقد',
+  'Acres': 'أفدنة',
+  'Hectares': 'هكتارات',
+  'Litres': 'لترات',
+  'Millilitres': 'مليلترات',
+  'Gallons (US)': 'غالون (أمريكي)',
+  'Pints (US)': 'باينت (أمريكي)',
+  'Coordinate geometry': 'الهندسة التحليلية',
+  'Triangles': 'المثلثات',
+  'Area & perimeter': 'المساحة والمحيط',
+  'Volume & solids': 'الحجم والمجسمات',
+  'Equations': 'المعادلات',
+  'Expressions': 'التعبيرات',
+  'Systems': 'الأنظمة',
+  'Inequalities': 'المتباينات',
+  'Derivatives': 'المشتقات',
+  'Integrals': 'التكاملات',
+  'Limits': 'النهايات',
+  'Analysis': 'التحليل',
+  'Identities & values': 'الهويات والقيم',
+  'Angle conversion': 'تحويل الزوايا',
+  'Graphs & transformations': 'الرسوم والتحويلات',
+  'Descriptive statistics': 'الإحصاء الوصفي',
+  'Probability': 'الاحتمالات',
+  'Counting': 'العد',
+  'Arithmetic': 'الحسابية',
+  'Geometric': 'الهندسية',
+  'Patterns': 'الأنماط',
+  'Second-order': 'الرتبة الثانية',
+  'First-order': 'الرتبة الأولى',
+  'Applications': 'التطبيقات',
+  'Number theory': 'نظرية الأعداد',
+  'Integer functions': 'الدوال الصحيحة',
+  'Motion': 'الحركة',
+  'Energy': 'الطاقة',
+  'Waves': 'الموجات',
+  'Mechanics': 'الميكانيكا',
+  'Other': 'أخرى',
+};
 
 
 // ── Topic catalogue ───────────────────────────────────────────────────────────
@@ -628,6 +888,7 @@ function Latex({ latex, display = false }: { latex: string; display?: boolean })
 }
 
 function WorkflowCard({ accent, title, steps }: { accent: string; title: string; steps: WorkflowStep[] }) {
+  const { t: tr } = useI18n(LOCAL_AR);
   return (
     <div
       style={{
@@ -641,7 +902,7 @@ function WorkflowCard({ accent, title, steps }: { accent: string; title: string;
       }}
     >
       <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: accent }}>
-        {title}
+        {tr(title)}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
         {steps.map((step, index) => (
@@ -655,10 +916,10 @@ function WorkflowCard({ accent, title, steps }: { accent: string; title: string;
             }}
           >
             <div style={{ fontSize: 11, color: accent, fontWeight: 700, marginBottom: 4 }}>
-              {index + 1}. {step.label}
+              {index + 1}. {tr(step.label)}
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-              {step.detail}
+              {tr(step.detail)}
             </div>
           </div>
         ))}
@@ -2058,6 +2319,7 @@ function solverTopicForQuestion(problem: string): TopicId {
 }
 
 export function MathSolverPage() {
+  const { t: tr, isRTL } = useI18n(LOCAL_AR);
   const [active, setActive] = useState<ActiveView>('algebra');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
     try { return localStorage.getItem(MATH_SIDEBAR_KEY) !== 'closed'; } catch { return true; }
@@ -2172,7 +2434,7 @@ export function MathSolverPage() {
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
     if (!isImage && !isPdf) {
-      setScanError('Upload a screenshot image or a PDF that contains a math question.');
+      setScanError(tr('Upload a screenshot image or a PDF that contains a math question.'));
       return;
     }
 
@@ -2184,7 +2446,7 @@ export function MathSolverPage() {
         const imageBase64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result ?? ''));
-          reader.onerror = () => reject(new Error('Could not read the image.'));
+          reader.onerror = () => reject(new Error(tr('Could not read the image.')));
           reader.readAsDataURL(file);
         });
 
@@ -2195,7 +2457,7 @@ export function MathSolverPage() {
         });
         const data = await response.json();
         if (!response.ok || !data.expression) {
-          throw new Error(data.error ?? 'Could not extract a math expression from the screenshot.');
+          throw new Error(data.error ?? tr('Could not extract a math expression from the screenshot.'));
         }
         setScanExtracted(String(data.expression).trim());
         return;
@@ -2203,15 +2465,15 @@ export function MathSolverPage() {
 
       const extracted = await extractTextFromBlob(file, file.name);
       if (extracted.error || !extracted.text.trim()) {
-        throw new Error(extracted.error ?? 'The PDF did not contain readable text.');
+        throw new Error(extracted.error ?? tr('The PDF did not contain readable text.'));
       }
       setScanExtracted(extracted.text.replace(/\s+/g, ' ').trim().slice(0, 4000));
     } catch (error) {
-      setScanError(error instanceof Error ? error.message : 'Could not process this file.');
+      setScanError(error instanceof Error ? error.message : tr('Could not process this file.'));
     } finally {
       setScanBusy(false);
     }
-  }, []);
+  }, [tr]);
 
   // ── Solver ─────────────────────────────────────────────────────────────────
 
@@ -2248,11 +2510,11 @@ export function MathSolverPage() {
         replaceGraphWith(data.graphExpr);
       }
     } catch {
-      setResult({ answer: '', answerLatex: '', steps: [], graphExpr: null, category: String(requestCategory ?? active), engine: 'error', error: 'Network error — check that the AI model is running.' });
+      setResult({ answer: '', answerLatex: '', steps: [], graphExpr: null, category: String(requestCategory ?? active), engine: 'error', error: tr('Network error — check that the AI model is running.') });
     } finally {
       setLoading(false);
     }
-  }, [input, active, replaceGraphWith]);
+  }, [input, active, replaceGraphWith, tr]);
 
   // ── Graph rendering ────────────────────────────────────────────────────────
 
@@ -2300,12 +2562,12 @@ export function MathSolverPage() {
   const currentCategoryConfig = currentTopic ? MATH_CATEGORIES[currentTopic.id] : null;
   const specialMeta = !currentTopic ? SPECIAL_VIEW_META[active as SpecialView] : null;
   const currentAccent = currentTopic?.color ?? specialMeta?.accent ?? DEFAULT_ACCENT;
-  const activeTitle = currentTopic?.label ?? specialMeta?.title ?? 'Math';
+  const activeTitle = tr(currentTopic?.label ?? specialMeta?.title ?? 'Math');
   const activeSubtitle = currentTopic
-    ? `Focus on ${currentCategoryConfig?.supportedActions.slice(0, 4).join(' · ') ?? 'solving problems'}.`
+    ? tr('Use structured forms and quick examples without leaving the current topic.')
     : active === 'matlab'
-      ? 'Run matrix, vector, and linear algebra workflows together in one MATLAB-style workspace.'
-      : specialMeta?.subtitle ?? '';
+      ? tr('Run matrix, vector, and linear algebra workflows together in one MATLAB-style workspace.')
+      : tr(specialMeta?.subtitle ?? '');
 
   const unitCat = UNIT_CATS[unitCatIdx];
   const unitResult = (() => {
@@ -2345,7 +2607,7 @@ export function MathSolverPage() {
           if (id !== active) { setInput(''); setResult(null); }
           setActive(id);
         }}
-        title={!sidebarOpen ? label : undefined}
+        title={!sidebarOpen ? tr(label) : undefined}
         style={{
           display: 'flex', alignItems: 'center', gap: 10,
           padding: sidebarOpen ? '8px 14px' : '8px 0',
@@ -2360,7 +2622,7 @@ export function MathSolverPage() {
         }}
       >
         <span style={{ fontSize: 15, flexShrink: 0, fontStyle: 'normal', minWidth: 20, textAlign: 'center' }}>{icon}</span>
-        {sidebarOpen && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>}
+        {sidebarOpen && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tr(label)}</span>}
       </button>
     );
   }
@@ -2368,18 +2630,18 @@ export function MathSolverPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div style={S.shell}>
+    <div style={S.shell} dir={isRTL ? 'rtl' : 'ltr'}>
 
       {/* ── Sidebar ── */}
       <aside style={S.sidebar}>
         {/* Collapse toggle */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: sidebarOpen ? 'space-between' : 'center', padding: sidebarOpen ? '14px 14px 8px' : '14px 0 8px' }}>
-          {sidebarOpen && <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Categories</span>}
+          {sidebarOpen && <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Categories')}</span>}
           <button onClick={() => setSidebarOpen(o => {
             const next = !o;
             try { localStorage.setItem(MATH_SIDEBAR_KEY, next ? 'open' : 'closed'); } catch { /* noop */ }
             return next;
-          })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: 4 }} title={sidebarOpen ? 'Collapse' : 'Expand'}>
+          })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: 4 }} title={sidebarOpen ? tr('Collapse') : tr('Expand')}>
             {sidebarOpen ? '◀' : '▶'}
           </button>
         </div>
@@ -2387,7 +2649,7 @@ export function MathSolverPage() {
         <div style={{ padding: '0 0 8px' }}>
           {sidebarOpen && (
             <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '6px 20px 4px', opacity: 0.6 }}>
-              Solver Topics
+              {tr('Solver Topics')}
             </div>
           )}
           {PRIMARY_TOPICS.map(t => <NavItem key={t.id} id={t.id} icon={t.icon} label={t.label} color={t.color} />)}
@@ -2395,7 +2657,7 @@ export function MathSolverPage() {
           <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
           {sidebarOpen && (
             <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '2px 20px 4px', opacity: 0.6 }}>
-              Input
+              {tr('Input')}
             </div>
           )}
           <NavItem id="write"  icon="✍️" label="Write a Question" color="#f43f5e" />
@@ -2405,7 +2667,7 @@ export function MathSolverPage() {
           <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
           {sidebarOpen && (
             <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '2px 20px 4px', opacity: 0.6 }}>
-              Visualize
+              {tr('Visualize')}
             </div>
           )}
           <NavItem id="graph"  icon="📈" label="Graph Plotter" color="#22c55e" />
@@ -2414,7 +2676,7 @@ export function MathSolverPage() {
           <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
           {sidebarOpen && (
             <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '2px 20px 4px', opacity: 0.6 }}>
-              Reference
+              {tr('Reference')}
             </div>
           )}
           <NavItem id="formulas" icon="📚" label="Formula Sheets" />
@@ -2445,7 +2707,7 @@ export function MathSolverPage() {
                 {activeTitle}
                 {currentTopic && (
                   <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: `${currentAccent}15`, color: currentAccent, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
-                    Solver
+                    {tr('Solver')}
                   </span>
                 )}
               </div>
@@ -2456,7 +2718,7 @@ export function MathSolverPage() {
             {history.length > 0 && (
               <button onClick={() => setShowHistory(h => !h)}
                 style={{ marginLeft: 'auto', padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${showHistory ? currentAccent : 'var(--border-subtle)'}`, background: showHistory ? `${currentAccent}12` : 'var(--bg-elevated)', color: showHistory ? currentAccent : 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s', flexShrink: 0 }}>
-                🕐 History
+                🕐 {tr('History')}
                 <span style={{ background: showHistory ? currentAccent : 'var(--border-mid, var(--border-subtle))', color: showHistory ? '#fff' : 'var(--text-muted)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, minWidth: 16, textAlign: 'center' }}>{history.length}</span>
               </button>
             )}
@@ -2478,17 +2740,17 @@ export function MathSolverPage() {
         >
           <div style={{ display: 'grid', gap: 3, minWidth: 0 }}>
             <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-              Math focus
+              {tr('Math focus')}
             </span>
             <strong style={{ color: 'var(--text-primary)', fontSize: 14 }}>
-              {currentTopic ? `${currentTopic.label} problem-solving` : `${specialMeta?.title ?? 'Math tools'} workspace`}
+              {currentTopic ? `${tr(currentTopic.label)} ${tr('problem-solving')}` : `${tr(specialMeta?.title ?? 'Math tools')} ${tr('workspace')}`}
             </strong>
             <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, maxWidth: 760 }}>
               {contextName
-                ? `Connected to ${contextName}. You can keep this file in context while solving, graphing, or exploring formulas.`
+                ? tr('Connected to {name}. You can keep this file in context while solving, graphing, or exploring formulas.', { name: contextName })
                 : currentTopic
-                  ? `Use structured forms and quick examples without leaving the current topic.`
-                  : `Switch between graphing, scanning, formulas, units, visual analysis, and MATLAB-style work from the same space.`}
+                  ? tr('Use structured forms and quick examples without leaving the current topic.')
+                  : tr('Switch between graphing, scanning, formulas, units, visual analysis, and MATLAB-style work from the same space.')}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -2506,18 +2768,18 @@ export function MathSolverPage() {
                   cursor: 'pointer',
                 }}
               >
-                {sidebarOpen ? 'Hide topics' : 'Show topics'}
+                {sidebarOpen ? tr('Hide topics') : tr('Show topics')}
               </button>
             )}
             <span style={{ padding: '4px 10px', borderRadius: 999, background: `${currentAccent}14`, color: currentAccent, fontSize: 11, fontWeight: 700 }}>
-              {currentTopic ? 'Solver mode' : specialMeta?.title ?? 'Tool mode'}
+              {currentTopic ? tr('Solver mode') : tr(specialMeta?.title ?? 'Tool mode')}
             </span>
             <span style={{ padding: '4px 10px', borderRadius: 999, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}>
-              {history.length} recent problem{history.length === 1 ? '' : 's'}
+              {history.length} {tr('recent problems')}
             </span>
             {currentCategoryConfig && (
               <span style={{ padding: '4px 10px', borderRadius: 999, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}>
-                {currentCategoryConfig.supportedActions.length} supported actions
+                {currentCategoryConfig.supportedActions.length} {tr('supported actions')}
               </span>
             )}
           </div>
@@ -2527,16 +2789,16 @@ export function MathSolverPage() {
         {showHistory && (
           <div style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-2)' }}>
             <div style={{ padding: '10px 24px 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>Recent Problems</span>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>{tr('Recent Problems')}</span>
               {history.length > 0 && (
                 <button onClick={() => { setHistory([]); try { localStorage.removeItem('kivora_math_history'); } catch { /* noop */ } }}
                   style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4 }}>
-                  Clear all
+                  {tr('Clear all')}
                 </button>
               )}
             </div>
             {history.length === 0 ? (
-              <div style={{ padding: '12px 24px 14px', fontSize: 12, color: 'var(--text-muted)' }}>No history yet</div>
+              <div style={{ padding: '12px 24px 14px', fontSize: 12, color: 'var(--text-muted)' }}>{tr('No history yet')}</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 200, overflowY: 'auto', padding: '4px 24px 12px' }}>
                 {history.map(h => {
@@ -2591,17 +2853,17 @@ export function MathSolverPage() {
             {!CATEGORY_FORMS[String(active)] && (
               <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                  Best for: one problem, one result, and clear working steps.
+                  {tr('Best for: one problem, one result, and clear working steps.')}
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  Press <strong style={{ color: 'var(--text-primary)' }}>Enter</strong> to solve, <strong style={{ color: 'var(--text-primary)' }}>Shift + Enter</strong> for a new line.
+                  {tr('Press Enter to solve, Shift + Enter for a new line.')}
                 </span>
               </div>
             )}
 
             {contextName && (
               <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 12, color: 'var(--text-secondary)' }}>
-                Linked workspace file: <strong style={{ color: 'var(--text-primary)' }}>{contextName}</strong>
+                {tr('Linked workspace file:')} <strong style={{ color: 'var(--text-primary)' }}>{contextName}</strong>
               </div>
             )}
 
@@ -2631,12 +2893,12 @@ export function MathSolverPage() {
 
                   {/* ── Problem type pill tabs ── */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>Problem type</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>{tr('Problem type')}</span>
                     {groupedForms ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {Object.entries(groupedForms).map(([groupLabel, groupForms]) => (
                           <div key={groupLabel} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{groupLabel}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{tr(groupLabel)}</span>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                               {groupForms.map((f) => {
                                 const isSelected = (structFormType === f.id) || (!structFormType && f === forms[0]);
@@ -2655,7 +2917,7 @@ export function MathSolverPage() {
                                     onMouseEnter={e => { if (!isSelected) { e.currentTarget.style.borderColor = `${currentAccent}80`; e.currentTarget.style.color = currentAccent; } }}
                                     onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
                                   >
-                                    {pillLabel(f.label)}
+                                    {tr(pillLabel(f.label))}
                                   </button>
                                 );
                               })}
@@ -2682,7 +2944,7 @@ export function MathSolverPage() {
                               onMouseEnter={e => { if (!isSelected) { e.currentTarget.style.borderColor = `${currentAccent}80`; e.currentTarget.style.color = currentAccent; } }}
                               onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
                             >
-                              {pillLabel(f.label)}
+                              {tr(pillLabel(f.label))}
                             </button>
                           );
                         })}
@@ -2700,13 +2962,13 @@ export function MathSolverPage() {
                     <div style={{ width: 4, flexShrink: 0, background: currentAccent, borderRadius: '0' }} />
                     <div style={{ padding: '14px 18px', flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: currentAccent, marginBottom: 6 }}>
-                        {pillLabel(pf.label)}
+                        {tr(pillLabel(pf.label))}
                       </div>
                       <div style={{ overflowX: 'auto', fontSize: 16 }}>
                         <Latex latex={pf.latexFormula} display />
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
-                        {pf.note}
+                        {tr(pf.note)}
                       </div>
                     </div>
                   </div>
@@ -2728,15 +2990,15 @@ export function MathSolverPage() {
                               <div key={param.key} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                                 <label style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'baseline', gap: 4 }}>
                                   <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: `${currentAccent}20`, color: currentAccent, fontSize: 9, fontWeight: 800, flexShrink: 0 }}>{idx + 1}</span>
-                                  {param.label}
+                                  {tr(param.label)}
                                   {param.unit && <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-muted)' }}>({param.unit})</span>}
                                 </label>
                                 {param.inputType === 'select' ? (
                                   <select value={structFormParams[param.key] ?? (param.options?.[0] ?? '')} onChange={e => setStructFormParams(prev => ({ ...prev, [param.key]: e.target.value }))} style={{ ...bs, cursor: 'pointer' }} onFocus={onF} onBlur={onB}>
-                                    {param.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                    {param.options?.map(opt => <option key={opt} value={opt}>{tr(opt)}</option>)}
                                   </select>
                                 ) : (
-                                  <input type={param.inputType === 'number' ? 'number' : 'text'} step="any" placeholder={param.placeholder ?? '…'}
+                                  <input type={param.inputType === 'number' ? 'number' : 'text'} step="any" placeholder={param.placeholder ? tr(param.placeholder) : '…'}
                                     value={structFormParams[param.key] ?? ''} onChange={e => setStructFormParams(prev => ({ ...prev, [param.key]: e.target.value }))}
                                     onKeyDown={e => { if (e.key === 'Enter') handleStructSolve(); }}
                                     style={{ ...bs, fontFamily: param.inputType === 'text' ? '"JetBrains Mono", monospace' : 'inherit' }} onFocus={onF} onBlur={onB} />
@@ -2751,7 +3013,7 @@ export function MathSolverPage() {
                           return (
                             <div key={param.key} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                               <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                                {param.label}<span style={{ marginLeft: 6, fontSize: 10, fontWeight: 400, color: 'var(--text-muted)' }}>({rows}×{cols})</span>
+                                {tr(param.label)}<span style={{ marginLeft: 6, fontSize: 10, fontWeight: 400, color: 'var(--text-muted)' }}>({rows}×{cols})</span>
                               </span>
                               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 6, maxWidth: cols <= 2 ? 260 : cols === 3 ? 340 : 440 }}>
                                 {Array.from({ length: rows * cols }, (_, idx) => {
@@ -2781,7 +3043,7 @@ export function MathSolverPage() {
                         onClick={() => { setStructFormParams({}); setResult(null); }}
                         style={{ fontSize: 12, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '7px 14px', cursor: 'pointer' }}
                       >
-                        ✕ Clear result
+                        ✕ {tr('Clear result')}
                       </button>
                     )}
                     <button
@@ -2797,8 +3059,8 @@ export function MathSolverPage() {
                       }}
                     >
                       {loading
-                        ? <><span style={{ display: 'inline-block', animation: 'spin 0.8s linear infinite' }}>⏳</span> Solving…</>
-                        : '▶  Solve'}
+                        ? <><span style={{ display: 'inline-block', animation: 'spin 0.8s linear infinite' }}>⏳</span> {tr('Solving…')}</>
+                        : `▶  ${tr('Solve')}`}
                     </button>
                   </div>
                   <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -2809,7 +3071,7 @@ export function MathSolverPage() {
             {/* Recent history chips — free-text categories only */}
             {!CATEGORY_FORMS[String(active)] && history.length > 0 && !loading && !result && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>Recent:</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{tr('Recent:')}</span>
                 {history.slice(0, 3).map(h => (
                   <button key={h.id}
                     onClick={() => {
@@ -2858,7 +3120,7 @@ export function MathSolverPage() {
                 {/* Thinking status pill */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20, background: `${currentAccent}0d`, border: `1px solid ${currentAccent}25`, alignSelf: 'flex-start', marginTop: 2 }}>
                   <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', fontSize: 12 }}>⚙</span>
-                  <span style={{ fontSize: 11, color: currentAccent, fontWeight: 600 }}>Solving step by step…</span>
+                  <span style={{ fontSize: 11, color: currentAccent, fontWeight: 600 }}>{tr('Solving step by step…')}</span>
                 </div>
               </div>
             )}
@@ -2873,10 +3135,10 @@ export function MathSolverPage() {
                     <div style={{ padding: '14px 18px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                       <div style={{ width: 32, height: 32, borderRadius: 8, background: '#ef444415', border: '1px solid #ef444430', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>⚠</div>
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: '#ef4444', marginBottom: 4 }}>Could not solve this problem</div>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: '#ef4444', marginBottom: 4 }}>{tr('Could not solve this problem')}</div>
                         <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{result.error}</div>
                         <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
-                          Try rephrasing your input, checking for typos, or switching to a different problem type.
+                          {tr('Try rephrasing your input, checking for typos, or switching to a different problem type.')}
                         </div>
                       </div>
                     </div>
@@ -2888,10 +3150,10 @@ export function MathSolverPage() {
                       {/* Thin top accent strip */}
                       <div style={{ height: 3, background: `linear-gradient(90deg, ${currentAccent}, ${currentAccent}50)` }} />
                       <div style={{ padding: '12px 20px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: currentAccent }}>Answer</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: currentAccent }}>{tr('Answer')}</div>
                         <div style={{ height: 1, flex: 1, background: `${currentAccent}20` }} />
                         <div style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, background: `${currentAccent}12`, color: currentAccent, fontWeight: 600 }}>
-                          {result.engine === 'ai' ? '✨ AI' : '🔢 symbolic'}
+                          {result.engine === 'ai' ? '✨ AI' : `🔢 ${tr('symbolic')}`}
                         </div>
                       </div>
                       <div style={{ padding: '10px 20px 16px', fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', overflowX: 'auto' }}>
@@ -2899,7 +3161,7 @@ export function MathSolverPage() {
                       </div>
                       {input && (
                         <div style={{ padding: '8px 20px 12px', borderTop: `1px solid ${currentAccent}18`, fontSize: 11, color: 'var(--text-muted)', fontFamily: '"JetBrains Mono", monospace', overflowX: 'auto', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>Input:</span>
+                          <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{tr('Input:')}</span>
                           <span style={{ color: 'var(--text-secondary)' }}>{input.length > 80 ? input.slice(0, 80) + '…' : input}</span>
                         </div>
                       )}
@@ -2955,7 +3217,7 @@ export function MathSolverPage() {
                         setActive('graph');
                       }}
                         style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 8, border: `1px solid ${currentAccent}40`, background: `${currentAccent}10`, color: currentAccent, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
-                        📈 Plot this in Graph Plotter
+                        {`📈 ${tr('Plot this in Graph Plotter')}`}
                       </button>
                     )}
 
@@ -2977,16 +3239,16 @@ export function MathSolverPage() {
                               }),
                             });
                             broadcastInvalidate(LIBRARY_CHANNEL);
-                            setFlashcardToast('Saved to flashcards!');
+                            setFlashcardToast(tr('Saved to flashcards!'));
                             setTimeout(() => setFlashcardToast(''), 2800);
                           } catch {
-                            setFlashcardToast('Could not save — try again.');
+                            setFlashcardToast(tr('Could not save — try again.'));
                             setTimeout(() => setFlashcardToast(''), 2800);
                           }
                         }}
                         style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}
                       >
-                        📇 Save as flashcard
+                        {`📇 ${tr('Save as flashcard')}`}
                       </button>
                       {flashcardToast && (
                         <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>{flashcardToast}</span>
@@ -3017,10 +3279,10 @@ export function MathSolverPage() {
                 <input
                   value={formulaSearch}
                   onChange={e => setFormulaSearch(e.target.value)}
-                  placeholder="Search formulas…"
+                  placeholder={tr('Search formulas…')}
                   style={{ flex: 1, minWidth: 180, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, outline: 'none' }}
                 />
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{totalCount} formulas across {topicsWithFormulas.length} topics</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{totalCount} {tr('formulas across')} {topicsWithFormulas.length} {tr('topics')}</span>
               </div>
 
               {/* Topic jump chips */}
@@ -3029,7 +3291,7 @@ export function MathSolverPage() {
                   {topicsWithFormulas.map(topic => (
                     <a key={topic.id} href={`#formula-${topic.id}`}
                       style={{ padding: '3px 12px', borderRadius: 20, border: `1px solid ${topic.color}40`, background: `${topic.color}10`, color: topic.color, fontSize: 11, fontWeight: 600, textDecoration: 'none', cursor: 'pointer' }}>
-                      {topic.icon} {topic.label} <span style={{ opacity: 0.7 }}>({FORMULAS[topic.id]?.length ?? 0})</span>
+                      {topic.icon} {tr(topic.label)} <span style={{ opacity: 0.7 }}>({FORMULAS[topic.id]?.length ?? 0})</span>
                     </a>
                   ))}
                 </div>
@@ -3045,9 +3307,9 @@ export function MathSolverPage() {
                   <div key={topic.id} id={`formula-${topic.id}`} style={{ marginBottom: 28, scrollMarginTop: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingBottom: 8, borderBottom: `2px solid ${topic.color}40` }}>
                       <span style={{ fontSize: 18 }}>{topic.icon}</span>
-                      <span style={{ fontWeight: 700, fontSize: 15, color: topic.color }}>{topic.label}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>{formulas.length} formula{formulas.length !== 1 ? 's' : ''}</span>
-                      <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic' }}>Click any card to explain in solver →</span>
+                      <span style={{ fontWeight: 700, fontSize: 15, color: topic.color }}>{tr(topic.label)}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>{formulas.length} {tr(formulas.length === 1 ? 'formula' : 'formulas')}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic' }}>{tr('Click any card to explain in solver →')}</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
                       {formulas.map((f, i) => (
@@ -3056,13 +3318,13 @@ export function MathSolverPage() {
                           onClick={() => { setInput(`Explain: ${f.title}`); setActive(topic.id as TopicId); void solve(`Explain: ${f.title}`, topic.id as TopicId); }}
                           onMouseEnter={e => { const el = e.currentTarget; el.style.borderColor = topic.color; el.style.boxShadow = `0 0 0 2px ${topic.color}20`; }}
                           onMouseLeave={e => { const el = e.currentTarget; el.style.borderColor = 'var(--border-subtle)'; el.style.boxShadow = 'none'; }}
-                          title={`Click to explain "${f.title}" in the solver`}
+                          title={tr('Click to explain "{title}" in the solver', { title: f.title })}
                         >
-                          <div style={{ fontSize: 11, color: topic.color, fontWeight: 600, marginBottom: 8 }}>{f.title}</div>
+                          <div style={{ fontSize: 11, color: topic.color, fontWeight: 600, marginBottom: 8 }}>{tr(f.title)}</div>
                           <div style={{ overflowX: 'auto', fontSize: 14 }}>
                             <Latex latex={f.latex} display />
                           </div>
-                          {f.note && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6, fontStyle: 'italic' }}>{f.note}</div>}
+                          {f.note && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6, fontStyle: 'italic' }}>{tr(f.note)}</div>}
                         </div>
                       ))}
                     </div>
@@ -3075,7 +3337,7 @@ export function MathSolverPage() {
                 return allFormulas.filter(f => f.title.toLowerCase().includes(q) || f.latex.toLowerCase().includes(q)).length === 0;
               }) && (
                 <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-                  No formulas match &ldquo;{formulaSearch}&rdquo;
+                  {tr('No formulas match “{query}”', { query: formulaSearch })}
                 </div>
               )}
             </div>
@@ -3098,23 +3360,23 @@ export function MathSolverPage() {
                     onClick={() => replaceGraphWith(preset.expr)}
                     style={{ padding: '5px 12px', borderRadius: 20, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer' }}
                   >
-                    {preset.label}
+                    {tr(preset.label)}
                   </button>
                 ))}
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button onClick={resetGraphView} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Home</button>
-                <button onClick={() => zoomGraph(0.8)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Zoom in</button>
-                <button onClick={() => zoomGraph(1.25)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Zoom out</button>
+                <button onClick={resetGraphView} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>{tr('Home')}</button>
+                <button onClick={() => zoomGraph(0.8)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>{tr('Zoom in')}</button>
+                <button onClick={() => zoomGraph(1.25)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>{tr('Zoom out')}</button>
               </div>
             </div>
 
             <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                Supported: <code>y = x^2</code>, <code>x = 2</code>, <code>x^2 + y^2 = 25</code>, line equations, and geometry results from the solver.
+                {tr('Supported:')} {tr('y = x^2, x = 2, x^2 + y^2 = 25, line equations, and geometry results from the solver.')}
               </span>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                Window x:[{xDomain[0]}, {xDomain[1]}] · y:[{yDomain[0]}, {yDomain[1]}]
+                {tr('Window')} x:[{xDomain[0]}, {xDomain[1]}] · y:[{yDomain[0]}, {yDomain[1]}]
               </span>
             </div>
 
@@ -3186,9 +3448,9 @@ export function MathSolverPage() {
                       <button
                         onClick={() => setGraphExprs(p => p.map(x => x.id === ge.id ? { ...x, enabled: !x.enabled } : x))}
                         style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, border: '1px solid var(--border-subtle)', background: ge.enabled ? `${ge.color}1f` : 'transparent', color: ge.enabled ? ge.color : 'var(--text-muted)', cursor: 'pointer', minWidth: 42 }}
-                        title={ge.enabled ? 'Hide expression' : 'Show expression'}
+                        title={ge.enabled ? tr('Hide expression') : tr('Show expression')}
                       >
-                        {ge.enabled ? 'On' : 'Off'}
+                        {ge.enabled ? tr('On') : tr('Off')}
                       </button>
                       <div style={{ width: 16, height: 16, borderRadius: '50%', background: ge.color, flexShrink: 0, cursor: 'pointer' }}
                         onClick={() => { const c = GRAPH_COLORS[(GRAPH_COLORS.indexOf(ge.color) + 1) % GRAPH_COLORS.length]; setGraphExprs(p => p.map(e => e.id === ge.id ? { ...e, color: c } : e)); }} />
@@ -3199,12 +3461,12 @@ export function MathSolverPage() {
                       />
                       <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 58, textAlign: 'right' }}>
                         {(() => {
-                          if (!ge.expr.trim()) return 'Empty';
-                          if (isCustomFuncDefinition(ge.expr)) return 'Definition';
+                          if (!ge.expr.trim()) return tr('Empty');
+                          if (isCustomFuncDefinition(ge.expr)) return tr('Definition');
                           const normalized = normalizeGraphExpression(ge.expr);
-                          if (!normalized) return 'Empty';
-                          if (normalized.type === 'parametric') return 'Parametric';
-                          return normalized.type === 'function' ? 'Function' : 'Relation';
+                          if (!normalized) return tr('Empty');
+                          if (normalized.type === 'parametric') return tr('Parametric');
+                          return normalized.type === 'function' ? tr('Function') : tr('Relation');
                         })()}
                       </span>
                       {graphExprs.length > 1 && (
@@ -3224,11 +3486,11 @@ export function MathSolverPage() {
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setGraphExprs(p => [...p, { id: crypto.randomUUID(), expr: '', color: GRAPH_COLORS[p.length % GRAPH_COLORS.length], enabled: true }])}
                   style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                  + Add expression
+                  {tr('+ Add expression')}
                 </button>
                 <button onClick={renderGraph}
                   style={{ fontSize: 12, padding: '5px 14px', borderRadius: 8, border: 'none', background: '#22c55e', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
-                  ▶ Plot
+                  {`▶ ${tr('Plot')}`}
                 </button>
               </div>
             </div>
@@ -3244,23 +3506,23 @@ export function MathSolverPage() {
               steps={SPECIAL_VIEW_META.units.workflow}
             />
             <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', marginBottom: 16, fontSize: 12, color: 'var(--text-secondary)' }}>
-              Use this tab for quick conversions only — one value, one category, one clean result.
+              {tr('Use this tab for quick conversions only — one value, one category, one clean result.')}
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
-              {UNIT_CATS.map((c, i) => (
+              {UNIT_CATS.map((category, i) => (
                 <button key={i} onClick={() => { setUnitCatIdx(i); setFromUnit(0); setToUnit(1); }}
                   style={{ padding: '5px 12px', borderRadius: 20, border: '1px solid var(--border-subtle)', background: unitCatIdx === i ? '#f59e0b' : 'var(--bg-2)', color: unitCatIdx === i ? '#fff' : 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: unitCatIdx === i ? 700 : 400 }}>
-                  {c.label}
+                  {tr(category.label)}
                 </button>
               ))}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[{ lbl: 'From', idx: fromUnit, set: setFromUnit }, { lbl: 'To', idx: toUnit, set: setToUnit }].map(({ lbl, idx, set }) => (
                 <div key={lbl} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <label style={{ fontSize: 12, color: 'var(--text-muted)', width: 30 }}>{lbl}</label>
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)', width: 30 }}>{tr(lbl)}</label>
                   <select value={idx} onChange={e => set(Number(e.target.value))}
                     style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13 }}>
-                    {unitCat.units.map((u, i) => <option key={i} value={i}>{u.label}</option>)}
+                    {unitCat.units.map((u, i) => <option key={i} value={i}>{tr(u.label)}</option>)}
                   </select>
                 </div>
               ))}
@@ -3269,19 +3531,19 @@ export function MathSolverPage() {
                   onClick={() => { setFromUnit(toUnit); setToUnit(fromUnit); }}
                   style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}
                 >
-                  ⇄ Swap units
+                  {`⇄ ${tr('Swap units')}`}
                 </button>
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <label style={{ fontSize: 12, color: 'var(--text-muted)', width: 30 }}>Val</label>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', width: 30 }}>{tr('Val')}</label>
                 <input type="number" value={unitValue} onChange={e => setUnitValue(e.target.value)}
                   style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14 }} />
               </div>
               {unitResult && (
                 <div style={{ padding: '16px 18px', borderRadius: 12, background: '#f59e0b14', border: '1.5px solid #f59e0b40', marginTop: 4 }}>
-                  <div style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700, marginBottom: 4 }}>Result</div>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>{unitResult} <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-muted)' }}>{unitCat.units[toUnit].label}</span></div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{unitValue} {unitCat.units[fromUnit].label} = {unitResult} {unitCat.units[toUnit].label}</div>
+                  <div style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700, marginBottom: 4 }}>{tr('Result')}</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>{unitResult} <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-muted)' }}>{tr(unitCat.units[toUnit].label)}</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{unitValue} {tr(unitCat.units[fromUnit].label)} = {unitResult} {tr(unitCat.units[toUnit].label)}</div>
                 </div>
               )}
             </div>
@@ -3293,28 +3555,28 @@ export function MathSolverPage() {
           <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 900, overflowY: 'auto' }}>
             <WorkflowCard accent={SPECIAL_VIEW_META.scan.accent} title={SPECIAL_VIEW_META.scan.workflowTitle} steps={SPECIAL_VIEW_META.scan.workflow} />
             <div style={{ padding: '14px 16px', borderRadius: 12, border: '1px dashed var(--border-subtle)', background: 'var(--bg-2)' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Upload a screenshot or PDF</div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{tr('Upload a screenshot or PDF')}</div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
-                Best for photos of worksheets, textbook pages, or exam papers.{' '}
+                {tr('Best for photos of worksheets, textbook pages, or exam papers.')}{' '}
                 <button
                   onClick={() => setActive('write')}
                   style={{ background: 'none', border: 'none', color: '#38bdf8', fontWeight: 600, fontSize: 12, cursor: 'pointer', padding: 0 }}
                 >
-                  Prefer to type? Use Write a Question →
+                  {tr('Prefer to type? Use Write a Question →')}
                 </button>
               </div>
               <input type="file" accept="image/*,.pdf" style={{ fontSize: 13 }} onChange={e => { const f = e.target.files?.[0]; if (f) loadQuestionFromFile(f); }} />
             </div>
-            {scanBusy && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>⏳ Reading file…</div>}
+            {scanBusy && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>⏳ {tr('Reading file…')}</div>}
             {scanError && <div style={{ fontSize: 13, color: '#f87171', padding: '10px 14px', borderRadius: 10, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>⚠️ {scanError}</div>}
             {scanExtracted && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Extracted question</div>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Extracted question')}</div>
                 <div style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 13, color: 'var(--text-secondary)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.65 }}>{scanExtracted}</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); inputRef.current?.focus(); }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Open in solver</button>
-                  <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); setTimeout(() => { void solve(scanExtracted, nextTopic); }, 0); }} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Solve now</button>
-                  <button onClick={() => setScanExtracted('')} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>Clear</button>
+                  <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); inputRef.current?.focus(); }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{tr('Open in solver')}</button>
+                  <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); setTimeout(() => { void solve(scanExtracted, nextTopic); }, 0); }} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{tr('Solve now')}</button>
+                  <button onClick={() => setScanExtracted('')} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>{tr('Clear')}</button>
                 </div>
               </div>
             )}
@@ -3332,21 +3594,21 @@ export function MathSolverPage() {
 
               {/* Topic override */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Topic (optional — auto-detected if blank)</label>
+                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Topic (optional — auto-detected if blank)')}</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                   <button
                     onClick={() => setWriteTopicOverride('')}
                     style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: `1.5px solid ${writeTopicOverride === '' ? accent : 'var(--border-subtle)'}`, background: writeTopicOverride === '' ? `${accent}18` : 'var(--bg-2)', color: writeTopicOverride === '' ? accent : 'var(--text-secondary)', cursor: 'pointer' }}
                   >
-                    Auto
+                    {tr('Auto')}
                   </button>
-                  {PRIMARY_TOPICS.map(t => (
+                  {PRIMARY_TOPICS.map((topic) => (
                     <button
-                      key={t.id}
-                      onClick={() => setWriteTopicOverride(t.id)}
-                      style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: `1.5px solid ${writeTopicOverride === t.id ? t.color : 'var(--border-subtle)'}`, background: writeTopicOverride === t.id ? `${t.color}18` : 'var(--bg-2)', color: writeTopicOverride === t.id ? t.color : 'var(--text-secondary)', cursor: 'pointer' }}
+                      key={topic.id}
+                      onClick={() => setWriteTopicOverride(topic.id)}
+                      style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: `1.5px solid ${writeTopicOverride === topic.id ? topic.color : 'var(--border-subtle)'}`, background: writeTopicOverride === topic.id ? `${topic.color}18` : 'var(--bg-2)', color: writeTopicOverride === topic.id ? topic.color : 'var(--text-secondary)', cursor: 'pointer' }}
                     >
-                      {t.icon} {t.label}
+                      {topic.icon} {tr(topic.label)}
                     </button>
                   ))}
                 </div>
@@ -3354,7 +3616,7 @@ export function MathSolverPage() {
 
               {/* Symbol keyboard */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Question</label>
+                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Question')}</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '8px 10px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)' }}>
                   {QUESTION_INPUT_SYMBOLS.map((sym) => (
                     <button
@@ -3373,7 +3635,7 @@ export function MathSolverPage() {
                   id="write-question-input"
                   value={typeInput}
                   onChange={e => setTypeInput(e.target.value)}
-                  placeholder={`e.g.  solve x^2 - 5x + 6 = 0\n     find the derivative of sin(x^2)\n     integrate 1/(1 + x^2) dx`}
+                  placeholder={`مثال:  solve x^2 - 5x + 6 = 0\n       find the derivative of sin(x^2)\n       integrate 1/(1 + x^2) dx`}
                   rows={5}
                   style={{ padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${typeInput.trim() ? `${topicColor}40` : 'var(--border-subtle)'}`, background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 14, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.65, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' as const, transition: 'border-color 0.15s' }}
                 />
@@ -3381,11 +3643,11 @@ export function MathSolverPage() {
 
               {/* Context / notes */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Context / what you tried <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></label>
+                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Context / what you tried')} <span style={{ fontWeight: 400, opacity: 0.6 }}>({tr('optional')})</span></label>
                 <textarea
                   value={writeContext}
                   onChange={e => setWriteContext(e.target.value)}
-                  placeholder="e.g.  I tried factoring but couldn't find the roots..."
+                  placeholder="مثال: جرّبت التحليل لكنني لم أتمكن من إيجاد الجذور..."
                   rows={2}
                   style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 13, lineHeight: 1.6, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' as const }}
                 />
@@ -3394,7 +3656,7 @@ export function MathSolverPage() {
               {/* Live preview */}
               {typeInput.trim() && (
                 <div style={{ padding: '12px 16px', borderRadius: 12, background: `${topicColor}06`, border: `1px solid ${topicColor}22`, minHeight: 52 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: topicColor, marginBottom: 8, opacity: 0.8 }}>Preview</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: topicColor, marginBottom: 8, opacity: 0.8 }}>{tr('Preview')}</div>
                   {shouldRenderMathPreview(typeInput) ? (
                     <MathRenderer math={typeInput.trim()} display />
                   ) : (
@@ -3402,7 +3664,7 @@ export function MathSolverPage() {
                   )}
                   {!writeTopicOverride && (
                     <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                      Auto-detected topic: <span style={{ color: topicColor, fontWeight: 600 }}>{TOPICS.find(t => t.id === resolvedTopic)?.label ?? resolvedTopic}</span>
+                      {tr('Auto-detected topic:')} <span style={{ color: topicColor, fontWeight: 600 }}>{tr(TOPICS.find((topic) => topic.id === resolvedTopic)?.label ?? resolvedTopic)}</span>
                     </div>
                   )}
                 </div>
@@ -3422,7 +3684,7 @@ export function MathSolverPage() {
                   }}
                   style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}
                 >
-                  Open in solver
+                  {tr('Open in solver')}
                 </button>
                 <button
                   disabled={!typeInput.trim()}
@@ -3436,7 +3698,7 @@ export function MathSolverPage() {
                   }}
                   style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}
                 >
-                  Solve now
+                  {tr('Solve now')}
                 </button>
                 <button
                   disabled={!typeInput.trim()}
@@ -3450,27 +3712,27 @@ export function MathSolverPage() {
                         body: JSON.stringify({
                           mode: 'notes',
                           title: q.length > 60 ? q.slice(0, 60) + '…' : q,
-                          content: writeContext.trim() ? `Question:\n${q}\n\nContext:\n${writeContext.trim()}` : `Question:\n${q}`,
+                          content: writeContext.trim() ? `${tr('Question')}:\n${q}\n\n${tr('Context / what you tried')}:\n${writeContext.trim()}` : `${tr('Question')}:\n${q}`,
                         }),
                       });
                       broadcastInvalidate(LIBRARY_CHANNEL);
-                      setWriteSavedToast('Saved to Library!');
+                      setWriteSavedToast(tr('Saved to Library!'));
                       setTimeout(() => setWriteSavedToast(''), 2800);
                     } catch {
-                      setWriteSavedToast('Could not save — try again.');
+                      setWriteSavedToast(tr('Could not save — try again.'));
                       setTimeout(() => setWriteSavedToast(''), 2800);
                     }
                   }}
                   style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}
                 >
-                  📚 Save to Library
+                  {`📚 ${tr('Save to Library')}`}
                 </button>
                 <button
                   disabled={!typeInput.trim() && !writeContext.trim()}
                   onClick={() => { setTypeInput(''); setWriteContext(''); setWriteTopicOverride(''); }}
                   style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: (typeInput.trim() || writeContext.trim()) ? 'pointer' : 'default', opacity: (typeInput.trim() || writeContext.trim()) ? 1 : 0.4 }}
                 >
-                  Clear
+                  {tr('Clear')}
                 </button>
                 {writeSavedToast && (
                   <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>{writeSavedToast}</span>
@@ -3479,9 +3741,9 @@ export function MathSolverPage() {
 
               {/* Shortcut to scan */}
               <div style={{ fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
-                Have a photo or PDF instead?{' '}
+                {tr('Have a photo or PDF instead?')}{' '}
                 <button onClick={() => setActive('scan')} style={{ background: 'none', border: 'none', color: '#38bdf8', fontWeight: 600, fontSize: 12, cursor: 'pointer', padding: 0 }}>
-                  Use Question Scan →
+                  {tr('Use Question Scan →')}
                 </button>
               </div>
             </div>
