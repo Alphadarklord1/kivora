@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/providers/ToastProvider';
+import { useI18n } from '@/lib/i18n/useI18n';
 import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
 import { loadClientAiDataMode } from '@/lib/privacy/ai-data';
 import { extractTextFromBlob } from '@/lib/pdf/extract';
@@ -35,6 +36,103 @@ import { AssignmentFileBanner } from './assignment/AssignmentFileBanner';
 import { WriteCheckPanel } from './assignment/WriteCheckPanel';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
+
+const LOCAL_AR: Record<string, string> = {
+  'Essay': 'مقال',
+  'Report': 'تقرير',
+  'Lit Review': 'مراجعة أدبية',
+  'Rephrase': 'إعادة صياغة',
+  'Explain': 'شرح',
+  'Summarise': 'تلخيص',
+  'Break down': 'تفكيك المهمة',
+  'Could not load Workspace files': 'تعذر تحميل ملفات Workspace',
+  'No readable text found in this file.': 'لم يتم العثور على نص قابل للقراءة في هذا الملف.',
+  'Could not read this file.': 'تعذر قراءة هذا الملف.',
+  'Loaded': 'تم التحميل',
+  'Loaded from Workspace': 'تم التحميل من Workspace',
+  'File not found in local storage — it may have been cleared.': 'الملف غير موجود في التخزين المحلي — ربما تمت إزالته.',
+  'Draft restored': 'تمت استعادة المسودة',
+  'Could not find sources': 'تعذر العثور على مصادر',
+  'Could not load sources': 'تعذر تحميل المصادر',
+  'Citation copied for MyBib': 'تم نسخ الاستشهاد إلى MyBib',
+  'Could not copy citation': 'تعذر نسخ الاستشهاد',
+  '{count} citations copied': 'تم نسخ {count} استشهاد',
+  'Could not copy citations': 'تعذر نسخ الاستشهادات',
+  'Could not generate outline': 'تعذر إنشاء المخطط',
+  'Outline ready — review and edit it, then write the full draft': 'أصبح المخطط جاهزًا — راجعه وعدله ثم اكتب المسودة الكاملة',
+  'No content returned': 'لم يتم إرجاع محتوى',
+  'Report builder failed': 'فشل إنشاء التقرير',
+  'Saved to Library': 'تم الحفظ في المكتبة',
+  'Library sync failed': 'فشلت مزامنة المكتبة',
+  'Assignment helper failed': 'فشل مساعد الواجب',
+  'Word document downloaded': 'تم تنزيل ملف Word',
+  'Could not generate Word document': 'تعذر إنشاء ملف Word',
+  'PowerPoint downloaded': 'تم تنزيل PowerPoint',
+  'Could not generate PowerPoint': 'تعذر إنشاء PowerPoint',
+  'No feedback returned': 'لم يتم إرجاع ملاحظات',
+  'Work checker failed': 'فشل فحص الكتابة',
+  'Original text not found — it may have been edited': 'لم يتم العثور على النص الأصلي — ربما تم تعديله',
+  'Applied': 'تم التطبيق',
+  'Applied {count} suggestions': 'تم تطبيق {count} من الاقتراحات',
+  'Switched to Build Report — topic pre-filled': 'تم الانتقال إلى بناء التقرير مع تعبئة الموضوع مسبقًا',
+  'AI assist failed': 'فشلت المساعدة بالذكاء الاصطناعي',
+  'Copied!': 'تم النسخ!',
+  'Draft cleared': 'تم مسح المسودة',
+  'Build Report': 'بناء التقرير',
+  'Outline, cite, draft': 'مخطط واستشهاد ومسودة',
+  'Write & Check': 'اكتب وراجع',
+  'Review, improve, export': 'راجع وحسّن وصدّر',
+  'suggestions': 'اقتراحات',
+  'Clear draft': 'مسح المسودة',
+  'Load brief': 'حمّل التكليف',
+  'Use a source file or start from a topic': 'استخدم ملف مصدر أو ابدأ من موضوع',
+  'Build draft': 'أنشئ مسودة',
+  'outline sections ready': 'أقسام المخطط جاهزة',
+  'Set type, topic, and outline': 'حدد النوع والموضوع والمخطط',
+  'Review writing': 'راجع الكتابة',
+  'words in editor': 'كلمات في المحرر',
+  'Start with a topic': 'ابدأ بموضوع',
+  'Outline ready': 'المخطط جاهز',
+  'Set the topic, choose the structure, then outline before writing.': 'حدد الموضوع، واختر البنية، ثم أنشئ المخطط قبل الكتابة.',
+  'Topic': 'الموضوع',
+  'What are you writing about? e.g. The causes of World War I': 'عمّ تكتب؟ مثال: أسباب الحرب العالمية الأولى',
+  'Type': 'النوع',
+  'Words': 'الكلمات',
+  'Hide key points': 'إخفاء النقاط الأساسية',
+  'Add key points': 'إضافة نقاط أساسية',
+  'Building…': 'جارٍ الإنشاء…',
+  'Outline': 'مخطط',
+  'Writing…': 'جارٍ الكتابة…',
+  'Write Draft': 'اكتب المسودة',
+  'Key points to cover': 'النقاط المطلوب تغطيتها',
+  '(optional)': '(اختياري)',
+  'e.g. Alliance system, nationalism, assassination of Franz Ferdinand…': 'مثال: نظام التحالفات، القومية، اغتيال فرانز فرديناند…',
+  'Optional sources & citations': 'مصادر واستشهادات اختيارية',
+  'Finding sources…': 'جارٍ العثور على مصادر…',
+  'found — selected': 'تم العثور — محدد',
+  'Research support is optional': 'الدعم البحثي اختياري',
+  'Use in report': 'استخدمه في التقرير',
+  'Copy citation': 'نسخ الاستشهاد',
+  'sources selected — included as context in your report': 'مصادر محددة — ستُستخدم كسياق في تقريرك',
+  'Copy all for MyBib': 'انسخ الكل إلى MyBib',
+  'Also using:': 'يستخدم أيضًا:',
+  'Research wider': 'وسّع البحث',
+  'Open': 'فتح',
+  'Outline — edit before writing': 'المخطط — عدّله قبل الكتابة',
+  'Discard': 'تجاهل',
+  'Write Full Draft': 'اكتب المسودة الكاملة',
+  'Copy': 'نسخ',
+  'PowerPoint': 'PowerPoint',
+  'Save to Library': 'حفظ في المكتبة',
+  'Load this draft into Write & Check': 'حمّل هذه المسودة إلى اكتب وراجع',
+  'Check this draft': 'راجع هذه المسودة',
+  'Clear': 'مسح',
+  'References': 'المراجع',
+  'Assignment Helper — optional support for confusing prompts': 'مساعد الواجب — دعم اختياري للتكليفات المربكة',
+  'Paste the assignment prompt here, or load a file above to auto-fill…': 'ألصق نص التكليف هنا، أو حمّل ملفًا بالأعلى للتعبئة التلقائية…',
+  'Go': 'ابدأ',
+  'Result': 'النتيجة',
+};
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,6 +235,7 @@ export function AssignmentWriterTab({
   onPreloadConsumed,
 }: Props) {
   const { toast } = useToast();
+  const { t } = useI18n(LOCAL_AR);
   const privacyMode = loadClientAiDataMode();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -169,7 +268,7 @@ export function AssignmentWriterTab({
       .then(r => r.json())
       .then((data: WorkspaceFile[]) =>
         setWsFiles(Array.isArray(data) ? data.filter(f => f.localBlobId) : []))
-      .catch(() => toast('Could not load Workspace files', 'error'))
+      .catch(() => toast(t('Could not load Workspace files'), 'error'))
       .finally(() => setWsLoading(false));
   }, [filePanelOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -179,14 +278,14 @@ export function AssignmentWriterTab({
     try {
       const extracted = await extractTextFromBlob(file, file.name);
       if (extracted.error) throw new Error(extracted.error);
-      if (!extracted.text.trim()) throw new Error('No readable text found in this file.');
+      if (!extracted.text.trim()) throw new Error(t('No readable text found in this file.'));
       setFileText(extracted.text);
       setFileWords(extracted.wordCount);
       setAssignText(extracted.text.slice(0, 2000));
       setFilePanelOpen(null);
-      toast(`Loaded "${file.name}"`, 'success');
+      toast(`${t('Loaded')} "${file.name}"`, 'success');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not read this file.';
+      const msg = err instanceof Error ? err.message : t('Could not read this file.');
       setFileError(msg); toast(msg, 'error');
     } finally { setFileLoading(false); }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -196,18 +295,18 @@ export function AssignmentWriterTab({
     setWsPicking(wsFile.id); setFileError('');
     try {
       const payload = await idbStore.get(wsFile.localBlobId);
-      if (!payload) throw new Error('File not found in local storage — it may have been cleared.');
+      if (!payload) throw new Error(t('File not found in local storage — it may have been cleared.'));
       const extracted = await extractTextFromBlob(payload.blob, wsFile.name);
       if (extracted.error) throw new Error(extracted.error);
-      if (!extracted.text.trim()) throw new Error('No readable text found in this file.');
+      if (!extracted.text.trim()) throw new Error(t('No readable text found in this file.'));
       setFileName(wsFile.name);
       setFileText(extracted.text);
       setFileWords(extracted.wordCount);
       setAssignText(extracted.text.slice(0, 2000));
       setFilePanelOpen(null);
-      toast(`Loaded "${wsFile.name}" from Workspace`, 'success');
+      toast(`${t('Loaded from Workspace')} "${wsFile.name}"`, 'success');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not read this file.';
+      const msg = err instanceof Error ? err.message : t('Could not read this file.');
       setFileError(msg); toast(msg, 'error');
     } finally { setWsPicking(null); }
   }
@@ -277,7 +376,7 @@ export function AssignmentWriterTab({
         if (typeof d.checkText       === 'string') setCheckText(d.checkText);
         if (d.innerTab === 'build' || d.innerTab === 'write') setInnerTab(d.innerTab);
         if (d.reportTopic || d.reportResult || d.checkText) {
-          toast('Draft restored', 'info');
+          toast(t('Draft restored'), 'info');
         }
       }
     } catch { /* ignore corrupt draft */ }
@@ -324,16 +423,16 @@ export function AssignmentWriterTab({
         body: JSON.stringify({ topic: trimmed, privacyMode }),
       });
       const data = await res.json().catch(() => null) as ArticleSuggestion[] | { error?: string } | null;
-      if (!res.ok) throw new Error((data as { error?: string } | null)?.error ?? 'Could not find sources');
+      if (!res.ok) throw new Error((data as { error?: string } | null)?.error ?? t('Could not find sources'));
       const articles = Array.isArray(data) ? data : [];
       articles.sort((a, b) => gradeSource(b.type).score - gradeSource(a.type).score);
       setSources(articles);
       setSelectedUrls(new Set(articles.slice(0, 2).map(a => a.url)));
     } catch (err) {
-      setSourcesError(err instanceof Error ? err.message : 'Could not load sources');
+      setSourcesError(err instanceof Error ? err.message : t('Could not load sources'));
       setSources([]);
     } finally { setSourcesLoading(false); }
-  }, [privacyMode]);
+  }, [privacyMode, t]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -360,16 +459,16 @@ export function AssignmentWriterTab({
 
   // ── Build handlers ────────────────────────────────────────────────────────
   async function handleCopyCitation(source: ArticleSuggestion) {
-    try { await navigator.clipboard.writeText(buildCitationText(source)); toast('Citation copied for MyBib', 'success'); }
-    catch { toast('Could not copy citation', 'warning'); }
+    try { await navigator.clipboard.writeText(buildCitationText(source)); toast(t('Citation copied for MyBib'), 'success'); }
+    catch { toast(t('Could not copy citation'), 'warning'); }
   }
 
   async function handleCopyAllCitations() {
     if (!selectedSources.length) return;
     try {
       await navigator.clipboard.writeText(selectedSources.map((s, i) => `[${i + 1}] ${buildCitationText(s)}`).join('\n'));
-      toast(`${selectedSources.length} citation${selectedSources.length > 1 ? 's' : ''} copied`, 'success');
-    } catch { toast('Could not copy citations', 'warning'); }
+      toast(t('{count} citations copied', { count: selectedSources.length }), 'success');
+    } catch { toast(t('Could not copy citations'), 'warning'); }
   }
 
   async function handleGenerateOutline() {
@@ -387,10 +486,10 @@ export function AssignmentWriterTab({
         }),
       });
       const data = await res.json() as { outline?: OutlineSection[]; error?: string };
-      if (!res.ok || !data.outline) throw new Error(data.error ?? 'Could not generate outline');
+      if (!res.ok || !data.outline) throw new Error(data.error ?? t('Could not generate outline'));
       setOutline(data.outline);
-      toast('Outline ready — review and edit it, then write the full draft', 'success');
-    } catch (err) { toast(err instanceof Error ? err.message : 'Could not generate outline', 'error'); }
+      toast(t('Outline ready — review and edit it, then write the full draft'), 'success');
+    } catch (err) { toast(err instanceof Error ? err.message : t('Could not generate outline'), 'error'); }
     finally { setOutlineLoading(false); }
   }
 
@@ -410,9 +509,9 @@ export function AssignmentWriterTab({
         }),
       });
       const data = await res.json() as { result?: string; error?: string };
-      if (!res.ok || !data.result) throw new Error(data.error ?? 'No content returned');
+      if (!res.ok || !data.result) throw new Error(data.error ?? t('No content returned'));
       setReportResult(data.result);
-    } catch (err) { toast(err instanceof Error ? err.message : 'Report builder failed', 'error'); }
+    } catch (err) { toast(err instanceof Error ? err.message : t('Report builder failed'), 'error'); }
     finally { setReportLoading(false); }
   }
 
@@ -429,8 +528,8 @@ export function AssignmentWriterTab({
       });
       setReportSavedLib(true);
       broadcastInvalidate(LIBRARY_CHANNEL);
-      toast('Saved to Library', 'success');
-    } catch { toast('Library sync failed', 'warning'); }
+      toast(t('Saved to Library'), 'success');
+    } catch { toast(t('Library sync failed'), 'warning'); }
   }
 
   async function handleAssignHelper() {
@@ -447,9 +546,9 @@ export function AssignmentWriterTab({
       });
       const data = await res.json() as { content?: string; result?: string; error?: string };
       const result = data.content ?? data.result ?? '';
-      if (!result) throw new Error(data.error ?? 'No result returned');
+      if (!result) throw new Error(data.error ?? t('Result'));
       setAssignResult(result);
-    } catch (err) { toast(err instanceof Error ? err.message : 'Assignment helper failed', 'error'); }
+    } catch (err) { toast(err instanceof Error ? err.message : t('Assignment helper failed'), 'error'); }
     finally { setAssignLoading(false); }
   }
 
@@ -461,8 +560,8 @@ export function AssignmentWriterTab({
       const { generateDocx } = await import('@/lib/export/docx');
       const blob = await generateDocx({ title: reportTopic, content: reportResult, references: refs });
       triggerDownload(blob, `${safeFilename(reportTopic)}.docx`);
-      toast('Word document downloaded', 'success');
-    } catch { toast('Could not generate Word document', 'error'); }
+      toast(t('Word document downloaded'), 'success');
+    } catch { toast(t('Could not generate Word document'), 'error'); }
     finally { setExportingDocx(false); }
   }
 
@@ -478,8 +577,8 @@ export function AssignmentWriterTab({
         content: reportResult, references: refs,
       });
       triggerDownload(blob, `${safeFilename(reportTopic)}.pptx`);
-      toast('PowerPoint downloaded', 'success');
-    } catch { toast('Could not generate PowerPoint', 'error'); }
+      toast(t('PowerPoint downloaded'), 'success');
+    } catch { toast(t('Could not generate PowerPoint'), 'error'); }
     finally { setExportingPptx(false); }
   }
 
@@ -504,7 +603,7 @@ export function AssignmentWriterTab({
         body: JSON.stringify({ text: checkText.trim(), context: contextBlock, ai: loadAiRuntimePreferences(), privacyMode }),
       });
       const data = await res.json() as Partial<CheckResult> & { error?: string };
-      if (!res.ok) throw new Error(data.error ?? 'No feedback returned');
+      if (!res.ok) throw new Error(data.error ?? t('No feedback returned'));
       if (typeof data.score === 'number') {
         setCheckScore(data.score);
         setCheckSummary(data.summary ?? '');
@@ -512,20 +611,20 @@ export function AssignmentWriterTab({
       } else {
         setLegacyResult(data.result ?? '');
       }
-    } catch (err) { toast(err instanceof Error ? err.message : 'Work checker failed', 'error'); }
+    } catch (err) { toast(err instanceof Error ? err.message : t('Work checker failed'), 'error'); }
     finally { setCheckLoading(false); }
   }
 
   function applySuggestion(sug: WritingSuggestion) {
     const result = applyWritingSuggestionToText(checkText, sug);
     if (!result.applied) {
-      toast('Original text not found — it may have been edited', 'warning');
+      toast(t('Original text not found — it may have been edited'), 'warning');
       setDismissed(prev => new Set([...prev, sug.id]));
       return;
     }
     setCheckText(result.text);
     setDismissed(prev => new Set([...prev, sug.id]));
-    toast('Applied', 'success');
+    toast(t('Applied'), 'success');
   }
 
   function applyAllSuggs() {
@@ -533,7 +632,7 @@ export function AssignmentWriterTab({
     const result = applyWritingSuggestionsToText(checkText, active);
     setCheckText(result.text);
     setDismissed(new Set(active.map(s => s.id)));
-    toast(`Applied ${result.applied} suggestion${result.applied !== 1 ? 's' : ''}`, 'success');
+    toast(t('Applied {count} suggestions', { count: result.applied }), 'success');
   }
 
   function sendDraftToBuild() {
@@ -542,7 +641,7 @@ export function AssignmentWriterTab({
     const topic = firstLine.slice(0, 80).replace(/[#*_]+/g, '').trim();
     if (topic) setReportTopic(topic);
     setInnerTab('build');
-    toast('Switched to Build Report — topic pre-filled', 'info');
+    toast(t('Switched to Build Report — topic pre-filled'), 'info');
   }
 
   async function handleAiAssist(action: AssistAction, selectedText: string, selStart: number, selEnd: number) {
@@ -572,9 +671,9 @@ export function AssignmentWriterTab({
         // Replace the selected range in the text
         setCheckText(prev => prev.slice(0, selStart) + data.result! + prev.slice(selEnd));
       }
-      toast(`${action.charAt(0).toUpperCase() + action.slice(1)} applied`, 'success');
+      toast(`${action.charAt(0).toUpperCase() + action.slice(1)} ${t('Applied')}`, 'success');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'AI assist failed', 'error');
+      toast(err instanceof Error ? err.message : t('AI assist failed'), 'error');
     } finally {
       setAssistLoading(false);
     }
@@ -601,8 +700,8 @@ export function AssignmentWriterTab({
       });
       setWriterSavedLib(true);
       broadcastInvalidate(LIBRARY_CHANNEL);
-      toast('Saved to Library', 'success');
-    } catch { toast('Library sync failed', 'warning'); }
+      toast(t('Saved to Library'), 'success');
+    } catch { toast(t('Library sync failed'), 'warning'); }
   }
 
   // ── Derived display ───────────────────────────────────────────────────────
@@ -650,8 +749,8 @@ export function AssignmentWriterTab({
             className={`${styles.studioTabBtn} ${innerTab === 'build' ? styles.studioTabBtnActive : ''}`}
             onClick={() => setInnerTab('build')}
           >
-            <span>📋 Build Report</span>
-            <small>Outline, cite, draft</small>
+            <span>📋 {t('Build Report')}</span>
+            <small>{t('Outline, cite, draft')}</small>
           </button>
           <button
             className={`${styles.studioTabBtn} ${innerTab === 'write' ? styles.studioTabBtnActive : ''}`}
@@ -660,14 +759,14 @@ export function AssignmentWriterTab({
               if (fileText && !checkText) setCheckText(fileText.slice(0, 8000));
             }}
           >
-            <span>✍️ Write &amp; Check</span>
-            <small>Review, improve, export</small>
+            <span>✍️ {t('Write & Check')}</span>
+            <small>{t('Review, improve, export')}</small>
           </button>
         </div>
         <div className={styles.studioNavMeta}>
           {fileName && <span className={styles.studioMetaPill}>📄 {fileName}</span>}
           {innerTab === 'write' && activeSuggs.length > 0 && (
-            <span className={styles.studioMetaPill}>{activeSuggs.length} suggestion{activeSuggs.length !== 1 ? 's' : ''}</span>
+            <span className={styles.studioMetaPill}>{activeSuggs.length} {t('suggestions')}</span>
           )}
           {(reportTopic || reportResult || checkText) && (
             <button
@@ -678,11 +777,11 @@ export function AssignmentWriterTab({
                 setReportKeyPoints(''); setShowKeyPoints(false); setOutline(null); setReportResult('');
                 setCheckText(''); clearWriterResults(); setAssignText(''); setAssignResult('');
                 localStorage.removeItem(DRAFT_KEY);
-                toast('Draft cleared', 'info');
+                toast(t('Draft cleared'), 'info');
               }}
               title="Clear all work and start fresh"
             >
-              Clear draft
+              {t('Clear draft')}
             </button>
           )}
         </div>
@@ -692,22 +791,22 @@ export function AssignmentWriterTab({
         {[
           {
             step: '1',
-            title: 'Load brief',
-            detail: fileName ? fileName : 'Use a source file or start from a topic',
+            title: t('Load brief'),
+            detail: fileName ? fileName : t('Use a source file or start from a topic'),
             active: writingStage >= 0 && innerTab === 'build',
             done: Boolean(fileName || reportTopic.trim()),
           },
           {
             step: '2',
-            title: 'Build draft',
-            detail: outline ? `${outline.length} outline section${outline.length === 1 ? '' : 's'} ready` : 'Set type, topic, and outline',
+            title: t('Build draft'),
+            detail: outline ? `${outline.length} ${t('outline sections ready')}` : t('Set type, topic, and outline'),
             active: innerTab === 'build' && writingStage >= 1,
             done: Boolean(reportResult),
           },
           {
             step: '3',
-            title: 'Review writing',
-            detail: innerTab === 'write' ? `${writerWordCount.toLocaleString()} words in editor` : 'Switch to Write & Check',
+            title: t('Review writing'),
+            detail: innerTab === 'write' ? `${writerWordCount.toLocaleString()} ${t('words in editor')}` : t('Write & Check'),
             active: innerTab === 'write',
             done: hasWriterResult,
           },
@@ -734,41 +833,41 @@ export function AssignmentWriterTab({
           <div className={styles.reportControls}>
             <div className={styles.buildHead}>
               <div>
-                <strong>Build draft</strong>
-                <p>Set the topic, choose the structure, then outline before writing.</p>
+                <strong>{t('Build draft')}</strong>
+                <p>{t('Set the topic, choose the structure, then outline before writing.')}</p>
               </div>
-              <span className={styles.buildHint}>{outline ? 'Outline ready' : 'Start with a topic'}</span>
+              <span className={styles.buildHint}>{outline ? t('Outline ready') : t('Start with a topic')}</span>
             </div>
             {/* Topic — primary, full width */}
             <div style={{ width: '100%' }}>
-              <label className={styles.controlLabel}>Topic</label>
+              <label className={styles.controlLabel}>{t('Topic')}</label>
               <input
                 className={styles.textInput}
                 style={{ fontSize: '0.95rem', padding: '0.65rem 0.85rem' }}
                 value={reportTopic}
                 onChange={e => setReportTopic(e.target.value)}
-                placeholder="What are you writing about? e.g. The causes of World War I"
+                placeholder={t('What are you writing about? e.g. The causes of World War I')}
                 onKeyDown={e => e.key === 'Enter' && !outlineLoading && reportTopic.trim() ? void handleGenerateOutline() : undefined}
               />
             </div>
             {/* Options row */}
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end', width: '100%' }}>
               <div className={styles.controlGroup}>
-                <label className={styles.controlLabel}>Type</label>
+                <label className={styles.controlLabel}>{t('Type')}</label>
                 <div className={styles.segControl}>
-                  {REPORT_TYPES.map(t => (
+                  {REPORT_TYPES.map((typeOption) => (
                     <button
-                      key={t.id}
-                      className={`${styles.segBtn} ${reportType === t.id ? styles.segBtnActive : ''}`}
-                      onClick={() => setReportType(t.id)}
+                      key={typeOption.id}
+                      className={`${styles.segBtn} ${reportType === typeOption.id ? styles.segBtnActive : ''}`}
+                      onClick={() => setReportType(typeOption.id)}
                     >
-                      {t.label}
+                      {t(typeOption.label)}
                     </button>
                   ))}
                 </div>
               </div>
               <div className={styles.controlGroup}>
-                <label className={styles.controlLabel}>Words</label>
+                <label className={styles.controlLabel}>{t('Words')}</label>
                 <select className={styles.selectInput} value={reportWordCount} onChange={e => setReportWordCount(+e.target.value)}>
                   {[500, 750, 1000, 1500, 2000, 3000].map(n => (
                     <option key={n} value={n}>{n.toLocaleString()}</option>
@@ -782,14 +881,14 @@ export function AssignmentWriterTab({
                   onClick={() => setShowKeyPoints(v => !v)}
                   type="button"
                 >
-                  {showKeyPoints ? 'Hide key points' : 'Add key points'}
+                  {showKeyPoints ? t('Hide key points') : t('Add key points')}
                 </button>
                 <button
                   className={styles.btnPrimary}
                   disabled={outlineLoading || reportLoading || !reportTopic.trim()}
                   onClick={() => void handleGenerateOutline()}
                 >
-                  {outlineLoading ? 'Building…' : 'Outline'}
+                  {outlineLoading ? t('Building…') : t('Outline')}
                 </button>
                 {outline && (
                   <button
@@ -797,7 +896,7 @@ export function AssignmentWriterTab({
                     disabled={reportLoading}
                     onClick={() => void handleWriteDraft()}
                   >
-                    {reportLoading ? 'Writing…' : 'Write Draft'}
+                    {reportLoading ? t('Writing…') : t('Write Draft')}
                   </button>
                 )}
               </div>
@@ -806,14 +905,14 @@ export function AssignmentWriterTab({
             {showKeyPoints && (
               <div className={styles.optionalBlock}>
                 <label className={styles.controlLabel}>
-                  Key points to cover <span className={styles.optional}>(optional)</span>
+                  {t('Key points to cover')} <span className={styles.optional}>{t('(optional)')}</span>
                 </label>
                 <textarea
                   className={styles.textArea}
                   rows={2}
                   value={reportKeyPoints}
                   onChange={e => setReportKeyPoints(e.target.value)}
-                  placeholder="e.g. Alliance system, nationalism, assassination of Franz Ferdinand…"
+                  placeholder={t('e.g. Alliance system, nationalism, assassination of Franz Ferdinand…')}
                 />
               </div>
             )}
@@ -826,15 +925,15 @@ export function AssignmentWriterTab({
               open={Boolean(selectedUrls.size || sourcesLoading || sourcesError)}
             >
               <summary className={styles.detailsSummary}>
-                📚 Optional sources & citations
+                📚 {t('Optional sources & citations')}
                 <span className={styles.sourceDiscoveryStatus} style={{ marginLeft: 8 }}>
                   {sourcesLoading
-                    ? '⏳ Finding sources…'
+                    ? `⏳ ${t('Finding sources…')}`
                     : sourcesError
                       ? `⚠️ ${sourcesError}`
                       : sources.length > 0
-                        ? `${sources.length} found — ${selectedUrls.size} selected`
-                        : 'Research support is optional'}
+                        ? `${sources.length} ${t('found — selected')} ${selectedUrls.size}`
+                        : t('Research support is optional')}
                 </span>
               </summary>
               <div className={styles.detailsBody}>
@@ -861,11 +960,11 @@ export function AssignmentWriterTab({
                           <div className={styles.sourceCardFooter}>
                             <label className={styles.sourceCardCheckbox} onClick={e => e.stopPropagation()}>
                               <input type="checkbox" checked={selected} onChange={() => toggleSource(source.url)} />
-                              Use in report
+                              {t('Use in report')}
                             </label>
                             <div style={{ display: 'flex', gap: '0.35rem' }}>
-                              <a href={source.url} target="_blank" rel="noopener noreferrer" className={styles.citationBtn} onClick={e => e.stopPropagation()}>Open ↗</a>
-                              <button className={styles.citationBtn} onClick={e => { e.stopPropagation(); void handleCopyCitation(source); }} title="Copy citation">📎 Cite</button>
+                              <a href={source.url} target="_blank" rel="noopener noreferrer" className={styles.citationBtn} onClick={e => e.stopPropagation()}>{t('Open')} ↗</a>
+                              <button className={styles.citationBtn} onClick={e => { e.stopPropagation(); void handleCopyCitation(source); }} title={t('Copy citation')}>📎 {t('Copy')}</button>
                             </div>
                           </div>
                         </div>
@@ -875,8 +974,8 @@ export function AssignmentWriterTab({
                 )}
                 {selectedUrls.size > 0 && (
                   <div className={styles.selectedBar}>
-                    <strong>{selectedUrls.size} source{selectedUrls.size > 1 ? 's' : ''} selected — included as context in your report</strong>
-                    <button className={styles.btnSecondary} onClick={() => void handleCopyAllCitations()}>📎 Copy all for MyBib</button>
+                    <strong>{selectedUrls.size} {t('sources selected — included as context in your report')}</strong>
+                    <button className={styles.btnSecondary} onClick={() => void handleCopyAllCitations()}>📎 {t('Copy all for MyBib')}</button>
                   </div>
                 )}
               </div>
@@ -886,10 +985,10 @@ export function AssignmentWriterTab({
           {/* Context banner */}
           {contextSource && (
             <div className={styles.contextBanner}>
-              <span>📄 Also using: <strong>{contextSource}</strong></span>
+              <span>📄 {t('Also using:')} <strong>{contextSource}</strong></span>
               <div className={styles.bannerActions}>
                 <button className={styles.btnSecondary} onClick={() => onNavigateToResearch(reportTopic || fileName)}>
-                  Research wider
+                  {t('Research wider')}
                 </button>
                 <a className={styles.btnSecondary} href="https://www.mybib.com/" target="_blank" rel="noopener noreferrer">MyBib ↗</a>
               </div>
@@ -900,11 +999,11 @@ export function AssignmentWriterTab({
           {outline && (
             <div className={styles.outlineEditor}>
               <div className={styles.outlineEditorHead}>
-                <strong>📋 Outline — edit before writing</strong>
+                <strong>📋 {t('Outline — edit before writing')}</strong>
                 <div className={styles.outlineActions}>
-                  <button className={styles.btnSecondary} onClick={() => setOutline(null)}>Discard</button>
+                  <button className={styles.btnSecondary} onClick={() => setOutline(null)}>{t('Discard')}</button>
                   <button className={styles.btnPrimary} disabled={reportLoading} onClick={() => void handleWriteDraft()}>
-                    {reportLoading ? 'Writing…' : '✨ Write Full Draft'}
+                    {reportLoading ? t('Writing…') : `✨ ${t('Write Full Draft')}`}
                   </button>
                 </div>
               </div>
@@ -938,26 +1037,26 @@ export function AssignmentWriterTab({
                   <span className={styles.wordCountPill}>~{draftWordCount.toLocaleString()} words</span>
                 </div>
                 <div className={styles.reportOutputActions}>
-                  <button className={styles.btnSecondary} onClick={() => void navigator.clipboard.writeText(reportResult).then(() => toast('Copied!', 'success'))}>📋 Copy</button>
-                  <button className={styles.btnSecondary} disabled={exportingDocx} onClick={() => void handleExportDocx()}>{exportingDocx ? '…' : '📄 Word'}</button>
-                  <button className={styles.btnSecondary} disabled={exportingPptx} onClick={() => void handleExportPptx()}>{exportingPptx ? '…' : '📊 PowerPoint'}</button>
-                  {!reportSavedLib && <button className={styles.btnSecondary} onClick={() => void handleSaveReport()}>📚 Save to Library</button>}
+                  <button className={styles.btnSecondary} onClick={() => void navigator.clipboard.writeText(reportResult).then(() => toast(t('Copied!'), 'success'))}>📋 {t('Copy')}</button>
+                  <button className={styles.btnSecondary} disabled={exportingDocx} onClick={() => void handleExportDocx()}>{exportingDocx ? '…' : `📄 ${t('Word')}`}</button>
+                  <button className={styles.btnSecondary} disabled={exportingPptx} onClick={() => void handleExportPptx()}>{exportingPptx ? '…' : `📊 ${t('PowerPoint')}`}</button>
+                  {!reportSavedLib && <button className={styles.btnSecondary} onClick={() => void handleSaveReport()}>📚 {t('Save to Library')}</button>}
                   <button
                     className={styles.btnSecondary}
-                    title="Load this draft into Write & Check"
+                    title={t('Load this draft into Write & Check')}
                     onClick={() => { setInnerTab('write'); setCheckText(reportResult); }}
                   >
-                    ✍️ Check this draft
+                    ✍️ {t('Check this draft')}
                   </button>
-                  <button className={styles.btnSecondary} onClick={() => { setReportResult(''); setReportSavedLib(false); }}>Clear</button>
+                  <button className={styles.btnSecondary} onClick={() => { setReportResult(''); setReportSavedLib(false); }}>{t('Clear')}</button>
                 </div>
               </div>
-              {reportSavedLib && <div className={styles.savedStrip}>✓ Saved to Library</div>}
+              {reportSavedLib && <div className={styles.savedStrip}>✓ {t('Saved to Library')}</div>}
               <div className={styles.reportDoc}>{reportResult}</div>
               {selectedSources.length > 0 && (
                 <div style={{ padding: '0 2rem 1.5rem' }}>
                   <div className={styles.refSection}>
-                    <h4>References</h4>
+                    <h4>{t('References')}</h4>
                     <ol className={styles.refList}>
                       {selectedSources.map((s, i) => (
                         <li key={s.url} className={styles.refItem}>
@@ -971,7 +1070,7 @@ export function AssignmentWriterTab({
                       ))}
                     </ol>
                     <div style={{ marginTop: '0.6rem' }}>
-                      <button className={styles.btnSecondary} onClick={() => void handleCopyAllCitations()}>📎 Copy all for MyBib</button>
+                      <button className={styles.btnSecondary} onClick={() => void handleCopyAllCitations()}>📎 {t('Copy all for MyBib')}</button>
                     </div>
                   </div>
                 </div>
@@ -981,7 +1080,7 @@ export function AssignmentWriterTab({
 
           {/* Assignment helper — auto-opens when a file is loaded */}
           <details className={styles.detailsBlock} open={!!assignResult}>
-            <summary className={styles.detailsSummary}>🔍 Assignment Helper — optional support for confusing prompts</summary>
+            <summary className={styles.detailsSummary}>🔍 {t('Assignment Helper — optional support for confusing prompts')}</summary>
             <div className={styles.detailsBody}>
               <div className={styles.segControl} style={{ marginBottom: '0.75rem' }}>
                 {ASSIGN_MODES.map(m => (
@@ -990,7 +1089,7 @@ export function AssignmentWriterTab({
                     className={`${styles.segBtn} ${assignMode === m.id ? styles.segBtnActive : ''}`}
                     onClick={() => setAssignMode(m.id)}
                   >
-                    {m.label}
+                    {t(m.label)}
                   </button>
                 ))}
               </div>
@@ -1000,7 +1099,7 @@ export function AssignmentWriterTab({
                   rows={3}
                   value={assignText}
                   onChange={e => setAssignText(e.target.value)}
-                  placeholder="Paste the assignment prompt here, or load a file above to auto-fill…"
+                  placeholder={t('Paste the assignment prompt here, or load a file above to auto-fill…')}
                   style={{ flex: 1 }}
                 />
                 <button
@@ -1009,14 +1108,14 @@ export function AssignmentWriterTab({
                   onClick={() => void handleAssignHelper()}
                   style={{ alignSelf: 'flex-end' }}
                 >
-                  {assignLoading ? '…' : 'Go'}
+                  {assignLoading ? '…' : t('Go')}
                 </button>
               </div>
               {assignResult && (
                 <div className={styles.resultBlock}>
                   <div className={styles.resultHead}>
-                    <strong>Result</strong>
-                    <button className={styles.btnSecondary} onClick={() => { setAssignResult(''); setAssignText(''); }}>Clear</button>
+                    <strong>{t('Result')}</strong>
+                    <button className={styles.btnSecondary} onClick={() => { setAssignResult(''); setAssignText(''); }}>{t('Clear')}</button>
                   </div>
                   <pre className={styles.preText}>{assignResult}</pre>
                 </div>
@@ -1047,7 +1146,7 @@ export function AssignmentWriterTab({
           onCheckTextChange={setCheckText}
           onCheckWork={() => void handleCheckWork()}
           onApplyAllSuggs={applyAllSuggs}
-          onCopy={() => void navigator.clipboard.writeText(checkText).then(() => toast('Copied!', 'success'))}
+          onCopy={() => void navigator.clipboard.writeText(checkText).then(() => toast(t('Copied!'), 'success'))}
           onExportWord={() => {
             void (async () => {
               try {
@@ -1057,9 +1156,9 @@ export function AssignmentWriterTab({
                 const url = URL.createObjectURL(blob);
                 Object.assign(document.createElement('a'), { href: url, download: 'essay.docx' }).click();
                 URL.revokeObjectURL(url);
-                toast('Word document downloaded', 'success');
+                toast(t('Word document downloaded'), 'success');
               } catch {
-                toast('Could not export to Word', 'error');
+                toast(t('Could not export to Word'), 'error');
               }
             })();
           }}
