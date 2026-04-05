@@ -59,6 +59,7 @@ export interface WriteCheckPanelProps {
   onApplyAllSuggs:    () => void;
   onCopy:             () => void;
   onExportWord:       () => void;
+  onExportPdf:        () => void;
   onSaveWriter:       () => void;
   onClearWriter:      () => void;
   onSendDraftToBuild: () => void;
@@ -93,6 +94,7 @@ export function WriteCheckPanel({
   onApplyAllSuggs,
   onCopy,
   onExportWord,
+  onExportPdf,
   onSaveWriter,
   onClearWriter,
   onSendDraftToBuild,
@@ -485,7 +487,15 @@ export function WriteCheckPanel({
             onClick={onExportWord}
             title="Download as Word document"
           >
-            📄 Download Word
+            📄 Word
+          </button>
+          <button
+            className={styles.wordFooterBtn}
+            disabled={!checkText}
+            onClick={onExportPdf}
+            title="Export as PDF (opens print dialog)"
+          >
+            🖨 PDF
           </button>
           <button
             className={`${styles.wordFooterBtn} ${styles.wordFooterBtnPrimary}`}

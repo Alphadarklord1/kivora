@@ -827,3 +827,242 @@
     align-items: stretch;
   }
 }
+
+/* ── Settings-row pattern ──────────────────────────────────────────── */
+.settingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 80%, transparent);
+  flex-wrap: wrap;
+  transition: border-color 0.14s, background 0.14s;
+}
+
+.settingRow:has(button[data-on='true']) {
+  border-color: color-mix(in srgb, var(--primary) 20%, var(--border-subtle));
+  background: color-mix(in srgb, var(--primary) 4%, var(--bg-surface));
+}
+
+.settingRowMain {
+  flex: 1;
+  min-width: 180px;
+}
+
+.settingRowLabel {
+  font-size: 0.93rem;
+  font-weight: 600;
+  color: var(--text);
+  display: block;
+  margin-bottom: 0.18rem;
+}
+
+.settingRowHint {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.45;
+}
+
+.settingRowControl {
+  flex-shrink: 0;
+}
+
+/* ── Theme swatch picker ───────────────────────────────────────────── */
+.themeSwatches {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.themeSwatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.85rem;
+  border: 2px solid transparent;
+  background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  min-width: 56px;
+}
+
+.themeSwatch:hover {
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-surface));
+}
+
+.themeSwatchActive {
+  border-color: var(--primary, var(--accent));
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg-surface));
+}
+
+.themeSwatchCircle {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  transition: transform 0.12s;
+}
+
+.themeSwatch:hover .themeSwatchCircle {
+  transform: scale(1.07);
+}
+
+.themeSwatchLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ── Segmented control (font size / line height) ───────────────────── */
+.segmented {
+  display: inline-flex;
+  border-radius: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
+}
+
+.segmentBtn {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.segmentBtn:not(:last-child) {
+  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+}
+
+.segmentBtnActive {
+  background: var(--primary, var(--accent));
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ── Section page header (inside stage) ────────────────────────────── */
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1.4rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 55%, transparent);
+}
+
+.sectionHeaderIcon {
+  font-size: 1.6rem;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 0.08rem;
+}
+
+.sectionHeaderTitle {
+  margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+  line-height: 1.1;
+}
+
+.sectionHeaderSub {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+/* ── Slim sidebar rail (redesigned) ────────────────────────────────── */
+.railSlim {
+  position: sticky;
+  top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  padding: 0.5rem;
+  border-radius: 1.2rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 86%, transparent);
+}
+
+.railItem {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.72rem;
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.railItem:hover {
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  color: var(--text);
+}
+
+.railItemActive {
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg-surface));
+  color: var(--text);
+  font-weight: 600;
+  border-left-color: var(--primary, var(--accent));
+}
+
+.railItemIcon {
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 1.2rem;
+  text-align: center;
+}
+
+/* ── Inline field row ──────────────────────────────────────────────── */
+.fieldRow {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.fieldRowLabel {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 980px) {
+  .railSlim {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    padding: 0.4rem;
+  }
+
+  .railItem {
+    flex: 0 1 auto;
+    min-width: max-content;
+    padding: 0.45rem 0.7rem;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+  }
+
+  .railItemActive {
+    border-left-color: transparent;
+    border-bottom-color: var(--primary, var(--accent));
+  }
+}

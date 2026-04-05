@@ -390,11 +390,10 @@ export function KnowledgeMap() {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [loading, setLoading] = useState(true);
   const [aiEnhanced, setAiEnhanced] = useState(false);
-  const [tooltip, setTooltip] = useState<{
+  const [libItems, setLibItems] = useState<LibraryItem[]>([]);
+  const [selectedNode, setSelectedNode] = useState<{
     label: string;
     sourceItemIds: string[];
-    x: number;
-    y: number;
   } | null>(null);
 
   useEffect(() => {
@@ -404,6 +403,7 @@ export function KnowledgeMap() {
       .then(res => (res.ok ? res.json() : []))
       .then(async (items: LibraryItem[]) => {
         if (cancelled) return;
+        setLibItems(items);
         if (items.length === 0) {
           setNodes([]);
           setEdges([]);
@@ -503,7 +503,7 @@ export function KnowledgeMap() {
         )}
       </div>
 
-      <div className="canvas" onClick={() => setTooltip(null)}>
+      <div className="canvas" onClick={() => setSelectedNode(null)}>
         {loading ? (
           <div className="empty">Building map…</div>
         ) : nodes.length === 0 ? (
@@ -561,15 +561,10 @@ export function KnowledgeMap() {
                     style={{ cursor: 'pointer' }}
                     onClick={ev => {
                       ev.stopPropagation();
-                      setTooltip(t =>
-                        t?.label === node.label
+                      setSelectedNode(s =>
+                        s?.label === node.label
                           ? null
-                          : {
-                              label: node.label,
-                              sourceItemIds: node.sourceItemIds,
-                              x: pos.x,
-                              y: pos.y,
-                            },
+                          : { label: node.label, sourceItemIds: node.sourceItemIds },
                       );
                     }}
                   >
@@ -589,40 +584,24 @@ export function KnowledgeMap() {
                 );
               })}
 
-              {/* Tooltip inside SVG */}
-              {tooltip && (() => {
-                const tx = tooltip.x > 70 ? tooltip.x - 28 : tooltip.x + 2;
-                const ty = tooltip.y > 80 ? tooltip.y - 14 : tooltip.y + 5;
-                const lines = [
-                  tooltip.label,
-                  `${tooltip.sourceItemIds.length} item${tooltip.sourceItemIds.length !== 1 ? 's' : ''}`,
-                ];
+              {/* Selected node highlight ring */}
+              {selectedNode && nodes.map(node => {
+                if (node.label !== selectedNode.label) return null;
+                const pos = positions[node.id];
+                if (!pos) return null;
+                const r = node.size / 10;
                 return (
-                  <g style={{ pointerEvents: 'none' }}>
-                    <rect
-                      x={tx - 1}
-                      y={ty - 1}
-                      width={30}
-                      height={lines.length * 4 + 2}
-                      rx="1"
-                      fill="var(--bg-surface, #f8fafc)"
-                      stroke="var(--border-subtle, #e2e8f0)"
-                      strokeWidth="0.3"
-                    />
-                    {lines.map((line, li) => (
-                      <text
-                        key={li}
-                        x={tx + 0.5}
-                        y={ty + 2.5 + li * 4}
-                        fontSize="2.5"
-                        fill="var(--text-primary, #0f172a)"
-                      >
-                        {truncate(line, 18)}
-                      </text>
-                    ))}
-                  </g>
+                  <circle
+                    key={`sel-${node.id}`}
+                    cx={pos.x} cy={pos.y} r={r + 1.2}
+                    fill="none"
+                    stroke="var(--primary, #6366f1)"
+                    strokeWidth="0.6"
+                    strokeDasharray="2,1"
+                    style={{ pointerEvents: 'none' }}
+                  />
                 );
-              })()}
+              })}
             </svg>
 
             <div style={{ marginTop: 10, fontSize: '0.78rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
@@ -638,6 +617,67 @@ export function KnowledgeMap() {
           </>
         )}
       </div>
+
+      {/* ── Content panel ─────────────────────────────────────── */}
+      {selectedNode && (() => {
+        const matchingItems = selectedNode.sourceItemIds.length > 0
+          ? libItems.filter(item => selectedNode.sourceItemIds.includes(item.id))
+          : libItems.filter(item =>
+              item.content.toLowerCase().includes(selectedNode.label.toLowerCase()),
+            ).slice(0, 5);
+
+        function highlight(text: string, term: string): string {
+          const idx = text.toLowerCase().indexOf(term.toLowerCase());
+          if (idx === -1) return text.slice(0, 220);
+          const start = Math.max(0, idx - 80);
+          const end = Math.min(text.length, idx + term.length + 140);
+          return (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '');
+        }
+
+        return (
+          <div className="content-panel">
+            <div className="content-panel-header">
+              <span className="content-panel-title">{selectedNode.label}</span>
+              <span className="content-panel-count">
+                {matchingItems.length} {matchingItems.length === 1 ? 'item' : 'items'}
+              </span>
+              <button
+                className="content-panel-close"
+                onClick={() => setSelectedNode(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            {matchingItems.length === 0 ? (
+              <p className="content-panel-empty">No saved content references this concept yet.</p>
+            ) : (
+              <div className="content-panel-list">
+                {matchingItems.map(item => {
+                  const snippet = highlight(item.content, selectedNode.label);
+                  const termIdx = snippet.toLowerCase().indexOf(selectedNode.label.toLowerCase());
+                  return (
+                    <div key={item.id} className="content-card">
+                      <div className="content-card-mode">{item.mode}</div>
+                      <p className="content-card-snippet">
+                        {termIdx >= 0 ? (
+                          <>
+                            {snippet.slice(0, termIdx)}
+                            <mark className="content-mark">
+                              {snippet.slice(termIdx, termIdx + selectedNode.label.length)}
+                            </mark>
+                            {snippet.slice(termIdx + selectedNode.label.length)}
+                          </>
+                        ) : snippet}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <style jsx>{`
         .map {
@@ -730,6 +770,87 @@ export function KnowledgeMap() {
         }
         .legend-item.tier2::before {
           background: rgba(245, 158, 11, 0.45);
+        }
+
+        /* ── Content panel ──────────────────────────────────── */
+        .content-panel {
+          border: 1px solid var(--border-subtle, #e2e8f0);
+          border-radius: 14px;
+          background: var(--bg-surface, #f8fafc);
+          overflow: hidden;
+        }
+        .content-panel-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 14px;
+          border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+          background: var(--surface, #fff);
+        }
+        .content-panel-title {
+          font-weight: 700;
+          font-size: 0.9rem;
+          color: var(--text-primary, #0f172a);
+          flex: 1;
+        }
+        .content-panel-count {
+          font-size: 0.75rem;
+          color: var(--text-muted, #64748b);
+          background: var(--bg-surface, #f1f5f9);
+          padding: 2px 8px;
+          border-radius: 999px;
+          flex-shrink: 0;
+        }
+        .content-panel-close {
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: var(--text-muted, #94a3b8);
+          font-size: 0.75rem;
+          padding: 2px 4px;
+          border-radius: 4px;
+          flex-shrink: 0;
+        }
+        .content-panel-close:hover {
+          color: var(--text-primary, #0f172a);
+          background: var(--bg-surface, #f1f5f9);
+        }
+        .content-panel-empty {
+          padding: 16px;
+          font-size: 0.82rem;
+          color: var(--text-muted, #64748b);
+          margin: 0;
+          text-align: center;
+        }
+        .content-panel-list {
+          display: grid;
+          gap: 1px;
+          background: var(--border-subtle, #e2e8f0);
+        }
+        .content-card {
+          padding: 10px 14px;
+          background: var(--surface, #fff);
+          display: grid;
+          gap: 4px;
+        }
+        .content-card-mode {
+          font-size: 0.7rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          color: var(--primary-500, #6366f1);
+        }
+        .content-card-snippet {
+          font-size: 0.82rem;
+          color: var(--text-muted, #475569);
+          line-height: 1.55;
+          margin: 0;
+        }
+        .content-mark {
+          background: color-mix(in srgb, var(--primary-500, #6366f1) 18%, transparent);
+          color: inherit;
+          border-radius: 3px;
+          padding: 0 2px;
         }
       `}</style>
     </div>

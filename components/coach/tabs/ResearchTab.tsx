@@ -307,7 +307,12 @@ export function ResearchTab({
   }
 
   async function copyBibTeX(s: SavedSourceRow) {
-    await navigator.clipboard.writeText(toBibTeX(s)).catch(() => null);
+    try {
+      await navigator.clipboard.writeText(toBibTeX(s));
+    } catch {
+      toast(t('Could not copy to clipboard'), 'error');
+      return;
+    }
     setBibCopiedId(s.id);
     setTimeout(() => setBibCopiedId(null), 2000);
   }

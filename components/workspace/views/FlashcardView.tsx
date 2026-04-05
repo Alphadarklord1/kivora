@@ -481,6 +481,8 @@ export function FlashcardView({
   const [importError, setImportError] = useState('');
   const [importUrl,   setImportUrl]   = useState(initialImportUrl ?? '');
   const [importUrlLoading, setImportUrlLoading] = useState(false);
+  const [importApkgLoading, setImportApkgLoading] = useState(false);
+  const apkgInputRef = useRef<HTMLInputElement>(null);
   // Share
   const [shareStatus, setShareStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [shareUrl,    setShareUrl]    = useState('');
@@ -856,6 +858,32 @@ export function FlashcardView({
     setImportUrl('');
     setImportError('');
     setPhase('preview');
+  }
+
+  async function importFromApkg(file: File) {
+    setImportApkgLoading(true);
+    setImportError('');
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch('/api/srs/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'anki', base64, fileName: file.name }),
+      });
+      const payload = await res.json().catch(() => null) as { cards?: Array<{ front: string; back: string }>; title?: string; error?: string } | null;
+      if (!res.ok) { setImportError(payload?.error || t('Import failed')); return; }
+      if (!payload?.cards?.length) { setImportError(t('No cards were found in that file.')); return; }
+      importParsedCards(payload.cards, String(payload.title ?? t('Imported Anki deck')));
+    } catch {
+      setImportError(t('Import failed'));
+    } finally {
+      setImportApkgLoading(false);
+    }
   }
 
   async function importFromUrl() {
@@ -1607,6 +1635,28 @@ export function FlashcardView({
           <span style={{ fontWeight:600, fontSize:'var(--text-sm)' }}>{`📥 ${t('Import cards')}`}</span>
           <button className="btn-icon" style={{ marginLeft:'auto', fontSize:11, color:'var(--text-3)' }} onClick={() => setPhase('preview')}>✕</button>
         </div>
+        {/* Anki .apkg import */}
+        <input
+          ref={apkgInputRef}
+          type="file"
+          accept=".apkg"
+          style={{ display:'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) { e.target.value = ''; void importFromApkg(f); } }}
+        />
+        <button
+          className="btn btn-secondary btn-sm"
+          disabled={importApkgLoading}
+          onClick={() => apkgInputRef.current?.click()}
+          style={{ width:'100%', justifyContent:'center', marginBottom:8 }}
+        >
+          {importApkgLoading ? `⏳ ${t('Importing…')}` : `🗂 ${t('Import Anki .apkg file')}`}
+        </button>
+        <div style={{ fontSize:'var(--text-xs)', color:'var(--text-3)', textAlign:'center', marginBottom:14 }}>
+          {t('Supports Anki 2 and Anki 21 packages — drag exported .apkg files from Anki desktop')}
+        </div>
+
+        <div style={{ borderTop:'1px solid var(--border-2)', marginBottom:14 }} />
+
         <div style={{ fontSize:'var(--text-xs)', color:'var(--text-3)', marginBottom:12, lineHeight:1.7 }}>
           {t('One card per line. Separate term and definition with a comma or tab.')}<br />
           Example: <code style={{ background:'var(--surface-2)', padding:'1px 5px', borderRadius:4, fontSize:11 }}>Mitosis, Cell division producing two identical daughter cells</code>

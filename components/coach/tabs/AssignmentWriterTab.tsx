@@ -69,6 +69,9 @@ const LOCAL_AR: Record<string, string> = {
   'Could not generate Word document': 'تعذر إنشاء ملف Word',
   'PowerPoint downloaded': 'تم تنزيل PowerPoint',
   'Could not generate PowerPoint': 'تعذر إنشاء PowerPoint',
+  'PDF opened — use your browser\'s print dialog to save': 'تم فتح PDF — استخدم نافذة الطباعة للحفظ',
+  'Could not generate PDF': 'تعذر إنشاء PDF',
+  'PDF': 'PDF',
   'No feedback returned': 'لم يتم إرجاع ملاحظات',
   'Work checker failed': 'فشل فحص الكتابة',
   'Original text not found — it may have been edited': 'لم يتم العثور على النص الأصلي — ربما تم تعديله',
@@ -332,6 +335,7 @@ export function AssignmentWriterTab({
   const [reportSavedLib,  setReportSavedLib]  = useState(false);
   const [exportingDocx,   setExportingDocx]   = useState(false);
   const [exportingPptx,   setExportingPptx]   = useState(false);
+  const [exportingPdf,    setExportingPdf]    = useState(false);
   const [showKeyPoints,   setShowKeyPoints]   = useState(false);
 
   // Assignment helper
@@ -518,7 +522,7 @@ export function AssignmentWriterTab({
   async function handleSaveReport() {
     if (!reportResult) return;
     try {
-      await fetch('/api/library', {
+      const res = await fetch('/api/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -526,6 +530,7 @@ export function AssignmentWriterTab({
           metadata: { title: `${REPORT_TYPES.find(t => t.id === reportType)?.label} — ${reportTopic}`, savedFrom: '/coach' },
         }),
       });
+      if (!res.ok) throw new Error('save-failed');
       setReportSavedLib(true);
       broadcastInvalidate(LIBRARY_CHANNEL);
       toast(t('Saved to Library'), 'success');
@@ -563,6 +568,23 @@ export function AssignmentWriterTab({
       toast(t('Word document downloaded'), 'success');
     } catch { toast(t('Could not generate Word document'), 'error'); }
     finally { setExportingDocx(false); }
+  }
+
+  async function handleExportPdf() {
+    if (!reportResult || exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      const refs = selectedSources.map((s, i) => `[${i + 1}] ${s.title}. ${s.source}. ${s.url}`);
+      const { generatePdf } = await import('@/lib/export/pdf');
+      await generatePdf({
+        title: reportTopic,
+        subtitle: REPORT_TYPES.find(rt => rt.id === reportType)?.label,
+        content: reportResult,
+        references: refs,
+      });
+      toast(t('PDF opened — use your browser\'s print dialog to save'), 'success');
+    } catch { toast(t('Could not generate PDF'), 'error'); }
+    finally { setExportingPdf(false); }
   }
 
   async function handleExportPptx() {
@@ -683,7 +705,7 @@ export function AssignmentWriterTab({
     const hasResult = checkScore !== null || legacyResult.length > 0;
     if (!hasResult) return;
     try {
-      await fetch('/api/library', {
+      const res = await fetch('/api/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -698,6 +720,7 @@ export function AssignmentWriterTab({
           metadata: { title: 'Writer feedback', savedFrom: '/coach' },
         }),
       });
+      if (!res.ok) throw new Error('save-failed');
       setWriterSavedLib(true);
       broadcastInvalidate(LIBRARY_CHANNEL);
       toast(t('Saved to Library'), 'success');
@@ -1040,6 +1063,7 @@ export function AssignmentWriterTab({
                   <button className={styles.btnSecondary} onClick={() => void navigator.clipboard.writeText(reportResult).then(() => toast(t('Copied!'), 'success'))}>📋 {t('Copy')}</button>
                   <button className={styles.btnSecondary} disabled={exportingDocx} onClick={() => void handleExportDocx()}>{exportingDocx ? '…' : `📄 ${t('Word')}`}</button>
                   <button className={styles.btnSecondary} disabled={exportingPptx} onClick={() => void handleExportPptx()}>{exportingPptx ? '…' : `📊 ${t('PowerPoint')}`}</button>
+                  <button className={styles.btnSecondary} disabled={exportingPdf} onClick={() => void handleExportPdf()}>{exportingPdf ? '…' : `🖨 ${t('PDF')}`}</button>
                   {!reportSavedLib && <button className={styles.btnSecondary} onClick={() => void handleSaveReport()}>📚 {t('Save to Library')}</button>}
                   <button
                     className={styles.btnSecondary}
@@ -1159,6 +1183,18 @@ export function AssignmentWriterTab({
                 toast(t('Word document downloaded'), 'success');
               } catch {
                 toast(t('Could not export to Word'), 'error');
+              }
+            })();
+          }}
+          onExportPdf={() => {
+            void (async () => {
+              try {
+                const firstLine = checkText.trim().split('\n').find(l => l.trim()) ?? 'Essay';
+                const { generatePdf } = await import('@/lib/export/pdf');
+                await generatePdf({ title: firstLine.slice(0, 60), content: checkText });
+                toast(t('PDF opened — use your browser\'s print dialog to save'), 'success');
+              } catch {
+                toast(t('Could not generate PDF'), 'error');
               }
             })();
           }}

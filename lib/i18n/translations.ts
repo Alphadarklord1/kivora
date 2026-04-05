@@ -33,6 +33,8 @@ export const GLOBAL_TRANSLATIONS: Record<string, Partial<Record<SupportedLocale,
   Planner:              { ar: 'المخطط',                fr: 'Planificateur' },
   Math:                 { ar: 'الرياضيات',             fr: 'Mathématiques' },
   Settings:             { ar: 'الإعدادات',             fr: 'Paramètres' },
+  Grapher:              { ar: 'راسم المنحنيات',         fr: 'Grapheur' },
+  'Study Audio':        { ar: 'الصوت الدراسي',         fr: 'Audio d\'étude' },
   Groups:               { ar: 'المجموعات',             fr: 'Groupes' },
   'Study Groups':       { ar: 'مجموعات الدراسة',      fr: 'Groupes d\'étude' },
   'Share decks and study together with classmates.': {
@@ -634,6 +636,12 @@ export const GLOBAL_TRANSLATIONS: Record<string, Partial<Record<SupportedLocale,
   '⌘↵ to save':                   { ar: '⌘↵ للحفظ',                  fr: '⌘↵ pour enregistrer' },
   'Export CSV':                    { ar: 'تصدير CSV',                  fr: 'Exporter CSV' },
   'Export Anki':                   { ar: 'تصدير Anki',                 fr: 'Exporter Anki' },
+  'Import Anki .apkg file':        { ar: 'استيراد ملف Anki .apkg',      fr: 'Importer un fichier Anki .apkg' },
+  'Imported Anki deck':            { ar: 'مجموعة Anki مستوردة',         fr: 'Paquet Anki importé' },
+  'Supports Anki 2 and Anki 21 packages — drag exported .apkg files from Anki desktop': {
+    ar: 'يدعم حزم Anki 2 وAnki 21 — اسحب ملفات .apkg من تطبيق Anki',
+    fr: 'Compatible Anki 2 et Anki 21 — glissez les fichiers .apkg exportés depuis Anki',
+  },
   'Copy link':                     { ar: 'نسخ الرابط',                fr: 'Copier le lien' },
 
   // Flashcard view — stats

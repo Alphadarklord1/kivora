@@ -12,5 +12,6 @@ export const config = {
     '/sharing/:path*',
     '/planner/:path*',
     '/podcast/:path*',
+    '/graphing/:path*',
   ],
 };

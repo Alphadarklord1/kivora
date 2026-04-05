@@ -87,6 +87,9 @@ const LOCAL_AR: Record<string, string> = {
   'Physics': 'الفيزياء',
   'Formula Sheets': 'ملخصات القوانين',
   'Graph Plotter': 'راسم المنحنيات',
+  'Slider': 'شريط تمرير',
+  'Point': 'نقطة',
+  'Export as SVG': 'تصدير كـ SVG',
   'Unit Converter': 'محول الوحدات',
   'Question Scan': 'مسح السؤال',
   'Visual Analyzer': 'المحلل البصري',
@@ -543,21 +546,24 @@ const FORMULAS: Record<string, Array<{ title: string; latex: string; note?: stri
 
 const GRAPH_COLORS = ['#6366f1', '#f97316', '#22c55e', '#ef4444', '#a855f7', '#0ea5e9'];
 const GRAPH_PRESETS = [
-  { label: 'y = x²',       expr: 'y = x^2' },
-  { label: 'y = sin(x)',   expr: 'y = sin(x)' },
-  { label: 'y = cos(x)',   expr: 'y = cos(x)' },
-  { label: 'y = e^x',     expr: 'y = e^x' },
-  { label: 'y = ln(x)',   expr: 'y = log(x)' },
-  { label: 'y = 1/x',    expr: 'y = 1/x' },
-  { label: 'y = |x|',    expr: 'y = abs(x)' },
-  { label: 'Line',       expr: 'y = 1.333333*x + 0.666667' },
-  { label: 'Circle',     expr: 'x^2 + y^2 = 25' },
-  { label: 'Shifted circle', expr: '(x - 2)^2 + (y + 3)^2 = 25' },
-  { label: 'y = tan(x)', expr: 'y = tan(x)' },
-  { label: 'x = 2',      expr: 'x = 2' },
+  { label: 'y = x²',            expr: 'y = x^2' },
+  { label: 'y = sin(x)',        expr: 'y = sin(x)' },
+  { label: 'y = cos(x)',        expr: 'y = cos(x)' },
+  { label: 'y = e^x',          expr: 'y = e^x' },
+  { label: 'y = ln(x)',         expr: 'y = log(x)' },
+  { label: 'y = 1/x',          expr: 'y = 1/x' },
+  { label: 'y = |x|',          expr: 'y = abs(x)' },
+  { label: 'Line',              expr: 'y = 1.333333*x + 0.666667' },
+  { label: 'Circle',            expr: 'x^2 + y^2 = 25' },
+  { label: 'Shifted circle',    expr: '(x - 2)^2 + (y + 3)^2 = 25' },
+  { label: 'y = tan(x)',        expr: 'y = tan(x)' },
+  { label: 'x = 2',            expr: 'x = 2' },
   { label: 'Parametric circle', expr: 'x = cos(t), y = sin(t)' },
   { label: 'Spiral',            expr: 'x = t*cos(t), y = t*sin(t)' },
   { label: 'Custom f(x)',       expr: 'f(x) = x^2 - 3' },
+  { label: 'Slider a·x²',      expr: 'a = 1' },
+  { label: 'Point (3,4)',       expr: '(3, 4)' },
+  { label: '√x domain',        expr: 'y = sqrt(x) {x >= 0}' },
 ];
 
 
@@ -706,6 +712,18 @@ function buildGraphSvg(
       const normalized = normalizeGraphExpression(expr.expr);
       if (!normalized) return '';
 
+      if (normalized.type === 'point') {
+        const sx = toSvgX(normalized.x);
+        const sy = toSvgY(normalized.y);
+        if (sx >= padding - 10 && sx <= width - padding + 10 && sy >= padding - 10 && sy <= height - padding + 10) {
+          const labelX = sx + 8;
+          const labelY = sy - 8;
+          return `<circle cx="${sx.toFixed(2)}" cy="${sy.toFixed(2)}" r="5.5" fill="${expr.color}" stroke="white" stroke-width="2" opacity="0.95" />`
+            + `<text x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" fill="${expr.color}" font-size="11" font-family="system-ui,sans-serif" font-weight="600">(${normalized.x}, ${normalized.y})</text>`;
+        }
+        return '';
+      }
+
       if (normalized.type === 'function') {
         const samples = 260;
         const segments: string[] = [];
@@ -714,6 +732,25 @@ function buildGraphSvg(
 
         for (let i = 0; i <= samples; i += 1) {
           const x = xDomain[0] + (xRange * i) / samples;
+
+          // Domain restriction check
+          if (normalized.domain) {
+            try {
+              const inDomain = evaluate(normalized.domain, { x });
+              if (!inDomain) {
+                if (current) segments.push(current);
+                current = '';
+                previous = null;
+                continue;
+              }
+            } catch {
+              if (current) segments.push(current);
+              current = '';
+              previous = null;
+              continue;
+            }
+          }
+
           let y: number;
           try {
             y = evaluate(normalized.value, { x });
@@ -2318,9 +2355,9 @@ function solverTopicForQuestion(problem: string): TopicId {
   return detected;
 }
 
-export function MathSolverPage() {
+export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {}) {
   const { t: tr, isRTL } = useI18n(LOCAL_AR);
-  const [active, setActive] = useState<ActiveView>('algebra');
+  const [active, setActive] = useState<ActiveView>((defaultPanel as ActiveView) ?? 'algebra');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
     try { return localStorage.getItem(MATH_SIDEBAR_KEY) !== 'closed'; } catch { return true; }
   });
@@ -2344,6 +2381,11 @@ export function MathSolverPage() {
   const [themeTick, setThemeTick] = useState(0);
   // Hover coordinates
   const [hoverCoord, setHoverCoord] = useState<{ x: number; y: number; svgX: number; svgY: number } | null>(null);
+  // Drag-to-pan
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ x: number; y: number; xDomain: [number, number]; yDomain: [number, number] } | null>(null);
+  // Touch pinch-to-zoom
+  const lastTouchDistRef = useRef<number | null>(null);
   const [formulaSearch, setFormulaSearch] = useState('');
 
   const [contextName, setContextName] = useState('');
@@ -2489,7 +2531,10 @@ export function MathSolverPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ problem: p, category: requestCategory }),
       });
-      const data = await res.json() as SolveResult;
+      const data = await res.json() as SolveResult & { error?: string };
+      if (!res.ok) {
+        throw new Error(data.error ?? tr('Could not solve this problem'));
+      }
       setResult(data);
       // Reveal steps one-by-one with animation
       setRevealedSteps(0);
@@ -2509,8 +2554,11 @@ export function MathSolverPage() {
       if (data.graphExpr && shouldOfferGraphFromSolver(p, data.category, data.graphExpr)) {
         replaceGraphWith(data.graphExpr);
       }
-    } catch {
-      setResult({ answer: '', answerLatex: '', steps: [], graphExpr: null, category: String(requestCategory ?? active), engine: 'error', error: tr('Network error — check that the AI model is running.') });
+    } catch (error) {
+      const message = error instanceof Error && error.message
+        ? error.message
+        : tr('Network error — check that the AI model is running.');
+      setResult({ answer: '', answerLatex: '', steps: [], graphExpr: null, category: String(requestCategory ?? active), engine: 'error', error: message });
     } finally {
       setLoading(false);
     }
@@ -2551,9 +2599,29 @@ export function MathSolverPage() {
     setYDomain([-10, 10]);
   }
 
-  function zoomGraph(factor: number) {
-    setXDomain(([min, max]) => [Number((min * factor).toFixed(2)), Number((max * factor).toFixed(2))]);
-    setYDomain(([min, max]) => [Number((min * factor).toFixed(2)), Number((max * factor).toFixed(2))]);
+  function zoomGraph(factor: number, cx?: number, cy?: number) {
+    setXDomain(([min, max]) => {
+      const pivot = cx ?? (min + max) / 2;
+      return [pivot + (min - pivot) * factor, pivot + (max - pivot) * factor];
+    });
+    setYDomain(([min, max]) => {
+      const pivot = cy ?? (min + max) / 2;
+      return [pivot + (min - pivot) * factor, pivot + (max - pivot) * factor];
+    });
+  }
+
+  function exportGraphSvg() {
+    if (!graphRef.current) return;
+    const svgEl = graphRef.current.querySelector('svg');
+    if (!svgEl) return;
+    const svgStr = new XMLSerializer().serializeToString(svgEl);
+    const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'kivora-graph.svg';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   // ── Computed ────────────────────────────────────────────────────────────────
@@ -3229,7 +3297,7 @@ export function MathSolverPage() {
                           const answer = result.answer ?? '';
                           if (!problem || !answer) return;
                           try {
-                            await fetch('/api/library', {
+                            const res = await fetch('/api/library', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({
@@ -3238,6 +3306,7 @@ export function MathSolverPage() {
                                 title: problem.length > 60 ? problem.slice(0, 60) + '…' : problem,
                               }),
                             });
+                            if (!res.ok) throw new Error('Save failed');
                             broadcastInvalidate(LIBRARY_CHANNEL);
                             setFlashcardToast(tr('Saved to flashcards!'));
                             setTimeout(() => setFlashcardToast(''), 2800);
@@ -3366,8 +3435,9 @@ export function MathSolverPage() {
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button onClick={resetGraphView} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>{tr('Home')}</button>
-                <button onClick={() => zoomGraph(0.8)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>{tr('Zoom in')}</button>
-                <button onClick={() => zoomGraph(1.25)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>{tr('Zoom out')}</button>
+                <button onClick={() => zoomGraph(0.8)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>＋</button>
+                <button onClick={() => zoomGraph(1.25)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>－</button>
+                <button onClick={exportGraphSvg} title={tr('Export as SVG')} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>⬇ SVG</button>
               </div>
             </div>
 
@@ -3383,22 +3453,67 @@ export function MathSolverPage() {
             {/* Graph canvas with hover overlay */}
             <div style={{ position: 'relative', width: '100%', height: 420 }}>
               <div ref={graphRef} style={{ width: '100%', height: '100%', borderRadius: 14, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }} />
-              {/* Transparent hover capture layer */}
+              {/* Transparent interaction layer — drag, scroll, hover, touch */}
               <div
                 ref={graphOverlayRef}
-                style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }}
+                style={{ position: 'absolute', inset: 0, cursor: isDragging ? 'grabbing' : 'crosshair', touchAction: 'none' }}
+                onMouseDown={e => {
+                  setIsDragging(true);
+                  dragStartRef.current = { x: e.clientX, y: e.clientY, xDomain: [...xDomain] as [number,number], yDomain: [...yDomain] as [number,number] };
+                }}
                 onMouseMove={e => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   const px = e.clientX - rect.left;
                   const py = e.clientY - rect.top;
-                  const padding = 28;
-                  const innerW = rect.width - padding * 2;
-                  const innerH = rect.height - padding * 2;
-                  const xVal = xDomain[0] + ((px - padding) / innerW) * (xDomain[1] - xDomain[0]);
-                  const yVal = yDomain[1] - ((py - padding) / innerH) * (yDomain[1] - yDomain[0]);
-                  setHoverCoord({ x: xVal, y: yVal, svgX: px, svgY: py });
+                  const pad = 28;
+                  const innerW = rect.width - pad * 2;
+                  const innerH = rect.height - pad * 2;
+
+                  if (isDragging && dragStartRef.current) {
+                    const dxMath = ((e.clientX - dragStartRef.current.x) / innerW) * (dragStartRef.current.xDomain[1] - dragStartRef.current.xDomain[0]);
+                    const dyMath = ((e.clientY - dragStartRef.current.y) / innerH) * (dragStartRef.current.yDomain[1] - dragStartRef.current.yDomain[0]);
+                    setXDomain([dragStartRef.current.xDomain[0] - dxMath, dragStartRef.current.xDomain[1] - dxMath]);
+                    setYDomain([dragStartRef.current.yDomain[0] + dyMath, dragStartRef.current.yDomain[1] + dyMath]);
+                  } else {
+                    const xVal = xDomain[0] + ((px - pad) / innerW) * (xDomain[1] - xDomain[0]);
+                    const yVal = yDomain[1] - ((py - pad) / innerH) * (yDomain[1] - yDomain[0]);
+                    setHoverCoord({ x: xVal, y: yVal, svgX: px, svgY: py });
+                  }
                 }}
-                onMouseLeave={() => setHoverCoord(null)}
+                onMouseUp={() => setIsDragging(false)}
+                onMouseLeave={() => { setIsDragging(false); setHoverCoord(null); }}
+                onWheel={e => {
+                  e.preventDefault();
+                  const factor = e.deltaY > 0 ? 1.15 : 0.87;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const px = e.clientX - rect.left;
+                  const py = e.clientY - rect.top;
+                  const pad = 28;
+                  const innerW = rect.width - pad * 2;
+                  const innerH = rect.height - pad * 2;
+                  const cx = xDomain[0] + ((px - pad) / innerW) * (xDomain[1] - xDomain[0]);
+                  const cy = yDomain[1] - ((py - pad) / innerH) * (yDomain[1] - yDomain[0]);
+                  zoomGraph(factor, cx, cy);
+                }}
+                onTouchStart={e => {
+                  if (e.touches.length === 2) {
+                    const dx = e.touches[0].clientX - e.touches[1].clientX;
+                    const dy = e.touches[0].clientY - e.touches[1].clientY;
+                    lastTouchDistRef.current = Math.sqrt(dx * dx + dy * dy);
+                  }
+                }}
+                onTouchMove={e => {
+                  if (e.touches.length === 2 && lastTouchDistRef.current) {
+                    e.preventDefault();
+                    const dx = e.touches[0].clientX - e.touches[1].clientX;
+                    const dy = e.touches[0].clientY - e.touches[1].clientY;
+                    const newDist = Math.sqrt(dx * dx + dy * dy);
+                    const factor = lastTouchDistRef.current / newDist;
+                    lastTouchDistRef.current = newDist;
+                    zoomGraph(factor);
+                  }
+                }}
+                onTouchEnd={() => { lastTouchDistRef.current = null; }}
               />
               {/* Coordinate tooltip */}
               {hoverCoord && (
@@ -3442,6 +3557,12 @@ export function MathSolverPage() {
                   }
                 } catch { /* skip bad expressions */ }
 
+                // Detect slider: single letter = number, e.g. "a = 2.5"
+                const sliderMatch = ge.expr.trim().match(/^([a-zA-Z])\s*=\s*(-?[\d.]+)$/);
+                const isSlider = !!sliderMatch;
+                const sliderVal = isSlider ? parseFloat(sliderMatch![2]) : 0;
+                const sliderName = isSlider ? sliderMatch![1] : '';
+
                 return (
                   <div key={ge.id} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -3462,10 +3583,12 @@ export function MathSolverPage() {
                       <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 58, textAlign: 'right' }}>
                         {(() => {
                           if (!ge.expr.trim()) return tr('Empty');
+                          if (isSlider) return tr('Slider');
                           if (isCustomFuncDefinition(ge.expr)) return tr('Definition');
                           const normalized = normalizeGraphExpression(ge.expr);
                           if (!normalized) return tr('Empty');
                           if (normalized.type === 'parametric') return tr('Parametric');
+                          if (normalized.type === 'point') return tr('Point');
                           return normalized.type === 'function' ? tr('Function') : tr('Relation');
                         })()}
                       </span>
@@ -3474,6 +3597,25 @@ export function MathSolverPage() {
                           style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}>✕</button>
                       )}
                     </div>
+                    {/* Slider control */}
+                    {isSlider && ge.enabled && (
+                      <div style={{ paddingLeft: 76, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 12, color: ge.color, fontWeight: 700, minWidth: 16, fontFamily: '"JetBrains Mono", monospace' }}>{sliderName}</span>
+                        <input
+                          type="range"
+                          min={-20} max={20} step={0.1}
+                          value={sliderVal}
+                          onChange={e => {
+                            const v = parseFloat(e.target.value);
+                            setGraphExprs(p => p.map(x => x.id === ge.id ? { ...x, expr: `${sliderName} = ${v}` } : x));
+                          }}
+                          onMouseUp={() => renderGraph()}
+                          onTouchEnd={() => renderGraph()}
+                          style={{ flex: 1, accentColor: ge.color }}
+                        />
+                        <span style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 38, textAlign: 'right', fontFamily: '"JetBrains Mono", monospace' }}>{sliderVal}</span>
+                      </div>
+                    )}
                     {/* LaTeX rendered preview */}
                     {latexPreview && (
                       <div style={{ paddingLeft: 76, fontSize: 13, color: ge.color, opacity: 0.9 }}>
@@ -3706,7 +3848,7 @@ export function MathSolverPage() {
                     const q = typeInput.trim();
                     if (!q) return;
                     try {
-                      await fetch('/api/library', {
+                      const res = await fetch('/api/library', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -3715,6 +3857,7 @@ export function MathSolverPage() {
                           content: writeContext.trim() ? `${tr('Question')}:\n${q}\n\n${tr('Context / what you tried')}:\n${writeContext.trim()}` : `${tr('Question')}:\n${q}`,
                         }),
                       });
+                      if (!res.ok) throw new Error('Save failed');
                       broadcastInvalidate(LIBRARY_CHANNEL);
                       setWriteSavedToast(tr('Saved to Library!'));
                       setTimeout(() => setWriteSavedToast(''), 2800);
