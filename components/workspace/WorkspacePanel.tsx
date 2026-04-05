@@ -1203,7 +1203,7 @@ export function WorkspacePanel({
 
       {/* Scholar Hub context banner */}
       {scholarCtx && (
-        <div style={{
+        <div className="workspace-scholar-banner" style={{
           display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
           padding: '6px 14px',
           background: 'color-mix(in srgb, var(--accent, #3b82f6) 8%, var(--surface))',
@@ -1215,7 +1215,7 @@ export function WorkspacePanel({
             <strong style={{ color: 'var(--text)' }}>Scholar Hub:</strong>{' '}
             <span style={{ color: 'var(--text-2)' }}>{scholarCtx.label.slice(0, 60)}{scholarCtx.label.length > 60 ? '…' : ''}</span>
           </span>
-          <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+          <div className="workspace-scholar-actions" style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
             {scholarCtx.sourceText && (
               <button
                 className="btn btn-sm btn-secondary"
@@ -1591,7 +1591,7 @@ export function WorkspacePanel({
             </div>
 
             {/* Source row */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', flexShrink: 0 }}>
+            <div className="workspace-generate-toolbar" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
                 <button className={`btn btn-sm ${!pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setPasteMode(false)}>{t('From file')}</button>
                 <button className={`btn btn-sm ${pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => { setPasteMode(true); setSelFile(null); if (!pasteMode) setExtractedText(''); }}>{t('Paste text')}</button>
@@ -1648,7 +1648,7 @@ export function WorkspacePanel({
               )}
 
               {(extractedText || pasteMode) && (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, marginLeft: 'auto' }}>
+                <div className="workspace-generate-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, marginLeft: 'auto' }}>
                   {['quiz','mcq','exam'].includes(genMode) && (
                     <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
                       Count:
@@ -1813,7 +1813,7 @@ export function WorkspacePanel({
                     <button className="btn btn-primary btn-sm" onClick={() => setMainTab('files')}>Open files</button>
                     <button className="btn btn-secondary btn-sm" onClick={() => setPasteMode(true)}>Paste text</button>
                   </div>
-                  <div style={{ display: 'grid', gap: 8, width: '100%', maxWidth: 520, margin: '0 auto 18px', textAlign: 'left' }}>
+                  <div className="workspace-generate-empty-grid" style={{ display: 'grid', gap: 8, width: '100%', maxWidth: 520, margin: '0 auto 18px', textAlign: 'left' }}>
                     <div style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3)', fontWeight: 700 }}>
                       Starter paths
                     </div>

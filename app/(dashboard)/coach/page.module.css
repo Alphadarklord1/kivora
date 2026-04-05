@@ -2615,6 +2615,45 @@ details[open] .detailsSummary::before {
     width: 100%;
   }
 
+  .contextStrip,
+  .sectionStrip,
+  .researchFlowBridge {
+    padding: 0.75rem;
+    gap: 0.7rem;
+  }
+
+  .contextStripMeta,
+  .researchFlowMeta {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .researchFlowCopy {
+    flex-basis: 100%;
+  }
+
+  .plxSearchHeader {
+    padding: 0.75rem 0.8rem 0.6rem;
+  }
+
+  .plxSearchRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .plxSearchBtn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .plxHeaderMeta {
+    justify-content: space-between;
+  }
+
+  .plxAdvanced {
+    padding: 0.6rem;
+  }
+
   .setRow {
     flex-direction: column;
     align-items: flex-start;
@@ -3904,6 +3943,28 @@ details[open] .detailsSummary::before {
 
 @media (max-width: 560px) {
   .guidelinesGrid { grid-template-columns: 1fr; }
+
+  .contextStripGroup strong,
+  .sectionStripCopy strong {
+    white-space: normal;
+  }
+
+  .researchWorkspaceSection {
+    padding: 0.75rem 0.8rem;
+    border-radius: 1rem;
+  }
+
+  .plxHero {
+    padding: 2.6rem 1rem 2.2rem;
+  }
+
+  .plxHero h2 {
+    font-size: 1.25rem;
+  }
+
+  .plxSuggestions {
+    gap: 0.45rem;
+  }
 }
 
 .guidelineItem {

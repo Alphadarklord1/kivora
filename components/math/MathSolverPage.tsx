@@ -2630,10 +2630,10 @@ export function MathSolverPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div style={S.shell} dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="math-split" style={S.shell} dir={isRTL ? 'rtl' : 'ltr'}>
 
       {/* ── Sidebar ── */}
-      <aside style={S.sidebar}>
+      <aside className="math-sidebar" style={S.sidebar}>
         {/* Collapse toggle */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: sidebarOpen ? 'space-between' : 'center', padding: sidebarOpen ? '14px 14px 8px' : '14px 0 8px' }}>
           {sidebarOpen && <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Categories')}</span>}

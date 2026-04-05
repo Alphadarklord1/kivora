@@ -1410,6 +1410,7 @@ a:focus-visible {
   font-weight: 700;
   font-size: var(--text-base);
   flex: 1;
+  min-width: 0;
 }
 .mobile-header-logo-mark {
   width: 28px;
@@ -1446,6 +1447,27 @@ a:focus-visible {
   background: currentColor;
   border-radius: 2px;
   transition: all 0.2s;
+}
+
+.mobile-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mobile-header-action {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 16px;
+  flex-shrink: 0;
 }
 /* Overlay behind open drawer */
 .mobile-overlay {
@@ -1579,6 +1601,40 @@ a:focus-visible {
   /* Files tab: hide list when viewer is open */
   .file-list-panel--has-viewer { display: none; }
   .file-viewer-panel { width: 100% !important; }
+
+  .workspace-scholar-banner {
+    align-items: stretch !important;
+  }
+
+  .workspace-scholar-actions {
+    width: 100%;
+    margin-left: 0 !important;
+    flex-wrap: wrap;
+  }
+
+  .workspace-scholar-actions > * {
+    flex: 1 1 10rem;
+    justify-content: center;
+  }
+
+  .workspace-generate-toolbar {
+    gap: 12px !important;
+  }
+
+  .workspace-generate-actions {
+    width: 100%;
+    margin-left: 0 !important;
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .workspace-generate-actions > * {
+    flex: 1 1 10rem;
+  }
+
+  .workspace-generate-empty-grid {
+    max-width: 100% !important;
+  }
 
   /* Nav items: 44px min-height touch targets */
   .nav-item {
@@ -1777,6 +1833,15 @@ a:focus-visible {
   .tab-btn {
     min-width: 44px;
     justify-content: center;
+  }
+
+  .mobile-header {
+    padding: 0 10px;
+    gap: 8px;
+  }
+
+  .mobile-header-logo span {
+    font-size: 0.92rem;
   }
 
   /* File cards: tighter spacing */

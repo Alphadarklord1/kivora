@@ -41,6 +41,7 @@ interface Group {
 export default function GroupsPage() {
   const { t } = useI18n();
   const { toast: notify_ } = useToast();
+  const [compactLayout, setCompactLayout] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -88,6 +89,14 @@ export default function GroupsPage() {
   }
 
   useEffect(() => { void loadGroups(); }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const syncLayout = () => setCompactLayout(window.innerWidth < 720);
+    syncLayout();
+    window.addEventListener('resize', syncLayout);
+    return () => window.removeEventListener('resize', syncLayout);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -248,14 +257,14 @@ export default function GroupsPage() {
 
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: compactLayout ? 'stretch' : 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 28 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 'var(--text-2xl)', fontWeight: 800 }}>{t('Study Groups')}</h1>
           <p style={{ margin: '4px 0 0', color: 'var(--text-3)', fontSize: 14 }}>
             {t('Share decks, group notes, and async study handoffs with classmates.')}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, width: compactLayout ? '100%' : undefined, flexDirection: compactLayout ? 'column' : 'row' }}>
           <button className="btn btn-ghost btn-sm" onClick={() => { setShowJoin(v => !v); setShowCreate(false); }}>
             {t('Join group')}
           </button>
@@ -303,14 +312,14 @@ export default function GroupsPage() {
       {showJoin && !requiresAccount && (
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 12, padding: '20px', marginBottom: 20 }}>
           <h3 style={{ margin: '0 0 14px', fontSize: 16 }}>{t('Join a group')}</h3>
-          <form onSubmit={handleJoin} style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <form onSubmit={handleJoin} style={{ display: 'flex', gap: 8, alignItems: compactLayout ? 'stretch' : 'flex-end', flexDirection: compactLayout ? 'column' : 'row' }}>
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', fontSize: 13, color: 'var(--text-2)', marginBottom: 4 }}>{t('6-character group code')}</label>
               <input style={{ ...fieldStyle, fontFamily: 'monospace', letterSpacing: 3, textTransform: 'uppercase', fontSize: 18 }}
                 placeholder="ABC123" value={joinCode} maxLength={6}
                 onChange={e => setJoinCode(e.target.value.toUpperCase())} required />
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, width: compactLayout ? '100%' : undefined, flexDirection: compactLayout ? 'column-reverse' : 'row' }}>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowJoin(false)}>{t('Cancel')}</button>
               <button type="submit" className="btn btn-primary btn-sm" disabled={joining}>
                 {joining ? t('Joining…') : t('Join')}
@@ -341,11 +350,11 @@ export default function GroupsPage() {
             <div key={group.id} style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 12, overflow: 'hidden' }}>
               {/* Group header */}
               <div
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', cursor: 'pointer', userSelect: 'none' }}
+                style={{ display: 'flex', alignItems: compactLayout ? 'stretch' : 'center', flexDirection: compactLayout ? 'column' : 'row', gap: 12, padding: '14px 18px', cursor: 'pointer', userSelect: 'none' }}
                 onClick={() => setExpanded(v => v === group.id ? null : group.id)}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 700, fontSize: 15 }}>{group.name}</span>
                     {group.isOwner && (
                       <span style={{ fontSize: 10, background: 'var(--primary)', color: '#fff', padding: '2px 7px', borderRadius: 99, fontWeight: 700 }}>
@@ -358,7 +367,7 @@ export default function GroupsPage() {
                       {group.description}
                     </p>
                   )}
-                  <div style={{ display: 'flex', gap: 12, marginTop: 4, fontSize: 12, color: 'var(--text-3)' }}>
+                  <div style={{ display: 'flex', gap: 12, marginTop: 4, fontSize: 12, color: 'var(--text-3)', flexWrap: 'wrap' }}>
                     <span>👤 {group.memberCount} member{group.memberCount !== 1 ? 's' : ''}</span>
                     <span>🃏 {group.deckCount} deck{group.deckCount !== 1 ? 's' : ''}</span>
                     <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--primary)', letterSpacing: 1 }}>
@@ -366,7 +375,7 @@ export default function GroupsPage() {
                     </span>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', width: compactLayout ? '100%' : undefined, justifyContent: compactLayout ? 'flex-start' : 'flex-end' }}>
                   <button
                     className="btn btn-ghost btn-xs"
                     onClick={e => { e.stopPropagation(); void navigator.clipboard.writeText(group.joinCode); notify(t('Code copied!')); }}
@@ -397,7 +406,7 @@ export default function GroupsPage() {
               {expanded === group.id && (
                 <div style={{ borderTop: '1px solid var(--border)' }}>
                   {/* Tab bar */}
-                  <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', overflowX: compactLayout ? 'auto' : 'visible' }}>
                     {(['decks', 'notes'] as const).map(tab => (
                       <button
                         key={tab}
@@ -424,7 +433,7 @@ export default function GroupsPage() {
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           {group.decks.map(deck => (
-                            <div key={deck.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                            <div key={deck.id} style={{ display: 'flex', alignItems: compactLayout ? 'stretch' : 'center', flexDirection: compactLayout ? 'column' : 'row', gap: 12, padding: '10px 14px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontWeight: 600, fontSize: 14 }}>{deck.deckName}</div>
                                 <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
@@ -433,7 +442,7 @@ export default function GroupsPage() {
                                   {t('Shared by {name}', { name: deck.addedByName })}
                                 </div>
                               </div>
-                              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                              <div style={{ display: 'flex', gap: 6, flexShrink: 0, width: compactLayout ? '100%' : undefined, justifyContent: compactLayout ? 'stretch' : 'flex-end' }}>
                                 <button className="btn btn-primary btn-xs" onClick={() => void importDeck(deck)}>
                                   {t('Import')}
                                 </button>
@@ -467,9 +476,9 @@ export default function GroupsPage() {
                         </button>
                       </div>
                       {/* Post new note */}
-                      <div style={{ display: 'flex', gap: 8 }}>
+                      <div style={{ display: 'flex', gap: 8, flexDirection: compactLayout ? 'column' : 'row' }}>
                         <textarea
-                          style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13, resize: 'vertical', minHeight: 60 }}
+                          style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-2)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13, resize: 'vertical', minHeight: 60, width: '100%' }}
                           placeholder={t('Write a note for the group…')}
                           value={noteDraft[group.id] ?? ''}
                           maxLength={2000}
@@ -478,7 +487,7 @@ export default function GroupsPage() {
                         />
                         <button
                           className="btn btn-primary btn-sm"
-                          style={{ alignSelf: 'flex-end' }}
+                          style={{ alignSelf: compactLayout ? 'stretch' : 'flex-end' }}
                           disabled={!noteDraft[group.id]?.trim() || notePosting[group.id]}
                           onClick={() => void postNote(group)}
                         >

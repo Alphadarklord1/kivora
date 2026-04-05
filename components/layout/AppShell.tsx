@@ -494,6 +494,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="mobile-header-logo-mark">K</div>
           <span>Kivora</span>
         </div>
+        <div className="mobile-header-actions">
+          <button
+            className="mobile-header-action"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Open search"
+            title="Search (⌘K)"
+          >
+            🔍
+          </button>
+          <Link
+            href="/settings"
+            className="mobile-header-action"
+            aria-label={t('Settings')}
+            title={t('Settings')}
+          >
+            ⚙️
+          </Link>
+        </div>
       </div>
 
       {/* Mobile drawer overlay — shown only on ≤768px when mobileOpen */}
