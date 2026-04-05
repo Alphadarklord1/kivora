@@ -155,7 +155,26 @@ const LOCAL_AR: Record<string, string> = {
   'Start a study plan first': '\u0627\u0628\u062f\u0623 \u0628\u062e\u0637\u0629 \u062f\u0631\u0627\u0633\u0629 \u0623\u0648\u0644\u064b\u0627',
   'Open Planner when the best next move is building structure before content.': '\u0627\u0641\u062a\u062d \u0627\u0644\u0645\u062e\u0637\u0637 \u0639\u0646\u062f\u0645\u0627 \u064a\u0643\u0648\u0646 \u0623\u0641\u0636\u0644 \u062e\u0637\u0648\u0629 \u062a\u0627\u0644\u064a\u0629 \u0647\u064a \u0628\u0646\u0627\u0621 \u0627\u0644\u0647\u064a\u0643\u0644 \u0642\u0628\u0644 \u0627\u0644\u0645\u062d\u062a\u0648\u0649.',
   'Open path': '\u0627\u0641\u062a\u062d \u0627\u0644\u0645\u0633\u0627\u0631',
+  'Could not load library right now. Check your connection and try again.': 'تعذر تحميل المكتبة الآن. تحقّق من الاتصال وحاول مرة أخرى.',
+  'Network connection issue — try again in a moment.': 'هناك مشكلة في الاتصال بالشبكة — حاول مرة أخرى بعد قليل.',
+  'Database unavailable right now. Please try again shortly.': 'قاعدة البيانات غير متاحة الآن. حاول مرة أخرى بعد قليل.',
+  'Could not delete this item right now.': 'تعذر حذف هذا العنصر الآن.',
+  'Could not copy this content automatically.': 'تعذر نسخ هذا المحتوى تلقائيًا.',
+  'Loading the full item first…': 'جارٍ تحميل العنصر الكامل أولًا…',
+  'Could not load the full item right now.': 'تعذر تحميل العنصر الكامل الآن.',
+  'Could not export this item to Word right now.': 'تعذر تصدير هذا العنصر إلى Word الآن.',
+  'Could not delete some selected items.': 'تعذر حذف بعض العناصر المحددة.',
+  'Could not rename this item right now.': 'تعذر إعادة تسمية هذا العنصر الآن.',
+  'Expand an item first if you want it included in Export all.': 'وسّع عنصرًا أولًا إذا كنت تريد تضمينه في تصدير الكل.',
 };
+
+function normalizeLibraryError(message: string | undefined, t: (key: string) => string) {
+  const lower = message?.toLowerCase() ?? '';
+  if (lower.includes('network')) return t('Network connection issue — try again in a moment.');
+  if (lower.includes('database')) return t('Database unavailable right now. Please try again shortly.');
+  if (lower.includes('load library')) return t('Could not load library right now. Check your connection and try again.');
+  return message ?? t('Could not load library right now. Check your connection and try again.');
+}
 
 export default function LibraryPage() {
   useEffect(() => { document.title = 'Library — Kivora'; }, []);
@@ -181,13 +200,13 @@ export default function LibraryPage() {
       const res = await fetch('/api/library?summary=1');
       if (!res.ok) throw new Error('Failed to load library');
       setItems(await res.json());
-    } catch {
-      setLoadError('Could not load library. Check your connection and try again.');
+    } catch (error) {
+      setLoadError(normalizeLibraryError(error instanceof Error ? error.message : undefined, t));
       setItems([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const ensureFullItem = useCallback(async (item: LibItem) => {
     if (typeof item.content === 'string') return item;
@@ -215,21 +234,21 @@ export default function LibraryPage() {
       toast(t('Deleted'), 'info');
     } catch {
       setItems(prev); // revert
-      toast('Failed to delete. Please try again.', 'error');
+      toast(t('Could not delete this item right now.'), 'error');
     }
   }
 
   function copyItem(content: string) {
     navigator.clipboard.writeText(content)
       .then(() => toast(t('Copied!'), 'success'))
-      .catch(() => toast('Copy failed — try selecting the text manually.', 'error'));
+      .catch(() => toast(t('Could not copy this content automatically.'), 'error'));
   }
 
   async function exportItem(item: LibItem) {
     if (typeof item.content !== 'string') {
-      toast('Loading the full item first…', 'info');
+      toast(t('Loading the full item first…'), 'info');
       void ensureFullItem(item).then(exportItem).catch(() => {
-        toast('Could not load the full item for export.', 'error');
+        toast(t('Could not load the full item right now.'), 'error');
       });
       return;
     }
@@ -244,7 +263,7 @@ export default function LibraryPage() {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast('Word document saved to downloads.', 'success');
     } catch {
-      toast('Could not export to Word.', 'error');
+      toast(t('Could not export this item to Word right now.'), 'error');
     }
   }
 
@@ -268,7 +287,7 @@ export default function LibraryPage() {
       toast(`Deleted ${ids.length} item${ids.length === 1 ? '' : 's'}`, 'info');
     } catch {
       setItems(prev);
-      toast('Some items could not be deleted.', 'error');
+      toast(t('Could not delete some selected items.'), 'error');
     }
   }
 
@@ -289,7 +308,7 @@ export default function LibraryPage() {
       });
       if (!res.ok) throw new Error();
     } catch {
-      toast('Could not rename item.', 'error');
+      toast(t('Could not rename this item right now.'), 'error');
       void load();
     }
   }
@@ -374,7 +393,7 @@ export default function LibraryPage() {
                   onClick={() => {
                     const readyItems = filtered.filter((item) => typeof item.content === 'string');
                     if (readyItems.length !== filtered.length) {
-                      toast('Expand an item first if you want it included in Export all.', 'info');
+                      toast(t('Expand an item first if you want it included in Export all.'), 'info');
                     }
                     printMultiple(readyItems.map(item => ({
                       title: item.metadata?.title || item.metadata?.problem || (MODE_META[item.mode]?.label ?? item.mode),
@@ -552,11 +571,11 @@ export default function LibraryPage() {
                         printContent(title, item.content);
                         return;
                       }
-                      toast('Loading the full item first…', 'info');
+                      toast(t('Loading the full item first…'), 'info');
                       void ensureFullItem(item).then((fullItem) => {
                         printContent(title, fullItem.content ?? '');
                       }).catch(() => {
-                        toast('Could not load the full item for printing.', 'error');
+                        toast(t('Could not load the full item right now.'), 'error');
                       });
                     }}
                   >{'\uD83D\uDDA8\uFE0F'}</button>
@@ -600,7 +619,7 @@ export default function LibraryPage() {
                       setExpanded(prev => prev === item.id ? null : item.id);
                       if (!isExp && typeof item.content !== 'string') {
                         void ensureFullItem(item).catch(() => {
-                          toast('Could not load the full item.', 'error');
+                          toast(t('Could not load the full item right now.'), 'error');
                         });
                       }
                     }}>
@@ -611,11 +630,11 @@ export default function LibraryPage() {
                       copyItem(item.content);
                       return;
                     }
-                    toast('Loading the full item first…', 'info');
+                    toast(t('Loading the full item first…'), 'info');
                     void ensureFullItem(item).then((fullItem) => {
                       copyItem(fullItem.content ?? '');
                     }).catch(() => {
-                      toast('Could not load the full item for copying.', 'error');
+                      toast(t('Could not load the full item right now.'), 'error');
                     });
                   }}>
                     {'\uD83D\uDCCB'} {t('Copy')}

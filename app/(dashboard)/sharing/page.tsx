@@ -78,7 +78,17 @@ const LOCAL_AR: Record<string, string> = {
   'Failed to create share': '\u062a\u0639\u0630\u0631 \u0625\u0646\u0634\u0627\u0621 \u0627\u0644\u0645\u0634\u0627\u0631\u0643\u0629',
   'Copy link': '\u0646\u0633\u062e \u0627\u0644\u0631\u0627\u0628\u0637',
   'Reset': '\u0625\u0639\u0627\u062f\u0629 \u062a\u0639\u064a\u064a\u0646',
+  'Network connection issue — try again in a moment.': '\u0647\u0646\u0627\u0643 \u0645\u0634\u0643\u0644\u0629 \u0641\u064a \u0627\u0644\u0627\u062a\u0635\u0627\u0644 \u0628\u0627\u0644\u0634\u0628\u0643\u0629 \u2014 \u062d\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649 \u0628\u0639\u062f \u0642\u0644\u064a\u0644.',
+  'Database unavailable right now. Please try again shortly.': '\u0642\u0627\u0639\u062f\u0629 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a \u063a\u064a\u0631 \u0645\u062a\u0627\u062d\u0629 \u0627\u0644\u0622\u0646. \u062d\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649 \u0642\u0631\u064a\u0628\u064b\u0627.',
+  'Could not copy this link automatically.': '\u062a\u0639\u0630\u0631 \u0646\u0633\u062e \u0647\u0630\u0627 \u0627\u0644\u0631\u0627\u0628\u0637 \u062a\u0644\u0642\u0627\u0626\u064a\u064b\u0627.',
 };
+
+function normalizeSharePageError(message: string | undefined, t: (key: string) => string, fallback: string) {
+  const lower = message?.toLowerCase() ?? '';
+  if (lower.includes('network')) return t('Network connection issue — try again in a moment.');
+  if (lower.includes('database')) return t('Database unavailable right now. Please try again shortly.');
+  return message || fallback;
+}
 
 const SHARE_FILTERS: ShareFilter[] = ['all', 'file', 'folder', 'topic', 'library'];
 
@@ -136,10 +146,10 @@ export default function SharedWithMePage() {
       } else {
         const payload = (await res.json()) as ApiErrorLike;
         setShares([]);
-        setErrorMsg(payload.reason || payload.error || t('Failed to load shares'));
+        setErrorMsg(normalizeSharePageError(payload.reason || payload.error, t, t('Failed to load shares')));
       }
     } catch {
-      setErrorMsg(t('Failed to load shares'));
+      setErrorMsg(t('Network connection issue — try again in a moment.'));
     } finally {
       setLoading(false);
     }
@@ -178,10 +188,10 @@ export default function SharedWithMePage() {
         setTimeout(() => setCopyMsg(''), 2500);
       } else {
         const payload = (await res.json()) as ApiErrorLike;
-        setErrorMsg(payload.reason || payload.error || t('Failed to revoke share'));
+        setErrorMsg(normalizeSharePageError(payload.reason || payload.error, t, t('Failed to revoke share')));
       }
     } catch {
-      setErrorMsg(t('Failed to revoke share'));
+      setErrorMsg(t('Network connection issue — try again in a moment.'));
     }
   }
 
@@ -192,7 +202,7 @@ export default function SharedWithMePage() {
         setTimeout(() => setCopyMsg(''), 2000);
       })
       .catch(() => {
-        setErrorMsg('Failed to copy — try selecting and copying the link manually.');
+        setErrorMsg(t('Could not copy this link automatically.'));
         setTimeout(() => setErrorMsg(''), 3000);
       });
   }
@@ -212,14 +222,14 @@ export default function SharedWithMePage() {
         body: JSON.stringify({ libraryItemId: qsItemId, shareType: 'link', permission: qsPermission }),
       });
       const data = (await res.json()) as ApiErrorLike;
-      if (!res.ok) throw new Error(data.reason || data.error || t('Failed to create share'));
+      if (!res.ok) throw new Error(normalizeSharePageError(data.reason || data.error, t, t('Failed to create share')));
       if (data.shareUrl) {
         setQsShareUrl(data.shareUrl);
         setQsSubmitting('done');
         void fetchShares();
       }
     } catch (err) {
-      setErrorMsg((err as Error).message);
+      setErrorMsg(normalizeSharePageError((err as Error).message, t, t('Failed to create share')));
       setQsSubmitting('');
     }
   }

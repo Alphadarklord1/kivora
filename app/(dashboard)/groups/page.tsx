@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/lib/i18n/useI18n';
 import { parseFlashcards } from '@/lib/srs/parse';
 import { buildImportedDeck, persistDeckLocally } from '@/lib/srs/deck-utils';
@@ -39,7 +39,12 @@ interface Group {
 }
 
 export default function GroupsPage() {
-  const { t } = useI18n();
+  const { t } = useI18n({
+    'Network connection issue — try again in a moment.': 'هناك مشكلة في الاتصال بالشبكة — حاول مرة أخرى بعد قليل.',
+    'Database unavailable right now. Please try again shortly.': 'قاعدة البيانات غير متاحة الآن. حاول مرة أخرى بعد قليل.',
+    'Could not update this group right now.': 'تعذر تحديث هذه المجموعة الآن.',
+    'Could not refresh group notes right now.': 'تعذر تحديث ملاحظات المجموعة الآن.',
+  });
   const { toast: notify_ } = useToast();
   const [compactLayout, setCompactLayout] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -68,8 +73,15 @@ export default function GroupsPage() {
   const [lastNotesRefresh, setLastNotesRefresh] = useState<Record<string, string>>({});
   const [inviteCode, setInviteCode] = useState('');
 
-  function notify(msg: string, kind: 'ok' | 'err' = 'ok') {
+  const notify = useCallback((msg: string, kind: 'ok' | 'err' = 'ok') => {
     notify_(msg, kind === 'ok' ? 'success' : 'error');
+  }, [notify_]);
+
+  function normalizeGroupError(message?: string) {
+    const lower = message?.toLowerCase() ?? '';
+    if (lower.includes('network')) return t('Network connection issue — try again in a moment.');
+    if (lower.includes('database')) return t('Database unavailable right now. Please try again shortly.');
+    return message ?? t('Could not update this group right now.');
   }
 
   async function loadGroups() {
@@ -126,7 +138,9 @@ export default function GroupsPage() {
         notify(t('Group created!'));
         setCreateName(''); setCreateDesc(''); setShowCreate(false);
         await loadGroups();
-      } else { notify(data.error ?? t('Failed to create group.'), 'err'); }
+      } else { notify(normalizeGroupError(data.error ?? t('Failed to create group.')), 'err'); }
+    } catch {
+      notify(t('Network connection issue — try again in a moment.'), 'err');
     } finally { setCreating(false); }
   }
 
@@ -145,7 +159,9 @@ export default function GroupsPage() {
         notify(data.alreadyMember ? t('You\'re already in that group.') : t('Joined group!'));
         setJoinCode(''); setShowJoin(false);
         await loadGroups();
-      } else { notify(data.error ?? t('Could not join group.'), 'err'); }
+      } else { notify(normalizeGroupError(data.error ?? t('Could not join group.')), 'err'); }
+    } catch {
+      notify(t('Network connection issue — try again in a moment.'), 'err');
     } finally { setJoining(false); }
   }
 
@@ -155,11 +171,15 @@ export default function GroupsPage() {
     const res = await fetch(`/api/groups/${group.joinCode}`, {
       method: 'DELETE', credentials: 'include',
     });
-    const data = await res.json() as { ok?: boolean; error?: string };
-    if (data.ok) {
-      notify(group.isOwner ? t('Group deleted.') : t('Left group.'));
-      await loadGroups();
-    } else { notify(data.error ?? t('Failed.'), 'err'); }
+    try {
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (data.ok) {
+        notify(group.isOwner ? t('Group deleted.') : t('Left group.'));
+        await loadGroups();
+      } else { notify(normalizeGroupError(data.error), 'err'); }
+    } catch {
+      notify(t('Network connection issue — try again in a moment.'), 'err');
+    }
   }
 
   async function removeDeck(group: Group, deck: GroupDeck) {
@@ -167,12 +187,16 @@ export default function GroupsPage() {
     const res = await fetch(`/api/groups/${group.joinCode}/decks?deckId=${deck.id}`, {
       method: 'DELETE', credentials: 'include',
     });
-    const data = await res.json() as { ok?: boolean; error?: string };
-    if (data.ok) { notify(t('Deck removed.')); await loadGroups(); }
-    else { notify(data.error ?? t('Failed.'), 'err'); }
+    try {
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (data.ok) { notify(t('Deck removed.')); await loadGroups(); }
+      else { notify(normalizeGroupError(data.error), 'err'); }
+    } catch {
+      notify(t('Network connection issue — try again in a moment.'), 'err');
+    }
   }
 
-  async function loadNotes(group: Group) {
+  const loadNotes = useCallback(async (group: Group) => {
     setNotesLoading(p => ({ ...p, [group.id]: true }));
     try {
       const res = await fetch(`/api/groups/${group.joinCode}/notes`, { credentials: 'include' });
@@ -180,9 +204,13 @@ export default function GroupsPage() {
         const notes = await res.json() as GroupNote[];
         setGroupNotes(p => ({ ...p, [group.id]: notes }));
         setLastNotesRefresh((prev) => ({ ...prev, [group.id]: new Date().toISOString() }));
+      } else {
+        notify(t('Could not refresh group notes right now.'), 'err');
       }
+    } catch {
+      notify(t('Network connection issue — try again in a moment.'), 'err');
     } finally { setNotesLoading(p => ({ ...p, [group.id]: false })); }
-  }
+  }, [notify, t]);
 
   function switchTab(groupId: string, tab: 'decks' | 'notes', group: Group) {
     setGroupTab(p => ({ ...p, [groupId]: tab }));
@@ -199,7 +227,7 @@ export default function GroupsPage() {
     }, 15000);
 
     return () => window.clearInterval(timer);
-  }, [expanded, groupTab, groups]);
+  }, [expanded, groupTab, groups, loadNotes]);
 
   async function postNote(group: Group) {
     const content = noteDraft[group.id]?.trim();
@@ -215,17 +243,23 @@ export default function GroupsPage() {
       if (data.ok) {
         setNoteDraft(p => ({ ...p, [group.id]: '' }));
         await loadNotes(group);
-      } else { notify(data.error ?? t('Failed.'), 'err'); }
+      } else { notify(normalizeGroupError(data.error), 'err'); }
+    } catch {
+      notify(t('Network connection issue — try again in a moment.'), 'err');
     } finally { setNotePosting(p => ({ ...p, [group.id]: false })); }
   }
 
   async function deleteNote(group: Group, noteId: string) {
-    const res = await fetch(`/api/groups/${group.joinCode}/notes?noteId=${noteId}`, {
-      method: 'DELETE', credentials: 'include',
-    });
-    const data = await res.json() as { ok?: boolean; error?: string };
-    if (data.ok) await loadNotes(group);
-    else notify(data.error ?? t('Failed.'), 'err');
+    try {
+      const res = await fetch(`/api/groups/${group.joinCode}/notes?noteId=${noteId}`, {
+        method: 'DELETE', credentials: 'include',
+      });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (data.ok) await loadNotes(group);
+      else notify(normalizeGroupError(data.error), 'err');
+    } catch {
+      notify(t('Network connection issue — try again in a moment.'), 'err');
+    }
   }
 
   async function importDeck(deck: GroupDeck) {
