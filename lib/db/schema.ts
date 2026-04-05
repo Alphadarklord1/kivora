@@ -209,6 +209,37 @@ export const studyGroupDecks = pgTable('study_group_decks', {
   addedByIdx: index('study_group_decks_added_by_idx').on(table.addedBy),
 }));
 
+// ============ STUDY GROUP NOTES ============
+
+export const studyGroupNotes = pgTable('study_group_notes', {
+  id:       uuid('id').defaultRandom().primaryKey(),
+  groupId:  uuid('group_id').notNull().references(() => studyGroups.id, { onDelete: 'cascade' }),
+  userId:   uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  content:  text('content').notNull(),
+  postedAt: timestamp('posted_at').defaultNow().notNull(),
+}, (table) => ({
+  groupIdx: index('study_group_notes_group_idx').on(table.groupId),
+}));
+
+// ============ SAVED SOURCES (Reference Library) ============
+
+export const savedSources = pgTable('saved_sources', {
+  id:         uuid('id').defaultRandom().primaryKey(),
+  userId:     uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title:      text('title').notNull(),
+  url:        text('url').notNull(),
+  authors:    text('authors'),          // comma-separated author names
+  journal:    text('journal'),          // journal / venue / publisher
+  year:       integer('year'),
+  doi:        text('doi'),
+  abstract:   text('abstract'),
+  sourceType: text('source_type'),      // 'pubmed' | 'arxiv' | 'web' | 'doi' | 'manual'
+  notes:      text('notes'),
+  savedAt:    timestamp('saved_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index('saved_sources_user_idx').on(table.userId),
+}));
+
 // ============ QUIZ ATTEMPTS ============
 
 export const quizAttempts = pgTable('quiz_attempts', {
@@ -238,12 +269,14 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   shares: many(shares),
   ownedGroups: many(studyGroups),
   groupMemberships: many(studyGroupMembers),
+  savedSources: many(savedSources),
 }));
 
 export const studyGroupsRelations = relations(studyGroups, ({ one, many }) => ({
   owner: one(users, { fields: [studyGroups.ownerId], references: [users.id] }),
   members: many(studyGroupMembers),
   decks: many(studyGroupDecks),
+  notes: many(studyGroupNotes),
 }));
 
 export const studyGroupMembersRelations = relations(studyGroupMembers, ({ one }) => ({
@@ -254,6 +287,15 @@ export const studyGroupMembersRelations = relations(studyGroupMembers, ({ one })
 export const studyGroupDecksRelations = relations(studyGroupDecks, ({ one }) => ({
   group: one(studyGroups, { fields: [studyGroupDecks.groupId], references: [studyGroups.id] }),
   addedByUser: one(users, { fields: [studyGroupDecks.addedBy], references: [users.id] }),
+}));
+
+export const studyGroupNotesRelations = relations(studyGroupNotes, ({ one }) => ({
+  group: one(studyGroups, { fields: [studyGroupNotes.groupId], references: [studyGroups.id] }),
+  author: one(users, { fields: [studyGroupNotes.userId], references: [users.id] }),
+}));
+
+export const savedSourcesRelations = relations(savedSources, ({ one }) => ({
+  user: one(users, { fields: [savedSources.userId], references: [users.id] }),
 }));
 
 export const foldersRelations = relations(folders, ({ one, many }) => ({
