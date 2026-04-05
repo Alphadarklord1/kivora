@@ -491,12 +491,15 @@ export function KnowledgeMap() {
           <h3>Knowledge Map</h3>
           <p>
             {aiEnhanced
-              ? 'Semantic concept map built from your library.'
-              : 'Key concepts from your saved library, connected by co-occurrence.'}
+              ? 'Concept clusters inferred from your saved library.'
+              : 'Key concepts from your saved library, grouped by repeated co-occurrence.'}
+          </p>
+          <p style={{ marginTop: 6, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            This is a high-level study map, not a full semantic graph.
           </p>
         </div>
         {aiEnhanced && (
-          <span className="ai-badge" aria-label="AI enhanced map">AI-enhanced</span>
+          <span className="ai-badge" aria-label="AI assisted map">AI-assisted</span>
         )}
       </div>
 
@@ -621,6 +624,10 @@ export function KnowledgeMap() {
                 );
               })()}
             </svg>
+
+            <div style={{ marginTop: 10, fontSize: '0.78rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+              Stronger lines mean concepts appeared together more often across your saved material.
+            </div>
 
             {/* Legend */}
             <div className="legend">

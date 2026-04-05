@@ -6,6 +6,7 @@ export function ExamView({ content, onDone }: { content: string; onDone?: (score
     .split(/\n(?=\*?\*?Q\d+[\.\)])/i)
     .map(b => b.trim())
     .filter(b => /Q\d+/i.test(b) && b.length > 10);
+  const hasParsableQuestions = blocks.length > 0;
 
   const [phase,    setPhase]    = useState<'setup' | 'exam' | 'results'>('setup');
   const [minutes,  setMinutes]  = useState(Math.max(5, Math.ceil(blocks.length * 1.5)));
@@ -51,12 +52,31 @@ export function ExamView({ content, onDone }: { content: string; onDone?: (score
   const pct = blocks.length > 0 ? Math.round((Object.keys(answers).length / blocks.length) * 100) : 0;
 
   if (phase === 'setup') {
+    if (!hasParsableQuestions) {
+      return (
+        <div style={{ maxWidth: 520, margin: '0 auto', padding: 24, textAlign: 'center' }}>
+          <div style={{ fontSize: 46, marginBottom: 12 }}>📝</div>
+          <h3 style={{ margin: '0 0 8px' }}>Practice Quiz</h3>
+          <p style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', lineHeight: 1.6, marginBottom: 18 }}>
+            This study set does not include clearly formatted multiple-choice questions yet.
+          </p>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px', textAlign: 'left', fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Best format for this tool</div>
+            <div>Use blocks like:</div>
+            <div style={{ fontFamily: 'var(--font-mono, monospace)', marginTop: 8, whiteSpace: 'pre-wrap' }}>
+              {`Q1) What is ATP?\nA) ...\nB) ...\nC) ...\nD) ...\nAnswer: B`}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div style={{ maxWidth: 440, margin: '0 auto', padding: 24, textAlign: 'center' }}>
         <div style={{ fontSize: 48, marginBottom: 12 }}>🏆</div>
-        <h3 style={{ margin: '0 0 6px' }}>Exam Simulator</h3>
+        <h3 style={{ margin: '0 0 6px' }}>Practice Quiz</h3>
         <p style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)', marginBottom: 24 }}>
-          {blocks.length} questions · timed exam with scoring
+          {blocks.length} questions · timed practice with scoring
         </p>
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', marginBottom: 20, fontSize: 'var(--text-sm)' }}>
           Time limit:
@@ -65,7 +85,7 @@ export function ExamView({ content, onDone }: { content: string; onDone?: (score
             style={{ width: 64, textAlign: 'center' }} /> minutes
         </label>
         <button className="btn btn-primary" style={{ padding: '10px 32px', fontSize: 'var(--text-base)' }}
-          onClick={startExam}>Start Exam →</button>
+          onClick={startExam}>Start Quiz →</button>
       </div>
     );
   }
@@ -93,7 +113,7 @@ export function ExamView({ content, onDone }: { content: string; onDone?: (score
           </div>
         )}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20 }}>
-          <button className="btn btn-primary" onClick={startExam}>Retake Exam</button>
+          <button className="btn btn-primary" onClick={startExam}>Retake Quiz</button>
           <button className="btn btn-ghost" onClick={() => setPhase('setup')}>Change settings</button>
         </div>
       </div>
@@ -117,15 +137,15 @@ export function ExamView({ content, onDone }: { content: string; onDone?: (score
         {blocks.map((block, qi) => {
           const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
           const stem  = lines[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '');
-          const opts  = lines.filter(l => /^[A-D]\)/.test(l));
+          const opts  = lines.filter(l => /^[A-D][\).]/.test(l));
           return (
             <div key={qi} className="quiz-card">
               <div className="quiz-q-num">Q{qi + 1}</div>
               <div className="quiz-q-text">{stem}</div>
               <div className="quiz-options">
                 {opts.map((opt, oi) => {
-                  const letter = opt.match(/^([A-D])\)/)?.[1] ?? '';
-                  const text   = opt.replace(/^[A-D]\)\s*/, '');
+                  const letter = opt.match(/^([A-D])[\).]/)?.[1] ?? '';
+                  const text   = opt.replace(/^[A-D][\).]\s*/, '');
                   const isSel  = answers[qi] === letter;
                   return (
                     <div key={oi} className={`quiz-option${isSel ? ' selected' : ''}`}

@@ -22,6 +22,13 @@ interface ApiErrorLike {
   reason?: string;
 }
 
+function normalizeShareError(message: string | undefined, t: (key: string) => string) {
+  const lower = message?.toLowerCase() ?? '';
+  if (lower.includes('network')) return t('Network connection issue — try again in a moment.');
+  if (lower.includes('database')) return t('Database unavailable right now. Please try again shortly.');
+  return message || t('Failed to create share');
+}
+
 export function ShareDialog({
   isOpen,
   onClose,
@@ -75,7 +82,7 @@ export function ShareDialog({
 
       if (!res.ok) {
         const data = (await res.json()) as ApiErrorLike;
-        throw new Error(data.reason || data.error || t('Failed to create share'));
+        throw new Error(normalizeShareError(data.reason || data.error, t));
       }
 
       const data = await res.json();
@@ -88,7 +95,7 @@ export function ShareDialog({
         onClose();
       }
     } catch (error) {
-      toast.error(t('Failed to share'), (error as Error).message);
+      toast.error(t('Failed to share'), normalizeShareError((error as Error).message, t));
     } finally {
       setLoading(false);
     }

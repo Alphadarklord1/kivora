@@ -68,10 +68,14 @@ const LOCAL_AR: Record<string, string> = {
   'Could not save to library': 'تعذر الحفظ في المكتبة',
   'Research brief saved to Library': 'تم حفظ ملخص البحث في المكتبة',
   'Could not save to Library': 'تعذر الحفظ في المكتبة',
+  'Could not save source': 'تعذر حفظ المصدر',
   'Could not copy to clipboard': 'تعذر النسخ إلى الحافظة',
   'Could not save': 'تعذر الحفظ',
   'Q&A thread saved to Library': 'تم حفظ سلسلة الأسئلة والأجوبة في المكتبة',
   'Could not save thread': 'تعذر حفظ السلسلة',
+  'Could not remove source': 'تعذر إزالة المصدر',
+  'Network connection issue — try again in a moment.': 'هناك مشكلة في الاتصال بالشبكة — حاول مرة أخرى بعد قليل.',
+  'Identifier not found': 'لم يتم العثور على المعرّف',
   'Search any topic — photosynthesis, French Revolution, quadratic equations…': 'ابحث عن أي موضوع — البناء الضوئي أو الثورة الفرنسية أو المعادلات التربيعية…',
   'Offline': 'غير متصل',
   'Searching…': 'جارٍ البحث…',
@@ -288,9 +292,9 @@ export function ResearchTab({
         await loadSavedSources();
       } else {
         const d = await res.json() as { error?: string };
-        toast(d.error ?? 'Failed to save source', 'error');
+        toast(d.error ?? t('Could not save source'), 'error');
       }
-    } catch { toast('Network error', 'error'); }
+    } catch { toast(t('Network connection issue — try again in a moment.'), 'error'); }
     finally { setSavingSourceUrl(null); }
   }
 
@@ -298,7 +302,8 @@ export function ResearchTab({
     try {
       const res = await fetch(`/api/sources?id=${id}`, { method: 'DELETE', credentials: 'include' });
       if (res.ok) { toast(t('Source removed'), 'success'); await loadSavedSources(); }
-    } catch { toast('Failed to remove', 'error'); }
+      else { toast(t('Could not remove source'), 'error'); }
+    } catch { toast(t('Network connection issue — try again in a moment.'), 'error'); }
   }
 
   async function copyBibTeX(s: SavedSourceRow) {
@@ -324,7 +329,7 @@ export function ResearchTab({
         body: JSON.stringify({ identifier: doiInput.trim() }),
       });
       const data = await res.json() as ResolvedPaper & { error?: string };
-      if (!res.ok) { setDoiStatus('error'); setDoiMsg(data.error ?? 'Not found'); return; }
+      if (!res.ok) { setDoiStatus('error'); setDoiMsg(data.error ?? t('Identifier not found')); return; }
       setDoiStatus('done'); setDoiMsg(data.title);
       // Append to manual URLs so user can include in next research
       setManualUrls(prev => (prev.trim() ? `${prev.trim()}\n${data.url}` : data.url));
@@ -337,7 +342,7 @@ export function ResearchTab({
       });
       setDoiInput('');
       setTimeout(() => { setDoiStatus('idle'); setDoiMsg(''); }, 3000);
-    } catch { setDoiStatus('error'); setDoiMsg('Network error'); }
+    } catch { setDoiStatus('error'); setDoiMsg(t('Network connection issue — try again in a moment.')); }
   }
 
   // When a pre-load topic arrives (e.g., from Recovery tab)
