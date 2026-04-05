@@ -19,6 +19,7 @@ import { useNotificationScheduler } from '@/hooks/useNotificationScheduler';
 import { useRateLimitToast } from '@/hooks/useRateLimitToast';
 import { installGlobalErrorHandlers } from '@/lib/errors/global-handler';
 import { loadLocalStudyPlans } from '@/lib/planner/local-plans';
+import type { StudyPlan } from '@/lib/planner/study-plan-types';
 
 const CORE_NAV_ITEMS = [
   { href: '/workspace', key: 'Workspace',  icon: '📚' },
@@ -30,6 +31,8 @@ const SUPPORT_NAV_ITEMS = [
   { href: '/library',   key: 'Library',   icon: '🗂️' },
   { href: '/planner',   key: 'Planner',   icon: '📅' },
   { href: '/analytics', key: 'Analytics', icon: '📊' },
+  { href: '/graphing',  key: 'Grapher',   icon: '📈' },
+  { href: '/podcast',   key: 'Study Audio', icon: '🎧' },
   { href: '/groups',    key: 'Groups',    icon: '👥' },
   { href: '/sharing',   key: 'Sharing',   icon: '🔗' },
 ];
@@ -40,6 +43,8 @@ const BOTTOM_NAV_ITEMS = [
   { href: '/coach',     key: 'Scholar Hub', icon: '🎓' },
   { href: '/planner',   key: 'Planner',    icon: '📅' },
 ];
+
+type SearchPlanRow = Pick<StudyPlan, 'id' | 'title' | 'topics' | 'status' | 'examDate'>;
 
 // ── Tiny inline avatar ────────────────────────────────────────────────────
 function SidebarAvatar({ src, name, email }: { src?: string | null; name?: string | null; email?: string | null }) {
@@ -88,6 +93,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const searchContentLoaded = useRef(false);
   const { toastJsx } = useAchievementToast();
   const { toastJsx: rateLimitToastJsx } = useRateLimitToast();
+  const hasSessionUser = Boolean(session?.user);
 
   useEffect(() => {
     installGlobalErrorHandlers();
@@ -128,6 +134,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (hasSessionUser) {
+      searchContentLoaded.current = false;
+    }
+  }, [hasSessionUser]);
+
   // Cmd+K / Ctrl+K opens the quick search palette
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -155,7 +167,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Lazy-load content (library, saved sources, decks) the first time search opens
   useEffect(() => {
     if (!searchOpen || searchContentLoaded.current) return;
-    searchContentLoaded.current = true;
 
     const items: QuickSearchItem[] = [];
 
@@ -176,11 +187,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     } catch { /* localStorage unavailable */ }
 
     // Cloud library + saved sources in parallel
-    Promise.all([
-      fetch('/api/library?summary=1', { credentials: 'include' }).then(r => r.ok ? r.json() : []).catch(() => []) as Promise<{ id: string; mode: string; metadata?: { title?: string; category?: string } }[]>,
-      fetch('/api/sources', { credentials: 'include' }).then(r => r.ok ? r.json() : []).catch(() => []) as Promise<{ id: string; title: string; url: string; journal?: string | null; year?: number | null }[]>,
-      fetch('/api/study-plans', { credentials: 'include' }).then(r => r.ok ? r.json() : []).catch(() => []) as Promise<{ id: string; title: string; topics?: { name: string }[]; status?: string; examDate?: string }[]>,
-    ]).then(([libraryRows, sourceRows, remotePlans]) => {
+    Promise.allSettled([
+      fetch('/api/library?summary=1', { credentials: 'include' }).then(async (r) => ({ ok: r.ok, data: r.ok ? await r.json() : [] as { id: string; mode: string; metadata?: { title?: string; category?: string } }[] })),
+      fetch('/api/sources', { credentials: 'include' }).then(async (r) => ({ ok: r.ok, data: r.ok ? await r.json() : [] as { id: string; title: string; url: string; journal?: string | null; year?: number | null }[] })),
+      fetch('/api/study-plans', { credentials: 'include' }).then(async (r) => ({ ok: r.ok, data: r.ok ? await r.json() : [] as SearchPlanRow[] })),
+    ]).then(([libraryResult, sourcesResult, plansResult]) => {
+      const libraryRows = libraryResult.status === 'fulfilled' ? libraryResult.value.data : [];
+      const sourceRows = sourcesResult.status === 'fulfilled' ? sourcesResult.value.data : [];
+      const remotePlans = plansResult.status === 'fulfilled' ? plansResult.value.data as SearchPlanRow[] : [];
+      const remoteFetchesSucceeded = [libraryResult, sourcesResult, plansResult].some(
+        (result) => result.status === 'fulfilled' && result.value.ok,
+      );
+
       const modeIcon: Record<string, string> = {
         summary: '📝', quiz: '📝', mcq: '📝', notes: '📒',
         flashcards: '🃏', research: '🔍', report: '📄',
@@ -216,7 +234,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           return [];
         }
       })();
-      const allPlans = [...remotePlans, ...localPlans].filter((plan, index, arr) => arr.findIndex((candidate) => candidate.id === plan.id) === index);
+      const allPlans: SearchPlanRow[] = [...remotePlans, ...localPlans].filter((plan, index, arr) => arr.findIndex((candidate) => candidate.id === plan.id) === index);
       for (const plan of allPlans) {
         const topicNames = Array.isArray(plan.topics) ? plan.topics.map((topic) => topic.name).filter(Boolean) : [];
         items.push({
@@ -252,9 +270,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       } catch { /* localStorage unavailable */ }
 
       setSearchContent(items);
+      searchContentLoaded.current = !session?.user || remoteFetchesSucceeded;
+      setSearchLoading(false);
+    }).catch(() => {
       setSearchLoading(false);
     });
-  }, [searchOpen]);
+  }, [searchOpen, session?.user]);
 
   // Build search items from nav items + lazy-loaded content
   const searchItems: QuickSearchItem[] = [
@@ -468,7 +489,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         loading={searchLoading}
         onQueryChange={setSearchQuery}
         onClose={() => { setSearchOpen(false); setSearchQuery(''); }}
-        onSelect={(item) => { router.push(item.href); setSearchOpen(false); setSearchQuery(''); }}
+        onSelect={(item) => {
+          if (/^https?:\/\//i.test(item.href)) {
+            window.open(item.href, '_blank', 'noopener,noreferrer');
+          } else {
+            router.push(item.href);
+          }
+          setSearchOpen(false);
+          setSearchQuery('');
+        }}
       />
 
       {showModelWizard && (

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as math from 'mathjs';
 
-const { isCustomFuncDefinition, normalizeGraphExpression, buildSharedScope } =
+const { isCustomFuncDefinition, isSliderDefinition, normalizeGraphExpression, buildSharedScope } =
   await import('../lib/math/graph-utils.ts');
 
 // ── isCustomFuncDefinition ────────────────────────────────────────────────────
@@ -49,6 +49,12 @@ test('isCustomFuncDefinition rejects whitespace-only string', () => {
 
 test('isCustomFuncDefinition handles extra whitespace around =', () => {
   assert.equal(isCustomFuncDefinition('h(x)   =   x + 5'), true);
+});
+
+test('isSliderDefinition detects slider constants but not axis equations', () => {
+  assert.equal(isSliderDefinition('a = 2.5'), true);
+  assert.equal(isSliderDefinition('x = 3'), false);
+  assert.equal(isSliderDefinition('y = -4'), false);
 });
 
 // ── normalizeGraphExpression ──────────────────────────────────────────────────
@@ -99,6 +105,11 @@ test('normalizeGraphExpression maps parametric syntax to parametric type', () =>
 test('normalizeGraphExpression is case-insensitive for Y =', () => {
   const result = normalizeGraphExpression('Y = 2*x');
   assert.deepEqual(result, { type: 'function', value: '2*x' });
+});
+
+test('normalizeGraphExpression preserves domain restrictions only when present', () => {
+  const result = normalizeGraphExpression('y = sqrt(x) {x >= 0}');
+  assert.deepEqual(result, { type: 'function', value: 'sqrt(x)', domain: 'x >= 0' });
 });
 
 // ── buildSharedScope ──────────────────────────────────────────────────────────
