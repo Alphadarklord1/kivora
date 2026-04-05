@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useI18n } from '@/lib/i18n/useI18n';
 import { parseFlashcards } from '@/lib/srs/parse';
 import { buildImportedDeck, persistDeckLocally } from '@/lib/srs/deck-utils';
+import { useToast } from '@/providers/ToastProvider';
 
 interface GroupDeck {
   id: string;
@@ -39,6 +40,7 @@ interface Group {
 
 export default function GroupsPage() {
   const { t } = useI18n();
+  const { toast: notify_ } = useToast();
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -62,12 +64,11 @@ export default function GroupsPage() {
   const [notesLoading, setNotesLoading] = useState<Record<string, boolean>>({});
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
   const [notePosting, setNotePosting] = useState<Record<string, boolean>>({});
-
-  const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
+  const [lastNotesRefresh, setLastNotesRefresh] = useState<Record<string, string>>({});
+  const [inviteCode, setInviteCode] = useState('');
 
   function notify(msg: string, kind: 'ok' | 'err' = 'ok') {
-    setToast({ msg, kind });
-    setTimeout(() => setToast(null), 3200);
+    notify_(msg, kind === 'ok' ? 'success' : 'error');
   }
 
   async function loadGroups() {
@@ -87,6 +88,19 @@ export default function GroupsPage() {
   }
 
   useEffect(() => { void loadGroups(); }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = new URLSearchParams(window.location.search).get('join')?.trim().toUpperCase() ?? '';
+    setInviteCode(raw.length === 6 ? raw : '');
+  }, []);
+
+  useEffect(() => {
+    if (!inviteCode) return;
+    setShowJoin(true);
+    setShowCreate(false);
+    setJoinCode(inviteCode);
+  }, [inviteCode]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -153,7 +167,11 @@ export default function GroupsPage() {
     setNotesLoading(p => ({ ...p, [group.id]: true }));
     try {
       const res = await fetch(`/api/groups/${group.joinCode}/notes`, { credentials: 'include' });
-      if (res.ok) { const notes = await res.json() as GroupNote[]; setGroupNotes(p => ({ ...p, [group.id]: notes })); }
+      if (res.ok) {
+        const notes = await res.json() as GroupNote[];
+        setGroupNotes(p => ({ ...p, [group.id]: notes }));
+        setLastNotesRefresh((prev) => ({ ...prev, [group.id]: new Date().toISOString() }));
+      }
     } finally { setNotesLoading(p => ({ ...p, [group.id]: false })); }
   }
 
@@ -161,6 +179,18 @@ export default function GroupsPage() {
     setGroupTab(p => ({ ...p, [groupId]: tab }));
     if (tab === 'notes' && !groupNotes[groupId]) void loadNotes(group);
   }
+
+  useEffect(() => {
+    const activeGroup = groups.find((group) => group.id === expanded);
+    if (!activeGroup) return;
+    if ((groupTab[activeGroup.id] ?? 'decks') !== 'notes') return;
+
+    const timer = window.setInterval(() => {
+      void loadNotes(activeGroup);
+    }, 15000);
+
+    return () => window.clearInterval(timer);
+  }, [expanded, groupTab, groups]);
 
   async function postNote(group: Group) {
     const content = noteDraft[group.id]?.trim();
@@ -198,6 +228,16 @@ export default function GroupsPage() {
     notify(`"${deck.deckName}" — ${t('{count} cards', { count: deck.cardCount })} ${t('Import').toLowerCase()}`);
   }
 
+  async function copyInviteLink(group: Group) {
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      await navigator.clipboard.writeText(`${origin}/groups?join=${group.joinCode}`);
+      notify(t('Invite link copied!'));
+    } catch {
+      notify(t('Could not copy invite link.'), 'err');
+    }
+  }
+
   const fieldStyle: React.CSSProperties = {
     width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-2)',
     background: 'var(--surface)', color: 'var(--text)', fontSize: 14,
@@ -205,17 +245,7 @@ export default function GroupsPage() {
 
   return (
     <div style={{ maxWidth: 780, margin: '0 auto', padding: '32px 20px 80px' }}>
-      {/* Toast */}
-      {toast && (
-        <div style={{
-          position: 'fixed', top: 16, right: 16, zIndex: 9999,
-          background: toast.kind === 'ok' ? '#22c55e' : '#ef4444',
-          color: '#fff', padding: '10px 18px', borderRadius: 10, fontSize: 14, fontWeight: 600,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-        }}>
-          {toast.msg}
-        </div>
-      )}
+
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 28 }}>
@@ -346,6 +376,13 @@ export default function GroupsPage() {
                   </button>
                   <button
                     className="btn btn-ghost btn-xs"
+                    onClick={e => { e.stopPropagation(); void copyInviteLink(group); }}
+                    title={t('Copy invite link')}
+                  >
+                    {t('Invite link')}
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-xs"
                     style={{ color: 'var(--error, #ef4444)' }}
                     onClick={e => { e.stopPropagation(); void handleLeaveOrDelete(group); }}
                     title={group.isOwner ? t('Delete') : t('Leave')}
@@ -419,6 +456,16 @@ export default function GroupsPage() {
                   {/* Notes tab */}
                   {groupTab[group.id] === 'notes' && (
                     <div style={{ padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                          {lastNotesRefresh[group.id]
+                            ? `${t('Updated')} ${new Date(lastNotesRefresh[group.id]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+                            : t('Auto-refreshes every 15 seconds')}
+                        </span>
+                        <button className="btn btn-ghost btn-xs" onClick={() => void loadNotes(group)} disabled={notesLoading[group.id]}>
+                          {notesLoading[group.id] ? t('Refreshing…') : `↻ ${t('Refresh')}`}
+                        </button>
+                      </div>
                       {/* Post new note */}
                       <div style={{ display: 'flex', gap: 8 }}>
                         <textarea

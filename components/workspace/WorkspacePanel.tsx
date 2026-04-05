@@ -832,16 +832,22 @@ export function WorkspacePanel({
 
     try {
       let generated = '';
+      let source: 'offline' | 'local' | 'openai' = 'offline';
 
       if (aiDataMode === 'offline') {
         const { offlineGenerate } = await import('@/lib/offline/generate');
         generated = offlineGenerate('notes', src, { count: 8, noteStyle });
+        source = 'offline';
       } else if (ai.mode === 'local' && typeof window !== 'undefined' && window.electronAPI?.desktopAI) {
         const result = await window.electronAPI.desktopAI.generate({ mode: 'notes', text: textForAI });
-        if (result.ok) generated = result.content.displayText;
+        if (result.ok) {
+          generated = result.content.displayText;
+          source = 'local';
+        }
         else {
           const { offlineGenerate } = await import('@/lib/offline/generate');
           generated = offlineGenerate('notes', src, { count: 8, noteStyle });
+          source = 'offline';
         }
       } else {
         const res = await fetch('/api/generate', {
@@ -856,13 +862,18 @@ export function WorkspacePanel({
             privacyMode,
           }),
         });
-        const data = await res.json() as { content?: string; result?: string; error?: string };
+        const data = await res.json() as { content?: string; result?: string; error?: string; source?: 'offline' | 'local' | 'openai' };
         generated = data.content ?? data.result ?? '';
         if (!generated) throw new Error(data.error ?? 'Could not generate notes');
+        source = data.source ?? 'openai';
       }
 
+      setStreamSource(source);
       setNotesInject(generated);
       setMainTab('notes');
+      if (source === 'offline') {
+        toast('Notes were generated with offline fallback — the output may be simpler than cloud or local AI.', 'info');
+      }
       toast('Structured notes are ready in Notes', 'success');
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Could not generate notes', 'error');

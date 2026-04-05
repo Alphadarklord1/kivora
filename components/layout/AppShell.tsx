@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
@@ -9,7 +9,7 @@ import { useI18n } from '@/lib/i18n/useI18n';
 import { trackRouteView } from '@/lib/privacy/preferences';
 import { OnboardingModal } from './OnboardingModal';
 import { ModelSetupWizard } from './ModelSetupWizard';
-import { getStreak } from '@/lib/srs/sm2';
+import { getStreak, loadSessions, getGoalPreferences, loadDecks } from '@/lib/srs/sm2';
 import { LevelBadge } from '@/components/gamification/LevelBadge';
 import { getGamificationState } from '@/lib/gamification/index';
 import { useAchievementToast } from '@/components/gamification/AchievementToast';
@@ -18,6 +18,7 @@ import { useSyncSubscription } from '@/hooks/useSyncSubscription';
 import { useNotificationScheduler } from '@/hooks/useNotificationScheduler';
 import { useRateLimitToast } from '@/hooks/useRateLimitToast';
 import { installGlobalErrorHandlers } from '@/lib/errors/global-handler';
+import { loadLocalStudyPlans } from '@/lib/planner/local-plans';
 
 const CORE_NAV_ITEMS = [
   { href: '/workspace', key: 'Workspace',  icon: '📚' },
@@ -75,20 +76,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [streak, setStreak] = useState(0);
+  const [todayCards, setTodayCards] = useState(0);
+  const [dailyGoal, setDailyGoal] = useState(20);
   const [mounted, setMounted] = useState(false);
   const [showModelWizard, setShowModelWizard] = useState(false);
   const [xp, setXp] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchContent, setSearchContent] = useState<QuickSearchItem[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchContentLoaded = useRef(false);
   const { toastJsx } = useAchievementToast();
   const { toastJsx: rateLimitToastJsx } = useRateLimitToast();
 
   useEffect(() => {
     installGlobalErrorHandlers();
-    // Read streak from localStorage on mount (client-side only, no external subscription)
+    // Read streak + goal from localStorage on mount (client-side only)
     // eslint-disable-next-line react-hooks/set-state-in-effect
     try { setStreak(getStreak()); } catch { /* noop */ }
     try { setXp(getGamificationState().xp); } catch { /* noop */ }
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const sessions = loadSessions();
+      const todaySession = sessions.find(s => s.date === today);
+      setTodayCards(todaySession?.cards ?? 0);
+      setDailyGoal(getGoalPreferences().dailyGoal);
+    } catch { /* noop */ }
     setMounted(true);
   }, []);
 
@@ -120,6 +133,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
+        if (!searchContentLoaded.current) setSearchLoading(true);
         setSearchOpen(true);
       }
     }
@@ -138,18 +152,122 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     router.replace('/login');
   }
 
-  // Build search items from nav items for the quick search palette
+  // Lazy-load content (library, saved sources, decks) the first time search opens
+  useEffect(() => {
+    if (!searchOpen || searchContentLoaded.current) return;
+    searchContentLoaded.current = true;
+
+    const items: QuickSearchItem[] = [];
+
+    // Local SRS decks
+    try {
+      const decks = loadDecks();
+      for (const deck of decks) {
+        items.push({
+          id: `deck-${deck.id}`,
+          type: 'file',
+          icon: '🃏',
+          title: deck.name,
+          subtitle: `${deck.cards.length} cards`,
+          href: `/decks/${deck.id}`,
+          searchText: deck.name,
+        });
+      }
+    } catch { /* localStorage unavailable */ }
+
+    // Cloud library + saved sources in parallel
+    Promise.all([
+      fetch('/api/library?summary=1', { credentials: 'include' }).then(r => r.ok ? r.json() : []).catch(() => []) as Promise<{ id: string; mode: string; metadata?: { title?: string; category?: string } }[]>,
+      fetch('/api/sources', { credentials: 'include' }).then(r => r.ok ? r.json() : []).catch(() => []) as Promise<{ id: string; title: string; url: string; journal?: string | null; year?: number | null }[]>,
+      fetch('/api/study-plans', { credentials: 'include' }).then(r => r.ok ? r.json() : []).catch(() => []) as Promise<{ id: string; title: string; topics?: { name: string }[]; status?: string; examDate?: string }[]>,
+    ]).then(([libraryRows, sourceRows, remotePlans]) => {
+      const modeIcon: Record<string, string> = {
+        summary: '📝', quiz: '📝', mcq: '📝', notes: '📒',
+        flashcards: '🃏', research: '🔍', report: '📄',
+      };
+      for (const item of libraryRows) {
+        const title = item.metadata?.title ?? item.mode;
+        items.push({
+          id: `lib-${item.id}`,
+          type: 'library',
+          icon: modeIcon[item.mode] ?? '🗂️',
+          title,
+          subtitle: item.metadata?.category ?? item.mode,
+          href: `/library`,
+          searchText: title,
+        });
+      }
+      for (const src of sourceRows) {
+        items.push({
+          id: `src-${src.id}`,
+          type: 'library',
+          icon: '🔖',
+          title: src.title,
+          subtitle: [src.journal, src.year].filter(Boolean).join(' · ') || 'Saved source',
+          href: src.url,
+          searchText: src.title,
+        });
+      }
+
+      const localPlans = (() => {
+        try {
+          return loadLocalStudyPlans();
+        } catch {
+          return [];
+        }
+      })();
+      const allPlans = [...remotePlans, ...localPlans].filter((plan, index, arr) => arr.findIndex((candidate) => candidate.id === plan.id) === index);
+      for (const plan of allPlans) {
+        const topicNames = Array.isArray(plan.topics) ? plan.topics.map((topic) => topic.name).filter(Boolean) : [];
+        items.push({
+          id: `plan-${plan.id}`,
+          type: 'page',
+          icon: '📅',
+          title: plan.title,
+          subtitle: topicNames.slice(0, 2).join(' · ') || plan.status || 'Study plan',
+          href: '/planner',
+          searchText: [plan.title, ...topicNames, plan.status, plan.examDate].filter(Boolean).join(' '),
+        });
+      }
+
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (!key || !key.startsWith('kivora-notes-')) continue;
+          const value = localStorage.getItem(key)?.trim();
+          if (!value) continue;
+          const lines = value.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+          const title = lines[0]?.replace(/^#\s*/, '').slice(0, 72) || 'Workspace notes';
+          const preview = (lines.slice(1).find(Boolean) ?? value).slice(0, 90);
+          items.push({
+            id: `note-${key}`,
+            type: 'file',
+            icon: '📝',
+            title,
+            subtitle: preview,
+            href: '/workspace',
+            searchText: `${title} ${value}`,
+          });
+        }
+      } catch { /* localStorage unavailable */ }
+
+      setSearchContent(items);
+      setSearchLoading(false);
+    });
+  }, [searchOpen]);
+
+  // Build search items from nav items + lazy-loaded content
   const searchItems: QuickSearchItem[] = [
-    ...CORE_NAV_ITEMS,
-    ...SUPPORT_NAV_ITEMS,
-  ].map((item) => ({
-    id: item.href,
-    type: 'page' as const,
-    href: item.href,
-    icon: item.icon,
-    title: item.key,
-    searchText: item.key,
-  }));
+    ...[...CORE_NAV_ITEMS, ...SUPPORT_NAV_ITEMS].map((item) => ({
+      id: item.href,
+      type: 'page' as const,
+      href: item.href,
+      icon: item.icon,
+      title: item.key,
+      searchText: item.key,
+    })),
+    ...searchContent,
+  ];
 
   // Sidebar nav content (shared between desktop sidebar and mobile drawer)
   const sidebarNavContent = (
@@ -224,6 +342,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           <span style={{ fontSize: 16 }}>🔥</span>
           {!collapsed && <span>{streak} day{streak !== 1 ? 's' : ''}</span>}
+        </div>
+      )}
+
+      {/* Daily goal progress */}
+      {mounted && (
+        <div
+          title={`Today: ${todayCards} / ${dailyGoal} cards`}
+          style={{
+            margin: collapsed ? '2px 8px 4px' : '2px 8px 4px',
+            padding: collapsed ? '6px 0' : '6px 10px',
+            borderRadius: 8,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          {!collapsed && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 600, marginBottom: 4, color: todayCards >= dailyGoal ? '#22c55e' : 'var(--text-2)' }}>
+              <span>{todayCards >= dailyGoal ? '✓ Goal done!' : `Today's goal`}</span>
+              <span>{todayCards}/{dailyGoal}</span>
+            </div>
+          )}
+          <div style={{ height: 5, borderRadius: 3, background: 'var(--border-2)', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', borderRadius: 3,
+              width: `${Math.min(100, (todayCards / dailyGoal) * 100)}%`,
+              background: todayCards >= dailyGoal
+                ? 'linear-gradient(90deg, #22c55e, #16a34a)'
+                : 'linear-gradient(90deg, var(--primary), var(--accent, #7c53e8))',
+              transition: 'width 0.4s ease',
+              minWidth: todayCards > 0 ? 6 : 0,
+            }} />
+          </div>
         </div>
       )}
 
@@ -315,7 +465,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         isOpen={searchOpen}
         query={searchQuery}
         items={searchItems}
-        loading={false}
+        loading={searchLoading}
         onQueryChange={setSearchQuery}
         onClose={() => { setSearchOpen(false); setSearchQuery(''); }}
         onSelect={(item) => { router.push(item.href); setSearchOpen(false); setSearchQuery(''); }}

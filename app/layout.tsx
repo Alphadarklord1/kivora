@@ -57,6 +57,7 @@ const guestSessionScript = `
       try {
         var id = window.__kivoraGuestSessionId;
         if (!id) return;
+        if (sessionStorage.getItem('kivora_guest_cleanup') !== '1') return;
         var payload = JSON.stringify({ guestSessionId: id });
         if (navigator.sendBeacon) {
           navigator.sendBeacon('/api/guest/session', new Blob([payload], { type: 'application/json' }));

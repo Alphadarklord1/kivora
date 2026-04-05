@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '@/lib/i18n/useI18n';
 
 export type QuickSearchType = 'page' | 'file' | 'library';
@@ -121,7 +121,7 @@ export function QuickSearchPalette({
             ref={inputRef}
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder={t('Search pages, files, and library...')}
+            placeholder={t('Search pages, plans, notes, files, and library...')}
             aria-label={t('Quick Search')}
           />
         </div>
@@ -132,7 +132,7 @@ export function QuickSearchPalette({
           ) : filtered.length === 0 ? (
             <div className="quick-search-empty">
               <strong>{t('No results')}</strong>
-              <span>{t('Type to search pages, files, and library items.')}</span>
+              <span>{t('Type to search pages, plans, notes, files, and library items.')}</span>
             </div>
           ) : (
             grouped.map((group) => {
