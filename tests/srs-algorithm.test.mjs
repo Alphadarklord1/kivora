@@ -52,6 +52,19 @@ test('gradeCard Easy (3) on first review produces longer interval than Good (2)'
   );
 });
 
+test('gradeCard orders Hard < Good < Easy on a later review', () => {
+  let card = createCard('c5b', 'Q', 'A');
+  card = gradeCard(card, 2);
+  card = { ...card, lastReview: '2020-01-01' };
+
+  const hard = gradeCard(card, 1);
+  const good = gradeCard(card, 2);
+  const easy = gradeCard(card, 3);
+
+  assert.ok(hard.interval <= good.interval, `Hard interval (${hard.interval}) should be <= Good (${good.interval})`);
+  assert.ok(good.interval <= easy.interval, `Good interval (${good.interval}) should be <= Easy (${easy.interval})`);
+});
+
 // ── gradeCard: subsequent reviews ────────────────────────────────────────────
 
 test('gradeCard stability grows with consecutive Good grades', () => {
@@ -74,6 +87,15 @@ test('gradeCard Again (0) after a Good grade resets repetitions', () => {
   assert.equal(card.repetitions, 0);
   assert.equal(card.correctReviews, 1); // previous correct still counted
   assert.equal(card.totalReviews, 2);
+});
+
+test('gradeCard Again lowers next interval relative to a successful review', () => {
+  let card = createCard('c7b', 'Q', 'A');
+  card = gradeCard(card, 2);
+  const successfulInterval = card.interval;
+  card = { ...card, lastReview: '2020-01-01' };
+  const forgotten = gradeCard(card, 0);
+  assert.ok(forgotten.interval < successfulInterval, `Again interval (${forgotten.interval}) should be less than prior successful interval (${successfulInterval})`);
 });
 
 test('gradeCard nextReview is in the future for interval > 0', () => {

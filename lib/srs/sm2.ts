@@ -172,6 +172,10 @@ export function gradeCard(card: SRSCard, grade: 0 | 1 | 2 | 3): SRSCard {
       updated.repetitions = card.repetitions + 1;
     }
     updated.interval = intervalFromStability(updated.stability);
+    if (g === 1) {
+      // Lapses should come back sooner than the previous schedule, not later.
+      updated.interval = Math.max(1, Math.min(updated.interval, Math.ceil(Math.max(1, card.interval) * 0.5)));
+    }
   }
 
   const next = new Date();
