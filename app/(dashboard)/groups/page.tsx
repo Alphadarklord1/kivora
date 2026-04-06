@@ -44,11 +44,16 @@ export default function GroupsPage() {
     'Database unavailable right now. Please try again shortly.': 'قاعدة البيانات غير متاحة الآن. حاول مرة أخرى بعد قليل.',
     'Could not update this group right now.': 'تعذر تحديث هذه المجموعة الآن.',
     'Could not refresh group notes right now.': 'تعذر تحديث ملاحظات المجموعة الآن.',
+    'Groups need a quick refresh': 'المجموعات تحتاج إلى تحديث سريع',
+    'Invite link detected': 'تم اكتشاف رابط دعوة',
+    'We pre-filled the join code from your invite link. Join the group below to keep decks and notes in sync.': 'قمنا بتعبئة رمز الانضمام من رابط الدعوة. انضم إلى المجموعة أدناه للحفاظ على تزامن البطاقات والملاحظات.',
+    'Could not copy group code.': 'تعذر نسخ رمز المجموعة.',
   });
   const { toast: notify_ } = useToast();
   const [compactLayout, setCompactLayout] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [requiresAccount, setRequiresAccount] = useState(false);
 
@@ -84,9 +89,10 @@ export default function GroupsPage() {
     return message ?? t('Could not update this group right now.');
   }
 
-  async function loadGroups() {
+  const loadGroups = useCallback(async () => {
     setLoading(true);
     setRequiresAccount(false);
+    setLoadError(null);
     try {
       const res = await fetch('/api/groups', { credentials: 'include' });
       if (res.status === 401) {
@@ -94,13 +100,21 @@ export default function GroupsPage() {
         setRequiresAccount(true);
         return;
       }
-      if (res.ok) setGroups(await res.json() as Group[]);
+      if (res.ok) {
+        setGroups(await res.json() as Group[]);
+      } else {
+        setGroups([]);
+        setLoadError(t('Could not update this group right now.'));
+      }
+    } catch {
+      setGroups([]);
+      setLoadError(t('Network connection issue — try again in a moment.'));
     } finally {
       setLoading(false);
     }
-  }
+  }, [t]);
 
-  useEffect(() => { void loadGroups(); }, []);
+  useEffect(() => { void loadGroups(); }, [loadGroups]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -323,6 +337,46 @@ export default function GroupsPage() {
         </div>
       )}
 
+      {!loading && !requiresAccount && loadError && (
+        <div style={{
+          background: 'rgba(239,68,68,0.08)',
+          border: '1px solid rgba(239,68,68,0.18)',
+          borderRadius: 12,
+          padding: '14px 16px',
+          marginBottom: 20,
+          display: 'flex',
+          alignItems: compactLayout ? 'stretch' : 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexDirection: compactLayout ? 'column' : 'row',
+        }}>
+          <div style={{ display: 'grid', gap: 4 }}>
+            <strong style={{ fontSize: 14 }}>{t('Groups need a quick refresh')}</strong>
+            <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{loadError}</span>
+          </div>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void loadGroups()}>
+            ↻ {t('Refresh')}
+          </button>
+        </div>
+      )}
+
+      {!loading && !requiresAccount && inviteCode && (
+        <div style={{
+          background: 'rgba(79, 134, 247, 0.08)',
+          border: '1px solid rgba(79, 134, 247, 0.18)',
+          borderRadius: 12,
+          padding: '14px 16px',
+          marginBottom: 20,
+          display: 'grid',
+          gap: 4,
+        }}>
+          <strong style={{ fontSize: 14 }}>{t('Invite link detected')}</strong>
+          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
+            {t('We pre-filled the join code from your invite link. Join the group below to keep decks and notes in sync.')}
+          </span>
+        </div>
+      )}
+
       {/* Create form */}
       {showCreate && !requiresAccount && (
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 12, padding: '20px', marginBottom: 20 }}>
@@ -412,7 +466,12 @@ export default function GroupsPage() {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', width: compactLayout ? '100%' : undefined, justifyContent: compactLayout ? 'flex-start' : 'flex-end' }}>
                   <button
                     className="btn btn-ghost btn-xs"
-                    onClick={e => { e.stopPropagation(); void navigator.clipboard.writeText(group.joinCode); notify(t('Code copied!')); }}
+                    onClick={e => {
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(group.joinCode)
+                        .then(() => notify(t('Code copied!')))
+                        .catch(() => notify(t('Could not copy group code.'), 'err'));
+                    }}
                     title={t('Copy code')}
                   >
                     {t('Copy code')}

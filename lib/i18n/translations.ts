@@ -100,6 +100,13 @@ export const GLOBAL_TRANSLATIONS: Record<string, Partial<Record<SupportedLocale,
   },
   'Write a note for the group…': { ar: 'اكتب ملاحظة للمجموعة…', fr: 'Écrire une note pour le groupe…' },
   'No notes yet. Be the first to post one.': { ar: 'لا توجد ملاحظات بعد. كن أول من يضيف واحدة.', fr: 'Aucune note pour l\'instant. Soyez le premier à en publier une.' },
+  'Groups need a quick refresh': { ar: 'المجموعات تحتاج إلى تحديث سريع', fr: 'Les groupes ont besoin d’un rafraîchissement rapide' },
+  'Invite link detected': { ar: 'تم اكتشاف رابط دعوة', fr: 'Lien d’invitation détecté' },
+  'We pre-filled the join code from your invite link. Join the group below to keep decks and notes in sync.': {
+    ar: 'قمنا بتعبئة رمز الانضمام من رابط الدعوة. انضم إلى المجموعة أدناه للحفاظ على تزامن البطاقات والملاحظات.',
+    fr: 'Nous avons prérempli le code depuis votre lien d’invitation. Rejoignez le groupe ci-dessous pour garder decks et notes synchronisés.',
+  },
+  'Could not copy group code.': { ar: 'تعذر نسخ رمز المجموعة.', fr: 'Impossible de copier le code du groupe.' },
   Post:   { ar: 'نشر', fr: 'Publier' },
   'Deck shared!':       { ar: 'تمت مشاركة المجموعة!', fr: 'Deck partagé !' },
   'Deck removed.':      { ar: 'تم إزالة المجموعة.',   fr: 'Deck supprimé.' },
@@ -299,6 +306,105 @@ export const GLOBAL_TRANSLATIONS: Record<string, Partial<Record<SupportedLocale,
   'Average score':  { ar: 'متوسط الدرجات',  fr: 'Score moyen' },
   'Study streak':   { ar: 'سلسلة الدراسة',   fr: "Série d'étude" },
   'Cards mastered': { ar: 'البطاقات المتقنة', fr: 'Cartes maîtrisées' },
+  'Study Analytics': { ar: 'تحليلات الدراسة', fr: 'Statistiques d’étude' },
+  'Your Progress': { ar: 'تقدمك', fr: 'Votre progression' },
+  'Track outcomes, spot weak areas, and see your consistency at a glance.': {
+    ar: 'تتبّع النتائج، واكتشف نقاط الضعف، وشاهد مدى انتظامك بنظرة سريعة.',
+    fr: 'Suivez vos résultats, repérez vos points faibles et voyez votre régularité en un coup d’œil.',
+  },
+  'Kickstart your analytics': { ar: 'ابدأ تشغيل تحليلاتك', fr: 'Lancez vos statistiques' },
+  'You have the analytics surface ready — now give it one result to track. Generate a deck, finish one quiz, or create a plan and this page starts becoming useful.': {
+    ar: 'سطح التحليلات جاهز — فقط امنحه أول نتيجة ليتتبعها. أنشئ مجموعة بطاقات أو أكمل اختبارًا واحدًا أو أنشئ خطة، وستبدأ هذه الصفحة بإعطائك قيمة حقيقية.',
+    fr: 'La surface analytique est prête — donnez-lui simplement un premier résultat à suivre. Créez un deck, terminez un quiz ou démarrez un plan, et cette page devient immédiatement utile.',
+  },
+  'Generate first deck': { ar: 'أنشئ أول مجموعة بطاقات', fr: 'Créer un premier deck' },
+  'Start first quiz': { ar: 'ابدأ أول اختبار', fr: 'Commencer un premier quiz' },
+  'Create first plan': { ar: 'أنشئ أول خطة', fr: 'Créer un premier plan' },
+  'Start with one action, then come back here to see retention, weak areas, and progress trends.': {
+    ar: 'ابدأ بإجراء واحد، ثم عُد إلى هنا لترى الاستبقاء ونقاط الضعف واتجاهات التقدم.',
+    fr: 'Commencez par une seule action, puis revenez ici pour voir la rétention, les points faibles et les tendances de progression.',
+  },
+  'Step {current} of {total}': { ar: 'الخطوة {current} من {total}', fr: 'Étape {current} sur {total}' },
+  'Close onboarding': { ar: 'إغلاق الإرشاد', fr: 'Fermer l’accueil' },
+  'Skip tour': { ar: 'تخطي الجولة', fr: 'Passer la visite' },
+  'Start here': { ar: 'ابدأ من هنا', fr: 'Commencer ici' },
+  'Choose the fastest path to your first useful study result. You can upload material, paste notes, or start from a subject without bringing anything in yet.': {
+    ar: 'اختر أسرع مسار للوصول إلى أول نتيجة دراسية مفيدة. يمكنك رفع مادة، أو لصق ملاحظات، أو البدء من مادة حتى لو لم تُحضّر شيئًا بعد.',
+    fr: 'Choisissez le chemin le plus rapide vers votre premier résultat utile. Vous pouvez téléverser un document, coller des notes ou commencer par une matière.',
+  },
+  'Start with one lane, not the whole app.': {
+    ar: 'ابدأ بمسار واحد، لا بالتطبيق كله.',
+    fr: 'Commencez par une seule voie, pas par toute l’application.',
+  },
+  'Drop in a PDF, slides, or notes and generate from it.': {
+    ar: 'أضف ملف PDF أو شرائح أو ملاحظات وأنشئ المحتوى منه.',
+    fr: 'Ajoutez un PDF, des slides ou des notes puis générez à partir de cela.',
+  },
+  'Paste text': { ar: 'الصق نصًا', fr: 'Coller du texte' },
+  'Skip the file step and generate from lecture notes or copied text.': {
+    ar: 'تجاوز خطوة الملف وأنشئ مباشرة من ملاحظات المحاضرة أو النص المنسوخ.',
+    fr: 'Passez l’étape du fichier et générez depuis vos notes de cours ou un texte copié.',
+  },
+  'Starter path': { ar: 'مسار جاهز', fr: 'Parcours guidé' },
+  'Open a pre-filled research, writing, math, or planning path.': {
+    ar: 'افتح مسارًا جاهزًا للبحث أو الكتابة أو الرياضيات أو التخطيط.',
+    fr: 'Ouvrez un parcours déjà rempli pour la recherche, l’écriture, les maths ou la planification.',
+  },
+  'Choose your first goal': { ar: 'اختر أول هدف لك', fr: 'Choisissez votre premier objectif' },
+  'Pick the outcome you want first. Kivora will take you to the shortest path instead of dropping you into every tool at once.': {
+    ar: 'اختر النتيجة التي تريدها أولًا. سيأخذك Kivora إلى أقصر مسار بدلًا من رميك في كل الأدوات دفعة واحدة.',
+    fr: 'Choisissez le premier résultat que vous voulez. Kivora vous emmènera vers le chemin le plus court au lieu de tout vous montrer d’un coup.',
+  },
+  'Generate my first flashcards': { ar: 'أنشئ أول بطاقاتي التعليمية', fr: 'Créer mes premières fiches' },
+  'Open Workspace with flashcards ready as the destination.': {
+    ar: 'افتح مساحة العمل مع البطاقات التعليمية كوجهة جاهزة.',
+    fr: 'Ouvrez l’espace de travail avec les fiches comme destination immédiate.',
+  },
+  'Build my first quiz': { ar: 'ابنِ أول اختبار لي', fr: 'Créer mon premier quiz' },
+  'Start from text or a file and turn it into MCQs in one flow.': {
+    ar: 'ابدأ من نص أو ملف وحوّله إلى أسئلة اختيار من متعدد في مسار واحد.',
+    fr: 'Partez d’un texte ou d’un fichier et transformez-le en QCM en une seule étape.',
+  },
+  'Research a topic': { ar: 'ابحث في موضوع', fr: 'Rechercher un sujet' },
+  'Open Scholar Hub with a starter topic and save sources from there.': {
+    ar: 'افتح مركز الباحث بموضوع جاهز واحفظ المصادر من هناك.',
+    fr: 'Ouvrez Scholar Hub avec un sujet de départ et enregistrez vos sources.',
+  },
+  'Plan an exam': { ar: 'خطط لامتحان', fr: 'Planifier un examen' },
+  'Go straight to a first study plan with your exam date and topics.': {
+    ar: 'انتقل مباشرة إلى أول خطة دراسة مع تاريخ الامتحان والموضوعات.',
+    fr: 'Passez directement à un premier plan d’étude avec la date d’examen et les sujets.',
+  },
+  'Turn inputs into something you can study': { ar: 'حوّل المدخلات إلى شيء يمكنك دراسته', fr: 'Transformez vos entrées en quelque chose à réviser' },
+  'The first useful win is simple: upload or paste, pick one tool, then review or save it. Aim for one deck, one quiz, or one outline in under two minutes.': {
+    ar: 'أول إنجاز مفيد بسيط: ارفع أو الصق، اختر أداة واحدة، ثم راجع الناتج أو احفظه. استهدف مجموعة بطاقات واحدة أو اختبارًا واحدًا أو مخططًا واحدًا خلال أقل من دقيقتين.',
+    fr: 'Le premier vrai gain est simple : téléversez ou collez, choisissez un outil, puis révisez ou enregistrez le résultat. Visez un deck, un quiz ou un plan en moins de deux minutes.',
+  },
+  'Workspace → Generate → Quiz, Flashcards, Notes, or Summary': {
+    ar: 'مساحة العمل ← إنشاء ← اختبار أو بطاقات أو ملاحظات أو ملخص',
+    fr: 'Espace de travail → Générer → Quiz, fiches, notes ou résumé',
+  },
+  'Everything generated here can move into Library, Planner, or Flashcard review without starting over.': {
+    ar: 'كل ما يتم إنشاؤه هنا يمكن نقله إلى المكتبة أو المخطط أو مراجعة البطاقات دون البدء من جديد.',
+    fr: 'Tout ce qui est généré ici peut aller vers la bibliothèque, le planificateur ou la révision sans repartir de zéro.',
+  },
+  'Research, save, then study': { ar: 'ابحث، احفظ، ثم ادرس', fr: 'Recherchez, enregistrez, puis étudiez' },
+  'Scholar Hub is strongest when you save what matters and send it into Workspace or your references library.': {
+    ar: 'يكون مركز الباحث أقوى عندما تحفظ ما يهمك ثم ترسله إلى مساحة العمل أو مكتبة المراجع.',
+    fr: 'Scholar Hub est le plus utile quand vous enregistrez ce qui compte puis l’envoyez vers l’espace de travail ou votre bibliothèque de références.',
+  },
+  'Scholar Hub → Save source or Send to Workspace': {
+    ar: 'مركز الباحث ← احفظ المصدر أو أرسله إلى مساحة العمل',
+    fr: 'Scholar Hub → Enregistrer la source ou envoyer vers l’espace de travail',
+  },
+  'If you only do one thing after sign-up, make it this: find one useful source and turn it into study material.': {
+    ar: 'إذا فعلت شيئًا واحدًا فقط بعد إنشاء الحساب فليكن هذا: اعثر على مصدر مفيد واحد وحوّله إلى مادة دراسية.',
+    fr: 'Si vous ne faites qu’une seule chose après l’inscription, faites celle-ci : trouvez une source utile et transformez-la en support de révision.',
+  },
+  'Use the quick actions on this step to get to your first result fast.': {
+    ar: 'استخدم الإجراءات السريعة في هذه الخطوة للوصول إلى أول نتيجة بسرعة.',
+    fr: 'Utilisez les actions rapides de cette étape pour obtenir un premier résultat rapidement.',
+  },
 
   // ─── Workspace tools ──────────────────────────────────────────────────────
   Generate:          { ar: 'توليد',          fr: 'Générer' },
@@ -447,7 +553,6 @@ export const GLOBAL_TRANSLATIONS: Record<string, Partial<Record<SupportedLocale,
   MCQ:          { ar: 'أسئلة متعددة',       fr: 'QCM' },
   'Exam Prep':  { ar: 'التحضير للامتحان',   fr: "Prép. d'examen" },
   'From file':  { ar: 'من ملف',             fr: 'Depuis un fichier' },
-  'Paste text': { ar: 'لصق النص',           fr: 'Coller du texte' },
 
   // ─── Analytics tab labels ─────────────────────────────────────────────────
   Overview:   { ar: 'نظرة عامة',   fr: "Vue d'ensemble" },

@@ -54,15 +54,20 @@ export function StudyAnalytics() {
   if (!data) return null;
 
   const { quizStats, planStats, weakAreas, coachActions, activity, insights, usage, deckStats, weekOverWeek, dailyReviews, retentionByInterval } = data;
+  const isColdStart = (quizStats?.totalAttempts ?? 0) === 0
+    && (deckStats?.totalCards ?? 0) === 0
+    && (planStats?.totalPlans ?? 0) === 0
+    && (usage?.totalFiles ?? 0) === 0
+    && (usage?.libraryItems ?? 0) === 0;
 
   return (
     <div className="an-shell">
       {/* Hero */}
       <section className="an-hero">
         <div>
-          <p className="eyebrow">Study Analytics</p>
-          <h1>Your Progress</h1>
-          <p>Track outcomes, spot weak areas, and see your consistency at a glance.</p>
+          <p className="eyebrow">{t('Study Analytics')}</p>
+          <h1>{t('Your Progress')}</h1>
+          <p>{t('Track outcomes, spot weak areas, and see your consistency at a glance.')}</p>
         </div>
         <div className="an-hero-right">
           <select
@@ -77,6 +82,21 @@ export function StudyAnalytics() {
           <button className="an-refresh-btn" onClick={refresh}>↻ Refresh</button>
         </div>
       </section>
+
+      {isColdStart && (
+        <section className="an-cold-start">
+          <div className="an-cold-copy">
+            <strong>{t('Kickstart your analytics')}</strong>
+            <p>{t('You have the analytics surface ready — now give it one result to track. Generate a deck, finish one quiz, or create a plan and this page starts becoming useful.')}</p>
+          </div>
+          <div className="an-cold-actions">
+            <Link href="/workspace?tab=flashcards" className="an-cold-link">{t('Generate first deck')}</Link>
+            <Link href="/workspace?tab=generate" className="an-cold-link">{t('Start first quiz')}</Link>
+            <Link href="/planner" className="an-cold-link">{t('Create first plan')}</Link>
+          </div>
+          <span className="an-cold-note">{t('Start with one action, then come back here to see retention, weak areas, and progress trends.')}</span>
+        </section>
+      )}
 
       {/* Stats cards */}
       <div className="stats-grid">
@@ -242,6 +262,51 @@ export function StudyAnalytics() {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
           gap: var(--space-3);
+        }
+        .an-cold-start {
+          display: grid;
+          gap: 14px;
+          padding: 18px 20px;
+          border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border-subtle));
+          border-radius: 20px;
+          background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 8%, var(--bg-elevated)), var(--bg-elevated));
+          box-shadow: var(--shadow-sm);
+        }
+        .an-cold-copy {
+          display: grid;
+          gap: 6px;
+        }
+        .an-cold-copy strong {
+          font-size: 1rem;
+          color: var(--text-primary);
+        }
+        .an-cold-copy p, .an-cold-note {
+          margin: 0;
+          font-size: 13px;
+          line-height: 1.7;
+          color: var(--text-muted);
+        }
+        .an-cold-actions {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .an-cold-link {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 10px 14px;
+          border-radius: 12px;
+          text-decoration: none;
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-primary);
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+        }
+        .an-cold-link:hover {
+          border-color: var(--primary);
+          color: var(--primary);
         }
         .an-tabs {
           display: flex;

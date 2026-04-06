@@ -3,8 +3,9 @@
 import dynamic from 'next/dynamic';
 
 function loadingLabel() {
-  if (typeof document !== 'undefined' && document.documentElement.lang === 'ar') {
-    return 'جارٍ تحميل راسم المنحنيات…';
+  if (typeof document !== 'undefined') {
+    if (document.documentElement.lang === 'ar') return 'جارٍ تحميل راسم المنحنيات…';
+    if (document.documentElement.lang === 'fr') return 'Chargement du traceur…';
   }
   return 'Loading Graph Plotter…';
 }

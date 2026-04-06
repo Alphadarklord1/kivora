@@ -5,8 +5,9 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
 function loadingLabel() {
-  if (typeof document !== 'undefined' && document.documentElement.lang === 'ar') {
-    return 'جارٍ تحميل الصوت الدراسي…';
+  if (typeof document !== 'undefined') {
+    if (document.documentElement.lang === 'ar') return 'جارٍ تحميل الصوت الدراسي…';
+    if (document.documentElement.lang === 'fr') return 'Chargement de l’audio d’étude…';
   }
   return 'Loading Study Audio…';
 }
