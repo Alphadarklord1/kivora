@@ -1,26 +1,26 @@
 {
-  "version": "1.0.0",
-  "generatedAt": "2026-03-26T00:00:00.000Z",
+  "version": "1.2.0-beta.1",
+  "generatedAt": "2026-04-09T19:25:19.218Z",
   "models": [
     {
       "key": "mini",
       "modelId": "Qwen2.5-1.5B-Instruct",
       "quantization": "Q4_K_M",
       "file": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-      "sizeBytes": 986048768,
-      "sha256": "1adf0b11065d8ad2e8123ea110d1ec956dab4ab038eab665614adba04b6c3370",
+      "sizeBytes": 1117320736,
+      "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
       "minRamGb": 8,
-      "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+      "url": "https://github.com/Alphadarklord1/kivora/releases/download/v1.2.0-beta.1/qwen2.5-1.5b-instruct-q4_k_m.gguf"
     },
     {
       "key": "balanced",
       "modelId": "Qwen2.5-3B-Instruct",
       "quantization": "Q4_K_M",
       "file": "qwen2.5-3b-instruct-q4_k_m.gguf",
-      "sizeBytes": 1929903264,
-      "sha256": "",
+      "sizeBytes": 2104932768,
+      "sha256": "626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d",
       "minRamGb": 16,
-      "url": "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf"
+      "url": "https://github.com/Alphadarklord1/kivora/releases/download/v1.2.0-beta.1/qwen2.5-3b-instruct-q4_k_m.gguf"
     },
     {
       "key": "pro",
@@ -28,9 +28,9 @@
       "quantization": "Q4_K_M",
       "file": "qwen2.5-7b-instruct-q4_k_m.gguf",
       "sizeBytes": 4683074240,
-      "sha256": "",
+      "sha256": "65b8fcd92af6b4fefa935c625d1ac27ea29dcb6ee14589c55a8f115ceaaa1423",
       "minRamGb": 24,
-      "url": "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+      "url": "https://github.com/Alphadarklord1/kivora/releases/download/v1.2.0-beta.1/qwen2.5-7b-instruct-q4_k_m.gguf"
     }
   ]
 }
