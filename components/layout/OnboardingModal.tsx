@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n/useI18n';
 
@@ -10,6 +10,9 @@ type OnboardingAction = {
   href: string;
   accent: string;
 };
+
+type GoalKey = 'flashcards' | 'quiz' | 'research' | 'plan';
+type SubjectKey = 'biology' | 'history' | 'math' | 'general';
 
 type OnboardingStep = {
   icon: string;
@@ -35,6 +38,45 @@ export function OnboardingModal() {
     }
   });
   const [step, setStep] = useState(0);
+  const [goal, setGoal] = useState<GoalKey>('flashcards');
+  const [subject, setSubject] = useState<SubjectKey>('biology');
+
+  const subjectLabel = useMemo<Record<SubjectKey, string>>(() => ({
+    biology: t('Biology'),
+    history: t('History'),
+    math: t('Math'),
+    general: t('General study'),
+  }), [t]);
+
+  const goalLabel = useMemo<Record<GoalKey, string>>(() => ({
+    flashcards: t('Flashcards'),
+    quiz: t('Quiz'),
+    research: t('Research'),
+    plan: t('Study plan'),
+  }), [t]);
+
+  const starterTopic = useMemo<Record<SubjectKey, string>>(() => ({
+    biology: 'cell respiration',
+    history: 'causes of World War I',
+    math: 'derivatives practice',
+    general: 'study strategies for finals',
+  }), []);
+
+  const goalHref = useCallback((selectedGoal: GoalKey, selectedSubject: SubjectKey) => {
+    const topic = starterTopic[selectedSubject];
+    switch (selectedGoal) {
+      case 'flashcards':
+        return `/workspace?tab=flashcards&starter=${encodeURIComponent(topic)}`;
+      case 'quiz':
+        return `/workspace?tab=generate&starter=${encodeURIComponent(topic)}&tool=quiz`;
+      case 'research':
+        return `/coach?starter=${encodeURIComponent(topic)}&section=research`;
+      case 'plan':
+        return `/planner?starter=${encodeURIComponent(topic)}`;
+      default:
+        return '/workspace';
+    }
+  }, [starterTopic]);
 
   const steps = useMemo<OnboardingStep[]>(() => ([
     {
@@ -55,20 +97,20 @@ export function OnboardingModal() {
       desc: t('Pick the outcome you want first. Kivora will take you to the shortest path instead of dropping you into every tool at once.'),
       tip: t('You can start immediately in guest mode and connect sync later if you want cross-device history.'),
       quickActions: [
-        { label: t('Generate my first flashcards'), hint: t('Open Workspace with flashcards ready as the destination.'), href: '/workspace?tab=flashcards', accent: '#52b788' },
-        { label: t('Build my first quiz'), hint: t('Start from text or a file and turn it into MCQs in one flow.'), href: '/workspace?tab=generate', accent: '#f59e0b' },
-        { label: t('Research a topic'), hint: t('Open Scholar Hub with a starter topic and save sources from there.'), href: '/coach?starter=cell%20respiration&section=research', accent: '#0ea5e9' },
-        { label: t('Plan an exam'), hint: t('Go straight to a first study plan with your exam date and topics.'), href: '/planner', accent: '#a855f7' },
+        { label: t('Generate my first flashcards'), hint: t('Open Workspace with flashcards ready as the destination.'), href: goalHref('flashcards', subject), accent: '#52b788' },
+        { label: t('Build my first quiz'), hint: t('Start from text or a file and turn it into MCQs in one flow.'), href: goalHref('quiz', subject), accent: '#f59e0b' },
+        { label: t('Research a topic'), hint: t('Open Scholar Hub with a starter topic and save sources from there.'), href: goalHref('research', subject), accent: '#0ea5e9' },
+        { label: t('Plan an exam'), hint: t('Go straight to a first study plan with your exam date and topics.'), href: goalHref('plan', subject), accent: '#a855f7' },
       ],
     },
     {
       icon: '⚡',
       title: t('Turn inputs into something you can study'),
       desc: t('The first useful win is simple: upload or paste, pick one tool, then review or save it. Aim for one deck, one quiz, or one outline in under two minutes.'),
-      highlight: t('Workspace → Generate → Quiz, Flashcards, Notes, or Summary'),
+      highlight: `${goalLabel[goal]} · ${subjectLabel[subject]}`,
       tip: t('Everything generated here can move into Library, Planner, or Flashcard review without starting over.'),
-      actionLabel: t('Open workspace'),
-      href: '/workspace?tab=generate',
+      actionLabel: goal === 'research' ? t('Open Scholar Hub') : goal === 'plan' ? t('Open planner') : t('Start first session'),
+      href: goalHref(goal, subject),
     },
     {
       icon: '🔍',
@@ -76,10 +118,10 @@ export function OnboardingModal() {
       desc: t('Scholar Hub is strongest when you save what matters and send it into Workspace or your references library.'),
       highlight: t('Scholar Hub → Save source or Send to Workspace'),
       tip: t('If you only do one thing after sign-up, make it this: find one useful source and turn it into study material.'),
-      actionLabel: t('Open Scholar Hub'),
-      href: '/coach?starter=cell%20respiration&section=research',
+      actionLabel: t('Open my first path'),
+      href: goalHref(goal, subject),
     },
-  ]), [t]);
+  ]), [goal, goalHref, goalLabel, subject, subjectLabel, t]);
 
   function dismiss() {
     try {
@@ -141,6 +183,46 @@ export function OnboardingModal() {
               <span>{current.tip}</span>
             </div>
           )}
+          {step === 0 ? (
+            <div className="ob-picker">
+              <span className="ob-picker-title">{t('Pick a subject')}</span>
+              <div className="ob-chip-row">
+                {(Object.keys(subjectLabel) as SubjectKey[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`ob-chip${subject === key ? ' active' : ''}`}
+                    onClick={() => setSubject(key)}
+                  >
+                    {subjectLabel[key]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {step === 1 ? (
+            <div className="ob-picker">
+              <span className="ob-picker-title">{t('Pick your first result')}</span>
+              <div className="ob-chip-row">
+                {(Object.keys(goalLabel) as GoalKey[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`ob-chip${goal === key ? ' active' : ''}`}
+                    onClick={() => setGoal(key)}
+                  >
+                    {goalLabel[key]}
+                  </button>
+                ))}
+              </div>
+              <div className="ob-selection-note">
+                {t('We will open {goal} for {subject} first.', {
+                  goal: goalLabel[goal],
+                  subject: subjectLabel[subject],
+                })}
+              </div>
+            </div>
+          ) : null}
           {current.quickActions?.length ? (
             <div className="ob-quick-start">
               <span className="ob-quick-title">{t('Fastest first win')}</span>
@@ -258,10 +340,55 @@ export function OnboardingModal() {
         .ob-icon { font-size: 52px; line-height: 1; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.2)); }
         .ob-title { font-size: 24px; font-weight: 700; margin: 0; color: var(--text-primary); }
         .ob-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.7; margin: 0; max-width: 46ch; }
-        .ob-highlight, .ob-tip, .ob-quick-start {
+        .ob-highlight,
+        .ob-tip,
+        .ob-quick-start,
+        .ob-picker,
+        .ob-selection-note {
           width: 100%;
           border-radius: 14px;
           text-align: left;
+        }
+        .ob-picker {
+          display: grid;
+          gap: 10px;
+          padding: 14px;
+          border: 1px solid var(--border-subtle);
+          background: color-mix(in srgb, var(--bg-surface) 86%, transparent);
+        }
+        .ob-picker-title {
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+        }
+        .ob-chip-row {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .ob-chip {
+          border-radius: 999px;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+          color: var(--text-secondary);
+          padding: 8px 12px;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .ob-chip.active {
+          background: color-mix(in srgb, var(--primary) 12%, var(--bg-surface));
+          border-color: color-mix(in srgb, var(--primary) 40%, var(--border-subtle));
+          color: var(--text-primary);
+        }
+        .ob-selection-note {
+          padding: 10px 12px;
+          background: color-mix(in srgb, var(--primary) 7%, var(--bg-surface));
+          border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+          font-size: 12px;
+          color: var(--text-secondary);
         }
         .ob-highlight {
           display: flex;
