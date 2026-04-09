@@ -37,6 +37,7 @@ function buttonStyle(primary = false) {
 export default async function DownloadsPage() {
   const downloads = await getReleaseDownloadData();
   const macReady = Boolean(downloads.macAsset);
+  const optionalModelsReady = downloads.manifestLooksReleaseReady;
 
   return (
     <main style={{ minHeight: '100dvh', background: 'var(--bg-base, #f4f6fb)', color: 'var(--text-primary, #0f172a)' }}>
@@ -47,10 +48,10 @@ export default async function DownloadsPage() {
           </span>
           <div style={{ display: 'grid', gap: 10 }}>
             <h1 style={{ margin: 0, fontSize: 'clamp(2rem, 4vw, 3.2rem)', lineHeight: 1.05 }}>
-              Mac desktop with offline AI ready from the first launch.
+              Mac desktop built for offline AI, with release checks that still need to be real.
             </h1>
             <p style={{ margin: 0, maxWidth: 760, color: 'var(--text-secondary, #475569)', fontSize: '1rem', lineHeight: 1.6 }}>
-              The Mac build is designed around a bundled Mini model for immediate offline use. Bigger models stay optional, so people can download them later inside the app or directly from the release assets.
+              Kivora is designed around a bundled Mini model for first-launch offline use on desktop. Optional Balanced and Pro installs only become release-ready when the manifest, checksums, and GitHub release assets all match the published files.
             </p>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -72,6 +73,24 @@ export default async function DownloadsPage() {
           </div>
         </section>
 
+        {!optionalModelsReady ? (
+          <section
+            style={{
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+              background: 'rgba(245, 158, 11, 0.09)',
+              borderRadius: 18,
+              padding: 18,
+              display: 'grid',
+              gap: 8,
+            }}
+          >
+            <strong style={{ fontSize: '0.95rem' }}>Optional model installs still need release publishing.</strong>
+            <p style={{ margin: 0, color: 'var(--text-secondary, #475569)', lineHeight: 1.55 }}>
+              The local fallback manifest is scaffolded for development. Before people download Balanced or Pro from a public release, publish a release <code>model-manifest.json</code> with real <code>sha256</code> and <code>sizeBytes</code> values, upload matching GitHub assets, and attach <code>SHA256SUMS.txt</code>.
+            </p>
+          </section>
+        ) : null}
+
         <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.3fr) minmax(320px, 0.7fr)', gap: 18 }}>
           <div style={cardStyle(true)}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
@@ -84,18 +103,18 @@ export default async function DownloadsPage() {
                   This is the cleanest Kivora setup: install the DMG, let the bundled Mini model handle offline notes, summaries, Scholar Hub file work, and Math support, then add heavier models only if you want them.
                 </p>
               </div>
-              <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(34,197,94,0.12)', color: '#15803d', fontSize: '0.76rem', fontWeight: 700 }}>
-                {macReady ? 'Mac asset ready' : 'Waiting on release asset'}
-              </span>
-            </div>
+                <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(34,197,94,0.12)', color: '#15803d', fontSize: '0.76rem', fontWeight: 700 }}>
+                  {macReady ? 'Mac asset ready' : 'Waiting on release asset'}
+                </span>
+              </div>
 
             <div style={{ display: 'grid', gap: 10 }}>
-              {[
-                'Install the Mac app',
-                'Mini is detected automatically if the DMG was built correctly',
-                'Workspace, Scholar Hub file analysis, and Math can run locally',
-                'Balanced and Pro stay optional downloads after install',
-              ].map((item, index) => (
+                {[
+                  'Install the Mac app',
+                  'Mini is detected automatically only if the desktop bundle really includes the staged model file',
+                  'Workspace, Scholar Hub file analysis, and Math can run locally',
+                  'Balanced and Pro stay optional downloads after install once release integrity files are published',
+                ].map((item, index) => (
                 <div key={item} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <span style={{ width: 24, height: 24, borderRadius: 999, background: 'color-mix(in srgb, var(--primary, #6366f1) 14%, transparent)', color: 'var(--primary, #6366f1)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.8rem', flexShrink: 0 }}>
                     {index + 1}
@@ -142,7 +161,7 @@ export default async function DownloadsPage() {
             </span>
             <h2 style={{ margin: 0, fontSize: '1.35rem' }}>Download bigger local models when you actually need them.</h2>
             <p style={{ margin: 0, color: 'var(--text-secondary, #475569)', lineHeight: 1.55 }}>
-              Mini should be the default Mac experience. Balanced and Pro are for people who want stronger local quality and have the RAM for it.
+              Mini should be the default Mac experience. Balanced and Pro are for people who want stronger local quality and have the RAM for it, but they should only be downloaded from a release once their checksums and assets are published together.
             </p>
           </div>
 
@@ -168,9 +187,14 @@ export default async function DownloadsPage() {
                     {model.downloadSource === 'release'
                       ? 'Download comes from the current Kivora release assets.'
                       : model.downloadSource === 'manifest'
-                        ? 'Fallback download comes from the model manifest URL.'
+                        ? 'Fallback download comes from the scaffolded manifest URL.'
                         : 'No download URL published yet.'}
                   </span>
+                  {model.integrityWarning ? (
+                    <span style={{ color: '#b45309' }}>{model.integrityWarning}</span>
+                  ) : (
+                    <span style={{ color: '#15803d' }}>Checksum and asset metadata are ready for release use.</span>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

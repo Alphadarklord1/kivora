@@ -178,8 +178,12 @@ Standalone audio navigation and Office-to-PDF visual conversion are intentionall
 3. Stage bundled Mini with `npm run models:prepare:laptop`
 4. Build desktop artifacts
 5. Publish desktop release assets
-6. Publish optional model assets with `model-manifest.json` and `SHA256SUMS.txt`
-7. Run release consistency validation before announcing the tag
+6. Generate `model-manifest.json` from the real release model files so every optional model has a real `sha256` and `sizeBytes`
+7. Generate `SHA256SUMS.txt` from those same files
+8. Upload the matching optional model assets, `model-manifest.json`, and `SHA256SUMS.txt` to the same GitHub release tag
+9. Run release consistency validation before announcing the tag
+
+Do not ship the scaffolded fallback manifest as if it were release metadata. Optional installs are only trustworthy once the manifest, checksums, and GitHub release assets all match.
 
 Detailed runtime/model docs:
 

@@ -96,6 +96,8 @@ interface DownloadsState {
   manifestAsset: { browser_download_url: string; name: string } | null;
   checksumsAsset: { browser_download_url: string; name: string } | null;
   hasPublishedModelAssets: boolean;
+  hasIntegrityReadyOptionalModels: boolean;
+  manifestLooksReleaseReady: boolean;
 }
 
 interface AuthCapabilitiesState {
@@ -1270,6 +1272,24 @@ function SettingsPageContent() {
                 </div>
               </div>
 
+              {!downloadsLoading && downloads && !downloads.manifestLooksReleaseReady ? (
+                <Card>
+                  <div className={styles.settingsFeatureHead}>
+                    <div>
+                      <strong>Optional model downloads still need release publishing</strong>
+                      <p>
+                        Balanced and Pro should stay treated as scaffolded until the release ships a real
+                        <code> model-manifest.json </code>
+                        with matching
+                        <code> SHA256SUMS.txt </code>
+                        and GitHub assets.
+                      </p>
+                    </div>
+                    <span className="badge" style={{ background: 'rgba(245,158,11,0.12)', color: '#b45309' }}>Needs publish step</span>
+                  </div>
+                </Card>
+              ) : null}
+
               <Card>
                 <div className={styles.settingsFeatureHead}>
                   <div>
@@ -1285,7 +1305,7 @@ function SettingsPageContent() {
                   <div>
                     <div style={{ fontWeight: 700 }}>Downloads & releases</div>
                     <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginTop: 4 }}>
-                      Install the app first, then add bigger models only if Mini is not enough.
+                      Install the app first, then add bigger models only if Mini is not enough and the release integrity files are published.
                     </div>
                   </div>
                   {downloads?.releaseUrl ? (
@@ -1300,12 +1320,12 @@ function SettingsPageContent() {
                   <div className={styles.downloadGrid}>
                     <DownloadCard
                       title="macOS Apple Silicon"
-                      hint="Primary 1.0 desktop download. Mini is required in the bundle for first-launch offline AI."
+                      hint="Primary 1.0 desktop download. Mini must actually be bundled for first-launch offline AI."
                       primary={downloads?.macAsset ? { label: 'Download DMG', href: downloads.macAsset.browser_download_url } : null}
                     />
                     <DownloadCard
                       title="Windows x64"
-                      hint="Same local-model system. First-launch offline AI is currently guaranteed on the Mac 1.0 path."
+                      hint="Same local-model system. Treat Windows optional downloads as release-ready only after manifest and checksums are published."
                       primary={downloads?.windowsInstaller ? { label: 'Download installer', href: downloads.windowsInstaller.browser_download_url } : null}
                       secondary={downloads?.windowsPortable ? { label: 'Portable EXE', href: downloads.windowsPortable.browser_download_url } : null}
                     />
@@ -1321,6 +1341,11 @@ function SettingsPageContent() {
                   <span className="badge">Local = private + offline</span>
                   <span className="badge">Cloud = convenience</span>
                   {downloads?.hasPublishedModelAssets ? <span className="badge badge-success">Optional model assets published</span> : null}
+                  {downloads?.hasIntegrityReadyOptionalModels ? (
+                    <span className="badge badge-success">Optional model checksums ready</span>
+                  ) : (
+                    <span className="badge">Optional models still scaffolded</span>
+                  )}
                 </div>
               </Card>
 

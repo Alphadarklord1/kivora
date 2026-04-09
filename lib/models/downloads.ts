@@ -36,6 +36,8 @@ export type ReleaseModelDownload = LocalManifestModel & {
   publishedAsset: ReleaseAsset | null;
   downloadUrl: string | null;
   downloadSource: 'release' | 'manifest' | 'none';
+  integrityReady: boolean;
+  integrityWarning: string | null;
 };
 
 export const MODEL_COPY: Record<string, { label: string; summary: string; bundled: boolean; fit: string }> = {
@@ -62,6 +64,23 @@ export const MODEL_COPY: Record<string, { label: string; summary: string; bundle
 export function formatSize(bytes: number) {
   if (!bytes) return 'Unknown size';
   return `${(bytes / (1024 ** 3)).toFixed(1)} GB`;
+}
+
+function isSha256(value: string | null | undefined) {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+}
+
+function inferIntegrityWarning(model: LocalManifestModel, publishedAsset: ReleaseAsset | null) {
+  if (!model.sizeBytes || model.sizeBytes <= 0) {
+    return 'Missing published file size.';
+  }
+  if (!isSha256(model.sha256)) {
+    return 'Missing release checksum.';
+  }
+  if (model.key !== 'mini' && !publishedAsset) {
+    return 'Optional model is not attached to the current GitHub release yet.';
+  }
+  return null;
 }
 
 export async function getLatestRelease(): Promise<LatestReleasePayload | null> {
@@ -99,6 +118,7 @@ export async function getReleaseDownloadData() {
   const localModels: ReleaseModelDownload[] = ((localManifest.models || []) as LocalManifestModel[]).map((model) => {
     const publishedAsset = findAsset(assets, (asset) => asset.name === model.file);
     const downloadUrl = publishedAsset?.browser_download_url || model.url || null;
+    const integrityWarning = inferIntegrityWarning(model, publishedAsset);
     return {
       ...model,
       label: MODEL_COPY[model.key]?.label || model.modelId,
@@ -108,8 +128,16 @@ export async function getReleaseDownloadData() {
       publishedAsset,
       downloadUrl,
       downloadSource: publishedAsset ? 'release' : model.url ? 'manifest' : 'none',
+      integrityReady: !integrityWarning,
+      integrityWarning,
     };
   });
+
+  const optionalModels = localModels.filter((model) => !model.bundled);
+  const manifestLooksReleaseReady =
+    Boolean(manifestAsset) &&
+    Boolean(checksumsAsset) &&
+    optionalModels.every((model) => model.integrityReady);
 
   return {
     releaseTag,
@@ -122,6 +150,8 @@ export async function getReleaseDownloadData() {
     checksumsAsset,
     localModels,
     hasPublishedModelAssets: localModels.some((model) => Boolean(model.publishedAsset)),
+    hasIntegrityReadyOptionalModels: optionalModels.every((model) => model.integrityReady),
+    manifestLooksReleaseReady,
   };
 }
 

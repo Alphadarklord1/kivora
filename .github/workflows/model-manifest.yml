@@ -10,7 +10,7 @@ on:
       repo:
         description: owner/repo for release assets
         required: false
-        default: Alphadarklord1/studypilot
+        default: Alphadarklord1/kivora
         type: string
   release:
     types: [published]
