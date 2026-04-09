@@ -14,6 +14,7 @@ const MODEL_FILES = [
   'qwen2.5-3b-instruct-q4_k_m.gguf',
   'qwen2.5-7b-instruct-q4_k_m.gguf',
 ];
+const RELEASE_UPLOAD_LIMIT_BYTES = 2147483648;
 
 function parseArgs(argv) {
   const args = {};
@@ -52,6 +53,20 @@ function ensureFilesExist(files) {
   }
 }
 
+function splitModelPaths(modelPaths) {
+  const releasable = [];
+  const externalOnly = [];
+  for (const modelPath of modelPaths) {
+    const size = fs.statSync(modelPath).size;
+    if (size >= RELEASE_UPLOAD_LIMIT_BYTES) {
+      externalOnly.push(modelPath);
+    } else {
+      releasable.push(modelPath);
+    }
+  }
+  return { releasable, externalOnly };
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const tag = normalizeTag(args.tag || process.env.STUDYPILOT_RELEASE_TAG);
@@ -66,6 +81,7 @@ function main() {
 
   const modelPaths = MODEL_FILES.map((file) => path.join(modelsDir, file));
   ensureFilesExist(modelPaths);
+  const { releasable, externalOnly } = splitModelPaths(modelPaths);
 
   run(process.execPath, [
     path.join(PROJECT_ROOT, 'scripts', 'generate-model-manifest.js'),
@@ -99,7 +115,7 @@ function main() {
     'release',
     'upload',
     tag,
-    ...modelPaths,
+    ...releasable,
     manifestPath,
     checksumsPath,
     '--repo',
@@ -108,7 +124,10 @@ function main() {
   ]);
 
   console.log('');
-  console.log(`Uploaded model assets + manifest + checksums to ${repo} ${tag}`);
+  console.log(`Uploaded release-safe model assets + manifest + checksums to ${repo} ${tag}`);
+  if (externalOnly.length > 0) {
+    console.log(`Skipped oversized models that must stay externally hosted: ${externalOnly.map((file) => path.basename(file)).join(', ')}`);
+  }
 }
 
 try {

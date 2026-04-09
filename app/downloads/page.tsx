@@ -48,10 +48,10 @@ export default async function DownloadsPage() {
           </span>
           <div style={{ display: 'grid', gap: 10 }}>
             <h1 style={{ margin: 0, fontSize: 'clamp(2rem, 4vw, 3.2rem)', lineHeight: 1.05 }}>
-              Mac desktop built for offline AI, with release checks that still need to be real.
+              Install Kivora once, then add bigger offline models only if you need them.
             </h1>
             <p style={{ margin: 0, maxWidth: 760, color: 'var(--text-secondary, #475569)', fontSize: '1rem', lineHeight: 1.6 }}>
-              Kivora is designed around a bundled Mini model for first-launch offline use on desktop. Optional Balanced and Pro installs only become release-ready when the manifest, checksums, and GitHub release assets all match the published files.
+              The easiest setup is still the desktop app with Mini included for offline study. Balanced and Pro stay optional, so students can start fast and only download larger models if they want stronger local quality later.
             </p>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -84,9 +84,9 @@ export default async function DownloadsPage() {
               gap: 8,
             }}
           >
-            <strong style={{ fontSize: '0.95rem' }}>Optional model installs still need release publishing.</strong>
+            <strong style={{ fontSize: '0.95rem' }}>Optional model downloads are still being finalized.</strong>
             <p style={{ margin: 0, color: 'var(--text-secondary, #475569)', lineHeight: 1.55 }}>
-              The local fallback manifest is scaffolded for development. Before people download Balanced or Pro from a public release, publish a release <code>model-manifest.json</code> with real <code>sha256</code> and <code>sizeBytes</code> values, upload matching GitHub assets, and attach <code>SHA256SUMS.txt</code>.
+              Mini is the safe default today. Larger models should only be shown as ready once Kivora has finished publishing and verifying the download files behind the scenes.
             </p>
           </section>
         ) : null}
@@ -100,7 +100,7 @@ export default async function DownloadsPage() {
                 </span>
                 <h2 style={{ margin: 0, fontSize: '1.35rem' }}>Mac + bundled Mini</h2>
                 <p style={{ margin: 0, color: 'var(--text-secondary, #475569)', lineHeight: 1.55 }}>
-                  This is the cleanest Kivora setup: install the DMG, let the bundled Mini model handle offline notes, summaries, Scholar Hub file work, and Math support, then add heavier models only if you want them.
+                  This is the cleanest Kivora setup: install the app, let Mini handle offline notes, summaries, Scholar Hub file work, and Math support, then add heavier models later only if you want them.
                 </p>
               </div>
                 <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(34,197,94,0.12)', color: '#15803d', fontSize: '0.76rem', fontWeight: 700 }}>
@@ -111,9 +111,9 @@ export default async function DownloadsPage() {
             <div style={{ display: 'grid', gap: 10 }}>
                 {[
                   'Install the Mac app',
-                  'Mini is detected automatically only if the desktop bundle really includes the staged model file',
+                  'Mini is detected automatically inside the desktop app',
                   'Workspace, Scholar Hub file analysis, and Math can run locally',
-                  'Balanced and Pro stay optional downloads after install once release integrity files are published',
+                  'Balanced and Pro stay optional in-app downloads after install',
                 ].map((item, index) => (
                 <div key={item} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <span style={{ width: 24, height: 24, borderRadius: 999, background: 'color-mix(in srgb, var(--primary, #6366f1) 14%, transparent)', color: 'var(--primary, #6366f1)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.8rem', flexShrink: 0 }}>
@@ -133,7 +133,7 @@ export default async function DownloadsPage() {
               <div>
                 <strong style={{ display: 'block', marginBottom: 4 }}>Windows</strong>
                 <span style={{ fontSize: '0.88rem', color: 'var(--text-secondary, #475569)' }}>
-                  Installer and portable downloads stay separate from the Mac-first offline AI path.
+                  Windows uses the same offline model approach, with the installer and portable app available separately.
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -141,9 +141,9 @@ export default async function DownloadsPage() {
                 {downloads.windowsPortable ? <a href={downloads.windowsPortable.browser_download_url} style={buttonStyle(false)}>Portable EXE</a> : null}
               </div>
               <div>
-                <strong style={{ display: 'block', marginBottom: 4 }}>Release metadata</strong>
+                <strong style={{ display: 'block', marginBottom: 4 }}>For advanced setups</strong>
                 <span style={{ fontSize: '0.88rem', color: 'var(--text-secondary, #475569)' }}>
-                  Manifest and checksum files are here for model verification and release integrity.
+                  Power users can still inspect the published verification files, but most students should just use the desktop app and manage models inside Kivora.
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -161,7 +161,7 @@ export default async function DownloadsPage() {
             </span>
             <h2 style={{ margin: 0, fontSize: '1.35rem' }}>Download bigger local models when you actually need them.</h2>
             <p style={{ margin: 0, color: 'var(--text-secondary, #475569)', lineHeight: 1.55 }}>
-              Mini should be the default Mac experience. Balanced and Pro are for people who want stronger local quality and have the RAM for it, but they should only be downloaded from a release once their checksums and assets are published together.
+              Mini should be the default experience. Balanced and Pro are for people who want stronger local quality and have the RAM for it.
             </p>
           </div>
 
@@ -185,22 +185,22 @@ export default async function DownloadsPage() {
                   <span>{model.quantization}</span>
                   <span>
                     {model.downloadSource === 'release'
-                      ? 'Download comes from the current Kivora release assets.'
+                      ? 'Ready to download now.'
                       : model.downloadSource === 'manifest'
-                        ? 'Fallback download comes from the scaffolded manifest URL.'
-                        : 'No download URL published yet.'}
+                        ? 'Delivered from Kivora’s hosted model source.'
+                        : 'No download is published yet.'}
                   </span>
                   {model.integrityWarning ? (
                     <span style={{ color: '#b45309' }}>{model.integrityWarning}</span>
                   ) : (
-                    <span style={{ color: '#15803d' }}>Checksum and asset metadata are ready for release use.</span>
+                    <span style={{ color: '#15803d' }}>Verified and ready to use.</span>
                   )}
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {model.downloadUrl ? (
                     <a href={model.downloadUrl} style={buttonStyle(model.key !== 'mini')}>
-                      {model.bundled ? 'View model file' : 'Download model'}
+                      {model.bundled ? 'View included model' : 'Download in app'}
                     </a>
                   ) : (
                     <span style={{ fontSize: '0.82rem', color: 'var(--text-muted, #64748b)' }}>No published download yet</span>

@@ -179,7 +179,7 @@ export function DesktopModelPanel() {
     <div style={{ display: 'grid', gap: 12 }}>
       <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
         {bundledMiniInstalled
-          ? `Mini is bundled in this desktop build, so the Mac app should be ready for first-launch offline AI. Optional bigger models download into your app data only when you ask for them.${optionalDownloadsInstalled > 0 ? ` You already have ${optionalDownloadsInstalled} optional model${optionalDownloadsInstalled === 1 ? '' : 's'} installed.` : ''}`
+          ? `Mini is bundled in this desktop build, so offline AI should work right after install. Bigger models stay optional and only download when you ask for them.${optionalDownloadsInstalled > 0 ? ` You already have ${optionalDownloadsInstalled} optional model${optionalDownloadsInstalled === 1 ? '' : 's'} installed.` : ''}`
           : 'This build does not currently include the bundled Mini model. Mac offline AI will still need a model download until the desktop bundle is staged correctly.'}
       </p>
 
@@ -278,7 +278,7 @@ export function DesktopModelPanel() {
                   disabled={isBusy}
                   onClick={() => handleInstall(model.key)}
                 >
-                  {isBusy ? 'Starting…' : model.key === 'mini' ? 'Install & use Mini' : 'Download optional model'}
+                  {isBusy ? 'Starting…' : model.key === 'mini' ? 'Install Mini' : 'Download here'}
                 </button>
               )}
               {model.isInstalled && !isActive && (

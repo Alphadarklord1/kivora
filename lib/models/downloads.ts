@@ -77,8 +77,12 @@ function inferIntegrityWarning(model: LocalManifestModel, publishedAsset: Releas
   if (!isSha256(model.sha256)) {
     return 'Missing release checksum.';
   }
-  if (model.key !== 'mini' && !publishedAsset) {
+  const isExternalHost = typeof model.url === 'string' && model.url.startsWith('https://') && !model.url.includes('/releases/download/');
+  if (model.key !== 'mini' && !publishedAsset && !isExternalHost) {
     return 'Optional model is not attached to the current GitHub release yet.';
+  }
+  if (model.key === 'pro' && isExternalHost) {
+    return null;
   }
   return null;
 }

@@ -71,11 +71,16 @@ function main() {
       fail(`minRamGb must be > 0 for ${model.key}`);
     }
     if (!allowPlaceholders) {
-      if (typeof model.url !== 'string' || !model.url.startsWith(`https://github.com/${repo}/releases/download/${versionTag}/`)) {
-        fail(`url is invalid or tag/repo mismatch for ${model.key}`);
+      if (typeof model.url !== 'string' || !model.url.startsWith('https://')) {
+        fail(`url must be https for ${model.key}`);
       }
-      if (!model.url.endsWith(`/${model.file}`)) {
-        fail(`url/file mismatch for ${model.key}`);
+      const isGitHubReleaseUrl = model.url.startsWith(`https://github.com/${repo}/releases/download/${versionTag}/`);
+      if (isGitHubReleaseUrl) {
+        if (!model.url.endsWith(`/${model.file}`)) {
+          fail(`url/file mismatch for ${model.key}`);
+        }
+      } else if (model.key !== 'pro') {
+        fail(`External model URL is only allowed for pro. Invalid url for ${model.key}`);
       }
     }
   }

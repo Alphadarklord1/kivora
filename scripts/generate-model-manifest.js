@@ -12,7 +12,14 @@ const DEFAULT_REPO = process.env.STUDYPILOT_MODEL_REPO || 'Alphadarklord1/kivora
 const MODEL_DEFS = [
   { key: 'mini', modelId: 'Qwen2.5-1.5B-Instruct', quantization: 'Q4_K_M', file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', minRamGb: 8 },
   { key: 'balanced', modelId: 'Qwen2.5-3B-Instruct', quantization: 'Q4_K_M', file: 'qwen2.5-3b-instruct-q4_k_m.gguf', minRamGb: 16 },
-  { key: 'pro', modelId: 'Qwen2.5-7B-Instruct', quantization: 'Q4_K_M', file: 'qwen2.5-7b-instruct-q4_k_m.gguf', minRamGb: 24 },
+  {
+    key: 'pro',
+    modelId: 'Qwen2.5-7B-Instruct',
+    quantization: 'Q4_K_M',
+    file: 'qwen2.5-7b-instruct-q4_k_m.gguf',
+    minRamGb: 24,
+    externalUrl: 'https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf',
+  },
 ];
 
 function parseArgs(argv) {
@@ -76,7 +83,7 @@ async function main() {
       sizeBytes: stat.size,
       sha256,
       minRamGb: def.minRamGb,
-      url: `https://github.com/${repo}/releases/download/${tag}/${def.file}`,
+      url: def.externalUrl || `https://github.com/${repo}/releases/download/${tag}/${def.file}`,
     });
   }
 
