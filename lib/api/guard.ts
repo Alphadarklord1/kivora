@@ -33,11 +33,20 @@ const ALLOWED_ORIGINS: string[] = [
   'app://kivora', // Electron renderer
 ].filter(Boolean);
 
+function getRequestOrigin(req: NextRequest): string | null {
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? req.nextUrl.host;
+  if (!host) return null;
+  const proto = req.headers.get('x-forwarded-proto') ?? req.nextUrl.protocol.replace(/:$/, '');
+  return `${proto}://${host}`;
+}
+
 function isOriginAllowed(req: NextRequest): boolean {
   const origin = req.headers.get('origin');
   // Non-browser requests (server-to-server, Electron, CLI) have no origin — allow
   if (!origin) return true;
-  return ALLOWED_ORIGINS.some(allowed => origin === allowed || origin.startsWith(allowed));
+  const requestOrigin = getRequestOrigin(req);
+  if (requestOrigin && origin === requestOrigin) return true;
+  return ALLOWED_ORIGINS.some(allowed => origin === allowed);
 }
 
 function isBodyTooLarge(req: NextRequest): boolean {
