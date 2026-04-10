@@ -59,6 +59,10 @@
     },
     "files": [
       "electron/**/*",
+      "!electron/runtime/models/**/*",
+      "!electron/runtime/model-manifest.json",
+      "!electron/runtime/SHA256SUMS.txt",
+      "!electron/runtime/README.md",
       "public/**/*",
       ".next/**/*",
       "out/**/*",
@@ -66,11 +70,8 @@
     ],
     "extraResources": [
       {
-        "from": "electron/runtime/models",
-        "to": "models",
-        "filter": [
-          "**/*"
-        ]
+        "from": "electron/runtime/models/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+        "to": "models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
       },
       {
         "from": "electron/runtime/bin",
@@ -78,6 +79,14 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "electron/runtime/model-manifest.json",
+        "to": "model-manifest.json"
+      },
+      {
+        "from": "electron/runtime/SHA256SUMS.txt",
+        "to": "SHA256SUMS.txt"
       }
     ],
     "afterPack": "scripts/after-pack-mac.js",
