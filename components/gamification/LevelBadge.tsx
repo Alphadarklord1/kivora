@@ -8,12 +8,12 @@ interface LevelBadgeProps {
 }
 
 export function LevelBadge({ compact = false }: LevelBadgeProps) {
-  const [state, setState] = useState<GamificationState | null>(null);
+  const [state, setState] = useState<GamificationState | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return getGamificationState();
+  });
 
   useEffect(() => {
-    // Read from localStorage on the client only
-    setState(getGamificationState());
-
     // Re-sync whenever another tab/window writes to storage
     function onStorage(e: StorageEvent) {
       if (e.key?.startsWith('kivora-gamification')) {

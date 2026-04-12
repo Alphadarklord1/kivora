@@ -65,6 +65,11 @@ interface GraphExpression {
   enabled: boolean;
 }
 
+interface GraphRecentItem {
+  expr: string;
+  savedAt: number;
+}
+
 interface WorkflowStep {
   label: string;
   detail: string;
@@ -90,6 +95,8 @@ const LOCAL_AR: Record<string, string> = {
   'Slider': 'شريط تمرير',
   'Point': 'نقطة',
   'Export as SVG': 'تصدير كـ SVG',
+  'Recent graphs': 'رسوم حديثة',
+  'Reuse a graph setup without retyping it.': 'أعد استخدام إعداد رسم بياني دون إعادة كتابته.',
   'Unit Converter': 'محول الوحدات',
   'Question Scan': 'مسح السؤال',
   'Visual Analyzer': 'المحلل البصري',
@@ -244,6 +251,10 @@ const LOCAL_AR: Record<string, string> = {
   'Could not extract a math expression from the screenshot.': 'تعذر استخراج تعبير رياضي من لقطة الشاشة.',
   'The PDF did not contain readable text.': 'ملف PDF لا يحتوي على نص قابل للقراءة.',
   'Could not process this file.': 'تعذر معالجة هذا الملف.',
+  'Copy extracted question': 'انسخ السؤال المستخرج',
+  'Question copied!': 'تم نسخ السؤال!',
+  'Could not copy question.': 'تعذر نسخ السؤال.',
+  'Open in writer': 'افتح في الكاتب',
   'Network error — check that the AI model is running.': 'خطأ في الشبكة — تأكد من أن نموذج الذكاء الاصطناعي يعمل.',
   'Question': 'السؤال',
   'Preview': 'المعاينة',
@@ -255,7 +266,12 @@ const LOCAL_AR: Record<string, string> = {
   'Use Question Scan →': 'استخدم مسح السؤال ←',
   'Saved to flashcards!': 'تم الحفظ في البطاقات التعليمية!',
   'Save as flashcard': 'احفظ كبطاقة تعليمية',
+  'Save worked solution': 'احفظ الحل الكامل',
+  'Saved worked solution!': 'تم حفظ الحل الكامل!',
+  'Copy solution': 'انسخ الحل',
+  'Solution copied!': 'تم نسخ الحل!',
   'Could not save — try again.': 'تعذر الحفظ — حاول مرة أخرى.',
+  'Could not copy solution.': 'تعذر نسخ الحل.',
   'Could not solve this problem': 'تعذر حل هذه المسألة',
   'Try rephrasing your input, checking for typos, or switching to a different problem type.': 'جرّب إعادة صياغة الإدخال أو التحقق من الأخطاء الكتابية أو اختيار نوع مسألة مختلف.',
   'Answer': 'الإجابة',
@@ -1012,11 +1028,18 @@ const UNIT_CATS = [
 ];
 
 const HISTORY_KEY = 'kivora-math-history';
+const GRAPH_HISTORY_KEY = 'kivora-math-graph-history';
 function loadHistory(): HistoryItem[] {
   try { return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]') as HistoryItem[]; } catch { return []; }
 }
 function saveHistory(h: HistoryItem[]) {
   try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(0, 50))); } catch { /* noop */ }
+}
+function loadGraphHistory(): GraphRecentItem[] {
+  try { return JSON.parse(localStorage.getItem(GRAPH_HISTORY_KEY) ?? '[]') as GraphRecentItem[]; } catch { return []; }
+}
+function saveGraphHistory(history: GraphRecentItem[]) {
+  try { localStorage.setItem(GRAPH_HISTORY_KEY, JSON.stringify(history.slice(0, 12))); } catch { /* noop */ }
 }
 
 // ── Structured form config (all solver categories) ────────────────────────────
@@ -2366,6 +2389,7 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SolveResult | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [recentGraphs, setRecentGraphs] = useState<GraphRecentItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -2413,8 +2437,13 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
 
   // Flashcard save feedback
   const [flashcardToast, setFlashcardToast] = useState<string>('');
+  const [solutionToast, setSolutionToast] = useState<string>('');
+  const [scanToast, setScanToast] = useState<string>('');
 
-  useEffect(() => { setHistory(loadHistory()); }, []);
+  useEffect(() => {
+    setHistory(loadHistory());
+    setRecentGraphs(loadGraphHistory());
+  }, []);
 
   useEffect(() => {
     if (active === 'vectors' || active === 'matrices' || active === 'linear-algebra') {
@@ -2471,6 +2500,16 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
     setGraphExprs([{ id: crypto.randomUUID(), expr, color: GRAPH_COLORS[0], enabled: true }]);
   }, []);
 
+  const rememberGraphExpression = useCallback((expr: string) => {
+    const trimmed = expr.trim();
+    if (!trimmed) return;
+    setRecentGraphs((current) => {
+      const next = [{ expr: trimmed, savedAt: Date.now() }, ...current.filter((item) => item.expr !== trimmed)].slice(0, 12);
+      saveGraphHistory(next);
+      return next;
+    });
+  }, []);
+
   const loadQuestionFromFile = useCallback(async (file: File) => {
     const isImage = file.type.startsWith('image/');
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
@@ -2516,6 +2555,36 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
       setScanBusy(false);
     }
   }, [tr]);
+
+  const copyToClipboard = useCallback(async (
+    text: string,
+    successMessage: string,
+    failureMessage: string,
+    setter: (value: string) => void,
+  ) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setter(successMessage);
+      window.setTimeout(() => setter(''), 2400);
+    } catch {
+      setter(failureMessage);
+      window.setTimeout(() => setter(''), 2400);
+    }
+  }, []);
+
+  const buildWorkedSolutionText = useCallback((problem: string, solveResult: SolveResult) => {
+    return [
+      `Problem: ${problem}`,
+      '',
+      `Answer: ${solveResult.answer}`,
+      '',
+      ...solveResult.steps.flatMap((step) => [
+        `${step.step}. ${step.description}`,
+        step.expression ? `   ${step.expression}` : '',
+        step.explanation ? `   ${step.explanation}` : '',
+      ].filter(Boolean)),
+    ].join('\n');
+  }, []);
 
   // ── Solver ─────────────────────────────────────────────────────────────────
 
@@ -2593,6 +2662,17 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
     const t = setTimeout(() => renderGraph(), 320);
     return () => clearTimeout(t);
   }, [graphExprs, xDomain, yDomain, active, renderGraph]);
+
+  useEffect(() => {
+    if (active !== 'graph') return;
+    const combined = graphExprs
+      .filter((expr) => expr.enabled && expr.expr.trim())
+      .map((expr) => expr.expr.trim())
+      .join(' | ');
+    if (!combined) return;
+    const timeout = window.setTimeout(() => rememberGraphExpression(combined), 450);
+    return () => window.clearTimeout(timeout);
+  }, [active, graphExprs, rememberGraphExpression]);
 
   function resetGraphView() {
     setXDomain([-12, 12]);
@@ -3292,6 +3372,48 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
                     {/* Save as flashcard */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                       <button
+                        onClick={() => {
+                          const problem = input.trim();
+                          if (!problem || !result.answer) return;
+                          void copyToClipboard(
+                            buildWorkedSolutionText(problem, result),
+                            tr('Solution copied!'),
+                            tr('Could not copy solution.'),
+                            setSolutionToast,
+                          );
+                        }}
+                        style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        {`📋 ${tr('Copy solution')}`}
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const problem = input.trim();
+                          if (!problem || !result.answer) return;
+                          try {
+                            const res = await fetch('/api/library', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                mode: 'notes',
+                                title: `Worked solution: ${problem.length > 48 ? `${problem.slice(0, 48)}…` : problem}`,
+                                content: buildWorkedSolutionText(problem, result),
+                              }),
+                            });
+                            if (!res.ok) throw new Error('Save failed');
+                            broadcastInvalidate(LIBRARY_CHANNEL);
+                            setSolutionToast(tr('Saved worked solution!'));
+                            setTimeout(() => setSolutionToast(''), 2800);
+                          } catch {
+                            setSolutionToast(tr('Could not save — try again.'));
+                            setTimeout(() => setSolutionToast(''), 2800);
+                          }
+                        }}
+                        style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        {`📚 ${tr('Save worked solution')}`}
+                      </button>
+                      <button
                         onClick={async () => {
                           const problem = input.trim();
                           const answer = result.answer ?? '';
@@ -3319,6 +3441,9 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
                       >
                         {`📇 ${tr('Save as flashcard')}`}
                       </button>
+                      {solutionToast && (
+                        <span style={{ fontSize: 12, color: solutionToast === tr('Could not save — try again.') || solutionToast === tr('Could not copy solution.') ? '#ef4444' : '#22c55e', fontWeight: 600 }}>{solutionToast}</span>
+                      )}
                       {flashcardToast && (
                         <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>{flashcardToast}</span>
                       )}
@@ -3421,6 +3546,38 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
               title={SPECIAL_VIEW_META.graph.workflowTitle}
               steps={SPECIAL_VIEW_META.graph.workflow}
             />
+            {recentGraphs.length > 0 && (
+              <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', display: 'grid', gap: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>
+                      {tr('Recent graphs')}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                      {tr('Reuse a graph setup without retyping it.')}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setRecentGraphs([]); saveGraphHistory([]); }}
+                    style={{ fontSize: 12, padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
+                  >
+                    {tr('Clear')}
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {recentGraphs.slice(0, 6).map((item) => (
+                    <button
+                      key={`${item.expr}-${item.savedAt}`}
+                      onClick={() => replaceGraphWith(item.expr)}
+                      title={item.expr}
+                      style={{ padding: '5px 12px', borderRadius: 20, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    >
+                      {item.expr}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {GRAPH_PRESETS.map(preset => (
@@ -3718,8 +3875,24 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); inputRef.current?.focus(); }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{tr('Open in solver')}</button>
                   <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); setTimeout(() => { void solve(scanExtracted, nextTopic); }, 0); }} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{tr('Solve now')}</button>
+                  <button
+                    onClick={() => {
+                      setTypeInput(scanExtracted);
+                      setActive('write');
+                    }}
+                    style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    {tr('Open in writer')}
+                  </button>
+                  <button
+                    onClick={() => void copyToClipboard(scanExtracted, tr('Question copied!'), tr('Could not copy question.'), setScanToast)}
+                    style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    {tr('Copy extracted question')}
+                  </button>
                   <button onClick={() => setScanExtracted('')} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>{tr('Clear')}</button>
                 </div>
+                {scanToast && <span style={{ fontSize: 12, color: scanToast === tr('Question copied!') ? '#22c55e' : '#ef4444', fontWeight: 600 }}>{scanToast}</span>}
               </div>
             )}
           </div>

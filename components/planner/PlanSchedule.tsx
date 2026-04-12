@@ -128,7 +128,10 @@ export function PlanSchedule({
   useEffect(() => {
     if (!schedule) return;
     const nextSelected = todayIdx ?? schedule.days.findIndex((day) => !day.completed) ?? 0;
-    setSelectedDayIndex(nextSelected >= 0 ? nextSelected : 0);
+    const timer = window.setTimeout(() => {
+      setSelectedDayIndex(nextSelected >= 0 ? nextSelected : 0);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [schedule, todayIdx]);
 
   const calendarWeeks = useMemo(() => (schedule ? buildCalendarWeeks(schedule.days) : []), [schedule]);
@@ -137,6 +140,22 @@ export function PlanSchedule({
     [schedule, locale]
   );
   const weekdayLabels = useMemo(() => [t('Mon'), t('Tue'), t('Wed'), t('Thu'), t('Fri'), t('Sat'), t('Sun')], [t]);
+  const scheduleDays = schedule?.days ?? [];
+  const nextIncompleteIndex = scheduleDays.findIndex((day) => !day.completed);
+
+  useEffect(() => {
+    if (!schedule) return;
+    const anchorIndex = todayIdx ?? (nextIncompleteIndex >= 0 ? nextIncompleteIndex : 0);
+    const anchorDay = schedule.days[Math.max(0, anchorIndex)];
+    if (!anchorDay) return;
+    const monthIndex = Math.max(0, monthSections.findIndex((section) => section.days.some((day) => day.dayNumber === anchorDay.dayNumber)));
+    const weekIndex = Math.max(0, calendarWeeks.findIndex((week) => week.some((day) => day?.dayNumber === anchorDay.dayNumber)));
+    const timer = window.setTimeout(() => {
+      setVisibleMonthIndex(monthIndex);
+      setVisibleWeekIndex(weekIndex);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [schedule, todayIdx, nextIncompleteIndex, monthSections, calendarWeeks]);
 
   if (!schedule) return null;
 
@@ -147,7 +166,6 @@ export function PlanSchedule({
 
   const selectedDay = schedule.days[Math.max(0, Math.min(selectedDayIndex, schedule.days.length - 1))];
   const weeklyAverageMinutes = Math.round(schedule.days.reduce((sum, day) => sum + day.totalMinutes, 0) / Math.max(1, calendarWeeks.length));
-  const nextIncompleteIndex = schedule.days.findIndex((day) => !day.completed);
   const examWeekIndex = Math.max(0, calendarWeeks.findIndex((week) => week.some((day) => day?.date === schedule.endDate)));
   const selectedWeekIndex = Math.max(0, calendarWeeks.findIndex((week) => week.some((day) => day?.dayNumber === selectedDay.dayNumber)));
   const visibleMonth = monthSections[Math.min(visibleMonthIndex, Math.max(monthSections.length - 1, 0))];
@@ -160,17 +178,6 @@ export function PlanSchedule({
     ? visibleMonth?.label ?? formatDate(schedule.startDate, { month: 'long', year: 'numeric' })
     : formatWeekRange(calendarWeeks[visibleWeekIndex] ?? calendarWeeks[0] ?? [], formatDate);
   const upcomingDays = schedule.days.filter((day) => !day.completed && day.dayNumber >= selectedDay.dayNumber).slice(0, 4);
-
-  useEffect(() => {
-    if (!schedule) return;
-    const anchorIndex = todayIdx ?? (nextIncompleteIndex >= 0 ? nextIncompleteIndex : 0);
-    const anchorDay = schedule.days[Math.max(0, anchorIndex)];
-    if (!anchorDay) return;
-    const monthIndex = Math.max(0, monthSections.findIndex((section) => section.days.some((day) => day.dayNumber === anchorDay.dayNumber)));
-    const weekIndex = Math.max(0, calendarWeeks.findIndex((week) => week.some((day) => day?.dayNumber === anchorDay.dayNumber)));
-    setVisibleMonthIndex(monthIndex);
-    setVisibleWeekIndex(weekIndex);
-  }, [schedule, todayIdx, nextIncompleteIndex, monthSections, calendarWeeks]);
 
   const syncVisibleRangeToDay = (dayIndex: number) => {
     const target = schedule.days[dayIndex];

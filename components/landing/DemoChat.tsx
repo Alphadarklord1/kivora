@@ -100,7 +100,7 @@ export function DemoChat() {
       <div className="demo-head">
         <div className="demo-head-left">
           <span className="demo-eyebrow">Live demo</span>
-          <h2 className="demo-title">Ask Kivora's AI anything.</h2>
+          <h2 className="demo-title">Ask Kivora&apos;s AI anything.</h2>
           <p className="demo-subtitle">
             Powered by <strong>Groq</strong> · <code>llama-3.3-70b-versatile</code> · Streamed in real time
           </p>

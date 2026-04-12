@@ -1010,6 +1010,85 @@ export function WorkspacePanel({
     }
   }
 
+  async function saveNotesSnapshotToLibrary(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) throw new Error('Add or generate notes first.');
+
+    const topicLabel = selectedTopicName && selectedTopicName !== 'All Topics' ? selectedTopicName : null;
+    const folderLabel = selectedFolderName && selectedFolderName !== 'All Files' ? selectedFolderName : null;
+    const titleParts = [topicLabel, folderLabel, 'Notes snapshot'].filter(Boolean);
+
+    const res = await fetch('/api/library', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'notes',
+        content: trimmed,
+        metadata: {
+          title: titleParts.join(' · ') || 'Workspace notes snapshot',
+          description: 'Saved from the Workspace notes panel.',
+          sourceFileName: selFile?.name ?? undefined,
+          savedFrom: 'workspace-notes',
+          category: noteStyle,
+        },
+      }),
+    });
+
+    const data = await res.json().catch(() => null) as { error?: string } | null;
+    if (!res.ok) {
+      throw new Error(data?.error ?? 'Could not save notes snapshot.');
+    }
+
+    broadcastInvalidate(LIBRARY_CHANNEL);
+  }
+
+  function openNotesInTools(text: string, nextMode?: GenMode) {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      toast('Add or generate notes first.', 'warning');
+      return;
+    }
+    setMainTab('generate');
+    setPasteMode(true);
+    setViewFile(null);
+    setSelFile(null);
+    setOutput('');
+    setGenMode(nextMode ?? genMode);
+    setExtractedText(trimmed);
+    toast(nextMode ? 'Notes are ready for generation' : 'Notes are ready in Tools', 'success');
+  }
+
+  function openNotesInChat(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      toast('Add or generate notes first.', 'warning');
+      return;
+    }
+    setMainTab('chat');
+    setViewFile(null);
+    setSelFile(null);
+    setOutput('');
+    setExtractedText(trimmed);
+    toast('Notes are ready in Chat', 'success');
+  }
+
+  function quizFromNotes(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      toast('Add or generate notes first.', 'warning');
+      return;
+    }
+    setMainTab('generate');
+    setPasteMode(true);
+    setViewFile(null);
+    setSelFile(null);
+    setOutput('');
+    setGenMode('quiz');
+    setExtractedText(trimmed);
+    toast('Building quiz prompts from your notes…', 'info');
+    void runGenerate('quiz', trimmed);
+  }
+
   function applyFileContext(file: FileRecord, text: string, nextTab: MainTab, successMessage: string) {
     setExtractedText(text);
     setSelFile(file);
@@ -1917,6 +1996,10 @@ export function WorkspacePanel({
             onNoteStyleChange={setNoteStyle}
             onGenerateFromSource={() => void generateNotesForWorkspace()}
             onOpenFiles={() => setMainTab('files')}
+            onUseNotesInTools={openNotesInTools}
+            onQuizFromNotes={quizFromNotes}
+            onAskChatAboutNotes={openNotesInChat}
+            onSaveNotesSnapshot={saveNotesSnapshotToLibrary}
           />
         )}
 

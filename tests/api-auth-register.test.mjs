@@ -43,11 +43,15 @@ mock.module(resolve(ROOT, 'lib/supabase/auth-admin.ts'), {
 });
 
 const { POST } = await import('../app/api/auth/register/route.ts');
+let requestCounter = 0;
 
 function req(body) {
   return new Request('http://localhost/api/auth/register', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-forwarded-for': `test-ip-${++requestCounter}`,
+    },
     body: JSON.stringify(body),
   });
 }

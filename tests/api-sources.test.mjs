@@ -14,6 +14,7 @@ const state = {
   rows: [],
   existing: null,
   inserted: null,
+  updated: null,
 };
 
 mock.module(resolve(ROOT, 'lib/db/index.ts'), {
@@ -38,6 +39,13 @@ mock.module(resolve(ROOT, 'lib/db/index.ts'), {
             returning: async () => [state.inserted ?? { id: 'src-1', ...data }],
           }),
         }),
+        update: () => ({
+          set: (data) => ({
+            where: () => ({
+              returning: async () => [state.updated ?? { ...state.existing, ...data }],
+            }),
+          }),
+        }),
         delete: () => ({
           where: async () => {},
         }),
@@ -52,7 +60,7 @@ mock.module(resolve(ROOT, 'lib/auth/get-user-id.ts'), {
   },
 });
 
-const { GET, POST, DELETE } = await import('../app/api/sources/route.ts');
+const { GET, POST, PATCH, DELETE } = await import('../app/api/sources/route.ts');
 
 function req(method, url, body) {
   return new Request(url, {
@@ -132,6 +140,38 @@ test('POST /sources: truncates title to 300 chars', async () => {
   assert.ok(res.ok);
   const body = await res.json();
   assert.ok(body.source.title.length <= 300);
+});
+
+// ── PATCH ────────────────────────────────────────────────────────────────────
+
+test('PATCH /sources: 400 when id is missing', async () => {
+  const res = await PATCH(req('PATCH', 'http://localhost/api/sources', { notes: 'Keep this for later' }));
+  assert.equal(res.status, 400);
+});
+
+test('PATCH /sources: 404 when source does not exist', async () => {
+  state.existing = null;
+  const res = await PATCH(req('PATCH', 'http://localhost/api/sources', { id: 'missing', notes: 'x' }));
+  assert.equal(res.status, 404);
+});
+
+test('PATCH /sources: 403 when source belongs to another user', async () => {
+  state.existing = { id: 'src-other', userId: 'someone-else', notes: null };
+  const res = await PATCH(req('PATCH', 'http://localhost/api/sources', { id: 'src-other', notes: 'x' }));
+  assert.equal(res.status, 403);
+  state.existing = null;
+});
+
+test('PATCH /sources: updates notes for owned source', async () => {
+  state.existing = { id: 'src-mine', userId: 'user-abc', title: 'Saved source', url: 'https://example.com', notes: null };
+  state.updated = { ...state.existing, notes: 'Useful for week 3' };
+  const res = await PATCH(req('PATCH', 'http://localhost/api/sources', { id: 'src-mine', notes: 'Useful for week 3' }));
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.source.notes, 'Useful for week 3');
+  state.existing = null;
+  state.updated = null;
 });
 
 // ── DELETE ────────────────────────────────────────────────────────────────────

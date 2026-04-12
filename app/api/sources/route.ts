@@ -91,3 +91,34 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to delete source' }, { status: 500 });
   }
 }
+
+/** PATCH /api/sources — update source notes */
+export async function PATCH(request: NextRequest) {
+  if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
+  const userId = await getUserId(request);
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const body = await request.json().catch(() => null) as { id?: string; notes?: string | null } | null;
+  const id = body?.id?.trim();
+  if (!id) return NextResponse.json({ error: 'id is required.' }, { status: 400 });
+
+  try {
+    const existing = await db.query.savedSources.findFirst({
+      where: eq(savedSources.id, id),
+    });
+    if (!existing) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
+    if (existing.userId !== userId) return NextResponse.json({ error: 'Forbidden.' }, { status: 403 });
+
+    const normalizedNotes = body?.notes?.trim() ? body.notes.trim().slice(0, 1000) : null;
+    const [row] = await db
+      .update(savedSources)
+      .set({ notes: normalizedNotes })
+      .where(eq(savedSources.id, id))
+      .returning();
+
+    return NextResponse.json({ ok: true, source: row });
+  } catch (err) {
+    console.error('[sources][PATCH]', err);
+    return NextResponse.json({ error: 'Failed to update source' }, { status: 500 });
+  }
+}

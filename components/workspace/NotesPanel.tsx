@@ -1,9 +1,47 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useToast } from '@/providers/ToastProvider';
 import { useI18n } from '@/lib/i18n/useI18n';
 
 export type NoteStyle = 'study' | 'summary' | 'revision' | 'cornell';
+
+interface BrowserSpeechRecognitionResult {
+  0: { transcript: string };
+  isFinal: boolean;
+}
+
+interface BrowserSpeechRecognitionEvent {
+  resultIndex: number;
+  results: ArrayLike<BrowserSpeechRecognitionResult>;
+}
+
+interface BrowserSpeechRecognitionErrorEvent {
+  error: string;
+}
+
+interface BrowserSpeechRecognition {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+}
+
+interface BrowserSpeechRecognitionConstructor {
+  new (): BrowserSpeechRecognition;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+  }
+}
 
 interface Props {
   folderId: string | null;
@@ -15,6 +53,10 @@ interface Props {
   onNoteStyleChange?: (style: NoteStyle) => void;
   onGenerateFromSource?: () => void;
   onOpenFiles?: () => void;
+  onUseNotesInTools?: (content: string) => void;
+  onQuizFromNotes?: (content: string) => void;
+  onAskChatAboutNotes?: (content: string) => void;
+  onSaveNotesSnapshot?: (content: string) => Promise<void> | void;
 }
 
 const STORAGE_PREFIX = 'kivora-notes-';
@@ -58,6 +100,26 @@ const LOCAL_AR: Record<string, string> = {
   'Generate notes': 'إنشاء ملاحظات',
   'Choose a file first': 'اختر ملفًا أولًا',
   'Preview appears here as you type.': 'ستظهر المعاينة هنا أثناء الكتابة.',
+  'Workspace actions': 'إجراءات مساحة العمل',
+  'Turn your notes into quiz prompts, AI tools, or a study chat without leaving this panel.': 'حوّل ملاحظاتك إلى اختبارات أو أدوات ذكاء أو دردشة دراسية من دون مغادرة هذه اللوحة.',
+  'Copy notes': 'نسخ الملاحظات',
+  'Save snapshot': 'حفظ لقطة',
+  'Use in Tools': 'استخدمها في الأدوات',
+  'Quiz me': 'اختبرني',
+  'Ask Chat': 'اسأل الدردشة',
+  'Dictate': 'إملاء',
+  'Stop dictation': 'إيقاف الإملاء',
+  'Voice dictation works best in supported desktop browsers.': 'يعمل الإملاء الصوتي بشكل أفضل في المتصفحات المكتبية المدعومة.',
+  'Voice dictation is not supported in this browser.': 'الإملاء الصوتي غير مدعوم في هذا المتصفح.',
+  'Microphone access was blocked.': 'تم حظر الوصول إلى الميكروفون.',
+  'Voice dictation stopped.': 'تم إيقاف الإملاء الصوتي.',
+  'Listening…': 'يستمع الآن…',
+  'Notes copied!': 'تم نسخ الملاحظات!',
+  'Could not copy notes.': 'تعذر نسخ الملاحظات.',
+  'Write or generate notes first.': 'اكتب أو أنشئ ملاحظات أولًا.',
+  'Saved notes snapshot!': 'تم حفظ لقطة الملاحظات!',
+  'Could not save notes snapshot.': 'تعذر حفظ لقطة الملاحظات.',
+  'Dictation unavailable.': 'الإملاء غير متاح.',
 };
 
 const NOTE_STYLES: Array<{ id: NoteStyle; label: string; hint: string }> = [
@@ -66,6 +128,10 @@ const NOTE_STYLES: Array<{ id: NoteStyle; label: string; hint: string }> = [
   { id: 'revision', label: 'Revision', hint: 'Exam cues, definitions, recall prompts' },
   { id: 'cornell',  label: 'Cornell',  hint: 'Cue column, notes, review summary' },
 ];
+
+function supportsVoiceDictation() {
+  return typeof window !== 'undefined' && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
 
 function mdToHtml(md: string): string {
   return md
@@ -108,15 +174,23 @@ export function NotesPanel({
   onNoteStyleChange,
   onGenerateFromSource,
   onOpenFiles,
+  onUseNotesInTools,
+  onQuizFromNotes,
+  onAskChatAboutNotes,
+  onSaveNotesSnapshot,
 }: Props) {
   const { t } = useI18n(LOCAL_AR);
+  const { toast } = useToast();
   const [content, setContent]       = useState('');
   const [viewMode, setViewMode]     = useState<ViewMode>('edit');
   const [noteMode, setNoteMode]     = useState<NoteMode>('plain');
   const [saved, setSaved]           = useState(true);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [dictating, setDictating] = useState(false);
+  const [dictationStatus, setDictationStatus] = useState('');
   const textareaRef               = useRef<HTMLTextAreaElement>(null);
   const saveTimer                 = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recognitionRef            = useRef<BrowserSpeechRecognition | null>(null);
 
   const storageKey = folderId ? `${STORAGE_PREFIX}${folderId}` : `${STORAGE_PREFIX}global`;
 
@@ -142,6 +216,11 @@ export function NotesPanel({
     return () => window.cancelAnimationFrame(frame);
   }, [injectContent, onInjectConsumed]);
 
+  useEffect(() => () => {
+    recognitionRef.current?.abort();
+    recognitionRef.current = null;
+  }, []);
+
   const debouncedSave = useCallback((text: string) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
@@ -155,6 +234,17 @@ export function NotesPanel({
     setSaved(false);
     debouncedSave(e.target.value);
   }
+
+  const appendContent = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setContent((prev) => {
+      const next = `${prev.trimEnd()}${prev.trim() ? '\n\n' : ''}${trimmed}`;
+      debouncedSave(next);
+      return next;
+    });
+    setSaved(false);
+  }, [debouncedSave]);
 
   function wrap(before: string, after: string, placeholder = '') {
     const ta = textareaRef.current;
@@ -232,6 +322,102 @@ export function NotesPanel({
   const wordCount      = content.trim() ? content.trim().split(/\s+/).length : 0;
   const sourceReady    = Boolean(sourceLabel && onGenerateFromSource);
   const activeStyle    = NOTE_STYLES.find((s) => s.id === noteStyle) ?? NOTE_STYLES[0];
+  const hasNotes       = Boolean(content.trim());
+  const dictationSupported = supportsVoiceDictation();
+
+  async function copyNotes() {
+    if (!hasNotes) {
+      toast(t('Write or generate notes first.'), 'warning');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(content);
+      toast(t('Notes copied!'), 'success');
+    } catch {
+      toast(t('Could not copy notes.'), 'error');
+    }
+  }
+
+  async function saveSnapshot() {
+    if (!hasNotes) {
+      toast(t('Write or generate notes first.'), 'warning');
+      return;
+    }
+    if (!onSaveNotesSnapshot) {
+      toast(t('Could not save notes snapshot.'), 'error');
+      return;
+    }
+    try {
+      await onSaveNotesSnapshot(content);
+      toast(t('Saved notes snapshot!'), 'success');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : t('Could not save notes snapshot.'), 'error');
+    }
+  }
+
+  function startDictation() {
+    if (typeof window === 'undefined') return;
+    const RecognitionCtor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!RecognitionCtor) {
+      toast(t('Voice dictation is not supported in this browser.'), 'warning');
+      return;
+    }
+
+    recognitionRef.current?.abort();
+    const recognition = new RecognitionCtor();
+    recognition.lang = document.documentElement.lang?.startsWith('ar') ? 'ar-QA' : 'en-US';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+
+    recognition.onresult = (event) => {
+      const finalSegments: string[] = [];
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        if (result?.isFinal) {
+          finalSegments.push(result[0]?.transcript ?? '');
+        }
+      }
+      if (finalSegments.length > 0) {
+        appendContent(finalSegments.join(' '));
+      }
+      setDictationStatus(t('Listening…'));
+    };
+
+    recognition.onerror = (event) => {
+      setDictating(false);
+      recognitionRef.current = null;
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setDictationStatus(t('Microphone access was blocked.'));
+        toast(t('Microphone access was blocked.'), 'error');
+        return;
+      }
+      setDictationStatus(t('Dictation unavailable.'));
+      toast(t('Voice dictation is not supported in this browser.'), 'error');
+    };
+
+    recognition.onend = () => {
+      setDictating(false);
+      recognitionRef.current = null;
+      setDictationStatus((prev) => (prev === t('Listening…') ? t('Voice dictation stopped.') : prev));
+    };
+
+    try {
+      recognition.start();
+      recognitionRef.current = recognition;
+      setDictating(true);
+      setDictationStatus(t('Listening…'));
+      textareaRef.current?.focus();
+    } catch {
+      setDictationStatus(t('Dictation unavailable.'));
+      toast(t('Voice dictation is not supported in this browser.'), 'error');
+    }
+  }
+
+  function stopDictation() {
+    recognitionRef.current?.stop();
+    setDictating(false);
+    setDictationStatus(t('Voice dictation stopped.'));
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', overflow: 'hidden' }}>
@@ -327,6 +513,51 @@ export function NotesPanel({
           ) : (
             <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, color: 'var(--danger)' }} onClick={() => setConfirmClear(true)} title={t('Clear notes')}>✕</button>
           )}
+        </div>
+      </div>
+
+      <div style={{
+        padding: '8px 12px',
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--surface)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        flexWrap: 'wrap',
+        flexShrink: 0,
+      }}>
+        <div style={{ minWidth: 180, flex: 1 }}>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3)', fontWeight: 700 }}>
+            {t('Workspace actions')}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+            {t('Turn your notes into quiz prompts, AI tools, or a study chat without leaving this panel.')}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 'auto' }}>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => void copyNotes()} disabled={!hasNotes}>
+            📋 {t('Copy notes')}
+          </button>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => void saveSnapshot()} disabled={!hasNotes}>
+            🗂 {t('Save snapshot')}
+          </button>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => hasNotes && onUseNotesInTools?.(content)} disabled={!hasNotes}>
+            ⚡ {t('Use in Tools')}
+          </button>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => hasNotes && onQuizFromNotes?.(content)} disabled={!hasNotes}>
+            🧩 {t('Quiz me')}
+          </button>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => hasNotes && onAskChatAboutNotes?.(content)} disabled={!hasNotes}>
+            💬 {t('Ask Chat')}
+          </button>
+          {dictationSupported && (
+            <button className={`btn btn-sm ${dictating ? 'btn-secondary' : 'btn-ghost'}`} style={{ fontSize: 11 }} onClick={dictating ? stopDictation : startDictation}>
+              {dictating ? `⏹ ${t('Stop dictation')}` : `🎙 ${t('Dictate')}`}
+            </button>
+          )}
+        </div>
+        <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, color: 'var(--text-3)' }}>
+          <span>{dictationSupported ? dictationStatus || t('Voice dictation works best in supported desktop browsers.') : t('Voice dictation is not supported in this browser.')}</span>
         </div>
       </div>
 

@@ -25,7 +25,30 @@ interface SavedSourceRow {
   doi: string | null;
   abstract: string | null;
   sourceType: string | null;
+  notes: string | null;
   savedAt: string;
+}
+
+interface RecentTopicEntry {
+  topic: string;
+  savedAt: string;
+  sourceCount: number;
+}
+
+const RECENT_TOPICS_KEY = 'kivora.scholar.recent-topics';
+
+function loadRecentTopics(): RecentTopicEntry[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_TOPICS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is RecentTopicEntry => Boolean(item?.topic && typeof item.topic === 'string'))
+      .slice(0, 6);
+  } catch {
+    return [];
+  }
 }
 
 function toBibTeX(s: SavedSourceRow): string {
@@ -141,10 +164,31 @@ const LOCAL_AR: Record<string, string> = {
   'Source removed': 'تم إزالة المصدر',
   'My references': 'مراجعي',
   'Saved sources': 'المصادر المحفوظة',
+  'Saved references': 'المراجع المحفوظة',
   'Export BibTeX': 'تصدير BibTeX',
   'Copy BibTeX': 'نسخ BibTeX',
   'BibTeX copied': 'تم نسخ BibTeX',
   'Remove source': 'إزالة المصدر',
+  'Open source': 'افتح المصدر',
+  'Notes': 'ملاحظات',
+  'Save note': 'احفظ الملاحظة',
+  'Note saved': 'تم حفظ الملاحظة',
+  'Could not update note': 'تعذر تحديث الملاحظة',
+  'Copy brief': 'انسخ الملخص',
+  'Research brief copied': 'تم نسخ ملخص البحث',
+  'Recent topics': 'الموضوعات الأخيرة',
+  'Pick up where you left off.': 'تابع من حيث توقفت.',
+  'Use saved refs': 'استخدم المراجع المحفوظة',
+  'Use saved references as manual links': 'استخدم المراجع المحفوظة كروابط يدوية',
+  'Saved references loaded into manual links': 'تم تحميل المراجع المحفوظة في الروابط اليدوية',
+  'No saved references to load yet': 'لا توجد مراجع محفوظة لتحميلها بعد',
+  'Save all sources': 'احفظ كل المصادر',
+  'All visible sources are already saved': 'كل المصادر الظاهرة محفوظة بالفعل',
+  'Saved {count} sources': 'تم حفظ {count} مصدرًا',
+  'Could not save all sources': 'تعذر حفظ كل المصادر',
+  'Could not copy research brief': 'تعذر نسخ ملخص البحث',
+  'Add quick notes for later writing or citation work.': 'أضف ملاحظات سريعة للكتابة أو الاستشهاد لاحقًا.',
+  'Save sources above to build your reference list.': 'احفظ المصادر أعلاه لبناء قائمة مراجعك.',
   'Resolve DOI / arXiv ID': 'تحليل DOI / معرّف arXiv',
   'Resolving…': 'جارٍ التحليل…',
   'Resolved!': 'تم التحليل!',
@@ -195,7 +239,10 @@ export function ResearchTab({
   const [readingArticles,    setReadingArticles]    = useState<ArticleSuggestion[]>([]);
   const [citationFormat,     setCitationFormat]     = useState<CitationFormat>('apa');
   const [citationCopied,     setCitationCopied]     = useState(false);
+  const [briefCopied,        setBriefCopied]        = useState(false);
   const [savingThread,       setSavingThread]       = useState(false);
+  const [savingAllSources,   setSavingAllSources]   = useState(false);
+  const [recentTopics,       setRecentTopics]       = useState<RecentTopicEntry[]>([]);
 
   // ── Reference Library state ────────────────────────────────────────────────
   const [savedSourcesList,  setSavedSourcesList]  = useState<SavedSourceRow[]>([]);
@@ -203,6 +250,8 @@ export function ResearchTab({
   const [showRefPanel,      setShowRefPanel]      = useState(false);
   const [bibCopiedId,       setBibCopiedId]       = useState<string | null>(null);
   const [refExportFmt,      setRefExportFmt]      = useState<'bibtex' | 'apa'>('bibtex');
+  const [noteDrafts,        setNoteDrafts]        = useState<Record<string, string>>({});
+  const [savingNoteId,      setSavingNoteId]      = useState<string | null>(null);
 
   // ── DOI / arXiv resolver state ────────────────────────────────────────────
   const [doiInput,          setDoiInput]          = useState('');
@@ -265,6 +314,19 @@ export function ResearchTab({
     router.push('/workspace?tab=generate&scholarAction=generate');
   }, [router, t, toast]);
 
+  const rememberRecentTopic = useCallback((topic: string, sourceCount: number) => {
+    const normalizedTopic = topic.trim();
+    if (!normalizedTopic || typeof window === 'undefined') return;
+    setRecentTopics((current) => {
+      const next = [
+        { topic: normalizedTopic, sourceCount, savedAt: new Date().toISOString() },
+        ...current.filter((entry) => entry.topic.toLowerCase() !== normalizedTopic.toLowerCase()),
+      ].slice(0, 6);
+      window.localStorage.setItem(RECENT_TOPICS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const loadSavedSources = useCallback(async () => {
     try {
       const res = await fetch('/api/sources', { credentials: 'include' });
@@ -274,12 +336,26 @@ export function ResearchTab({
 
   useEffect(() => { void loadSavedSources(); }, [loadSavedSources]);
 
+  useEffect(() => {
+    setRecentTopics(loadRecentTopics());
+  }, []);
+
+  useEffect(() => {
+    setNoteDrafts((current) => {
+      const next: Record<string, string> = {};
+      for (const source of savedSourcesList) {
+        next[source.id] = current[source.id] ?? source.notes ?? '';
+      }
+      return next;
+    });
+  }, [savedSourcesList]);
+
   const savedUrlSet = useMemo(() => new Set(savedSourcesList.map(s => s.url)), [savedSourcesList]);
 
   async function saveSource(payload: {
     title: string; url: string; authors?: string; journal?: string;
     year?: number | null; doi?: string | null; abstract?: string; sourceType?: string;
-  }) {
+  }, options?: { quiet?: boolean }): Promise<boolean> {
     setSavingSourceUrl(payload.url);
     try {
       const res = await fetch('/api/sources', {
@@ -288,14 +364,19 @@ export function ResearchTab({
         body: JSON.stringify(payload),
       });
       if (res.ok) {
-        toast(t('Source saved'), 'success');
-        await loadSavedSources();
-      } else {
-        const d = await res.json() as { error?: string };
-        toast(d.error ?? t('Could not save source'), 'error');
+        if (!options?.quiet) toast(t('Source saved'), 'success');
+        if (!options?.quiet) await loadSavedSources();
+        return true;
       }
-    } catch { toast(t('Network connection issue — try again in a moment.'), 'error'); }
-    finally { setSavingSourceUrl(null); }
+      const d = await res.json().catch(() => null) as { error?: string } | null;
+      if (!options?.quiet) toast(d?.error ?? t('Could not save source'), 'error');
+      return false;
+    } catch {
+      if (!options?.quiet) toast(t('Network connection issue — try again in a moment.'), 'error');
+      return false;
+    } finally {
+      setSavingSourceUrl(null);
+    }
   }
 
   async function removeSource(id: string) {
@@ -304,6 +385,29 @@ export function ResearchTab({
       if (res.ok) { toast(t('Source removed'), 'success'); await loadSavedSources(); }
       else { toast(t('Could not remove source'), 'error'); }
     } catch { toast(t('Network connection issue — try again in a moment.'), 'error'); }
+  }
+
+  async function updateSourceNote(id: string) {
+    const notes = noteDrafts[id] ?? '';
+    setSavingNoteId(id);
+    try {
+      const res = await fetch('/api/sources', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, notes }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null) as { error?: string } | null;
+        throw new Error(data?.error ?? t('Could not update note'));
+      }
+      toast(t('Note saved'), 'success');
+      await loadSavedSources();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : t('Could not update note'), 'error');
+    } finally {
+      setSavingNoteId(null);
+    }
   }
 
   async function copyBibTeX(s: SavedSourceRow) {
@@ -315,6 +419,70 @@ export function ResearchTab({
     }
     setBibCopiedId(s.id);
     setTimeout(() => setBibCopiedId(null), 2000);
+  }
+
+  async function copyResearchBrief() {
+    if (!researchResult) return;
+    const text = [
+      `Research Brief: ${researchResult.topic}`,
+      '',
+      researchResult.overview,
+      '',
+      'Key takeaways',
+      ...researchResult.keyIdeas.map((idea, index) => `${index + 1}. ${idea}`),
+      '',
+      'Top citations',
+      ...researchResult.citations.slice(0, 6).map((citation) => `[${citation.label}] ${citation.title} — ${citation.url}`),
+    ].join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setBriefCopied(true);
+      setTimeout(() => setBriefCopied(false), 2000);
+      toast(t('Research brief copied'), 'success');
+    } catch {
+      toast(t('Could not copy research brief'), 'error');
+    }
+  }
+
+  function useSavedReferencesAsManualLinks() {
+    const urls = savedSourcesList.map((source) => source.url).filter(Boolean).slice(0, 5);
+    if (!urls.length) {
+      toast(t('No saved references to load yet'), 'error');
+      return;
+    }
+    setManualUrls(urls.join('\n'));
+    setResearchMode(includeWeb ? 'hybrid' : 'manual');
+    setShowAdvanced(true);
+    toast(t('Saved references loaded into manual links'), 'success');
+  }
+
+  async function saveVisibleSources() {
+    if (!researchResult || savingAllSources) return;
+    const pending = researchResult.sources.filter((source) => !savedUrlSet.has(source.url));
+    if (pending.length === 0) {
+      toast(t('All visible sources are already saved'), 'success');
+      return;
+    }
+
+    setSavingAllSources(true);
+    try {
+      let savedCount = 0;
+      for (const source of pending) {
+        const ok = await saveSource({
+          title: source.title,
+          url: source.url,
+          sourceType: source.type,
+        }, { quiet: true });
+        if (ok) savedCount += 1;
+      }
+      if (savedCount === 0) throw new Error(t('Could not save all sources'));
+      await loadSavedSources();
+      toast(t('Saved {count} sources', { count: savedCount }), 'success');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : t('Could not save all sources'), 'error');
+    } finally {
+      setSavingAllSources(false);
+    }
   }
 
   function exportAllBibTeX() {
@@ -398,15 +566,16 @@ export function ResearchTab({
     }
   }
 
-  async function handleTopicResearch() {
-    if (!researchTopic.trim() || researchLoading) return;
+  async function handleTopicResearch(topicOverride?: string) {
+    const topic = (topicOverride ?? researchTopic).trim();
+    if (!topic || researchLoading) return;
     setResearchLoading(true);
     try {
       const res = await fetch('/api/coach/research', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          topic: researchTopic.trim(),
+          topic,
           mode: researchMode,
           ranking,
           includeWeb,
@@ -418,8 +587,10 @@ export function ResearchTab({
       const data = await res.json().catch(() => null) as TopicResearchResult & { error?: string } | null;
       if (!res.ok) throw new Error(data?.error ?? t('Could not research this topic'));
       const result = data as TopicResearchResult;
+      setResearchTopic(topic);
       onResearchResult(result);
       setReadingArticles(result.relatedLinks ?? []);
+      rememberRecentTopic(topic, result.sources.length);
       // Share context with Workspace
       writeScholarContext({
         label:            result.topic,
@@ -762,17 +933,50 @@ export function ResearchTab({
           <h2>{t('Search any study topic')}</h2>
           <p>{t('Scholar Hub compares multiple sources, ranks stronger ones higher, and keeps every claim grounded with visible citations.')}</p>
           <div className={styles.plxSuggestions}>
-            {SUGGESTED_TOPICS.map(t => (
+            {SUGGESTED_TOPICS.map((topicLabel) => (
               <button
-                key={t}
+                key={topicLabel}
                 type="button"
                 className={styles.plxSuggestionChip}
-                onClick={() => setResearchTopic(t)}
+                onClick={() => void handleTopicResearch(topicLabel)}
               >
-                {t}
+                {topicLabel}
               </button>
             ))}
           </div>
+          {recentTopics.length > 0 && (
+            <div className={styles.plxSection} style={{ marginTop: '1rem', width: 'min(100%, 46rem)' }}>
+              <div className={styles.plxSectionHead}>
+                <h3>{t('Recent topics')}</h3>
+                <span>{t('Pick up where you left off.')}</span>
+              </div>
+              <div className={styles.plxRelatedChips}>
+                {recentTopics.map((entry) => (
+                  <button
+                    key={entry.topic}
+                    type="button"
+                    className={styles.plxRelatedChip}
+                    onClick={() => void handleTopicResearch(entry.topic)}
+                    title={`${entry.sourceCount} sources · ${new Date(entry.savedAt).toLocaleDateString()}`}
+                  >
+                    {entry.topic}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {savedSourcesList.length > 0 && (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem', justifyContent: 'center' }}>
+              <button
+                type="button"
+                className={styles.plxAdvancedToggle}
+                onClick={useSavedReferencesAsManualLinks}
+                title={t('Use saved references as manual links')}
+              >
+                📚 {t('Use saved refs')} ({savedSourcesList.length})
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -804,6 +1008,13 @@ export function ResearchTab({
                 )}
                 <button type="button" className={styles.plxAdvancedToggle} disabled={docxExporting} onClick={() => void downloadResearchDocx()}>
                   {docxExporting ? t('Exporting…') : t('Word')}
+                </button>
+                <button
+                  type="button"
+                  className={styles.plxAdvancedToggle}
+                  onClick={() => void copyResearchBrief()}
+                >
+                  {briefCopied ? `✓ ${t('Copied')}` : t('Copy brief')}
                 </button>
                 <button
                   type="button"
@@ -1035,6 +1246,15 @@ export function ResearchTab({
                 <p className={styles.plxSourcesSubhead}>{t('Open the originals and compare the ranking yourself.')}</p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <button
+                  type="button"
+                  className={styles.plxAdvancedToggle}
+                  style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem' }}
+                  disabled={savingAllSources}
+                  onClick={() => void saveVisibleSources()}
+                >
+                  {savingAllSources ? t('Saving…') : t('Save all sources')}
+                </button>
                 <span className={styles.plxHeaderSummary}>{researchResult.sources.length} {t('ranked')}</span>
                 <button
                   type="button"
@@ -1112,6 +1332,17 @@ export function ResearchTab({
                 <div className={styles.plxSidebarHead} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span>📚 {t('My references')} ({savedSourcesList.length})</span>
                   <div style={{ display: 'flex', gap: '0.35rem' }}>
+                    {savedSourcesList.length > 0 && (
+                      <button
+                        type="button"
+                        className={styles.plxAdvancedToggle}
+                        style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem' }}
+                        onClick={useSavedReferencesAsManualLinks}
+                        title={t('Use saved references as manual links')}
+                      >
+                        {t('Use saved refs')}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className={`${styles.plxAdvancedToggle} ${refExportFmt === 'bibtex' ? styles.plxPrimaryGhost : ''}`}
@@ -1137,7 +1368,7 @@ export function ResearchTab({
                 </div>
                 {savedSourcesList.length === 0 ? (
                   <p className={styles.plxSidebarText} style={{ marginTop: '0.5rem', fontSize: '0.78rem' }}>
-                    Save sources above to build your reference list.
+                    {t('Save sources above to build your reference list.')}
                   </p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '0.5rem' }}>
@@ -1147,6 +1378,29 @@ export function ResearchTab({
                         {s.authors && <div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginBottom: '0.1rem' }}>{s.authors}</div>}
                         <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
                           {[s.journal, s.year].filter(Boolean).join(' · ')}
+                        </div>
+                        <div style={{ marginTop: '0.45rem' }}>
+                          <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>
+                            {t('Notes')}
+                          </label>
+                          <textarea
+                            value={noteDrafts[s.id] ?? ''}
+                            onChange={(event) => setNoteDrafts((current) => ({ ...current, [s.id]: event.target.value }))}
+                            placeholder={t('Add quick notes for later writing or citation work.')}
+                            rows={3}
+                            style={{
+                              width: '100%',
+                              resize: 'vertical',
+                              borderRadius: 6,
+                              border: '1px solid var(--border)',
+                              background: 'var(--bg)',
+                              color: 'var(--text)',
+                              padding: '0.45rem 0.55rem',
+                              fontSize: '0.72rem',
+                              lineHeight: 1.45,
+                              marginTop: '0.1rem',
+                            }}
+                          />
                         </div>
                         {refExportFmt === 'bibtex' && (
                           <pre style={{ marginTop: '0.4rem', fontSize: '0.65rem', background: 'var(--bg)', padding: '0.35rem', borderRadius: 4, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--text-secondary)' }}>
@@ -1167,6 +1421,24 @@ export function ResearchTab({
                           >
                             {bibCopiedId === s.id ? `✓ ${t('BibTeX copied')}` : t('Copy BibTeX')}
                           </button>
+                          <button
+                            type="button"
+                            className={styles.plxAdvancedToggle}
+                            style={{ padding: '0.1rem 0.4rem', fontSize: '0.7rem' }}
+                            disabled={savingNoteId === s.id}
+                            onClick={() => void updateSourceNote(s.id)}
+                          >
+                            {savingNoteId === s.id ? t('Saving…') : t('Save note')}
+                          </button>
+                          <a
+                            href={s.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={styles.plxAdvancedToggle}
+                            style={{ padding: '0.1rem 0.4rem', fontSize: '0.7rem', textDecoration: 'none' }}
+                          >
+                            {t('Open source')}
+                          </a>
                           <button
                             type="button"
                             className={styles.plxAdvancedToggle}
