@@ -1,6 +1,8 @@
 node_modules
 .next
 dist-electron
+/electron/runtime/models
+/electron/runtime/SHA256SUMS.txt
 certificates
 *.pem
 .git
