@@ -33,6 +33,25 @@ export function resolve(specifier, context, nextResolve) {
     }
     return nextResolve(pathToFileURL(resolved).href, context);
   }
+  if ((specifier.startsWith('./') || specifier.startsWith('../')) && !/\.(ts|tsx|js|mjs|json)$/.test(specifier)) {
+    const parentPath = context.parentURL?.startsWith('file:')
+      ? fileURLToPath(context.parentURL)
+      : null;
+    if (parentPath) {
+      const base = resolvePath(parentPath, '..', specifier);
+      let resolved;
+      if (existsSync(base + '.ts')) {
+        resolved = base + '.ts';
+      } else if (existsSync(base + '.tsx')) {
+        resolved = base + '.tsx';
+      } else if (existsSync(resolvePath(base, 'index.ts'))) {
+        resolved = resolvePath(base, 'index.ts');
+      }
+      if (resolved) {
+        return nextResolve(pathToFileURL(resolved).href, context);
+      }
+    }
+  }
   if (NEXT_EXTENSIONLESS.has(specifier)) {
     return nextResolve(specifier + '.js', context);
   }

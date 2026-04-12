@@ -1329,7 +1329,17 @@ function solveDerivative(normalizedInput: string): SolverResult {
 
 function solveIntegral(normalizedInput: string): SolverResult {
   const result = baseResult('calculus', normalizedInput, 'nerdamer');
-  const definiteMatch = normalizedInput.match(/^integral\s+from\s+(.+?)\s+to\s+(.+?)\s+of\s+(.+?)(?:\s+d([a-zA-Z]))?$/i);
+  const canonicalDefiniteInput = (() => {
+    const trimmed = normalizedInput.trim();
+    const integrateBoundsMatch = trimmed.match(/^integrate\s+(.+?)\s+from\s+(.+?)\s+to\s+(.+?)(?:\s+d([a-zA-Z]))?$/i);
+    if (integrateBoundsMatch) {
+      const [, integrand, lowerBound, upperBound, rawVariable] = integrateBoundsMatch;
+      return `integral from ${lowerBound} to ${upperBound} of ${integrand}${rawVariable ? ` d${rawVariable}` : ''}`;
+    }
+    return trimmed;
+  })();
+
+  const definiteMatch = canonicalDefiniteInput.match(/^integral\s+from\s+(.+?)\s+to\s+(.+?)\s+of\s+(.+?)(?:\s+d([a-zA-Z]))?$/i);
   if (definiteMatch) {
     const [, lowerBound, upperBound, integrand, rawVariable] = definiteMatch;
     const variable = rawVariable || 'x';
@@ -1354,7 +1364,7 @@ function solveIntegral(normalizedInput: string): SolverResult {
     result.steps.push({
       step: 1,
       description: 'Identify the definite integral',
-      expression: formatMathExpression(normalizedInput),
+      expression: formatMathExpression(canonicalDefiniteInput),
       explanation: 'Read the lower limit, upper limit, and integrand before integrating.',
     });
     result.steps.push({
