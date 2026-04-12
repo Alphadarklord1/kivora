@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const PROJECT_ROOT = path.join(__dirname, '..');
 const DEFAULT_OUTPUT = path.join(PROJECT_ROOT, 'electron', 'runtime', 'model-manifest.json');
 const DEFAULT_MODELS_DIR = path.join(PROJECT_ROOT, 'electron', 'runtime', 'models');
-const DEFAULT_REPO = process.env.STUDYPILOT_MODEL_REPO || 'Alphadarklord1/kivora';
+const DEFAULT_REPO = process.env.KIVORA_MODEL_REPO || process.env.STUDYPILOT_MODEL_REPO || 'Alphadarklord1/kivora';
 
 const MODEL_DEFS = [
   { key: 'mini', modelId: 'Qwen2.5-1.5B-Instruct', quantization: 'Q4_K_M', file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', minRamGb: 8 },
@@ -50,10 +50,10 @@ function sha256File(filePath) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const tag = normalizeTag(args.tag || process.env.STUDYPILOT_RELEASE_TAG);
-  const repo = (args.repo || process.env.STUDYPILOT_RELEASE_REPO || DEFAULT_REPO).trim();
+  const tag = normalizeTag(args.tag || process.env.KIVORA_RELEASE_TAG || process.env.STUDYPILOT_RELEASE_TAG);
+  const repo = (args.repo || process.env.KIVORA_RELEASE_REPO || process.env.STUDYPILOT_RELEASE_REPO || DEFAULT_REPO).trim();
   const outPath = path.resolve(args.out || DEFAULT_OUTPUT);
-  const modelsDir = path.resolve(args['models-dir'] || process.env.STUDYPILOT_MODELS_DIR || DEFAULT_MODELS_DIR);
+  const modelsDir = path.resolve(args['models-dir'] || process.env.KIVORA_MODELS_DIR || process.env.STUDYPILOT_MODELS_DIR || DEFAULT_MODELS_DIR);
 
   if (!repo.includes('/')) {
     throw new Error(`Invalid repo "${repo}". Use owner/name format.`);

@@ -11,6 +11,7 @@ const MODEL_FILES = new Map([
   ['pro', 'qwen2.5-7b-instruct-q4_k_m.gguf'],
 ]);
 const REQUIRED_STATIC_ASSETS = ['model-manifest.json', 'SHA256SUMS.txt'];
+const OPTIONAL_STATIC_ASSETS = ['latest.yml', 'latest-mac.yml'];
 
 function parseArgs(argv) {
   const args = {};
@@ -74,7 +75,7 @@ for (const key of requiredModels) {
 }
 
 const mismatched = assets.filter((name) => {
-  if (REQUIRED_STATIC_ASSETS.includes(name)) return false;
+  if (REQUIRED_STATIC_ASSETS.includes(name) || OPTIONAL_STATIC_ASSETS.includes(name)) return false;
   if (name.endsWith('.gguf')) return false;
   if (name.endsWith('.blockmap')) return false;
   return !name.includes(version);

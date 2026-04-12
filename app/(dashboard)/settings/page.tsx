@@ -1261,14 +1261,14 @@ function SettingsPageContent() {
             <div className={styles.downloadsStack}>
               <div className={styles.aiHero}>
                 <div className={styles.aiHeroCopy}>
-                  <span className={styles.previewEyebrow}>AI control center</span>
-                  <h3>Choose how Kivora thinks before you download anything else.</h3>
-                  <p>Start with local-first privacy, switch to cloud when you want it, and keep the included Mini model as the simplest offline default.</p>
+                  <span className={styles.previewEyebrow}>{t('AI control center')}</span>
+                  <h3>{t('Choose how Kivora thinks before you download anything else.')}</h3>
+                  <p>{t('Start with local-first privacy, switch to cloud when you want it, and keep the included Mini model as the simplest offline default.')}</p>
                 </div>
                 <div className={styles.aiHeroBadges}>
-                  <span className="badge">Local-first</span>
-                  <span className="badge">Cloud optional</span>
-                  <span className="badge badge-success">Mac Mini path</span>
+                  <span className="badge">{t('Local-first')}</span>
+                  <span className="badge">{t('Cloud optional')}</span>
+                  <span className="badge badge-success">{t('Mac Mini path')}</span>
                 </div>
               </div>
 
@@ -1276,12 +1276,12 @@ function SettingsPageContent() {
                 <Card>
                   <div className={styles.settingsFeatureHead}>
                     <div>
-                      <strong>Optional model downloads are still being finalized</strong>
+                      <strong>{t('Optional model downloads are still being finalized')}</strong>
                       <p>
-                        Keep students on Mini until the larger downloads are fully published and verified behind the scenes.
+                        {t('Keep students on Mini until the larger downloads are fully published and verified behind the scenes.')}
                       </p>
                     </div>
-                    <span className="badge" style={{ background: 'rgba(245,158,11,0.12)', color: '#b45309' }}>Mini first</span>
+                    <span className="badge" style={{ background: 'rgba(245,158,11,0.12)', color: '#b45309' }}>{t('Mini first')}</span>
                   </div>
                 </Card>
               ) : null}
@@ -1289,8 +1289,8 @@ function SettingsPageContent() {
               <Card>
                 <div className={styles.settingsFeatureHead}>
                   <div>
-                    <strong>AI routing</strong>
-                    <p>Pick the behavior you want first, then layer downloads on top only if they help your machine.</p>
+                    <strong>{t('AI routing')}</strong>
+                    <p>{t('Pick the behavior you want first, then layer downloads on top only if they help your machine.')}</p>
                   </div>
                 </div>
                 <AiRuntimeControls compact />
@@ -1299,9 +1299,9 @@ function SettingsPageContent() {
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
                   <div>
-                    <div style={{ fontWeight: 700 }}>Downloads & releases</div>
+                    <div style={{ fontWeight: 700 }}>{t('Downloads & releases')}</div>
                     <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', marginTop: 4 }}>
-                      Install the app first, use Mini by default, then add bigger models only if you need more local quality.
+                      {t('Install the app first, use Mini by default, then add bigger models only if you need more local quality.')}
                     </div>
                   </div>
                   {downloads?.releaseUrl ? (
@@ -1315,32 +1315,32 @@ function SettingsPageContent() {
                 ) : (
                   <div className={styles.downloadGrid}>
                     <DownloadCard
-                      title="macOS Apple Silicon"
-                      hint="Primary 1.0 desktop download. Mini is the default offline path."
-                      primary={downloads?.macAsset ? { label: 'Download DMG', href: downloads.macAsset.browser_download_url } : null}
+                      title={t('macOS Apple Silicon')}
+                      hint={t('Primary 1.0 desktop download. Mini is the default offline path.')}
+                      primary={downloads?.macAsset ? { label: t('Download DMG'), href: downloads.macAsset.browser_download_url } : null}
                     />
                     <DownloadCard
-                      title="Windows x64"
-                      hint="Same local-model system, with installer and portable options."
-                      primary={downloads?.windowsInstaller ? { label: 'Download installer', href: downloads.windowsInstaller.browser_download_url } : null}
-                      secondary={downloads?.windowsPortable ? { label: 'Portable EXE', href: downloads.windowsPortable.browser_download_url } : null}
+                      title={t('Windows x64')}
+                      hint={t('Same local-model system, with installer and portable options.')}
+                      primary={downloads?.windowsInstaller ? { label: t('Download installer'), href: downloads.windowsInstaller.browser_download_url } : null}
+                      secondary={downloads?.windowsPortable ? { label: t('Portable EXE'), href: downloads.windowsPortable.browser_download_url } : null}
                     />
                     <DownloadCard
-                      title="Advanced release files"
-                      hint="Only needed if you are validating the published model package manually."
-                      primary={downloads?.manifestAsset ? { label: 'Manifest', href: downloads.manifestAsset.browser_download_url } : null}
-                      secondary={downloads?.checksumsAsset ? { label: 'Checksums', href: downloads.checksumsAsset.browser_download_url } : null}
+                      title={t('Advanced release files')}
+                      hint={t('Only needed if you are validating the published model package manually.')}
+                      primary={downloads?.manifestAsset ? { label: t('Manifest'), href: downloads.manifestAsset.browser_download_url } : null}
+                      secondary={downloads?.checksumsAsset ? { label: t('Checksums'), href: downloads.checksumsAsset.browser_download_url } : null}
                     />
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-                  <span className="badge">Local = private + offline</span>
-                  <span className="badge">Cloud = convenience</span>
-                  {downloads?.hasPublishedModelAssets ? <span className="badge badge-success">Optional model assets published</span> : null}
+                  <span className="badge">{t('Local-first')}</span>
+                  <span className="badge">{t('Cloud optional')}</span>
+                  {downloads?.hasPublishedModelAssets ? <span className="badge badge-success">{t('Optional model assets published')}</span> : null}
                   {downloads?.hasIntegrityReadyOptionalModels ? (
-                    <span className="badge badge-success">Bigger models ready</span>
+                    <span className="badge badge-success">{t('Bigger models ready')}</span>
                   ) : (
-                    <span className="badge">Mini is the current safe default</span>
+                    <span className="badge">{t('Mini is the current safe default')}</span>
                   )}
                 </div>
               </Card>
@@ -1348,8 +1348,8 @@ function SettingsPageContent() {
               <Card>
                 <div className={styles.settingsFeatureHead}>
                   <div>
-                    <strong>Offline AI model</strong>
-                    <p>Use the bundled Mini when available, then install Balanced or Pro only if you want more local quality.</p>
+                    <strong>{t('Offline AI model')}</strong>
+                    <p>{t('Use the bundled Mini when available, then install Balanced or Pro only if you want more local quality.')}</p>
                   </div>
                 </div>
                 <DesktopModelPanel />
@@ -1358,10 +1358,10 @@ function SettingsPageContent() {
               <div id="ollama-setup" className={styles.settingsFeatureCard}>
                 <div className={styles.settingsFeatureHead}>
                   <div>
-                    <strong>Browser local AI (Ollama)</strong>
-                    <p>If you are in the web version instead of the desktop app, Ollama is the local path. Desktop users do not need this.</p>
+                    <strong>{t('Browser local AI (Ollama)')}</strong>
+                    <p>{t('If you are in the web version instead of the desktop app, Ollama is the local path. Desktop users do not need this.')}</p>
                   </div>
-                  <span className="badge">Web only</span>
+                  <span className="badge">{t('Web only')}</span>
                 </div>
                 <OllamaSetupPanel />
               </div>

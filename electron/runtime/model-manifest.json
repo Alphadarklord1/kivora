@@ -1,6 +1,6 @@
 {
-  "version": "1.2.0-beta.1",
-  "generatedAt": "2026-04-09T22:16:32.464Z",
+  "version": "1.0.0",
+  "generatedAt": "2026-04-12T20:45:24.181Z",
   "models": [
     {
       "key": "mini",
@@ -10,7 +10,7 @@
       "sizeBytes": 1117320736,
       "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
       "minRamGb": 8,
-      "url": "https://github.com/Alphadarklord1/kivora/releases/download/v1.2.0-beta.1/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+      "url": "https://github.com/Alphadarklord1/kivora/releases/download/v1.0.0/qwen2.5-1.5b-instruct-q4_k_m.gguf"
     },
     {
       "key": "balanced",
@@ -20,7 +20,7 @@
       "sizeBytes": 2104932768,
       "sha256": "626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d",
       "minRamGb": 16,
-      "url": "https://github.com/Alphadarklord1/kivora/releases/download/v1.2.0-beta.1/qwen2.5-3b-instruct-q4_k_m.gguf"
+      "url": "https://github.com/Alphadarklord1/kivora/releases/download/v1.0.0/qwen2.5-3b-instruct-q4_k_m.gguf"
     },
     {
       "key": "pro",

@@ -16,7 +16,7 @@ Put these files there:
 
 You can also use another folder by setting:
 
-`STUDYPILOT_MODEL_STORE=/absolute/path/to/models`
+`KIVORA_MODEL_STORE=/absolute/path/to/models`
 
 ## 2) Pick installer profile
 

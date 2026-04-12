@@ -5,8 +5,8 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const DEFAULT_REPO = process.env.STUDYPILOT_RELEASE_REPO || 'Alphadarklord1/kivora';
-const DEFAULT_MODELS_DIR = process.env.STUDYPILOT_MODELS_DIR || path.join(process.env.HOME || '', 'Kivora-model-store');
+const DEFAULT_REPO = process.env.KIVORA_RELEASE_REPO || process.env.STUDYPILOT_RELEASE_REPO || 'Alphadarklord1/kivora';
+const DEFAULT_MODELS_DIR = process.env.KIVORA_MODELS_DIR || process.env.STUDYPILOT_MODELS_DIR || path.join(process.env.HOME || '', 'Kivora-model-store');
 const DEFAULT_MANIFEST = path.join(PROJECT_ROOT, 'electron', 'runtime', 'model-manifest.json');
 const DEFAULT_CHECKSUMS = path.join(PROJECT_ROOT, 'electron', 'runtime', 'SHA256SUMS.txt');
 const MODEL_FILES = [
@@ -69,7 +69,7 @@ function splitModelPaths(modelPaths) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const tag = normalizeTag(args.tag || process.env.STUDYPILOT_RELEASE_TAG);
+  const tag = normalizeTag(args.tag || process.env.KIVORA_RELEASE_TAG || process.env.STUDYPILOT_RELEASE_TAG);
   const repo = String(args.repo || DEFAULT_REPO).trim();
   const modelsDir = path.resolve(args['models-dir'] || DEFAULT_MODELS_DIR);
   const manifestPath = path.resolve(args.manifest || DEFAULT_MANIFEST);

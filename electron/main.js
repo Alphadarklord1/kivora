@@ -440,7 +440,7 @@ function getDeviceProfile() {
 }
 
 function getRecommendedModelKey() {
-  const forcedModelKey = process.env.STUDYPILOT_AI_MODEL_KEY;
+  const forcedModelKey = process.env.KIVORA_AI_MODEL_KEY || process.env.STUDYPILOT_AI_MODEL_KEY;
   if (forcedModelKey && DESKTOP_AI_MODELS.some((model) => model.key === forcedModelKey)) {
     return forcedModelKey;
   }
@@ -1029,6 +1029,8 @@ async function startDesktopAiRuntime() {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
+        KIVORA_AI_MODEL: modelPath,
+        KIVORA_AI_PORT: String(port),
         STUDYPILOT_AI_MODEL: modelPath,
         STUDYPILOT_AI_PORT: String(port),
       },
@@ -1162,16 +1164,22 @@ function spawnAppServer(port, oauthDisabledReason = null) {
   const serverUrl = `http://127.0.0.1:${port}`;
   const nextCliPath = path.join(__dirname, '../node_modules/next/dist/bin/next');
   const appRoot = path.join(__dirname, '..');
-  const desktopAuthPort = parseDesktopAuthPort(process.env.STUDYPILOT_DESKTOP_AUTH_PORT);
+  const desktopAuthPort = parseDesktopAuthPort(
+    process.env.KIVORA_DESKTOP_AUTH_PORT || process.env.STUDYPILOT_DESKTOP_AUTH_PORT,
+  );
 
   appServerProcess = spawn(process.execPath, [nextCliPath, 'start', '-p', String(port), '-H', '127.0.0.1'], {
     cwd: appRoot,
     env: {
       ...process.env,
       NODE_ENV: 'production',
+      KIVORA_DESKTOP_ONLY: process.env.KIVORA_DESKTOP_ONLY || process.env.STUDYPILOT_DESKTOP_ONLY || '1',
       STUDYPILOT_DESKTOP_ONLY: process.env.STUDYPILOT_DESKTOP_ONLY || '1',
       AUTH_GUEST_MODE: process.env.AUTH_GUEST_MODE || '1',
+      KIVORA_DESKTOP_AUTH_PORT: String(desktopAuthPort),
       STUDYPILOT_DESKTOP_AUTH_PORT: String(desktopAuthPort),
+      KIVORA_OAUTH_DISABLED: oauthDisabledReason ? '1' : '0',
+      KIVORA_OAUTH_DISABLED_REASON: oauthDisabledReason || '',
       STUDYPILOT_OAUTH_DISABLED: oauthDisabledReason ? '1' : '0',
       STUDYPILOT_OAUTH_DISABLED_REASON: oauthDisabledReason || '',
     },
@@ -1215,8 +1223,12 @@ async function ensureAppServerUrl() {
   if (isDev) return 'http://localhost:3000';
   if (appServerUrl) return appServerUrl;
 
-  const desktopAuthPort = parseDesktopAuthPort(process.env.STUDYPILOT_DESKTOP_AUTH_PORT);
-  const allowRandomFallback = process.env.STUDYPILOT_ALLOW_RANDOM_AUTH_PORT_FALLBACK === '1' || isGuestModeFromEnv();
+  const desktopAuthPort = parseDesktopAuthPort(
+    process.env.KIVORA_DESKTOP_AUTH_PORT || process.env.STUDYPILOT_DESKTOP_AUTH_PORT,
+  );
+  const allowRandomFallback =
+    (process.env.KIVORA_ALLOW_RANDOM_AUTH_PORT_FALLBACK || process.env.STUDYPILOT_ALLOW_RANDOM_AUTH_PORT_FALLBACK) === '1' ||
+    isGuestModeFromEnv();
   let launchPort = desktopAuthPort;
   let oauthDisabledReason = null;
 

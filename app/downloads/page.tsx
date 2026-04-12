@@ -38,6 +38,7 @@ export default async function DownloadsPage() {
   const downloads = await getReleaseDownloadData();
   const macReady = Boolean(downloads.macAsset);
   const optionalModelsReady = downloads.manifestLooksReleaseReady;
+  const advancedFilesReady = Boolean(downloads.manifestAsset || downloads.checksumsAsset);
 
   return (
     <main style={{ minHeight: '100dvh', background: 'var(--bg-base, #f4f6fb)', color: 'var(--text-primary, #0f172a)' }}>
@@ -141,15 +142,20 @@ export default async function DownloadsPage() {
                 {downloads.windowsPortable ? <a href={downloads.windowsPortable.browser_download_url} style={buttonStyle(false)}>Portable EXE</a> : null}
               </div>
               <div>
-                <strong style={{ display: 'block', marginBottom: 4 }}>For advanced setups</strong>
+                <strong style={{ display: 'block', marginBottom: 4 }}>Advanced verification</strong>
                 <span style={{ fontSize: '0.88rem', color: 'var(--text-secondary, #475569)' }}>
-                  Power users can still inspect the published verification files, but most students should just use the desktop app and manage models inside Kivora.
+                  Most students can ignore this. These files only matter if you want to verify the published model package manually.
                 </span>
               </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {downloads.manifestAsset ? <a href={downloads.manifestAsset.browser_download_url} style={buttonStyle(false)}>Manifest</a> : null}
-                {downloads.checksumsAsset ? <a href={downloads.checksumsAsset.browser_download_url} style={buttonStyle(false)}>Checksums</a> : null}
-              </div>
+              {advancedFilesReady ? (
+                <details style={{ border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 12, padding: 12, background: 'var(--bg-base, #f8fafc)' }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Show verification files</summary>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    {downloads.manifestAsset ? <a href={downloads.manifestAsset.browser_download_url} style={buttonStyle(false)}>Manifest</a> : null}
+                    {downloads.checksumsAsset ? <a href={downloads.checksumsAsset.browser_download_url} style={buttonStyle(false)}>Checksums</a> : null}
+                  </div>
+                </details>
+              ) : null}
             </div>
           </div>
         </section>
@@ -185,9 +191,9 @@ export default async function DownloadsPage() {
                   <span>{model.quantization}</span>
                   <span>
                     {model.downloadSource === 'release'
-                      ? 'Ready to download now.'
+                      ? 'Available through Kivora’s published download files.'
                       : model.downloadSource === 'manifest'
-                        ? 'Delivered from Kivora’s hosted model source.'
+                        ? 'Available from Kivora’s external model host.'
                         : 'No download is published yet.'}
                   </span>
                   {model.integrityWarning ? (
@@ -198,16 +204,22 @@ export default async function DownloadsPage() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {model.downloadUrl ? (
-                    <a href={model.downloadUrl} style={buttonStyle(model.key !== 'mini')}>
-                      {model.bundled ? 'View included model' : 'Download in app'}
-                    </a>
+                  {model.bundled ? (
+                    <Link href="/settings#ai-models" style={buttonStyle(false)}>
+                      Included in desktop app
+                    </Link>
+                  ) : model.downloadUrl ? (
+                    <Link href="/settings#ai-models" style={buttonStyle(model.key !== 'mini')}>
+                      Install inside Kivora
+                    </Link>
                   ) : (
                     <span style={{ fontSize: '0.82rem', color: 'var(--text-muted, #64748b)' }}>No published download yet</span>
                   )}
-                  <Link href="/settings#ai-models" style={buttonStyle(false)}>
-                    Manage in app
-                  </Link>
+                  {!model.bundled && (
+                    <a href={model.downloadUrl || downloads.releaseUrl} style={buttonStyle(false)}>
+                      View file source
+                    </a>
+                  )}
                 </div>
               </article>
             ))}

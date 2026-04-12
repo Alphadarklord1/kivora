@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface ModelEntry {
   key: string;
@@ -63,7 +64,30 @@ const MODEL_LABELS: Record<string, { name: string; description: string; tag: str
   },
 };
 
+const LOCAL_AR: Record<string, string> = {
+  'Loading model status…': 'جارٍ تحميل حالة النماذج…',
+  'Mini is bundled in this desktop build, so offline AI should work right after install. Bigger models stay optional and only download when you ask for them.': 'Mini مضمّن في هذا الإصدار المكتبي، لذلك ينبغي أن يعمل الذكاء الاصطناعي دون اتصال مباشرة بعد التثبيت. تبقى النماذج الأكبر اختيارية ولا تُنزّل إلا عند طلبك.',
+  'You already have {count} optional model installed.': 'لديك بالفعل نموذج اختياري واحد مثبت.',
+  'You already have {count} optional models installed.': 'لديك بالفعل {count} نماذج اختيارية مثبتة.',
+  'This build does not currently include the bundled Mini model. Mac offline AI will still need a model download until the desktop bundle is staged correctly.': 'هذا الإصدار لا يتضمن حاليًا نموذج Mini المضمّن. سيظل الذكاء الاصطناعي دون اتصال على Mac بحاجة إلى تنزيل نموذج حتى يتم تجهيز الحزمة المكتبية بشكل صحيح.',
+  Bundled: 'مضمّن',
+  Active: 'نشط',
+  'GB RAM min': 'الحد الأدنى للذاكرة (GB RAM)',
+  'Downloading…': 'جارٍ التنزيل…',
+  'Starting…': 'جارٍ البدء…',
+  'Install Mini': 'ثبّت Mini',
+  'Install in app': 'ثبّت داخل التطبيق',
+  'Switching…': 'جارٍ التبديل…',
+  'Use this model': 'استخدم هذا النموذج',
+  'Currently active': 'قيد الاستخدام الآن',
+  'Removing…': 'جارٍ الإزالة…',
+  Remove: 'إزالة',
+  'Downloading — you can leave this page': 'جارٍ التنزيل — يمكنك مغادرة هذه الصفحة',
+  'Models are stored in your app data folder. Switching restarts the local AI engine automatically.': 'تُخزَّن النماذج في مجلد بيانات التطبيق. سيؤدي التبديل إلى إعادة تشغيل محرك الذكاء الاصطناعي المحلي تلقائيًا.',
+};
+
 export function DesktopModelPanel() {
+  const { t } = useI18n(LOCAL_AR);
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [selection, setSelection] = useState<SelectionResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -163,7 +187,7 @@ export function DesktopModelPanel() {
   if (loading) {
     return (
       <div style={{ padding: '14px 0', color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>
-        Loading model status…
+        {t('Loading model status…')}
       </div>
     );
   }
@@ -179,8 +203,8 @@ export function DesktopModelPanel() {
     <div style={{ display: 'grid', gap: 12 }}>
       <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>
         {bundledMiniInstalled
-          ? `Mini is bundled in this desktop build, so offline AI should work right after install. Bigger models stay optional and only download when you ask for them.${optionalDownloadsInstalled > 0 ? ` You already have ${optionalDownloadsInstalled} optional model${optionalDownloadsInstalled === 1 ? '' : 's'} installed.` : ''}`
-          : 'This build does not currently include the bundled Mini model. Mac offline AI will still need a model download until the desktop bundle is staged correctly.'}
+          ? `${t('Mini is bundled in this desktop build, so offline AI should work right after install. Bigger models stay optional and only download when you ask for them.')}${optionalDownloadsInstalled > 0 ? ` ${t(optionalDownloadsInstalled === 1 ? 'You already have {count} optional model installed.' : 'You already have {count} optional models installed.', { count: optionalDownloadsInstalled })}` : ''}`
+          : t('This build does not currently include the bundled Mini model. Mac offline AI will still need a model download until the desktop bundle is staged correctly.')}
       </p>
 
       {error && (
@@ -233,10 +257,10 @@ export function DesktopModelPanel() {
                     <span className="badge" style={{ fontSize: 11 }}>{label.tag}</span>
                   )}
                   {model.bundled && (
-                    <span className="badge badge-success" style={{ fontSize: 11 }}>Bundled</span>
+                    <span className="badge badge-success" style={{ fontSize: 11 }}>{t('Bundled')}</span>
                   )}
                   {isActive && (
-                    <span className="badge badge-accent" style={{ fontSize: 11 }}>Active</span>
+                    <span className="badge badge-accent" style={{ fontSize: 11 }}>{t('Active')}</span>
                   )}
                 </div>
                 <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--text-3)', maxWidth: 420 }}>
@@ -249,7 +273,7 @@ export function DesktopModelPanel() {
                   {model.quantization} · {formatSize(model.sizeBytes)}
                 </span>
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                  {model.minRamGb} GB RAM min
+                  {model.minRamGb} {t('GB RAM min')}
                 </span>
               </div>
             </div>
@@ -260,7 +284,7 @@ export function DesktopModelPanel() {
                   <span>
                     {model.downloadProgress?.downloadedBytes != null && model.downloadProgress.totalBytes
                       ? `${formatBytes(model.downloadProgress.downloadedBytes)} / ${formatBytes(model.downloadProgress.totalBytes)}${formatSpeed(model.downloadProgress.speedBps ?? 0)}`
-                      : 'Downloading…'}
+                      : t('Downloading…')}
                   </span>
                   <span style={{ fontVariantNumeric: 'tabular-nums' }}>{Math.round(progress)}%</span>
                 </div>
@@ -278,7 +302,7 @@ export function DesktopModelPanel() {
                   disabled={isBusy}
                   onClick={() => handleInstall(model.key)}
                 >
-                  {isBusy ? 'Starting…' : model.key === 'mini' ? 'Install Mini' : 'Download here'}
+                  {isBusy ? t('Starting…') : model.key === 'mini' ? t('Install Mini') : t('Install in app')}
                 </button>
               )}
               {model.isInstalled && !isActive && (
@@ -288,12 +312,12 @@ export function DesktopModelPanel() {
                   disabled={isBusy}
                   onClick={() => handleSwitch(model.key)}
                 >
-                  {isBusy ? 'Switching…' : 'Use this model'}
+                  {isBusy ? t('Switching…') : t('Use this model')}
                 </button>
               )}
               {model.isInstalled && isActive && (
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>
-                  Currently active
+                  {t('Currently active')}
                 </span>
               )}
               {model.isInstalled && !isActive && model.installedSource === 'userData' && !model.isDownloading && (
@@ -304,12 +328,12 @@ export function DesktopModelPanel() {
                   style={{ color: 'var(--text-3)' }}
                   onClick={() => handleRemove(model.key)}
                 >
-                  {isBusy ? 'Removing…' : 'Remove'}
+                  {isBusy ? t('Removing…') : t('Remove')}
                 </button>
               )}
               {model.isDownloading && (
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>
-                  Downloading — you can leave this page
+                  {t('Downloading — you can leave this page')}
                 </span>
               )}
             </div>
@@ -318,7 +342,7 @@ export function DesktopModelPanel() {
       })}
 
       <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-        Models are stored in your app data folder. Switching restarts the local AI engine automatically.
+        {t('Models are stored in your app data folder. Switching restarts the local AI engine automatically.')}
       </p>
     </div>
   );

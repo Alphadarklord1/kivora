@@ -1,7 +1,10 @@
 import localManifest from '@/electron/runtime/model-manifest.json';
 
 export const REPO_RELEASES_URL = 'https://github.com/Alphadarklord1/kivora/releases';
-export const FALLBACK_TAG = process.env.NEXT_PUBLIC_STUDYPILOT_RELEASE_TAG || 'v1.0.0';
+export const FALLBACK_TAG =
+  process.env.NEXT_PUBLIC_KIVORA_RELEASE_TAG ||
+  process.env.NEXT_PUBLIC_STUDYPILOT_RELEASE_TAG ||
+  'v1.0.0';
 export const FALLBACK_RELEASE_URL = `https://github.com/Alphadarklord1/kivora/releases/tag/${FALLBACK_TAG}`;
 export const GITHUB_API_LATEST_RELEASE = 'https://api.github.com/repos/Alphadarklord1/kivora/releases/latest';
 

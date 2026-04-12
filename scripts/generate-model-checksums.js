@@ -53,7 +53,7 @@ function sha256File(filePath) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const modelsDir = path.resolve(args['models-dir'] || process.env.STUDYPILOT_MODELS_DIR || DEFAULT_MODELS_DIR);
+  const modelsDir = path.resolve(args['models-dir'] || process.env.KIVORA_MODELS_DIR || process.env.STUDYPILOT_MODELS_DIR || DEFAULT_MODELS_DIR);
   const output = path.resolve(args.out || DEFAULT_OUTPUT);
   const keys = normalizeKeys(args.models);
 
