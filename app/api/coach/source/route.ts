@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isYouTubeUrl, fetchYouTubeTranscript, extractYouTubeVideoId } from '@/lib/coach/youtube';
 import { offlineGenerate } from '@/lib/offline/generate';
 import { callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
-import { callGroqChat, isGroqConfigured } from '@/lib/ai/groq';
 import { callOpenAIChat } from '@/lib/ai/openai';
 import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/ai/server-routing';
 import { cloudProviderForModel } from '@/lib/ai/runtime';
@@ -102,14 +101,6 @@ async function generateSourceBrief(meta: Omit<SourceBrief, 'summary' | 'keyPoint
 
   const { mode, localModel, cloudModel } = resolveAiRuntimeRequest({ ai: aiPrefs });
   const provider = cloudProviderForModel(cloudModel);
-
-  if (shouldTryCloud(mode) && (provider === 'groq' || isGroqConfigured())) {
-    const groqModel = provider === 'groq' ? cloudModel : 'openai/gpt-oss-20b';
-    const result = await callGroqChat({ model: groqModel, messages, maxTokens: 900, temperature: 0.3 });
-    if (result.ok && result.content.trim()) {
-      return result.content.trim();
-    }
-  }
 
   if (shouldTryCloud(mode) && (provider === 'grok' || isGrokConfigured())) {
     const grokModel = provider === 'grok' ? cloudModel : 'grok-3-fast';

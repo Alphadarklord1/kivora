@@ -107,7 +107,7 @@ export function GuidelinesTab() {
         <div className={styles.guidelinesCard}>
           <div className={styles.guidelineItem}>
             <span className={`${styles.guidelineItemDot} ${styles.guidelineItemDotGreen}`} />
-            <span><strong>Online mode</strong> — requests are sent to Groq (primary), Grok, or OpenAI for generation. Your content is sent to their servers transiently and is not stored by Kivora beyond your session.</span>
+            <span><strong>Online mode</strong> — requests are sent to Grok or OpenAI for generation. Your content is sent to their servers transiently and is not stored by Kivora beyond your session.</span>
           </div>
           <div className={styles.guidelineItem}>
             <span className={`${styles.guidelineItemDot} ${styles.guidelineItemDotGreen}`} />

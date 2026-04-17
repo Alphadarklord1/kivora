@@ -23,7 +23,7 @@ const SYSTEM_PROMPT = 'You are a study assistant. Be concise, accurate, and help
  * Body: { mode: AllModes, text: string, options?: Record<string, unknown> }
  *
  * AI Provider Priority:
- *  1. Shared cloud router (Groq → Grok/xAI → OpenAI, based on selected model)
+ *  1. Shared cloud router (Grok/xAI → OpenAI, based on selected model)
  *  2. Ollama local — offline feature (OLLAMA_URL, default localhost:11434)
  *  3. Deterministic offline generation — always available, no API needed
  */

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAppAccess } from '@/lib/api/guard';
+import { tryCloudGeneration } from '@/lib/ai/server-routing';
 import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { solveMathProblem } from '@/lib/math/symbolic-solver';
-import { callGroqChat, isGroqConfigured } from '@/lib/ai/groq';
 import type { MathSolveRequest, SolverResult } from '@/lib/math/types';
 
 const AI_SYSTEM_PROMPT = `You are a careful math tutor for high-school and undergraduate students.
@@ -103,32 +103,30 @@ async function tryOllamaSolve(problem: string, category: string | null, contextT
   return null;
 }
 
-async function tryGroqSolve(problem: string, category: string | null, contextText?: string | null): Promise<SolverResult | null> {
-  if (!isGroqConfigured()) return null;
+async function tryAiSolve(problem: string, category: string | null, contextText?: string | null): Promise<SolverResult | null> {
+  const ollamaResult = await tryOllamaSolve(problem, category, contextText);
+  if (ollamaResult) return ollamaResult;
 
-  const model = process.env.GROQ_MODEL_DEFAULT ?? 'llama-3.3-70b-versatile';
   const contextBlock = contextText?.trim()
-    ? `\n\nStudy context:\n${contextText.slice(0, 2500)}`
+    ? `
+
+Study context:
+${contextText.slice(0, 2500)}`
     : '';
 
-  const result = await callGroqChat({
+  const model = process.env.GROK_MODEL_DEFAULT ?? process.env.OPENAI_MODEL_DEFAULT ?? 'grok-3-fast';
+  const result = await tryCloudGeneration({
     model,
     messages: [
       { role: 'system', content: AI_SYSTEM_PROMPT },
-      { role: 'user', content: `Category hint: ${category ?? 'auto'}\nProblem: ${problem}${contextBlock}` },
+      { role: 'user', content: `Category hint: ${category ?? 'auto'}
+Problem: ${problem}${contextBlock}` },
     ],
     maxTokens: 1200,
-    temperature: 0.05,
   });
 
   if (!result.ok) return null;
   return parseAiResponse(result.content, problem, category);
-}
-
-async function tryAiSolve(problem: string, category: string | null, contextText?: string | null): Promise<SolverResult | null> {
-  const ollamaResult = await tryOllamaSolve(problem, category, contextText);
-  if (ollamaResult) return ollamaResult;
-  return tryGroqSolve(problem, category, contextText);
 }
 
 export async function POST(request: NextRequest) {

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { fetchGroqStream } from '@/lib/ai/groq';
+import { fetchGrokStream } from '@/lib/ai/grok';
 
 // ── Simple in-memory rate limiter (resets on server restart) ──────────────
 // Max 8 requests per IP per minute for the public demo
@@ -55,9 +55,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const model = process.env.GROQ_MODEL_DEFAULT || 'llama-3.3-70b-versatile';
+  const model = process.env.GROK_MODEL_DEFAULT || 'grok-3-fast';
 
-  const stream = await fetchGroqStream({
+  const stream = await fetchGrokStream({
     model,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },

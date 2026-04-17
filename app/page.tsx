@@ -340,13 +340,13 @@ export default function RootPage() {
             <span className={styles.eyebrow}>AI routing</span>
             <h2 className={styles.dualTitle}>Cloud AI online. Local AI offline.</h2>
             <p className={styles.dualBody}>
-              Kivora uses Groq (cloud) for fast online generation and Qwen via Ollama for
+              Kivora uses Grok or OpenAI for cloud generation and Qwen via Ollama for
               fully offline local AI on desktop. You stay in control of which runs.
             </p>
             <div className={styles.aiStack}>
               <div className={styles.aiRow}>
                 <span className={styles.aiDot} style={{ background: '#22c55e' }} />
-                <span><strong>Online</strong> — Groq · Grok · OpenAI</span>
+                <span><strong>Online</strong> — Grok · OpenAI</span>
               </div>
               <div className={styles.aiRow}>
                 <span className={styles.aiDot} style={{ background: '#60a5fa' }} />

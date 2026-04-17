@@ -56,7 +56,6 @@ export function DemoChat() {
       const decoder = new TextDecoder();
       let buffer = '';
 
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -102,7 +101,7 @@ export function DemoChat() {
           <span className="demo-eyebrow">Live demo</span>
           <h2 className="demo-title">Ask Kivora&apos;s AI anything.</h2>
           <p className="demo-subtitle">
-            Powered by <strong>Groq</strong> · <code>llama-3.3-70b-versatile</code> · Streamed in real time
+            Powered by <strong>Grok</strong> · <code>grok-3-fast</code> · Streamed in real time
           </p>
         </div>
         <div className="demo-model-badge">

@@ -2,7 +2,7 @@
  * lib/ai/call.ts
  *
  * Centralised AI caller.  Every server-side route that needs an AI response
- * should use callAi() instead of repeating the Groq → Grok → Ollama → OpenAI →
+ * should use callAi() instead of repeating the Grok → Ollama → OpenAI →
  * offline routing block.
  *
  * Usage:
@@ -34,7 +34,7 @@ interface CallAiOptions {
 
 interface CallAiResult {
   result: string;
-  source: 'groq' | 'grok' | 'openai' | 'local' | 'offline';
+  source: 'grok' | 'openai' | 'local' | 'offline';
 }
 
 /**

@@ -20,23 +20,26 @@ import { persistDeckLocally } from '@/lib/srs/deck-utils';
 import type { TopicResearchResult } from '@/lib/coach/research';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 
-const tabLoadingFallback = <div className="tool-loading">Loading section…</div>;
+function TabLoadingFallback() {
+  const { t } = useI18n();
+  return <div className="tool-loading">{t('Loading section…')}</div>;
+}
 
 const AssignmentWriterTab = dynamic(
   () => import('./tabs/AssignmentWriterTab').then((mod) => mod.AssignmentWriterTab),
-  { ssr: false, loading: () => tabLoadingFallback },
+  { ssr: false, loading: () => <TabLoadingFallback /> },
 );
 const ResearchTab = dynamic(
   () => import('./tabs/ResearchTab').then((mod) => mod.ResearchTab),
-  { ssr: false, loading: () => tabLoadingFallback },
+  { ssr: false, loading: () => <TabLoadingFallback /> },
 );
 const RecoveryTab = dynamic(
   () => import('./tabs/RecoveryTab').then((mod) => mod.RecoveryTab),
-  { ssr: false, loading: () => tabLoadingFallback },
+  { ssr: false, loading: () => <TabLoadingFallback /> },
 );
 const GuidelinesTab = dynamic(
   () => import('./tabs/GuidelinesTab').then((mod) => mod.GuidelinesTab),
-  { ssr: false, loading: () => tabLoadingFallback },
+  { ssr: false, loading: () => <TabLoadingFallback /> },
 );
 
 type CoachPanel   = 'review' | 'manage';
@@ -188,64 +191,64 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
   const activeSectionSummary = useMemo(() => {
     if (activeSection === 'research') {
       return {
-        title: 'Research workspace',
+        title: t('Research workspace'),
         description: researchResult
-          ? `Search across ${researchResult.sources.length} ranked sources and keep ${researchResult.citations.length} citations visible while you explore.`
-          : 'Research a topic, compare manual links, or search the web in one focused workspace.',
+          ? t('Search across {sources} ranked sources and keep {citations} citations visible while you explore.', { sources: String(researchResult.sources.length), citations: String(researchResult.citations.length) })
+          : t('Research a topic, compare manual links, or search the web in one focused workspace.'),
         pills: [
-          'Topic-led research',
-          researchResult ? `Ranking: ${researchResult.ranking}` : 'Auto / manual / hybrid',
-          researchResult ? `Provider: ${researchResult.provider}` : 'Evidence-first synthesis',
+          t('Topic-led research'),
+          researchResult ? t('Ranking: {ranking}', { ranking: researchResult.ranking }) : t('Auto / manual / hybrid'),
+          researchResult ? t('Provider: {provider}', { provider: researchResult.provider }) : t('Evidence-first synthesis'),
         ],
       };
     }
     if (activeSection === 'write') {
       return {
-        title: 'Writing studio',
+        title: t('Writing studio'),
         description: researchResult
-          ? 'Use your current research context to build stronger drafts, outlines, and revisions.'
-          : 'Load a file or run a research topic first, then turn it into a report structure, draft, or checked paragraph.',
+          ? t('Use your current research context to build stronger drafts, outlines, and revisions.')
+          : t('Load a file or run a research topic first, then turn it into a report structure, draft, or checked paragraph.'),
         pills: [
-          researchResult ? 'Research context connected' : 'Upload a file to get started',
-          'Draft · report · check',
+          researchResult ? t('Research context connected') : t('Upload a file to get started'),
+          t('Draft · report · check'),
         ],
       };
     }
     return {
-      title: 'Recovery and review',
+      title: t('Recovery and review'),
       description: dueReviewSets.length
-        ? `You have ${dueReviewSets.length} review set${dueReviewSets.length === 1 ? '' : 's'} with due work ready to continue in Workspace.`
-        : 'See what is due, where you are weak, and what to practice next.',
+        ? t('You have {count} review sets with due work ready to continue in Workspace.', { count: String(dueReviewSets.length) })
+        : t('See what is due, where you are weak, and what to practice next.'),
       pills: [
-        `${contextStats.dueCount} due cards`,
-        topWeakAreas[0] ? `Top weak area: ${topWeakAreas[0].topic}` : 'Weak-area insights ready',
+        t('{count} due cards', { count: String(contextStats.dueCount) }),
+        topWeakAreas[0] ? t('Top weak area: {topic}', { topic: topWeakAreas[0].topic }) : t('Weak-area insights ready'),
       ],
     };
-  }, [activeSection, contextStats.dueCount, dueReviewSets.length, researchResult, topWeakAreas]);
+  }, [activeSection, contextStats.dueCount, dueReviewSets.length, researchResult, t, topWeakAreas]);
 
   const mission = useMemo(() => {
     if (dueReviewSets[0]) {
       const set = dueReviewSets[0];
       const due = getSetDue(set);
-      return { eyebrow: "Today's Mission", title: `Review ${due} due card${due === 1 ? '' : 's'} in ${set.name}`, description: 'Start with the review set that is already waiting.', actionLabel: "Start today's mission", secondaryLabel: 'Quick manage', kind: 'review' as const, setId: set.id };
+      return { eyebrow: t("Today's Mission"), title: t('Review {count} due cards in {name}', { count: String(due), name: set.name }), description: t('Start with the review set that is already waiting.'), actionLabel: t("Start today's mission"), secondaryLabel: t('Quick manage'), kind: 'review' as const, setId: set.id };
     }
     if (topWeakAreas[0]) {
       const area = topWeakAreas[0];
-      return { eyebrow: "Today's Mission", title: `Recover ${area.topic}`, description: `${Math.round(area.accuracy)}% accuracy — a short focused practice run is the best next move.`, actionLabel: "Start today's mission", secondaryLabel: 'Explain it', kind: 'weak' as const, weakArea: area };
+      return { eyebrow: t("Today's Mission"), title: t('Recover {topic}', { topic: area.topic }), description: t('{accuracy}% accuracy — a short focused practice run is the best next move.', { accuracy: String(Math.round(area.accuracy)) }), actionLabel: t("Start today's mission"), secondaryLabel: t('Explain it'), kind: 'weak' as const, weakArea: area };
     }
     if ((analytics?.planStats?.activePlans ?? 0) > 0 && (analytics?.planStats?.averageProgress ?? 100) < 60) {
-      return { eyebrow: "Today's Mission", title: 'Catch up on your active study plan', description: `${analytics?.planStats?.averageProgress ?? 0}% average progress.`, actionLabel: "Start today's mission", secondaryLabel: 'Open planner', kind: 'plan' as const };
+      return { eyebrow: t("Today's Mission"), title: t('Catch up on your active study plan'), description: t('{progress}% average progress.', { progress: String(analytics?.planStats?.averageProgress ?? 0) }), actionLabel: t("Start today's mission"), secondaryLabel: t('Open planner'), kind: 'plan' as const };
     }
     if (reviewSets.length === 0) {
-      return { eyebrow: "Today's Mission", title: 'Import your first review set', description: 'Bring in a reliable source and let Scholar Hub guide the next steps.', actionLabel: "Start today's mission", secondaryLabel: 'View review sets', kind: 'import' as const };
+      return { eyebrow: t("Today's Mission"), title: t('Import your first review set'), description: t('Bring in a reliable source and let Scholar Hub guide the next steps.'), actionLabel: t("Start today's mission"), secondaryLabel: t('View review sets'), kind: 'import' as const };
     }
     const set = sortedReviewSets[0];
-    return { eyebrow: "Today's Mission", title: `Open ${set?.name ?? 'your latest review set'}`, description: 'Nothing urgent is due right now.', actionLabel: "Start today's mission", secondaryLabel: 'Quick manage', kind: 'manage' as const, setId: set?.id };
-  }, [analytics, dueReviewSets, reviewSets, sortedReviewSets, topWeakAreas, getSetDue]);
+    return { eyebrow: t("Today's Mission"), title: t('Open {name}', { name: set?.name ?? t('your latest review set') }), description: t('Nothing urgent is due right now.'), actionLabel: t("Start today's mission"), secondaryLabel: t('Quick manage'), kind: 'manage' as const, setId: set?.id };
+  }, [analytics, dueReviewSets, reviewSets, sortedReviewSets, t, topWeakAreas, getSetDue]);
 
   function launchWeakTopic(area: WeakArea, tool: 'quiz' | 'explain') {
     writeCoachHandoff({ type: 'weak-topic', topic: area.topic, preferredTool: tool });
-    toast(`"${area.topic}" is ready in Workspace`, 'success');
+    toast(t('"{topic}" is ready in Workspace', { topic: area.topic }), 'success');
     if (drawerMode && onClose) {
       onClose();
     } else {
@@ -302,13 +305,13 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
             href="/workspace"
             className={styles.btnSecondary}
             style={{ fontSize: '0.78rem', textDecoration: 'none', padding: '0.3rem 0.7rem' }}
-            title="Open Workspace — practice, review sets, file tools"
+            title={t('Open Workspace — practice, review sets, file tools')}
           >
-            Workspace →
+            {t('Workspace →')}
           </a>
           <button
             className={styles.refreshBtn}
-            title="Refresh all data"
+            title={t('Refresh all data')}
             onClick={() => void refreshReviewSets().then(() => refreshAnalytics())}
           >
             ↻
@@ -323,7 +326,7 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
           <p>{activeSectionSummary.description}</p>
         </div>
         <div className={styles.sectionStripMeta}>
-          <span className={styles.metaTag}>{contextStats.activeSource ?? 'Start with a topic or source'}</span>
+          <span className={styles.metaTag}>{contextStats.activeSource ?? t('Start with a topic or source')}</span>
           {activeSection === 'research' && <span className={styles.metaTag}>{contextStats.citationCount} citations</span>}
           {activeSection === 'recovery' && <span className={styles.metaTag}>{contextStats.dueCount} due</span>}
           {activeSectionSummary.pills.slice(0, 2).map((pill) => (

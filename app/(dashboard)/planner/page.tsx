@@ -7,11 +7,13 @@ import { PlanForm } from '@/components/planner/PlanForm';
 import { generateStudySchedule } from '@/lib/planner/generate';
 import type { StudyPlan } from '@/lib/planner/study-plan-types';
 import { loadDecks, getWorkloadForecast } from '@/lib/srs/sm2';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type EventType = 'study' | 'exam' | 'deadline' | 'class' | 'break' | 'revision';
 type CalendarView = 'month' | 'week' | 'day' | 'agenda';
+type PlannerMode = 'timetable' | 'calendar' | 'plans';
 
 interface CalendarEvent {
   id: string;
@@ -33,6 +35,56 @@ interface NewEventForm {
   startTime: string;
   endTime: string;
   description: string;
+}
+
+type TimetableFocus = 'balanced' | 'earliest' | 'compact' | 'seat-open';
+
+interface TimetableMeeting {
+  days: number[];
+  start: string;
+  end: string;
+  startMinutes: number;
+  endMinutes: number;
+  raw: string;
+}
+
+interface TimetableSection {
+  id: string;
+  label: string;
+  instructor?: string;
+  seatsOpen?: number | null;
+  meetings: TimetableMeeting[];
+  raw: string;
+}
+
+interface TimetableCourse {
+  id: string;
+  title: string;
+  code?: string;
+  raw: string;
+  sections: TimetableSection[];
+}
+
+interface TimetablePrefs {
+  earliestStart: string;
+  latestFinish: string;
+  avoidDays: number[];
+  focus: TimetableFocus;
+  seatOpenOnly: boolean;
+}
+
+interface TimetableCandidate {
+  id: string;
+  sections: Array<{
+    courseId: string;
+    courseTitle: string;
+    section: TimetableSection;
+  }>;
+  score: number;
+  firstStart: number;
+  lastEnd: number;
+  busyDays: number;
+  seatOpenCount: number;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -63,6 +115,54 @@ const MONTHS = [
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 const LS_KEY = 'kivora-calendar-events';
+
+const TIMETABLE_FOCUS_OPTIONS: TimetableFocus[] = ['balanced', 'earliest', 'compact', 'seat-open'];
+const TIMETABLE_DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const TIMETABLE_DAY_PATTERNS: Array<[RegExp, number[]]> = [
+  [/sunday|sun\b|\bsu\b/i, [0]],
+  [/monday|mon\b/i, [1]],
+  [/tuesday|tue\b/i, [2]],
+  [/wednesday|wed\b/i, [3]],
+  [/thursday|thu\b|th\b/i, [4]],
+  [/friday|fri\b/i, [5]],
+  [/saturday|sat\b|\bsa\b/i, [6]],
+];
+
+const SAMPLE_CATALOG_TEXTS = [
+  `MATH 201 Calculus II
+
+Section A
+Instructor: Dr. Rahman
+Seats open: 8
+MW 9:00 AM - 10:15 AM
+
+Section B
+Instructor: Dr. Silva
+Seats open: 0
+TR 1:00 PM - 2:15 PM`,
+  `BIO 110 Biology Foundations
+
+Section 01
+Instructor: Prof. Al-Mansoori
+Seats open: 12
+TR 9:30 AM - 10:45 AM
+
+Section 02
+Instructor: Prof. Haddad
+Seats open: 4
+MW 11:00 AM - 12:15 PM`,
+  `ENG 205 Academic Writing
+
+Section A
+Instructor: Dr. Khan
+Seats open: 7
+Sun 2:00 PM - 4:00 PM
+
+Section B
+Instructor: Dr. Noor
+Seats open: 2
+Wed 2:00 PM - 4:00 PM`,
+];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -140,12 +240,221 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((target.getTime() - today.getTime()) / 86400000);
 }
 
+function timeToMinutes(value: string): number {
+  const trimmed = value.trim().toUpperCase();
+  const match = trimmed.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/);
+  if (!match) return Number.NaN;
+  let hours = Number(match[1]);
+  const minutes = Number(match[2] ?? '0');
+  const meridiem = match[3];
+  if (meridiem === 'PM' && hours < 12) hours += 12;
+  if (meridiem === 'AM' && hours === 12) hours = 0;
+  return hours * 60 + minutes;
+}
+
+function minutesToTimeLabel(minutes: number): string {
+  const hrs = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  const suffix = hrs >= 12 ? 'PM' : 'AM';
+  const twelve = hrs % 12 || 12;
+  return `${twelve}:${String(mins).padStart(2, '0')} ${suffix}`;
+}
+
+function parseMeetingDays(input: string): number[] {
+  const normalized = input.replace(/[·,]/g, ' ').replace(/\s+/g, ' ').trim();
+  const found = new Set<number>();
+  for (const [pattern, days] of TIMETABLE_DAY_PATTERNS) {
+    if (pattern.test(normalized)) days.forEach((day) => found.add(day));
+  }
+  if (found.size > 0) return [...found].sort((a, b) => a - b);
+
+  const compact = normalized.replace(/[^A-Za-z]/g, '');
+  for (let i = 0; i < compact.length; i += 1) {
+    const pair = compact.slice(i, i + 2).toUpperCase();
+    if (pair === 'SU') { found.add(0); i += 1; continue; }
+    if (pair === 'SA') { found.add(6); i += 1; continue; }
+    if (pair === 'TH') { found.add(4); i += 1; continue; }
+    const single = compact[i]?.toUpperCase();
+    if (single === 'M') found.add(1);
+    if (single === 'T') found.add(2);
+    if (single === 'W') found.add(3);
+    if (single === 'R') found.add(4);
+    if (single === 'F') found.add(5);
+  }
+
+  return [...found].sort((a, b) => a - b);
+}
+
+function parseMeetingLine(line: string): TimetableMeeting | null {
+  const rangeMatch = line.match(/(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)[\s]*[-–][\s]*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)/i);
+  if (!rangeMatch) return null;
+  const startMinutes = timeToMinutes(rangeMatch[1]);
+  const endMinutes = timeToMinutes(rangeMatch[2]);
+  if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes) || endMinutes <= startMinutes) return null;
+  const days = parseMeetingDays(line.slice(0, rangeMatch.index ?? 0) || line);
+  if (days.length === 0) return null;
+  return {
+    days,
+    start: minutesToTimeLabel(startMinutes),
+    end: minutesToTimeLabel(endMinutes),
+    startMinutes,
+    endMinutes,
+    raw: line,
+  };
+}
+
+function parseSectionChunk(courseId: string, title: string, rawChunk: string, index: number): TimetableSection | null {
+  const lines = rawChunk.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const meetings = lines.map(parseMeetingLine).filter((meeting): meeting is TimetableMeeting => Boolean(meeting));
+  if (meetings.length === 0) return null;
+  const sectionMatch = rawChunk.match(/(?:section|sec|class|crn)[:\s#-]*([A-Za-z0-9-]+)/i);
+  const instructorMatch = rawChunk.match(/(?:instructor|professor|faculty)[:\s-]*([^\n]+)/i);
+  const seatsMatch = rawChunk.match(/(\d+)\s*(?:seats?\s*open|open\s*seats?|available)/i);
+  return {
+    id: `${courseId}_section_${index + 1}`,
+    label: sectionMatch?.[1] ?? `Option ${index + 1}`,
+    instructor: instructorMatch?.[1]?.trim(),
+    seatsOpen: seatsMatch ? Number(seatsMatch[1]) : null,
+    meetings,
+    raw: rawChunk,
+  };
+}
+
+function parseRegistrarCourse(raw: string): TimetableCourse | null {
+  const cleaned = raw.trim();
+  if (!cleaned) return null;
+  const blocks = cleaned.split(/\n\s*\n+/).map((block) => block.trim()).filter(Boolean);
+  const titleLine = blocks[0]?.split('\n')[0]?.trim() ?? 'Untitled course';
+  const codeMatch = titleLine.match(/([A-Z]{2,}\s*\d{2,}[A-Z]?)/);
+  const courseId = `${codeMatch?.[1]?.replace(/\s+/g, '-') ?? 'course'}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const sectionSources = blocks.length > 1 ? blocks.slice(1) : [cleaned];
+  const sections = sectionSources.map((chunk, index) => parseSectionChunk(courseId, titleLine, chunk, index)).filter((section): section is TimetableSection => Boolean(section));
+  if (sections.length === 0) return null;
+  return {
+    id: courseId,
+    title: titleLine,
+    code: codeMatch?.[1],
+    raw: cleaned,
+    sections,
+  };
+}
+
+function sectionsConflict(a: TimetableSection, b: TimetableSection): boolean {
+  return a.meetings.some((meetingA) => b.meetings.some((meetingB) =>
+    meetingA.days.some((day) => meetingB.days.includes(day))
+    && meetingA.startMinutes < meetingB.endMinutes
+    && meetingB.startMinutes < meetingA.endMinutes,
+  ));
+}
+
+function sectionMatchesPrefs(section: TimetableSection, prefs: TimetablePrefs): boolean {
+  return section.meetings.every((meeting) =>
+    meeting.startMinutes >= (prefs.earliestStart ? timeToMinutes(prefs.earliestStart) : 0)
+    && meeting.endMinutes <= (prefs.latestFinish ? timeToMinutes(prefs.latestFinish) : 24 * 60)
+    && meeting.days.every((day) => !prefs.avoidDays.includes(day)),
+  ) && (!prefs.seatOpenOnly || (section.seatsOpen ?? 0) > 0);
+}
+
+function scoreCandidate(candidate: Omit<TimetableCandidate, 'score'>, prefs: TimetablePrefs): number {
+  const span = candidate.lastEnd - candidate.firstStart;
+  const seatBoost = candidate.seatOpenCount * 18;
+  if (prefs.focus === 'earliest') return 10000 - candidate.firstStart - candidate.busyDays * 20 + seatBoost;
+  if (prefs.focus === 'compact') return 10000 - span - candidate.busyDays * 65 + seatBoost;
+  if (prefs.focus === 'seat-open') return 1000 + seatBoost - candidate.busyDays * 15 - candidate.firstStart * 0.1;
+  return 10000 - span * 0.4 - candidate.busyDays * 45 - candidate.firstStart * 0.15 + seatBoost;
+}
+
+function buildTimetableCandidates(courses: TimetableCourse[], prefs: TimetablePrefs): TimetableCandidate[] {
+  const filtered = courses.map((course) => ({ ...course, sections: course.sections.filter((section) => sectionMatchesPrefs(section, prefs)) }));
+  if (filtered.some((course) => course.sections.length === 0)) return [];
+
+  const candidates: TimetableCandidate[] = [];
+  const current: Array<{ courseId: string; courseTitle: string; section: TimetableSection }> = [];
+
+  const visit = (index: number) => {
+    if (candidates.length > 500) return;
+    if (index >= filtered.length) {
+      const meetings = current.flatMap((item) => item.section.meetings);
+      const daySet = new Set(meetings.flatMap((meeting) => meeting.days));
+      const firstStart = Math.min(...meetings.map((meeting) => meeting.startMinutes));
+      const lastEnd = Math.max(...meetings.map((meeting) => meeting.endMinutes));
+      const seatOpenCount = current.filter((item) => (item.section.seatsOpen ?? 0) > 0).length;
+      const base = {
+        id: current.map((item) => item.section.id).join('__'),
+        sections: [...current],
+        firstStart,
+        lastEnd,
+        busyDays: daySet.size,
+        seatOpenCount,
+      };
+      candidates.push({ ...base, score: scoreCandidate(base, prefs) });
+      return;
+    }
+
+    const course = filtered[index];
+    for (const section of course.sections) {
+      if (current.some((item) => sectionsConflict(item.section, section))) continue;
+      current.push({ courseId: course.id, courseTitle: course.title, section });
+      visit(index + 1);
+      current.pop();
+    }
+  };
+
+  visit(0);
+  return candidates.sort((a, b) => b.score - a.score).slice(0, 24);
+}
+
+function formatTimetableCandidate(candidate: TimetableCandidate): string {
+  const header = `Kivora timetable · ${candidate.busyDays} day week · ${minutesToTimeLabel(candidate.firstStart)} to ${minutesToTimeLabel(candidate.lastEnd)}`;
+  const lines = candidate.sections.map((item) => {
+    const meetings = item.section.meetings
+      .map((meeting) => `${meeting.days.map((day) => TIMETABLE_DAY_LABELS[day]).join('/')} ${meeting.start}-${meeting.end}`)
+      .join('; ');
+    const instructor = item.section.instructor ? ` · ${item.section.instructor}` : '';
+    const seats = typeof item.section.seatsOpen === 'number' ? ` · ${item.section.seatsOpen} open` : '';
+    return `- ${item.courseTitle} (${item.section.label}${instructor}${seats}): ${meetings}`;
+  });
+  return [header, ...lines].join('\\n');
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function PlannerPage() {
   useEffect(() => { document.title = 'Planner — Kivora'; }, []);
+  const { t } = useI18n({
+    'Academic Planner': 'المخطط الأكاديمي',
+    'Map exams, deadlines, classes, and study blocks in one calm command center.': 'نظّم الاختبارات والمواعيد النهائية والدروس وجلسات الدراسة في مركز واحد هادئ.',
+    'Active plans': 'الخطط النشطة',
+    'Upcoming exams': 'الاختبارات القادمة',
+    'Events this week': 'الأحداث هذا الأسبوع',
+    "Today's sessions": "جلسات اليوم",
+    'Create study plan': 'أنشئ خطة دراسة',
+    'Add calendar event': 'أضف حدثًا للتقويم',
+    'Planner board': 'لوحة المخطط',
+    'A clearer view of what matters next.': 'رؤية أوضح لما يجب التركيز عليه بعد ذلك.',
+    'Selected plan': 'الخطة المحددة',
+    'No plan selected yet': 'لم يتم تحديد خطة بعد',
+    'Current range': 'النطاق الحالي',
+    'View': 'العرض',
+    'Today agenda': 'أجندة اليوم',
+    'No events scheduled for today.': 'لا توجد أحداث مجدولة اليوم.',
+    'Planner setup': 'إعداد المخطط',
+    'Start with one exam or deadline and Kivora will build the study blocks around it.': 'ابدأ باختبار واحد أو موعد نهائي وسيبني Kivora جلسات الدراسة حوله.',
+    'Open Workspace': 'افتح مساحة العمل',
+    'New Event': 'حدث جديد',
+    'Event Types': 'أنواع الأحداث',
+    'Exam Countdowns': 'عدّادات الاختبار',
+    'Today': 'اليوم',
+    'No events today': 'لا توجد أحداث اليوم',
+    'Timetable Builder': 'منشئ الجدول',
+    'Study Calendar': 'تقويم الدراسة',
+    'Study Plans': 'خطط الدراسة',
+    'Build timetable': 'أنشئ جدولاً',
+    'Paste course text': 'الصق نص المقرر',
+  });
   const today = useMemo(() => new Date(), []);
   const [view, setView] = useState<CalendarView>('week');
+  const [plannerMode, setPlannerMode] = useState<PlannerMode>('timetable');
   const [cursor, setCursor] = useState<Date>(today);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -161,6 +470,18 @@ export default function PlannerPage() {
   const { plans, createPlan, deletePlan, loading: plansLoading } = useStudyPlans();
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [courseInput, setCourseInput] = useState('');
+  const [timetableCourses, setTimetableCourses] = useState<TimetableCourse[]>([]);
+  const [pinnedSchedules, setPinnedSchedules] = useState<string[]>([]);
+  const [timetablePrefs, setTimetablePrefs] = useState<TimetablePrefs>({
+    earliestStart: '',
+    latestFinish: '',
+    avoidDays: [],
+    focus: 'balanced',
+    seatOpenOnly: false,
+  });
+  const [courseParseError, setCourseParseError] = useState<string | null>(null);
+  const [timetableActionMessage, setTimetableActionMessage] = useState<string | null>(null);
 
   // Load from API (falling back to localStorage) + inject from study plans
   useEffect(() => {
@@ -342,6 +663,12 @@ export default function PlannerPage() {
     });
   }, []);
 
+  const activePlansCount = plans.filter((plan) => plan.status === 'active').length;
+  const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) ?? null;
+  const weekStart = startOfWeek(cursor);
+  const weekEnd = addDays(weekStart, 6);
+  const weeklyEventsCount = useMemo(() => events.filter((evt) => evt.date >= toDateStr(weekStart) && evt.date <= toDateStr(weekEnd)).length, [events, weekEnd, weekStart]);
+
   // Upcoming exams for sidebar countdown
   const upcomingExams = useMemo(() => {
     const todayStr = toDateStr(today);
@@ -353,6 +680,56 @@ export default function PlannerPage() {
 
   // Today events
   const todayEvents = useMemo(() => eventsForDate(toDateStr(today)), [eventsForDate, today]);
+
+  const timetableCandidates = useMemo(() => buildTimetableCandidates(timetableCourses, timetablePrefs), [timetableCourses, timetablePrefs]);
+  const seatOpenOptionCount = useMemo(() => timetableCourses.reduce((total, course) => total + course.sections.filter((section) => (section.seatsOpen ?? 0) > 0).length, 0), [timetableCourses]);
+  const pinnedTimetables = useMemo(() => pinnedSchedules.map((candidateId) => timetableCandidates.find((candidate) => candidate.id === candidateId)).filter((candidate): candidate is TimetableCandidate => Boolean(candidate)), [pinnedSchedules, timetableCandidates]);
+
+  const addTimetableCourse = useCallback(() => {
+    const parsed = parseRegistrarCourse(courseInput);
+    if (!parsed) {
+      setCourseParseError('Paste a course block with at least one section meeting line to generate options.');
+      return;
+    }
+    setTimetableCourses((prev) => [...prev, parsed]);
+    setCourseInput('');
+    setCourseParseError(null);
+    setTimetableActionMessage(`${parsed.title} added with ${parsed.sections.length} section option${parsed.sections.length === 1 ? '' : 's'}.`);
+  }, [courseInput]);
+
+  const useSampleCatalogText = useCallback(() => {
+    setCourseInput(SAMPLE_CATALOG_TEXTS[0]);
+    setCourseParseError(null);
+    setTimetableActionMessage('Sample course loaded. Add it, then add more courses or use the full demo set.');
+  }, []);
+
+  const addSampleCourseSet = useCallback(() => {
+    const parsed = SAMPLE_CATALOG_TEXTS.map(parseRegistrarCourse).filter((course): course is TimetableCourse => Boolean(course));
+    setTimetableCourses(parsed);
+    setPinnedSchedules([]);
+    setCourseInput('');
+    setCourseParseError(null);
+    setTimetableActionMessage('Demo course set added. Try avoiding a day or changing the ranking focus to compare schedules.');
+  }, []);
+
+  const copyTimetableCandidate = useCallback(async (candidate: TimetableCandidate) => {
+    const text = formatTimetableCandidate(candidate);
+    try {
+      await navigator.clipboard.writeText(text);
+      setTimetableActionMessage('Schedule copied. You can paste it into notes, email, or your registrar planning sheet.');
+    } catch {
+      setTimetableActionMessage(text);
+    }
+  }, []);
+
+  const removeTimetableCourse = useCallback((courseId: string) => {
+    setTimetableCourses((prev) => prev.filter((course) => course.id !== courseId));
+    setPinnedSchedules((prev) => prev.filter((candidateId) => !candidateId.includes(courseId)));
+  }, []);
+
+  const togglePinnedSchedule = useCallback((candidateId: string) => {
+    setPinnedSchedules((prev) => prev.includes(candidateId) ? prev.filter((id) => id !== candidateId) : [...prev, candidateId]);
+  }, []);
 
   // Navigation
   const goToday = () => { setCursor(new Date(today)); setMiniDate(new Date(today)); };
@@ -381,11 +758,237 @@ export default function PlannerPage() {
 
   return (
     <div className="cal-shell">
+      <section className="planner-hero">
+        <div className="planner-hero-copy">
+          <span className="planner-hero-eyebrow">{t('Planner board')}</span>
+          <h1>{t('Academic Planner')}</h1>
+          <p>{t('Map exams, deadlines, classes, and study blocks in one calm command center.')}</p>
+        </div>
+        <div className="planner-mode-switcher" role="tablist" aria-label="Planner modes">
+          {([
+            ['timetable', t('Timetable Builder')],
+            ['calendar', t('Study Calendar')],
+            ['plans', t('Study Plans')],
+          ] as Array<[PlannerMode, string]>).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              role="tab"
+              aria-selected={plannerMode === mode}
+              className={`mode-tab${plannerMode === mode ? ' active' : ''}`}
+              onClick={() => setPlannerMode(mode)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="planner-hero-stats">
+          <article className="hero-stat">
+            <span>{t('Active plans')}</span>
+            <strong>{activePlansCount}</strong>
+          </article>
+          <article className="hero-stat">
+            <span>{t('Upcoming exams')}</span>
+            <strong>{upcomingExams.length}</strong>
+          </article>
+          <article className="hero-stat">
+            <span>{t('Events this week')}</span>
+            <strong>{weeklyEventsCount}</strong>
+          </article>
+          <article className="hero-stat">
+            <span>{t("Today's sessions")}</span>
+            <strong>{todayEvents.length}</strong>
+          </article>
+        </div>
+      </section>
 
+      <section className="planner-status-bar">
+        <div className="planner-status-item">
+          <span>{t('Selected plan')}</span>
+          <strong>{selectedPlan?.title ?? t('No plan selected yet')}</strong>
+        </div>
+        <div className="planner-status-item">
+          <span>{t('Current range')}</span>
+          <strong>{navLabel}</strong>
+        </div>
+        <div className="planner-status-item">
+          <span>{t('View')}</span>
+          <strong>{view.charAt(0).toUpperCase()+view.slice(1)}</strong>
+        </div>
+        <div className="planner-status-item">
+          <span>{t('Today agenda')}</span>
+          <strong>{todayEvents[0]?.title ?? t('No events scheduled for today.')}</strong>
+        </div>
+      </section>
+
+      {plannerMode === 'timetable' && (
+        <section className="timetable-shell">
+        <div className="timetable-header">
+          <div>
+            <span className="planner-hero-eyebrow">Build your timetable</span>
+            <h2>Paste your catalog export, fine-tune constraints, and we&apos;ll build the best schedule for you.</h2>
+          </div>
+          <div className="timetable-stats">
+            <article className="timetable-stat"><span>Courses</span><strong>{timetableCourses.length}</strong></article>
+            <article className="timetable-stat"><span>Seat-open options</span><strong>{seatOpenOptionCount}</strong></article>
+            <article className="timetable-stat"><span>Pinned</span><strong>{pinnedTimetables.length}</strong></article>
+            <article className="timetable-stat"><span>Valid schedules</span><strong>{timetableCandidates.length}</strong></article>
+          </div>
+        </div>
+
+        <div className="timetable-grid">
+          <section className="timetable-panel">
+            <div className="panel-heading">
+              <h3>Courses</h3>
+              <div className="panel-actions">
+                <button className="ghost-action" type="button" onClick={useSampleCatalogText}>Use sample</button>
+                <button className="ghost-action" type="button" onClick={addSampleCourseSet}>Demo set</button>
+                <button className="hero-btn primary compact" type="button" onClick={addTimetableCourse}>Add course</button>
+              </div>
+            </div>
+            <p className="panel-copy">Paste one registrar export chunk, hit add, and repeat for each course.</p>
+            <textarea
+              className="timetable-textarea"
+              value={courseInput}
+              onChange={(event) => setCourseInput(event.target.value)}
+              placeholder="Paste the raw course text here..."
+              rows={8}
+            />
+            {courseParseError && (
+              <div className="builder-note error">
+                <strong>{courseParseError}</strong>
+                <span>Example: Section A · Instructor: Dr. Noor · Seats open: 8 · MW 9:00 AM - 10:15 AM</span>
+              </div>
+            )}
+            {timetableCourses.length === 0 ? (
+              <p className="builder-note">Paste your catalog text to see structured options.</p>
+            ) : (
+              <div className="course-stack">
+                {timetableCourses.map((course) => (
+                  <article key={course.id} className="course-card">
+                    <div>
+                      <strong>{course.title}</strong>
+                      <p>{course.sections.length} section option{course.sections.length === 1 ? '' : 's'}</p>
+                    </div>
+                    <button className="ghost-action" type="button" onClick={() => removeTimetableCourse(course.id)}>Remove</button>
+                  </article>
+                ))}
+              </div>
+            )}
+            {timetableActionMessage && <p className="builder-note action">{timetableActionMessage}</p>}
+          </section>
+
+          <section className="timetable-panel">
+            <div className="panel-heading">
+              <h3>Preferences</h3>
+              <label className="seat-toggle">
+                <input type="checkbox" checked={timetablePrefs.seatOpenOnly} onChange={(event) => setTimetablePrefs((prev) => ({ ...prev, seatOpenOnly: event.target.checked }))} />
+                <span>Seat-open only</span>
+              </label>
+            </div>
+            <div className="pref-grid">
+              <label>
+                <span>Earliest start</span>
+                <input type="time" value={timetablePrefs.earliestStart} onChange={(event) => setTimetablePrefs((prev) => ({ ...prev, earliestStart: event.target.value }))} />
+              </label>
+              <label>
+                <span>Latest finish</span>
+                <input type="time" value={timetablePrefs.latestFinish} onChange={(event) => setTimetablePrefs((prev) => ({ ...prev, latestFinish: event.target.value }))} />
+              </label>
+            </div>
+            <div className="focus-wrap">
+              <span>Preference focus</span>
+              <div className="focus-pills">
+                {TIMETABLE_FOCUS_OPTIONS.map((option) => (
+                  <button key={option} type="button" className={`focus-pill${timetablePrefs.focus === option ? ' active' : ''}`} onClick={() => setTimetablePrefs((prev) => ({ ...prev, focus: option }))}>
+                    {option === 'seat-open' ? 'Seat-open' : option.charAt(0).toUpperCase()+option.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="focus-wrap">
+              <span>Avoid days</span>
+              <div className="day-pills">
+                {TIMETABLE_DAY_LABELS.map((day, index) => {
+                  const active = timetablePrefs.avoidDays.includes(index);
+                  return (
+                    <button key={day} type="button" className={`focus-pill${active ? ' active' : ''}`} onClick={() => setTimetablePrefs((prev) => ({
+                      ...prev,
+                      avoidDays: active ? prev.avoidDays.filter((entry) => entry !== index) : [...prev.avoidDays, index].sort((a, b) => a - b),
+                    }))}>
+                      {day}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          <section className="timetable-panel timetable-results">
+            <div className="panel-heading">
+              <h3>Schedule builder</h3>
+              <span className="builder-count">{timetableCandidates.length} valid combinations after applying constraints.</span>
+            </div>
+            {timetableCandidates.length === 0 ? (
+              <div className="builder-empty">
+                <p>No schedules match the current constraints. Try relaxing earliest/latest times or allowed days.</p>
+              </div>
+            ) : (
+              <div className="schedule-stack">
+                {timetableCandidates.slice(0, 6).map((candidate, index) => (
+                  <article key={candidate.id} className="schedule-card">
+                    <div className="schedule-top">
+                      <div>
+                        <span className="schedule-rank">Option {index + 1}</span>
+                        <h4>{candidate.busyDays} day week · {minutesToTimeLabel(candidate.firstStart)} to {minutesToTimeLabel(candidate.lastEnd)}</h4>
+                      </div>
+                      <div className="schedule-actions">
+                        <button className="ghost-action" type="button" onClick={() => void copyTimetableCandidate(candidate)}>Copy</button>
+                        <button className={`ghost-action${pinnedSchedules.includes(candidate.id) ? ' active' : ''}`} type="button" onClick={() => togglePinnedSchedule(candidate.id)}>{pinnedSchedules.includes(candidate.id) ? 'Pinned' : 'Pin'}</button>
+                      </div>
+                    </div>
+                    <div className="schedule-summary">
+                      {candidate.sections.map((item) => (
+                        <div key={item.section.id} className="summary-row">
+                          <div>
+                            <strong>{item.courseTitle}</strong>
+                            <p>{item.section.label}{item.section.instructor ? ` · ${item.section.instructor}` : ''}</p>
+                          </div>
+                          <div className="summary-meta">
+                            <span>{item.section.meetings.map((meeting) => `${meeting.days.map((day) => TIMETABLE_DAY_LABELS[day]).join('/') } ${meeting.start}–${meeting.end}`).join(' • ')}</span>
+                            {typeof item.section.seatsOpen === 'number' && <em>{item.section.seatsOpen} open</em>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <div className="timetable-help">
+          <div>
+            <span className="planner-hero-eyebrow">Need help?</span>
+            <h3>How to find your best fit schedule</h3>
+            <p>Paste your courses, generate multiple timetables, and pick the one that works best for you.</p>
+          </div>
+          <div className="help-grid">
+            <article><strong>Simple workflow</strong><p>Paste course text from your registrar portal above. The planner generates all valid combinations from the sections it can read.</p></article>
+            <article><strong>Multiple options</strong><p>Use focus and day filters to narrow down a calmer week, an earlier start, or seat-open sections only.</p></article>
+            <article><strong>Pick the best</strong><p>Pin your favorite schedules and keep your study plans, deadlines, and revision blocks in the same command center.</p></article>
+          </div>
+        </div>
+        </section>
+      )}
+
+      {plannerMode === 'calendar' && (
+        <>
       {/* ── Left Sidebar ────────────────────────────────────────────── */}
       <aside className="cal-sidebar">
         <button className="new-event-btn" onClick={() => openNewEvent()}>
-          <span>＋</span> New Event
+          <span>＋</span> {t('New Event')}
         </button>
 
         {/* Mini calendar */}
@@ -399,7 +1002,7 @@ export default function PlannerPage() {
 
         {/* Event type legend */}
         <div className="sidebar-section">
-          <p className="sidebar-label">Event Types</p>
+          <p className="sidebar-label">{t('Event Types')}</p>
           <div className="legend">
             {(Object.entries(EVENT_COLORS) as [EventType, string][]).map(([type, color]) => (
               <div key={type} className="legend-item">
@@ -413,7 +1016,7 @@ export default function PlannerPage() {
         {/* Exam countdowns */}
         {upcomingExams.length > 0 && (
           <div className="sidebar-section">
-            <p className="sidebar-label">Exam Countdowns</p>
+            <p className="sidebar-label">{t('Exam Countdowns')}</p>
             {upcomingExams.map(exam => {
               const d = daysUntil(exam.date);
               return (
@@ -430,9 +1033,9 @@ export default function PlannerPage() {
 
         {/* Today's agenda */}
         <div className="sidebar-section">
-          <p className="sidebar-label">Today</p>
+          <p className="sidebar-label">{t('Today')}</p>
           {todayEvents.length === 0
-            ? <p className="sidebar-empty">No events today</p>
+            ? <p className="sidebar-empty">{t('No events today')}</p>
             : todayEvents.map(evt => (
               <div
                 key={evt.id}
@@ -447,23 +1050,6 @@ export default function PlannerPage() {
           }
         </div>
 
-        {/* Study Plans section */}
-        <div className="sidebar-section sidebar-section-plans">
-          <PlanList
-            plans={plans}
-            loading={plansLoading}
-            selectedPlanId={selectedPlanId}
-            onSelectPlan={(plan: StudyPlan) => {
-              setSelectedPlanId(plan.id);
-              // Jump calendar to exam date
-              const examD = new Date(plan.examDate);
-              setCursor(examD);
-              setMiniDate(examD);
-            }}
-            onNewPlan={() => setShowPlanForm(true)}
-            onDeletePlan={(planId: string) => { void deletePlan(planId); }}
-          />
-        </div>
       </aside>
 
       {/* ── Main Calendar ────────────────────────────────────────────── */}
@@ -476,7 +1062,9 @@ export default function PlannerPage() {
             <button className="nav-btn icon-btn" onClick={navNext}>›</button>
             <h2 className="cal-title">{navLabel}</h2>
           </div>
-          <div className="view-switcher">
+          <div className="calendar-header-actions">
+            <button className="hero-btn primary compact" type="button" onClick={() => openNewEvent()}>{t('Add calendar event')}</button>
+            <div className="view-switcher">
             {(['month','week','day','agenda'] as CalendarView[]).map(v => (
               <button
                 key={v}
@@ -486,6 +1074,7 @@ export default function PlannerPage() {
                 {v.charAt(0).toUpperCase()+v.slice(1)}
               </button>
             ))}
+            </div>
           </div>
         </header>
 
@@ -500,20 +1089,17 @@ export default function PlannerPage() {
             gap: 10,
           }}>
             <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', fontWeight: 700 }}>
-              Planner setup
+              {t('Planner setup')}
             </span>
             <strong style={{ fontSize: '1rem', color: 'var(--text)' }}>
-              Start with one exam or deadline and Kivora will build the study blocks around it.
+              {t('Start with one exam or deadline and Kivora will build the study blocks around it.')}
             </strong>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn btn-primary btn-sm" onClick={() => setShowPlanForm(true)}>
-                Create first plan
-              </button>
-              <button className="btn btn-secondary btn-sm" onClick={() => openNewEvent()}>
-                Add event
+              <button className="btn btn-primary btn-sm" onClick={() => openNewEvent()}>
+                {t('Add calendar event')}
               </button>
               <a href="/workspace" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
-                Open Workspace
+                {t('Open Workspace')}
               </a>
             </div>
           </div>
@@ -567,6 +1153,55 @@ export default function PlannerPage() {
           />
         )}
       </main>
+        </>
+      )}
+
+      {plannerMode === 'plans' && (
+        <section className="plans-mode-shell">
+          <div className="mode-section-head">
+            <div>
+              <span className="planner-hero-eyebrow">{t('Study Plans')}</span>
+              <h2>{t('Create study plan')}</h2>
+              <p>Build an exam-ready revision path from your topics, daily minutes, and deadline.</p>
+            </div>
+            <button className="hero-btn primary" type="button" onClick={() => setShowPlanForm(true)}>{t('Create study plan')}</button>
+          </div>
+          <div className="plans-mode-grid">
+            <div className="plans-mode-list">
+              <PlanList
+                plans={plans}
+                loading={plansLoading}
+                selectedPlanId={selectedPlanId}
+                onSelectPlan={(plan: StudyPlan) => {
+                  setSelectedPlanId(plan.id);
+                  const examD = new Date(plan.examDate);
+                  setCursor(examD);
+                  setMiniDate(examD);
+                }}
+                onNewPlan={() => setShowPlanForm(true)}
+                onDeletePlan={(planId: string) => { void deletePlan(planId); }}
+              />
+            </div>
+            <article className="plans-mode-detail">
+              {selectedPlan ? (
+                <>
+                  <span className="schedule-rank">Selected plan</span>
+                  <h3>{selectedPlan.title}</h3>
+                  <p>Exam date: {new Date(selectedPlan.examDate).toLocaleDateString()}</p>
+                  <p>{selectedPlan.topics.length} topic{selectedPlan.topics.length === 1 ? '' : 's'} · {selectedPlan.dailyMinutes} minutes/day</p>
+                  <button className="hero-btn" type="button" onClick={() => { setPlannerMode('calendar'); setCursor(new Date(selectedPlan.examDate)); }}>View on calendar</button>
+                </>
+              ) : (
+                <>
+                  <span className="schedule-rank">Planner setup</span>
+                  <h3>No study plan selected yet</h3>
+                  <p>Create your first plan or select one from the list to see its exam date, workload, and generated revision blocks.</p>
+                </>
+              )}
+            </article>
+          </div>
+        </section>
+      )}
 
       {/* ── Event Detail Panel ───────────────────────────────────────── */}
       {selectedEvent && (
@@ -710,21 +1345,148 @@ export default function PlannerPage() {
         /* ── Shell ─────────────────────────────────────────────────── */
         .cal-shell {
           display: grid;
-          grid-template-columns: 260px minmax(0,1fr);
+          grid-template-columns: 280px minmax(0,1fr);
+          grid-template-rows: auto auto 1fr;
           height: calc(100dvh - 40px);
           overflow: hidden;
-          background: var(--bg-surface);
+          background:
+            radial-gradient(circle at top left, color-mix(in srgb, var(--primary) 10%, transparent), transparent 24%),
+            linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 55%, white 45%), var(--bg-surface));
         }
+        .planner-hero {
+          grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 20px;
+          padding: 24px 24px 16px;
+          border-bottom: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-subtle));
+          background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 7%, white), color-mix(in srgb, var(--bg-elevated) 70%, white));
+        }
+        .planner-hero-copy h1 {
+          margin: 0;
+          font-size: clamp(1.8rem, 3vw, 2.5rem);
+          letter-spacing: -0.04em;
+          color: var(--text-primary);
+        }
+        .planner-hero-copy p {
+          margin: 10px 0 0;
+          max-width: 60ch;
+          color: var(--text-secondary);
+          font-size: 0.98rem;
+        }
+        .planner-hero-eyebrow {
+          display: inline-block;
+          margin-bottom: 8px;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--primary);
+        }
+        .hero-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 42px;
+          padding: 0 16px;
+          border-radius: 999px;
+          border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--border-subtle));
+          background: color-mix(in srgb, var(--bg-surface) 88%, white 12%);
+          color: var(--text-primary);
+          font-weight: 650;
+          cursor: pointer;
+          transition: 150ms ease;
+        }
+        .hero-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .hero-btn.primary { background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #1d4ed8)); color: white; border-color: transparent; }
+
+        .planner-mode-switcher {
+          display: inline-flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 4px;
+          padding: 4px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--bg-surface) 88%, white 12%);
+          border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--border-subtle));
+          box-shadow: var(--shadow-sm);
+          align-self: start;
+        }
+        .mode-tab {
+          border: 0;
+          border-radius: 999px;
+          padding: 9px 14px;
+          background: transparent;
+          color: var(--text-secondary);
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .mode-tab.active {
+          background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 68%, #1d4ed8));
+          color: white;
+          box-shadow: var(--shadow-sm);
+        }
+        .mode-tab:focus-visible, .hero-btn:focus-visible, .ghost-action:focus-visible, .focus-pill:focus-visible {
+          outline: 3px solid color-mix(in srgb, var(--primary) 34%, transparent);
+          outline-offset: 2px;
+        }
+        .panel-actions, .calendar-header-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .hero-btn.compact { min-height: 36px; padding: 0 13px; }
+
+        .planner-hero-stats {
+          grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+        }
+        .hero-stat {
+          display: grid;
+          gap: 6px;
+          padding: 14px 16px;
+          border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-subtle));
+          border-radius: 18px;
+          background: color-mix(in srgb, var(--bg-surface) 92%, white 8%);
+          box-shadow: var(--shadow-sm);
+        }
+        .hero-stat span { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 700; }
+        .hero-stat strong { font-size: 1.35rem; color: var(--text-primary); }
+        .planner-status-bar {
+          grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+          padding: 12px 24px 16px;
+          background: color-mix(in srgb, var(--bg-surface) 84%, white 16%);
+          border-bottom: 1px solid var(--border-subtle);
+        }
+        .planner-status-item {
+          display: grid;
+          gap: 4px;
+          min-width: 0;
+          padding: 10px 12px;
+          border-radius: 14px;
+          background: color-mix(in srgb, var(--bg-elevated) 82%, white 18%);
+          border: 1px solid var(--border-subtle);
+        }
+        .planner-status-item span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 700; }
+        .planner-status-item strong { font-size: 0.92rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         /* ── Sidebar ───────────────────────────────────────────────── */
         .cal-sidebar {
+          grid-row: 3;
           display: flex;
           flex-direction: column;
           gap: 0;
           padding: 16px 12px;
           border-right: 1px solid var(--border-subtle);
           overflow-y: auto;
-          background: var(--bg-elevated);
+          background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 92%, white 8%), var(--bg-elevated));
         }
         .new-event-btn {
           display: flex;
@@ -740,6 +1502,7 @@ export default function PlannerPage() {
           font-size: 14px;
           cursor: pointer;
           margin-bottom: 16px;
+          box-shadow: var(--shadow-sm);
           transition: all 0.15s;
           box-shadow: var(--shadow-sm);
         }
@@ -792,15 +1555,16 @@ export default function PlannerPage() {
 
         /* ── Main ──────────────────────────────────────────────────── */
         .cal-main {
+          grid-row: 3;
           display: flex; flex-direction: column; overflow: hidden;
         }
         .cal-header {
           display: flex; align-items: center; justify-content: space-between;
-          padding: 12px 20px; border-bottom: 1px solid var(--border-subtle);
-          background: var(--bg-elevated); flex-shrink: 0;
+          padding: 14px 22px; border-bottom: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-subtle));
+          background: color-mix(in srgb, var(--bg-elevated) 85%, white 15%); flex-shrink: 0;
         }
         .cal-nav { display: flex; align-items: center; gap: 8px; }
-        .cal-title { font-size: 18px; font-weight: 600; margin: 0; margin-left: 8px; }
+        .cal-title { font-size: 18px; font-weight: 700; margin: 0; margin-left: 8px; letter-spacing: -0.02em; }
         .nav-btn {
           display: inline-flex; align-items: center; justify-content: center;
           border-radius: 8px; border: 1px solid var(--border-subtle);
@@ -811,13 +1575,13 @@ export default function PlannerPage() {
         .nav-btn:hover { border-color: var(--primary); color: var(--primary); }
         .icon-btn { padding: 4px 10px; font-size: 18px; }
         .today-btn { background: var(--bg-elevated); }
-        .view-switcher { display: flex; gap: 2px; background: var(--bg-surface); border-radius: 10px; padding: 3px; border: 1px solid var(--border-subtle); }
+        .view-switcher { display: flex; gap: 2px; background: color-mix(in srgb, var(--bg-surface) 82%, white 18%); border-radius: 999px; padding: 4px; border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-subtle)); box-shadow: var(--shadow-sm); }
         .view-btn {
-          padding: 5px 14px; border-radius: 8px; border: none;
+          padding: 6px 14px; border-radius: 999px; border: none;
           background: transparent; color: var(--text-secondary);
           font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.12s;
         }
-        .view-btn.active { background: var(--primary); color: white; }
+        .view-btn.active { background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 65%, #1d4ed8)); color: white; }
         .view-btn:hover:not(.active) { color: var(--text-primary); }
 
         /* ── Detail panel ──────────────────────────────────────────── */
@@ -919,9 +1683,244 @@ export default function PlannerPage() {
         .modal-btn.save:hover { opacity: 0.88; }
         .modal-btn.save:disabled { opacity: 0.4; cursor: not-allowed; }
 
+
+        .plans-mode-shell {
+          grid-column: 1 / -1;
+          min-height: 0;
+          overflow: auto;
+          padding: 22px 24px 28px;
+          background: color-mix(in srgb, var(--bg-surface) 88%, white 12%);
+        }
+        .mode-section-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 18px;
+          margin-bottom: 18px;
+          padding: 18px;
+          border-radius: 22px;
+          border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-subtle));
+          background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 6%, white), color-mix(in srgb, var(--bg-elevated) 88%, white 12%));
+        }
+        .mode-section-head h2, .mode-section-head p, .plans-mode-detail h3, .plans-mode-detail p { margin: 0; }
+        .mode-section-head p, .plans-mode-detail p { color: var(--text-secondary); }
+        .plans-mode-grid {
+          display: grid;
+          grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+          gap: 18px;
+        }
+        .plans-mode-list, .plans-mode-detail {
+          border-radius: 22px;
+          border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-subtle));
+          background: var(--bg-elevated);
+          padding: 18px;
+          box-shadow: var(--shadow-sm);
+        }
+        .plans-mode-detail {
+          display: grid;
+          align-content: start;
+          gap: 12px;
+          min-height: 260px;
+        }
+
+        .timetable-shell {
+          grid-column: 1 / -1;
+          min-height: 0;
+          overflow: auto;
+          padding: 20px 24px 24px;
+          border-bottom: 1px solid var(--border-subtle);
+          background: linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 88%, white 12%), color-mix(in srgb, var(--bg-elevated) 92%, white 8%));
+        }
+        .timetable-header {
+          display: grid;
+          grid-template-columns: minmax(0, 1.4fr) minmax(320px, 540px);
+          gap: 20px;
+          align-items: end;
+        }
+        .timetable-header h2 {
+          margin: 0;
+          font-size: clamp(1.3rem, 2vw, 1.9rem);
+          letter-spacing: -0.03em;
+        }
+        .timetable-stats {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+        }
+        .timetable-stat {
+          padding: 12px 14px;
+          border-radius: 16px;
+          border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--border-subtle));
+          background: color-mix(in srgb, var(--bg-surface) 90%, white 10%);
+          display: grid;
+          gap: 4px;
+        }
+        .timetable-stat span, .schedule-rank {
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--text-muted);
+        }
+        .timetable-stat strong { font-size: 1.2rem; }
+        .timetable-grid {
+          margin-top: 18px;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr);
+          gap: 16px;
+          align-items: start;
+        }
+        .timetable-panel {
+          display: grid;
+          gap: 14px;
+          padding: 18px;
+          border-radius: 22px;
+          border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-subtle));
+          background: color-mix(in srgb, var(--bg-surface) 94%, white 6%);
+          box-shadow: var(--shadow-sm);
+        }
+        .panel-heading {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .panel-heading h3, .timetable-help h3, .schedule-card h4 { margin: 0; }
+        .panel-copy, .builder-note, .builder-empty p, .timetable-help p, .help-grid p, .course-card p, .summary-row p {
+          margin: 0;
+          color: var(--text-secondary);
+        }
+        .builder-note.error { color: #b42318; display: grid; gap: 4px; }
+        .builder-note.error span { color: var(--text-secondary); }
+        .builder-note.action {
+          border-radius: 14px;
+          padding: 10px 12px;
+          background: color-mix(in srgb, var(--primary) 7%, white);
+          border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border-subtle));
+        }
+        .timetable-textarea {
+          width: 100%;
+          min-height: 180px;
+          resize: vertical;
+          border-radius: 18px;
+          border: 1px solid var(--border-subtle);
+          background: color-mix(in srgb, var(--bg-elevated) 82%, white 18%);
+          padding: 14px 16px;
+          color: var(--text-primary);
+          font: inherit;
+        }
+        .course-stack, .schedule-stack { display: grid; gap: 12px; }
+        .course-card, .schedule-card {
+          border: 1px solid var(--border-subtle);
+          border-radius: 18px;
+          background: color-mix(in srgb, var(--bg-elevated) 88%, white 12%);
+          padding: 14px;
+        }
+        .course-card { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+        .ghost-action {
+          border: 1px solid var(--border-subtle);
+          background: color-mix(in srgb, var(--bg-surface) 86%, white 14%);
+          color: var(--text-secondary);
+          border-radius: 999px;
+          padding: 8px 12px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .ghost-action.active { background: color-mix(in srgb, var(--primary) 14%, white); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 25%, var(--border-subtle)); }
+        .pref-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        .pref-grid label, .focus-wrap { display: grid; gap: 8px; }
+        .pref-grid span, .focus-wrap > span { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+        .pref-grid input { border-radius: 12px; border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-primary); padding: 10px 12px; }
+        .focus-pills, .day-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+        .focus-pill {
+          border: 1px solid var(--border-subtle);
+          border-radius: 999px;
+          padding: 8px 12px;
+          background: color-mix(in srgb, var(--bg-surface) 86%, white 14%);
+          color: var(--text-secondary);
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .focus-pill.active { background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 68%, #1d4ed8)); color: white; border-color: transparent; }
+        .seat-toggle { display: inline-flex; align-items: center; gap: 10px; color: var(--text-secondary); font-weight: 600; }
+        .builder-count { color: var(--text-muted); font-size: 13px; }
+        .builder-empty {
+          border-radius: 18px;
+          border: 1px dashed color-mix(in srgb, var(--primary) 24%, var(--border-subtle));
+          padding: 18px;
+          background: color-mix(in srgb, var(--bg-elevated) 78%, white 22%);
+        }
+        .schedule-top, .summary-row { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+        .schedule-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+        .schedule-top { margin-bottom: 12px; }
+        .schedule-summary { display: grid; gap: 10px; }
+        .summary-row { padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--primary) 8%, var(--border-subtle)); }
+        .summary-row:first-child { padding-top: 0; border-top: none; }
+        .summary-meta { display: grid; gap: 4px; text-align: right; max-width: 48%; }
+        .summary-meta span { color: var(--text-secondary); font-size: 12px; }
+        .summary-meta em { color: var(--primary); font-style: normal; font-size: 12px; font-weight: 700; }
+        .timetable-help {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+          gap: 20px;
+          margin-top: 18px;
+          padding: 18px;
+          border-radius: 22px;
+          border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-subtle));
+          background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 6%, white), color-mix(in srgb, var(--bg-surface) 82%, white 18%));
+        }
+        .help-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+        .help-grid article { padding: 14px; border-radius: 16px; background: color-mix(in srgb, var(--bg-surface) 88%, white 12%); border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-subtle)); }
+        @media (max-width: 1024px) {
+          .planner-hero,
+          .planner-status-bar,
+          .timetable-header,
+          .timetable-help {
+            grid-template-columns: 1fr 1fr;
+          }
+          .planner-mode-switcher {
+            justify-content: flex-start;
+          }
+          .planner-hero-stats,
+          .timetable-stats,
+          .help-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .timetable-grid, .plans-mode-grid {
+            grid-template-columns: 1fr;
+          }
+        }
         @media (max-width: 768px) {
-          .cal-shell { grid-template-columns: 1fr; }
+          .cal-shell { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
+          .planner-hero,
+          .planner-status-bar,
+          .planner-hero-stats,
+          .timetable-header,
+          .timetable-help,
+          .timetable-stats,
+          .help-grid,
+          .pref-grid {
+            grid-template-columns: 1fr;
+          }
+          .planner-hero {
+            padding: 18px 16px 12px;
+          }
+          .planner-mode-switcher, .mode-section-head, .calendar-header-actions {
+            justify-content: flex-start;
+          }
+          .planner-status-bar, .timetable-shell, .plans-mode-shell {
+            padding: 10px 16px 14px;
+          }
+          .summary-row, .schedule-top, .course-card, .schedule-actions {
+            flex-direction: column;
+          }
+          .summary-meta {
+            max-width: none;
+            text-align: left;
+          }
           .cal-sidebar { display: none; }
+          .cal-main { grid-row: 3; }
         }
       `}</style>
     </div>

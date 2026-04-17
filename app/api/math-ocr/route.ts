@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getGroqApiKey } from '@/lib/ai/groq';
 
 const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://127.0.0.1:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_OCR_MODEL ?? process.env.OLLAMA_MODEL ?? 'llava';
+const OCR_PROMPT = 'Extract the mathematical expression from this image. Return ONLY the math expression in plain text suitable for a math solver (use ^ for powers, * for multiplication, / for division). No explanation, just the expression.';
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: OLLAMA_MODEL,
-        prompt: 'Extract the mathematical expression from this image. Return ONLY the math expression in plain text suitable for a math solver (use ^ for powers, * for multiplication, / for division). No explanation, just the expression.',
+        prompt: OCR_PROMPT,
         images: [base64Data],
         stream: false,
       }),
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
         messages: [{
           role: 'user',
           content: [
-            { type: 'text', text: 'Extract the mathematical expression from this image. Return ONLY the math expression in plain text (use ^ for powers, * for multiplication). No explanation.' },
+            { type: 'text', text: OCR_PROMPT },
             { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
           ],
         }],
@@ -62,36 +62,37 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Try Groq vision (gpt-4o-compatible endpoint)
-    const groqKey = getGroqApiKey();
-    if (groqKey) {
-      try {
-        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
-          body: JSON.stringify({
-            model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-            messages: [{
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Extract the mathematical expression from this image. Return ONLY the math expression in plain text suitable for a math solver (use ^ for powers, * for multiplication, / for division). No explanation, just the expression.' },
-                { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
-              ],
-            }],
-            max_tokens: 200,
-          }),
-          signal: AbortSignal.timeout(20_000),
-        });
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (openaiKey) {
+      const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${openaiKey}`,
+        },
+        body: JSON.stringify({
+          model: process.env.OPENAI_OCR_MODEL ?? process.env.OPENAI_MODEL_DEFAULT ?? 'gpt-4o-mini',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: OCR_PROMPT },
+              { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
+            ],
+          }],
+          max_tokens: 200,
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
 
-        if (groqRes.ok) {
-          const data = await groqRes.json();
-          const expression = data.choices?.[0]?.message?.content?.trim();
-          if (expression) return NextResponse.json({ expression });
+      if (openaiRes.ok) {
+        const data = await openaiRes.json();
+        const expression = data.choices?.[0]?.message?.content?.trim();
+        if (expression) {
+          return NextResponse.json({ expression });
         }
-      } catch {
-        // Groq vision failed — surface the final error below
       }
     }
+
 
     return NextResponse.json(
       { error: 'Could not extract math from the image. Try typing the problem manually.' },

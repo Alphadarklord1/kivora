@@ -85,7 +85,7 @@ test('returns 502 when cloud returns completely non-JSON response', async () => 
   cloudResponse = {
     ok: true,
     content: 'not json at all !!!',
-    source: 'groq',
+    source: 'grok',
   };
   const res = await POST(req({ text: 'Photosynthesis converts light to energy.', mode: 'notes' }, '192.168.1.2'));
   assert.equal(res.status, 502);
@@ -98,7 +98,7 @@ test('falls back to offline when cloud returns malformed JSON (braces but unpars
   cloudResponse = {
     ok: true,
     content: '{ totally : invalid : json : here }',
-    source: 'groq',
+    source: 'grok',
   };
   const res = await POST(req({ text: 'Photosynthesis converts light to energy.', mode: 'notes' }, '192.168.1.7'));
   assert.equal(res.status, 200);
@@ -112,7 +112,7 @@ test('falls back to offline when cloud returns schema-invalid JSON', async () =>
   cloudResponse = {
     ok: true,
     content: '{"mode":"notes","displayText":""}',
-    source: 'groq',
+    source: 'grok',
   };
   const res = await POST(req({ text: 'Photosynthesis converts light to energy.', mode: 'notes' }, '192.168.1.3'));
   assert.equal(res.status, 200);
@@ -134,7 +134,7 @@ test('returns real content when cloud returns valid JSON', async () => {
       flashcards: [],
       sourceText: 'Photosynthesis...',
     }),
-    source: 'groq',
+    source: 'grok',
   };
   const res = await POST(req({ text: 'Photosynthesis converts light to energy.', mode: 'summarize' }, '192.168.1.4'));
   assert.equal(res.status, 200);

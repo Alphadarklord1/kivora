@@ -170,6 +170,13 @@ const LOCAL_AR: Record<string, string> = {
   'BibTeX copied': 'تم نسخ BibTeX',
   'Remove source': 'إزالة المصدر',
   'Open source': 'افتح المصدر',
+  'Search saved references': 'ابحث في المراجع المحفوظة',
+  'Clear recent topics': 'امسح الموضوعات الأخيرة',
+  'Recent topics cleared': 'تم مسح الموضوعات الأخيرة',
+  'Copy source list': 'انسخ قائمة المصادر',
+  'Source list copied': 'تم نسخ قائمة المصادر',
+  'Could not copy source list': 'تعذر نسخ قائمة المصادر',
+  'Showing {count} references': 'يعرض {count} مرجعًا',
   'Notes': 'ملاحظات',
   'Save note': 'احفظ الملاحظة',
   'Note saved': 'تم حفظ الملاحظة',
@@ -243,6 +250,7 @@ export function ResearchTab({
   const [savingThread,       setSavingThread]       = useState(false);
   const [savingAllSources,   setSavingAllSources]   = useState(false);
   const [recentTopics,       setRecentTopics]       = useState<RecentTopicEntry[]>([]);
+  const [referenceQuery,     setReferenceQuery]     = useState('');
 
   // ── Reference Library state ────────────────────────────────────────────────
   const [savedSourcesList,  setSavedSourcesList]  = useState<SavedSourceRow[]>([]);
@@ -351,6 +359,15 @@ export function ResearchTab({
   }, [savedSourcesList]);
 
   const savedUrlSet = useMemo(() => new Set(savedSourcesList.map(s => s.url)), [savedSourcesList]);
+  const filteredSavedSources = useMemo(() => {
+    const query = referenceQuery.trim().toLowerCase();
+    if (!query) return savedSourcesList;
+    return savedSourcesList.filter((source) =>
+      [source.title, source.authors, source.journal, source.notes, source.doi, source.url]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query)),
+    );
+  }, [referenceQuery, savedSourcesList]);
 
   async function saveSource(payload: {
     title: string; url: string; authors?: string; journal?: string;
@@ -444,6 +461,19 @@ export function ResearchTab({
     }
   }
 
+  async function copySourceList() {
+    if (!researchResult) return;
+    const text = researchResult.sources
+      .map((source, index) => `${index + 1}. ${source.title}\n${source.url}\n${source.excerpt}`)
+      .join('\n\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(t('Source list copied'), 'success');
+    } catch {
+      toast(t('Could not copy source list'), 'error');
+    }
+  }
+
   function useSavedReferencesAsManualLinks() {
     const urls = savedSourcesList.map((source) => source.url).filter(Boolean).slice(0, 5);
     if (!urls.length) {
@@ -454,6 +484,14 @@ export function ResearchTab({
     setResearchMode(includeWeb ? 'hybrid' : 'manual');
     setShowAdvanced(true);
     toast(t('Saved references loaded into manual links'), 'success');
+  }
+
+  function clearRecentTopics() {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(RECENT_TOPICS_KEY);
+    }
+    setRecentTopics([]);
+    toast(t('Recent topics cleared'), 'success');
   }
 
   async function saveVisibleSources() {
@@ -948,7 +986,17 @@ export function ResearchTab({
             <div className={styles.plxSection} style={{ marginTop: '1rem', width: 'min(100%, 46rem)' }}>
               <div className={styles.plxSectionHead}>
                 <h3>{t('Recent topics')}</h3>
-                <span>{t('Pick up where you left off.')}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                  <span>{t('Pick up where you left off.')}</span>
+                  <button
+                    type="button"
+                    className={styles.plxAdvancedToggle}
+                    style={{ padding: '0.15rem 0.55rem', fontSize: '0.72rem' }}
+                    onClick={clearRecentTopics}
+                  >
+                    {t('Clear recent topics')}
+                  </button>
+                </div>
               </div>
               <div className={styles.plxRelatedChips}>
                 {recentTopics.map((entry) => (
@@ -1250,6 +1298,14 @@ export function ResearchTab({
                   type="button"
                   className={styles.plxAdvancedToggle}
                   style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem' }}
+                  onClick={() => void copySourceList()}
+                >
+                  {t('Copy source list')}
+                </button>
+                <button
+                  type="button"
+                  className={styles.plxAdvancedToggle}
+                  style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem' }}
                   disabled={savingAllSources}
                   onClick={() => void saveVisibleSources()}
                 >
@@ -1372,7 +1428,25 @@ export function ResearchTab({
                   </p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '0.5rem' }}>
-                    {savedSourcesList.map(s => (
+                    <input
+                      value={referenceQuery}
+                      onChange={(event) => setReferenceQuery(event.target.value)}
+                      placeholder={t('Search saved references')}
+                      style={{
+                        width: '100%',
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg)',
+                        color: 'var(--text)',
+                        padding: '0.5rem 0.65rem',
+                        fontSize: '0.75rem',
+                        lineHeight: 1.3,
+                      }}
+                    />
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      {t('Showing {count} references', { count: filteredSavedSources.length })}
+                    </div>
+                    {filteredSavedSources.map(s => (
                       <div key={s.id} style={{ background: 'var(--surface)', borderRadius: 8, padding: '0.5rem 0.6rem', fontSize: '0.78rem' }}>
                         <div style={{ fontWeight: 600, marginBottom: '0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</div>
                         {s.authors && <div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginBottom: '0.1rem' }}>{s.authors}</div>}

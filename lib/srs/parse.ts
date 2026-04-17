@@ -4,7 +4,7 @@ export function parseFlashcards(content: string): Array<{ front: string; back: s
     .map((line) => line.replace(/^\d+[.)]\s*/, '').trim())
     .filter(Boolean);
 
-  // Format: **Front**: text | **Back**: text  (Groq bold markdown style)
+  // Format: **Front**: text | **Back**: text  (legacy bold markdown style)
   // Format: Front: text | Back: text          (plain style)
   const pipePattern = /\*{0,2}front\*{0,2}:\s*(.*?)\s*\|\s*\*{0,2}back\*{0,2}:\s*(.*)/i;
   const pipeLines = lines.filter((line) => pipePattern.test(line));
