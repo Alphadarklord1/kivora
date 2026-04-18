@@ -449,8 +449,90 @@ export default function PlannerPage() {
     'Timetable Builder': 'منشئ الجدول',
     'Study Calendar': 'تقويم الدراسة',
     'Study Plans': 'خطط الدراسة',
-    'Build timetable': 'أنشئ جدولاً',
-    'Paste course text': 'الصق نص المقرر',
+    'Build your timetable': 'أنشئ جدولك',
+    "Paste your catalog export, fine-tune constraints, and we'll build the best schedule for you.": 'الصق تصدير المقررات، واضبط القيود، وسنبني لك أفضل جدول ممكن.',
+    Courses: 'المقررات',
+    'Seat-open options': 'الخيارات ذات المقاعد المفتوحة',
+    Pinned: 'المثبتة',
+    'Valid schedules': 'الجداول الصالحة',
+    'Use sample': 'استخدم مثالاً',
+    'Demo set': 'مجموعة تجريبية',
+    'Paste one registrar export chunk, hit add, and repeat for each course.': 'الصق جزءًا واحدًا من تصدير نظام التسجيل، ثم اضغط إضافة وكرر ذلك لكل مقرر.',
+    'Paste the raw course text here...': 'الصق نص المقرر الخام هنا...',
+    'Paste your catalog text to see structured options.': 'الصق نص المقررات لرؤية الخيارات المنظمة.',
+    'Paste a course block with at least one section meeting line to generate options.': 'الصق كتلة مقرر تتضمن سطر موعد شعبة واحدًا على الأقل لإنشاء الخيارات.',
+    'Sample course loaded. Add it, then add more courses or use the full demo set.': 'تم تحميل مقرر نموذجي. أضفه، ثم أضف مقررات أخرى أو استخدم المجموعة التجريبية الكاملة.',
+    'Demo course set added. Try avoiding a day or changing the ranking focus to compare schedules.': 'تمت إضافة المجموعة التجريبية. جرّب استبعاد يوم أو تغيير أولوية الترتيب لمقارنة الجداول.',
+    Preferences: 'التفضيلات',
+    'Seat-open only': 'المقاعد المفتوحة فقط',
+    'Earliest start': 'أبكر بداية',
+    'Latest finish': 'أقصى نهاية',
+    'Preference focus': 'تركيز التفضيل',
+    'Avoid days': 'تجنب الأيام',
+    'Schedule builder': 'منشئ الجداول',
+    '{count} valid combinations after applying constraints.': 'هناك {count} توليفة صالحة بعد تطبيق القيود.',
+    'No schedules match the current constraints. Try relaxing earliest/latest times or allowed days.': 'لا توجد جداول تطابق القيود الحالية. جرّب تخفيف أوقات البداية أو النهاية أو الأيام المسموح بها.',
+    'Need help?': 'هل تحتاج إلى مساعدة؟',
+    'How to find your best fit schedule': 'كيف تجد الجدول الأنسب لك',
+    'Paste your courses, generate multiple timetables, and pick the one that works best for you.': 'الصق مقرراتك، وأنشئ عدة جداول، ثم اختر الأنسب لك.',
+    'Simple workflow': 'خطوات بسيطة',
+    'Multiple options': 'خيارات متعددة',
+    'Pick the best': 'اختر الأفضل',
+    'Paste course text from your registrar portal above. The planner generates all valid combinations from the sections it can read.': 'الصق نص المقرر من بوابة التسجيل بالأعلى. سينشئ المخطط كل التوليفات الصالحة التي يستطيع قراءتها من الشعب.',
+    'Use focus and day filters to narrow down a calmer week, an earlier start, or seat-open sections only.': 'استخدم مرشحات التركيز والأيام للحصول على أسبوع أهدأ أو بداية أبكر أو شعب بمقاعد مفتوحة فقط.',
+    'Pin your favorite schedules and keep your study plans, deadlines, and revision blocks in the same command center.': 'ثبّت جداولك المفضلة واحتفظ بخطط الدراسة والمواعيد النهائية وجلسات المراجعة في نفس المركز.',
+    'Build an exam-ready revision path from your topics, daily minutes, and deadline.': 'ابنِ مسار مراجعة جاهزًا للاختبار من موضوعاتك ودقائقك اليومية وموعدك النهائي.',
+    'Exam date': 'تاريخ الاختبار',
+    'View on calendar': 'اعرض على التقويم',
+    'No study plan selected yet': 'لم يتم تحديد خطة دراسة بعد',
+    'Create your first plan or select one from the list to see its exam date, workload, and generated revision blocks.': 'أنشئ خطتك الأولى أو اختر واحدة من القائمة لرؤية تاريخ الاختبار وحجم العبء وجلسات المراجعة المُولدة.',
+    'Schedule copied. You can paste it into notes, email, or your registrar planning sheet.': 'تم نسخ الجدول. يمكنك لصقه في الملاحظات أو البريد أو ورقة التخطيط الخاصة بك.',
+    'Option {count}': 'الخيار {count}',
+    'Pin': 'ثبّت',
+    Copy: 'نسخ',
+    'Add course': 'أضف مقررًا',
+    'Example: Section A · Instructor: Dr. Noor · Seats open: 8 · MW 9:00 AM - 10:15 AM': 'مثال: الشعبة A · المحاضر: د. نور · المقاعد المفتوحة: 8 · اث/أر 9:00 ص - 10:15 ص',
+    Remove: 'إزالة',
+    Balanced: 'متوازن',
+    Earliest: 'الأبكر',
+    Compact: 'مكثف',
+    '{count} open': '{count} مقعد مفتوح',
+    'View mode {mode}': 'وضع العرض {mode}',
+    Month: 'شهر',
+    Week: 'أسبوع',
+    Day: 'يوم',
+    Agenda: 'جدول الأعمال',
+    'Event detail': 'تفاصيل الحدث',
+    Passed: 'انتهى',
+    '{count}d': '{count}ي',
+    'Study event': 'جلسة دراسة',
+    'Exam event': 'اختبار',
+    'Deadline event': 'موعد نهائي',
+    'Class event': 'حصة',
+    'Break event': 'استراحة',
+    'Revision event': 'مراجعة',
+    Unmark: 'إلغاء التعليم',
+    Done: 'تم',
+    Edit: 'تعديل',
+    Delete: 'حذف',
+    'Edit Event': 'عدّل الحدث',
+    Title: 'العنوان',
+    'Event title…': 'عنوان الحدث…',
+    Type: 'النوع',
+    Date: 'التاريخ',
+    Start: 'البداية',
+    End: 'النهاية',
+    'Notes (optional)': 'ملاحظات (اختياري)',
+    'Add notes…': 'أضف ملاحظات…',
+    Cancel: 'إلغاء',
+    'Save Changes': 'احفظ التغييرات',
+    'Create Event': 'أنشئ الحدث',
+    'Added course summary': 'تمت إضافة {title} مع {count} خيار شعبة.',
+    '{count} section option': '{count} خيار شعبة',
+    '{count} section options': '{count} خيارات شعب',
+    '{count} topic': '{count} موضوع',
+    '{count} topics': '{count} موضوعات',
+    '{count} minutes/day': '{count} دقيقة/يوم',
   });
   const today = useMemo(() => new Date(), []);
   const [view, setView] = useState<CalendarView>('week');
@@ -688,20 +770,20 @@ export default function PlannerPage() {
   const addTimetableCourse = useCallback(() => {
     const parsed = parseRegistrarCourse(courseInput);
     if (!parsed) {
-      setCourseParseError('Paste a course block with at least one section meeting line to generate options.');
+      setCourseParseError(t('Paste a course block with at least one section meeting line to generate options.'));
       return;
     }
     setTimetableCourses((prev) => [...prev, parsed]);
     setCourseInput('');
     setCourseParseError(null);
-    setTimetableActionMessage(`${parsed.title} added with ${parsed.sections.length} section option${parsed.sections.length === 1 ? '' : 's'}.`);
-  }, [courseInput]);
+    setTimetableActionMessage(t('Added course summary', { title: parsed.title, count: parsed.sections.length }));
+  }, [courseInput, t]);
 
   const useSampleCatalogText = useCallback(() => {
     setCourseInput(SAMPLE_CATALOG_TEXTS[0]);
     setCourseParseError(null);
-    setTimetableActionMessage('Sample course loaded. Add it, then add more courses or use the full demo set.');
-  }, []);
+    setTimetableActionMessage(t('Sample course loaded. Add it, then add more courses or use the full demo set.'));
+  }, [t]);
 
   const addSampleCourseSet = useCallback(() => {
     const parsed = SAMPLE_CATALOG_TEXTS.map(parseRegistrarCourse).filter((course): course is TimetableCourse => Boolean(course));
@@ -709,18 +791,18 @@ export default function PlannerPage() {
     setPinnedSchedules([]);
     setCourseInput('');
     setCourseParseError(null);
-    setTimetableActionMessage('Demo course set added. Try avoiding a day or changing the ranking focus to compare schedules.');
-  }, []);
+    setTimetableActionMessage(t('Demo course set added. Try avoiding a day or changing the ranking focus to compare schedules.'));
+  }, [t]);
 
   const copyTimetableCandidate = useCallback(async (candidate: TimetableCandidate) => {
     const text = formatTimetableCandidate(candidate);
     try {
       await navigator.clipboard.writeText(text);
-      setTimetableActionMessage('Schedule copied. You can paste it into notes, email, or your registrar planning sheet.');
+      setTimetableActionMessage(t('Schedule copied. You can paste it into notes, email, or your registrar planning sheet.'));
     } catch {
       setTimetableActionMessage(text);
     }
-  }, []);
+  }, [t]);
 
   const removeTimetableCourse = useCallback((courseId: string) => {
     setTimetableCourses((prev) => prev.filter((course) => course.id !== courseId));
@@ -825,52 +907,52 @@ export default function PlannerPage() {
         <section className="timetable-shell">
         <div className="timetable-header">
           <div>
-            <span className="planner-hero-eyebrow">Build your timetable</span>
-            <h2>Paste your catalog export, fine-tune constraints, and we&apos;ll build the best schedule for you.</h2>
+            <span className="planner-hero-eyebrow">{t('Build your timetable')}</span>
+            <h2>{t("Paste your catalog export, fine-tune constraints, and we'll build the best schedule for you.")}</h2>
           </div>
           <div className="timetable-stats">
-            <article className="timetable-stat"><span>Courses</span><strong>{timetableCourses.length}</strong></article>
-            <article className="timetable-stat"><span>Seat-open options</span><strong>{seatOpenOptionCount}</strong></article>
-            <article className="timetable-stat"><span>Pinned</span><strong>{pinnedTimetables.length}</strong></article>
-            <article className="timetable-stat"><span>Valid schedules</span><strong>{timetableCandidates.length}</strong></article>
+            <article className="timetable-stat"><span>{t('Courses')}</span><strong>{timetableCourses.length}</strong></article>
+            <article className="timetable-stat"><span>{t('Seat-open options')}</span><strong>{seatOpenOptionCount}</strong></article>
+            <article className="timetable-stat"><span>{t('Pinned')}</span><strong>{pinnedTimetables.length}</strong></article>
+            <article className="timetable-stat"><span>{t('Valid schedules')}</span><strong>{timetableCandidates.length}</strong></article>
           </div>
         </div>
 
         <div className="timetable-grid">
           <section className="timetable-panel">
             <div className="panel-heading">
-              <h3>Courses</h3>
+              <h3>{t('Courses')}</h3>
               <div className="panel-actions">
-                <button className="ghost-action" type="button" onClick={useSampleCatalogText}>Use sample</button>
-                <button className="ghost-action" type="button" onClick={addSampleCourseSet}>Demo set</button>
-                <button className="hero-btn primary compact" type="button" onClick={addTimetableCourse}>Add course</button>
+                <button className="ghost-action" type="button" onClick={useSampleCatalogText}>{t('Use sample')}</button>
+                <button className="ghost-action" type="button" onClick={addSampleCourseSet}>{t('Demo set')}</button>
+                <button className="hero-btn primary compact" type="button" onClick={addTimetableCourse}>{t('Add course')}</button>
               </div>
             </div>
-            <p className="panel-copy">Paste one registrar export chunk, hit add, and repeat for each course.</p>
+            <p className="panel-copy">{t('Paste one registrar export chunk, hit add, and repeat for each course.')}</p>
             <textarea
               className="timetable-textarea"
               value={courseInput}
               onChange={(event) => setCourseInput(event.target.value)}
-              placeholder="Paste the raw course text here..."
+              placeholder={t('Paste the raw course text here...')}
               rows={8}
             />
             {courseParseError && (
               <div className="builder-note error">
                 <strong>{courseParseError}</strong>
-                <span>Example: Section A · Instructor: Dr. Noor · Seats open: 8 · MW 9:00 AM - 10:15 AM</span>
+                <span>{t('Example: Section A · Instructor: Dr. Noor · Seats open: 8 · MW 9:00 AM - 10:15 AM')}</span>
               </div>
             )}
             {timetableCourses.length === 0 ? (
-              <p className="builder-note">Paste your catalog text to see structured options.</p>
+              <p className="builder-note">{t('Paste your catalog text to see structured options.')}</p>
             ) : (
               <div className="course-stack">
                 {timetableCourses.map((course) => (
                   <article key={course.id} className="course-card">
                     <div>
                       <strong>{course.title}</strong>
-                      <p>{course.sections.length} section option{course.sections.length === 1 ? '' : 's'}</p>
+                      <p>{course.sections.length} {t('Valid schedules').toLowerCase()}</p>
                     </div>
-                    <button className="ghost-action" type="button" onClick={() => removeTimetableCourse(course.id)}>Remove</button>
+                    <button className="ghost-action" type="button" onClick={() => removeTimetableCourse(course.id)}>{t('Remove')}</button>
                   </article>
                 ))}
               </div>
@@ -880,34 +962,34 @@ export default function PlannerPage() {
 
           <section className="timetable-panel">
             <div className="panel-heading">
-              <h3>Preferences</h3>
+              <h3>{t('Preferences')}</h3>
               <label className="seat-toggle">
                 <input type="checkbox" checked={timetablePrefs.seatOpenOnly} onChange={(event) => setTimetablePrefs((prev) => ({ ...prev, seatOpenOnly: event.target.checked }))} />
-                <span>Seat-open only</span>
+                <span>{t('Seat-open only')}</span>
               </label>
             </div>
             <div className="pref-grid">
               <label>
-                <span>Earliest start</span>
+                <span>{t('Earliest start')}</span>
                 <input type="time" value={timetablePrefs.earliestStart} onChange={(event) => setTimetablePrefs((prev) => ({ ...prev, earliestStart: event.target.value }))} />
               </label>
               <label>
-                <span>Latest finish</span>
+                <span>{t('Latest finish')}</span>
                 <input type="time" value={timetablePrefs.latestFinish} onChange={(event) => setTimetablePrefs((prev) => ({ ...prev, latestFinish: event.target.value }))} />
               </label>
             </div>
             <div className="focus-wrap">
-              <span>Preference focus</span>
+              <span>{t('Preference focus')}</span>
               <div className="focus-pills">
                 {TIMETABLE_FOCUS_OPTIONS.map((option) => (
                   <button key={option} type="button" className={`focus-pill${timetablePrefs.focus === option ? ' active' : ''}`} onClick={() => setTimetablePrefs((prev) => ({ ...prev, focus: option }))}>
-                    {option === 'seat-open' ? 'Seat-open' : option.charAt(0).toUpperCase()+option.slice(1)}
+                    {option === 'seat-open' ? t('Seat-open only') : t(option.charAt(0).toUpperCase()+option.slice(1))}
                   </button>
                 ))}
               </div>
             </div>
             <div className="focus-wrap">
-              <span>Avoid days</span>
+              <span>{t('Avoid days')}</span>
               <div className="day-pills">
                 {TIMETABLE_DAY_LABELS.map((day, index) => {
                   const active = timetablePrefs.avoidDays.includes(index);
@@ -926,12 +1008,12 @@ export default function PlannerPage() {
 
           <section className="timetable-panel timetable-results">
             <div className="panel-heading">
-              <h3>Schedule builder</h3>
-              <span className="builder-count">{timetableCandidates.length} valid combinations after applying constraints.</span>
+              <h3>{t('Schedule builder')}</h3>
+              <span className="builder-count">{t('{count} valid combinations after applying constraints.', { count: timetableCandidates.length })}</span>
             </div>
             {timetableCandidates.length === 0 ? (
               <div className="builder-empty">
-                <p>No schedules match the current constraints. Try relaxing earliest/latest times or allowed days.</p>
+                <p>{t('No schedules match the current constraints. Try relaxing earliest/latest times or allowed days.')}</p>
               </div>
             ) : (
               <div className="schedule-stack">
@@ -939,12 +1021,12 @@ export default function PlannerPage() {
                   <article key={candidate.id} className="schedule-card">
                     <div className="schedule-top">
                       <div>
-                        <span className="schedule-rank">Option {index + 1}</span>
+                        <span className="schedule-rank">{t('Option {count}', { count: index + 1 })}</span>
                         <h4>{candidate.busyDays} day week · {minutesToTimeLabel(candidate.firstStart)} to {minutesToTimeLabel(candidate.lastEnd)}</h4>
                       </div>
                       <div className="schedule-actions">
-                        <button className="ghost-action" type="button" onClick={() => void copyTimetableCandidate(candidate)}>Copy</button>
-                        <button className={`ghost-action${pinnedSchedules.includes(candidate.id) ? ' active' : ''}`} type="button" onClick={() => togglePinnedSchedule(candidate.id)}>{pinnedSchedules.includes(candidate.id) ? 'Pinned' : 'Pin'}</button>
+                        <button className="ghost-action" type="button" onClick={() => void copyTimetableCandidate(candidate)}>{t('Copy')}</button>
+                        <button className={`ghost-action${pinnedSchedules.includes(candidate.id) ? ' active' : ''}`} type="button" onClick={() => togglePinnedSchedule(candidate.id)}>{pinnedSchedules.includes(candidate.id) ? t('Pinned') : t('Pin')}</button>
                       </div>
                     </div>
                     <div className="schedule-summary">
@@ -956,7 +1038,7 @@ export default function PlannerPage() {
                           </div>
                           <div className="summary-meta">
                             <span>{item.section.meetings.map((meeting) => `${meeting.days.map((day) => TIMETABLE_DAY_LABELS[day]).join('/') } ${meeting.start}–${meeting.end}`).join(' • ')}</span>
-                            {typeof item.section.seatsOpen === 'number' && <em>{item.section.seatsOpen} open</em>}
+                            {typeof item.section.seatsOpen === 'number' && <em>{t('{count} open', { count: item.section.seatsOpen })}</em>}
                           </div>
                         </div>
                       ))}
@@ -970,14 +1052,14 @@ export default function PlannerPage() {
 
         <div className="timetable-help">
           <div>
-            <span className="planner-hero-eyebrow">Need help?</span>
-            <h3>How to find your best fit schedule</h3>
-            <p>Paste your courses, generate multiple timetables, and pick the one that works best for you.</p>
+            <span className="planner-hero-eyebrow">{t('Need help?')}</span>
+            <h3>{t('How to find your best fit schedule')}</h3>
+            <p>{t('Paste your courses, generate multiple timetables, and pick the one that works best for you.')}</p>
           </div>
           <div className="help-grid">
-            <article><strong>Simple workflow</strong><p>Paste course text from your registrar portal above. The planner generates all valid combinations from the sections it can read.</p></article>
-            <article><strong>Multiple options</strong><p>Use focus and day filters to narrow down a calmer week, an earlier start, or seat-open sections only.</p></article>
-            <article><strong>Pick the best</strong><p>Pin your favorite schedules and keep your study plans, deadlines, and revision blocks in the same command center.</p></article>
+            <article><strong>{t('Simple workflow')}</strong><p>{t('Paste course text from your registrar portal above. The planner generates all valid combinations from the sections it can read.')}</p></article>
+            <article><strong>{t('Multiple options')}</strong><p>{t('Use focus and day filters to narrow down a calmer week, an earlier start, or seat-open sections only.')}</p></article>
+            <article><strong>{t('Pick the best')}</strong><p>{t('Pin your favorite schedules and keep your study plans, deadlines, and revision blocks in the same command center.')}</p></article>
           </div>
         </div>
         </section>
@@ -1023,7 +1105,7 @@ export default function PlannerPage() {
                 <div key={exam.id} className="countdown-item" onClick={() => { setCursor(parseDate(exam.date)); setView('day'); }}>
                   <div className="countdown-title">{exam.title.replace('📝 Exam: ','')}</div>
                   <div className="countdown-days" style={{ color: d <= 3 ? '#e05252' : d <= 7 ? '#e07a52' : 'var(--primary)' }}>
-                    {d === 0 ? 'Today!' : d < 0 ? 'Passed' : `${d}d`}
+                    {d === 0 ? `${t('Today')}!` : d < 0 ? t('Passed') : t('{count}d', { count: d })}
                   </div>
                 </div>
               );
@@ -1057,7 +1139,7 @@ export default function PlannerPage() {
         {/* Header */}
         <header className="cal-header">
           <div className="cal-nav">
-            <button className="nav-btn today-btn" onClick={goToday}>Today</button>
+            <button className="nav-btn today-btn" onClick={goToday}>{t('Today')}</button>
             <button className="nav-btn icon-btn" onClick={navPrev}>‹</button>
             <button className="nav-btn icon-btn" onClick={navNext}>›</button>
             <h2 className="cal-title">{navLabel}</h2>
@@ -1069,9 +1151,10 @@ export default function PlannerPage() {
               <button
                 key={v}
                 className={`view-btn${view === v ? ' active' : ''}`}
+                aria-label={t('View mode {mode}', { mode: t(v.charAt(0).toUpperCase()+v.slice(1)) })}
                 onClick={() => setView(v)}
               >
-                {v.charAt(0).toUpperCase()+v.slice(1)}
+                {t(v.charAt(0).toUpperCase()+v.slice(1))}
               </button>
             ))}
             </div>
@@ -1162,7 +1245,7 @@ export default function PlannerPage() {
             <div>
               <span className="planner-hero-eyebrow">{t('Study Plans')}</span>
               <h2>{t('Create study plan')}</h2>
-              <p>Build an exam-ready revision path from your topics, daily minutes, and deadline.</p>
+              <p>{t('Build an exam-ready revision path from your topics, daily minutes, and deadline.')}</p>
             </div>
             <button className="hero-btn primary" type="button" onClick={() => setShowPlanForm(true)}>{t('Create study plan')}</button>
           </div>
@@ -1185,17 +1268,17 @@ export default function PlannerPage() {
             <article className="plans-mode-detail">
               {selectedPlan ? (
                 <>
-                  <span className="schedule-rank">Selected plan</span>
+                  <span className="schedule-rank">{t('Selected plan')}</span>
                   <h3>{selectedPlan.title}</h3>
-                  <p>Exam date: {new Date(selectedPlan.examDate).toLocaleDateString()}</p>
-                  <p>{selectedPlan.topics.length} topic{selectedPlan.topics.length === 1 ? '' : 's'} · {selectedPlan.dailyMinutes} minutes/day</p>
-                  <button className="hero-btn" type="button" onClick={() => { setPlannerMode('calendar'); setCursor(new Date(selectedPlan.examDate)); }}>View on calendar</button>
+                  <p>{t('Exam date')}: {new Date(selectedPlan.examDate).toLocaleDateString()}</p>
+                  <p>{t(selectedPlan.topics.length === 1 ? '{count} topic' : '{count} topics', { count: selectedPlan.topics.length })} · {t('{count} minutes/day', { count: selectedPlan.dailyMinutes })}</p>
+                  <button className="hero-btn" type="button" onClick={() => { setPlannerMode('calendar'); setCursor(new Date(selectedPlan.examDate)); }}>{t('View on calendar')}</button>
                 </>
               ) : (
                 <>
-                  <span className="schedule-rank">Planner setup</span>
-                  <h3>No study plan selected yet</h3>
-                  <p>Create your first plan or select one from the list to see its exam date, workload, and generated revision blocks.</p>
+                  <span className="schedule-rank">{t('Planner setup')}</span>
+                  <h3>{t('No study plan selected yet')}</h3>
+                  <p>{t('Create your first plan or select one from the list to see its exam date, workload, and generated revision blocks.')}</p>
                 </>
               )}
             </article>
@@ -1210,7 +1293,7 @@ export default function PlannerPage() {
             <div className="detail-header" style={{ background: EVENT_COLORS[selectedEvent.type] }}>
               <span className="detail-icon">{EVENT_ICONS[selectedEvent.type]}</span>
               <div>
-                <div className="detail-type">{selectedEvent.type}</div>
+                <div className="detail-type">{t(`${selectedEvent.type.charAt(0).toUpperCase()+selectedEvent.type.slice(1)} event`)}</div>
                 <h3 className="detail-title">{selectedEvent.title}</h3>
               </div>
               <button className="detail-close" onClick={() => setSelectedEvent(null)}>✕</button>
@@ -1235,12 +1318,12 @@ export default function PlannerPage() {
                   className="det-btn complete"
                   onClick={() => toggleComplete(selectedEvent.id)}
                 >
-                  {selectedEvent.completed ? '↩ Unmark' : '✓ Done'}
+                  {selectedEvent.completed ? `↩ ${t('Unmark')}` : `✓ ${t('Done')}`}
                 </button>
                 {!selectedEvent.id.startsWith('plan_') && !selectedEvent.id.startsWith('exam_') && (
                   <>
-                    <button className="det-btn edit" onClick={() => openEditEvent(selectedEvent)}>✏️ Edit</button>
-                    <button className="det-btn delete" onClick={() => deleteEvent(selectedEvent.id)}>🗑 Delete</button>
+                    <button className="det-btn edit" onClick={() => openEditEvent(selectedEvent)}>✏️ {t('Edit')}</button>
+                    <button className="det-btn delete" onClick={() => deleteEvent(selectedEvent.id)}>🗑 {t('Delete')}</button>
                   </>
                 )}
               </div>
@@ -1254,35 +1337,35 @@ export default function PlannerPage() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{editingEvent ? 'Edit Event' : 'New Event'}</h3>
+              <h3>{editingEvent ? t('Edit Event') : t('New Event')}</h3>
               <button className="modal-close" onClick={() => setShowModal(false)}>✕</button>
             </div>
             <div className="modal-body">
-              <label className="field-label">Title</label>
+              <label className="field-label">{t('Title')}</label>
               <input
                 className="field-input"
-                placeholder="Event title…"
+                placeholder={t('Event title…')}
                 value={form.title}
                 onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                 autoFocus
                 onKeyDown={e => e.key === 'Enter' && saveEvent()}
               />
 
-              <label className="field-label">Type</label>
+              <label className="field-label">{t('Type')}</label>
               <div className="type-picker">
-                {(Object.keys(EVENT_COLORS) as EventType[]).map(t => (
+                {(Object.keys(EVENT_COLORS) as EventType[]).map((eventType) => (
                   <button
-                    key={t}
-                    className={`type-opt${form.type === t ? ' active' : ''}`}
-                    style={form.type === t ? { background: EVENT_COLORS[t], color: '#fff', borderColor: EVENT_COLORS[t] } : {}}
-                    onClick={() => setForm(f => ({ ...f, type: t }))}
+                    key={eventType}
+                    className={`type-opt${form.type === eventType ? ' active' : ''}`}
+                    style={form.type === eventType ? { background: EVENT_COLORS[eventType], color: '#fff', borderColor: EVENT_COLORS[eventType] } : {}}
+                    onClick={() => setForm(f => ({ ...f, type: eventType }))}
                   >
-                    {EVENT_ICONS[t]} {t}
+                    {EVENT_ICONS[eventType]} {t(`${eventType.charAt(0).toUpperCase()+eventType.slice(1)} event`)}
                   </button>
                 ))}
               </div>
 
-              <label className="field-label">Date</label>
+              <label className="field-label">{t('Date')}</label>
               <input
                 className="field-input"
                 type="date"
@@ -1292,30 +1375,30 @@ export default function PlannerPage() {
 
               <div className="time-row">
                 <div>
-                  <label className="field-label">Start</label>
+                  <label className="field-label">{t('Start')}</label>
                   <input className="field-input" type="time" value={form.startTime}
                     onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="field-label">End</label>
+                  <label className="field-label">{t('End')}</label>
                   <input className="field-input" type="time" value={form.endTime}
                     onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} />
                 </div>
               </div>
 
-              <label className="field-label">Notes (optional)</label>
+              <label className="field-label">{t('Notes (optional)')}</label>
               <textarea
                 className="field-input field-textarea"
-                placeholder="Add notes…"
+                placeholder={t('Add notes…')}
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 rows={3}
               />
             </div>
             <div className="modal-footer">
-              <button className="modal-btn cancel" onClick={() => setShowModal(false)}>Cancel</button>
+              <button className="modal-btn cancel" onClick={() => setShowModal(false)}>{t('Cancel')}</button>
               <button className="modal-btn save" onClick={saveEvent} disabled={!form.title.trim()}>
-                {editingEvent ? 'Save Changes' : 'Create Event'}
+                {editingEvent ? t('Save Changes') : t('Create Event')}
               </button>
             </div>
           </div>
