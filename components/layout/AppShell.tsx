@@ -380,7 +380,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           {!collapsed && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 600, marginBottom: 4, color: todayCards >= dailyGoal ? '#22c55e' : 'var(--text-2)' }}>
-              <span>{todayCards >= dailyGoal ? '✓ Goal done!' : `Today's goal`}</span>
+              <span>{todayCards >= dailyGoal ? t('✓ Goal done!') : t("Today's goal")}</span>
               <span>{todayCards}/{dailyGoal}</span>
             </div>
           )}

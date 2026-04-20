@@ -6,6 +6,7 @@ import { idbStore } from '@/lib/idb';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteLocalFilesForFolder, deleteLocalFilesForTopic, upsertLocalFile } from '@/lib/files/local-files';
 import { createFileUploadRequest } from '@/lib/files/client-storage';
+import { useI18n } from '@/lib/i18n/useI18n';
 
 interface Topic  { id: string; name: string; folderId: string; }
 interface Folder { id: string; name: string; expanded: boolean; topics: Topic[]; }
@@ -38,6 +39,7 @@ const ACCEPT = '.pdf,.docx,.pptx,.txt,.md,.png,.jpg,.jpeg,.webp';
 export function FolderPanel({
   onSelect, selectedFolder, selectedTopic, refreshKey, collapsed = false, onToggleCollapse, onFilesChanged,
 }: FolderPanelProps) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [folders,         setFolders]         = useState<Folder[]>([]);
   const [loading,         setLoading]         = useState(true);
@@ -327,7 +329,7 @@ export function FolderPanel({
           </button>
         ))}
         <button className="btn-icon" style={{ marginTop: 'auto' }}
-          title="New folder"
+          title={t('New folder')}
           onClick={() => { onToggleCollapse?.(); setCreatingFolder(true); }}>
           ＋
         </button>
@@ -347,7 +349,7 @@ export function FolderPanel({
       {/* Header */}
       <div className="panel-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-          <span className="panel-title">Folders</span>
+          <span className="panel-title">{t('Folders')}</span>
           <span
             className="badge"
             style={{
@@ -362,12 +364,12 @@ export function FolderPanel({
             {folders.length}
           </span>
         </div>
-        <button className="btn-icon" title="New folder"
+        <button className="btn-icon" title={t('New folder')}
           onClick={() => {
             setCreatingFolder(c => !c);
             setTimeout(() => folderInputRef.current?.focus(), 50);
           }}>＋</button>
-        <button className="btn-icon" title="Collapse" onClick={onToggleCollapse}>‹</button>
+        <button className="btn-icon" title={t('Collapse')} onClick={onToggleCollapse}>‹</button>
       </div>
 
       {/* Search — shows when 3+ folders exist */}
@@ -375,7 +377,7 @@ export function FolderPanel({
         <div style={{ padding: '6px 10px 0' }}>
           <input
             type="text"
-            placeholder="Search…"
+            placeholder={t('Search…')}
             value={search}
             onChange={e => setSearch(e.target.value)}
             onKeyDown={e => e.key === 'Escape' && setSearch('')}
@@ -442,7 +444,7 @@ export function FolderPanel({
             <div className="empty-state" style={{ padding: '32px 12px' }}>
               <div className="empty-icon">📂</div>
               <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', textAlign: 'center' }}>
-                No folders yet.<br />Click <strong>＋</strong> to create one.
+                {t('No folders yet. Click ＋ to create one.')}
               </p>
             </div>
           )
