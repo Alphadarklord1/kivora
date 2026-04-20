@@ -1217,7 +1217,7 @@ export function WorkspacePanel({
 
   const breadcrumb = [selectedFolderName, selectedTopicName].filter(Boolean).join(' › ');
   const currentGen = GENERATE_TABS.find(t => t.id === genMode)!;
-  const currentSourceLabel = pasteMode ? 'Pasted text' : selFile?.name ?? null;
+  const currentSourceLabel = pasteMode ? t('Pasted text') : selFile?.name ?? null;
   const workspaceTabMeta = { filesCount: files.length, libraryCount: libItems.length, decksCount: srsDecks.length };
 
   // ── Render ────────────────────────────────────────────────────────────
@@ -1230,9 +1230,9 @@ export function WorkspacePanel({
         <span className="panel-title">
           {breadcrumb
             ? <>{selectedFolderName}<span style={{ color: 'var(--text-3)' }}>{selectedTopicName ? ` › ${selectedTopicName}` : ''}</span></>
-            : 'Kivora Workspace'}
-        </span>
-        {!selectedFolder && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', fontWeight: 400 }}>← Select a folder to get started</span>}
+            : t('Kivora Workspace')}
+          </span>
+        {!selectedFolder && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', fontWeight: 400 }}>{t('← Select a folder to get started')}</span>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
           {currentSourceLabel && (
             <span
@@ -1255,24 +1255,24 @@ export function WorkspacePanel({
             </span>
           )}
           {streak > 0 && (
-            <span title={`${streak}-day study streak`} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--text-xs)', color: 'var(--text-2)', background: 'var(--warning-bg)', border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)', borderRadius: 20, padding: '2px 8px', cursor: 'default' }}>
-              🔥 {streak}d
+            <span title={t('{count}-day study streak', { count: streak })} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--text-xs)', color: 'var(--text-2)', background: 'var(--warning-bg)', border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)', borderRadius: 20, padding: '2px 8px', cursor: 'default' }}>
+              🔥 {t('{count}d', { count: streak })}
             </span>
           )}
-          {files.length > 0 && <span className="badge badge-accent">{files.length} file{files.length !== 1 ? 's' : ''}</span>}
+          {files.length > 0 && <span className="badge badge-accent">{t(files.length === 1 ? '{count} file' : '{count} files', { count: files.length })}</span>}
           <button
             className="btn btn-sm btn-ghost"
             onClick={() => router.push('/library')}
-            title="Open review sets and saved outputs"
+            title={t('Open review sets and saved outputs')}
             style={{ fontSize: 12, padding: '3px 8px' }}
           >
-            📇 Review sets {srsDecks.length ? `(${srsDecks.length})` : ''}
+            📇 {t('Review sets')} {srsDecks.length ? `(${srsDecks.length})` : ''}
           </button>
           {onToggleReports && (
             <button
               className={`btn btn-sm ${reportsOpen ? 'btn-accent' : 'btn-ghost'}`}
               onClick={onToggleReports}
-              title={reportsOpen ? 'Close reports panel' : 'Open study reports'}
+              title={reportsOpen ? t('Close reports panel') : t('Open study reports')}
               style={{ fontSize: 12, padding: '3px 8px' }}>
               📊
             </button>
@@ -1291,7 +1291,7 @@ export function WorkspacePanel({
         }}>
           <span style={{ color: 'var(--text-2)' }}>
             {scholarCtx.kind === 'research' ? '🔍' : '📄'}{' '}
-            <strong style={{ color: 'var(--text)' }}>Scholar Hub:</strong>{' '}
+            <strong style={{ color: 'var(--text)' }}>{t('Scholar Hub')}:</strong>{' '}
             <span style={{ color: 'var(--text-2)' }}>{scholarCtx.label.slice(0, 60)}{scholarCtx.label.length > 60 ? '…' : ''}</span>
           </span>
           <div className="workspace-scholar-actions" style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
@@ -1307,7 +1307,7 @@ export function WorkspacePanel({
                   setOutput('');
                 }}
               >
-                Use as source ↓
+                {t('Use as source ↓')}
               </button>
             )}
             {scholarCtx.reviewSetContent && (
@@ -1324,7 +1324,7 @@ export function WorkspacePanel({
                   setRequestedReviewPhase(null);
                 }}
               >
-                Build review set ↓
+                {t('Build review set ↓')}
               </button>
             )}
             <a
@@ -1332,13 +1332,13 @@ export function WorkspacePanel({
               className="btn btn-sm btn-ghost"
               style={{ fontSize: 11, padding: '2px 8px', textDecoration: 'none' }}
             >
-              Open Scholar Hub ↗
+              {t('Open Scholar Hub ↗')}
             </a>
             <button
               className="btn btn-sm btn-ghost"
               style={{ fontSize: 11, padding: '2px 8px', opacity: 0.7 }}
               onClick={() => { clearScholarContext(); setScholarCtx(null); }}
-              title="Dismiss Scholar Hub context"
+              title={t('Dismiss Scholar Hub context')}
             >
               ✕
             </button>
@@ -1378,21 +1378,21 @@ export function WorkspacePanel({
               {!selectedFolder ? (
                 <div className="empty-state" style={{ flex: 1, gap: 20, padding: '28px 16px' }}>
                   <div className="empty-icon">📚</div>
-                  <h3 style={{ marginBottom: 4 }}>Pick a starting point</h3>
-                  <p style={{ marginBottom: 8 }}>Create a folder to organize files, or jump straight into a tool.</p>
+                  <h3 style={{ marginBottom: 4 }}>{t('Pick a starting point')}</h3>
+                  <p style={{ marginBottom: 8 }}>{t('Create a folder to organize files, or jump straight into a tool.')}</p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 240 }}>
                     <button className="btn btn-primary btn-sm" onClick={requestCreateFolder} style={{ justifyContent: 'flex-start', gap: 8 }}>
-                      📂 Create a folder
+                      📂 {t('Create a folder')}
                     </button>
                     <button className="btn btn-secondary btn-sm" onClick={() => setMainTab('generate')} style={{ justifyContent: 'flex-start', gap: 8 }}>
-                      ⚡ Use tools without a file
+                      ⚡ {t('Use tools without a file')}
                     </button>
                     <a href="/coach" className="btn btn-secondary btn-sm" style={{ justifyContent: 'flex-start', gap: 8, textDecoration: 'none' }}>
-                      🔬 Search research sources
+                      🔬 {t('Search research sources')}
                     </a>
                   </div>
                   <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 4 }}>
-                    Tip: ⌘K searches all your decks, library items, and saved sources.
+                    {t('Tip: ⌘K searches all your decks, library items, and saved sources.')}
                   </p>
                 </div>
               ) : (
@@ -1415,24 +1415,24 @@ export function WorkspacePanel({
                       transition: 'border-color 0.15s, background 0.15s', flexShrink: 0,
                     }}>
                     <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: dragging ? 'var(--accent)' : 'var(--text-2)' }}>
-                      {uploading ? '⏳ Uploading…' : dragging ? '📥 Drop to upload' : '＋ Drop files or click to upload'}
+                      {uploading ? `⏳ ${t('Uploading…')}` : dragging ? `📥 ${t('Drop to upload')}` : `＋ ${t('Drop files or click to upload')}`}
                     </div>
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 3 }}>
-                      PDF · Word · PowerPoint · Images · Text
+                      {t('PDF · Word · PowerPoint · Images · Text')}
                       {(selectedTopicName || selectedFolderName) && <span style={{ color: 'var(--accent)' }}> → {selectedTopicName || selectedFolderName}</span>}
                     </div>
                   </div>
 
                   <div className="workspace-focus-strip" style={{ margin: '10px 10px 0', flexShrink: 0 }}>
                     <div className="workspace-focus-card">
-                      <span className="workspace-focus-eyebrow">Files</span>
-                      <strong>{files.length ? `${files.length} study file${files.length !== 1 ? 's' : ''}` : 'Build your study source library'}</strong>
-                      <span>{viewFile ? `Previewing ${viewFile.name}` : selFile ? `Current source: ${selFile.name}` : 'Upload once, then send a file into Tools, Notes, Chat, or Math.'}</span>
+                      <span className="workspace-focus-eyebrow">{t('Files')}</span>
+                      <strong>{files.length ? t(files.length === 1 ? '{count} study file' : '{count} study files', { count: files.length }) : t('Build your study source library')}</strong>
+                      <span>{viewFile ? t('Previewing {name}', { name: viewFile.name }) : selFile ? t('Current source: {name}', { name: selFile.name }) : t('Upload once, then send a file into Tools, Notes, Chat, or Math.')}</span>
                     </div>
                     <div className="workspace-focus-card">
-                      <span className="workspace-focus-eyebrow">Best next step</span>
-                      <strong>{selFile ? 'Turn this file into notes or questions' : 'Open a file and route it anywhere'}</strong>
-                      <span>{selFile ? 'Use the quick actions on the file card or preview to move faster.' : 'Every file card now has one-click actions for Generate, Chat, Notes, and Math.'}</span>
+                      <span className="workspace-focus-eyebrow">{t('Best next step')}</span>
+                      <strong>{selFile ? t('Turn this file into notes or questions') : t('Open a file and route it anywhere')}</strong>
+                      <span>{selFile ? t('Use the quick actions on the file card or preview to move faster.') : t('Every file card now has one-click actions for Generate, Chat, Notes, and Math.')}</span>
                     </div>
                   </div>
 
@@ -1443,7 +1443,7 @@ export function WorkspacePanel({
                     ) : files.length === 0 ? (
                       <div className="empty-state" style={{ padding: '32px 12px' }}>
                         <div className="empty-icon">📁</div>
-                        <p style={{ fontSize: 'var(--text-sm)' }}>No files yet — drag one in above.</p>
+                        <p style={{ fontSize: 'var(--text-sm)' }}>{t('No files yet — drag one in above.')}</p>
                       </div>
                     ) : (
                       files.map(file => {
@@ -1478,7 +1478,7 @@ export function WorkspacePanel({
                                           setMainTab('generate');
                                         }
                                       }}>
-                                      ⚡ Use
+                                      ⚡ {t('Use')}
                                     </button>
                                     <button
                                       className="btn btn-secondary btn-sm"
@@ -1492,7 +1492,7 @@ export function WorkspacePanel({
                                           setMainTab('chat');
                                         }
                                       }}>
-                                      💬 Chat
+                                      💬 {t('Chat')}
                                     </button>
                                     <button
                                       className="btn btn-secondary btn-sm"
@@ -1505,7 +1505,7 @@ export function WorkspacePanel({
                                           handleUseForNotes(file, text);
                                         }
                                       }}>
-                                      📓 Notes
+                                      📓 {t('Notes')}
                                     </button>
                                     <button
                                       className="btn btn-secondary btn-sm"
@@ -1518,7 +1518,7 @@ export function WorkspacePanel({
                                           await sendFileToMath(file, text);
                                         }
                                       }}>
-                                      ∑ Math
+                                      ∑ {t('Math')}
                                     </button>
                                     <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}
                                       aria-label={`${viewFile?.id === file.id ? 'Close preview for' : 'View'} ${file.name}`}
@@ -1526,7 +1526,7 @@ export function WorkspacePanel({
                                         void markRecentFile(file.id);
                                         setViewFile(v => v?.id === file.id ? null : file);
                                       }}>
-                                      {viewFile?.id === file.id ? 'Close' : 'View'}
+                                      {viewFile?.id === file.id ? t('Close') : t('View')}
                                     </button>
                                   </>
                                 )}
@@ -1544,7 +1544,7 @@ export function WorkspacePanel({
                               }}
                                 onClick={e => e.stopPropagation()}>
                                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--warning)', flex: 1 }}>
-                                  ⚠ File data missing — re-upload to restore
+                                  ⚠ {t('File data missing — re-upload to restore')}
                                 </span>
                                 <button
                                   className="btn btn-sm"
@@ -1554,7 +1554,7 @@ export function WorkspacePanel({
                                     setReuploadTarget(file);
                                     reuploadRef.current?.click();
                                   }}>
-                                  ↑ Re-upload
+                                  ↑ {t('Re-upload')}
                                 </button>
                               </div>
                             )}
@@ -1606,12 +1606,12 @@ export function WorkspacePanel({
               }}>
                 {streak > 0 && (
                   <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                    🔥 <strong>{streak}</strong>d streak
+                    🔥 <strong>{streak}</strong>{t('d streak')}
                   </span>
                 )}
                 {weekScore !== null && (
                   <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                    📊 <strong>{weekScore}%</strong> avg · {weekQuizzes} quiz{weekQuizzes !== 1 ? 'zes' : ''} this week
+                    📊 <strong>{weekScore}%</strong> {t('avg · {count} quizzes this week', { count: weekQuizzes })}
                   </span>
                 )}
                 <button
@@ -1619,27 +1619,27 @@ export function WorkspacePanel({
                   style={{ fontSize: 10, padding: '1px 7px', marginLeft: 'auto', opacity: 0.7 }}
                   onClick={() => setMainTab('analytics')}
                 >
-                  Full analytics →
+                  {t('Full analytics →')}
                 </button>
               </div>
             )}
 
             <div className="workspace-focus-strip" style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
               <div className="workspace-focus-card">
-                <span className="workspace-focus-eyebrow">Tools</span>
-                <strong>{currentGen.label}</strong>
+                <span className="workspace-focus-eyebrow">{t('Tools')}</span>
+                <strong>{t(currentGen.label)}</strong>
                 <span>
                   {selFile
-                    ? `Working from ${selFile.name}${extractedText ? ` · ${wordCount(extractedText).toLocaleString()} words loaded` : ''}.`
+                    ? t('Working from {name}{suffix}.', { name: selFile.name, suffix: extractedText ? ` · ${wordCount(extractedText).toLocaleString()} ${t('words loaded')}` : '' })
                     : pasteMode
-                      ? 'Paste text directly, then generate notes, summaries, quizzes, or exam prep.'
-                      : 'Pick a file from Workspace or switch to Paste text to start generating study material.'}
+                      ? t('Paste text directly, then generate notes, summaries, quizzes, or exam prep.')
+                      : t('Pick a file from Workspace or switch to Paste text to start generating study material.')}
                 </span>
               </div>
               <div className="workspace-focus-card">
-                <span className="workspace-focus-eyebrow">Best fit</span>
-                <strong>{genMode === 'notes' ? 'Turn sources into notes' : genMode === 'exam' ? 'Simulate exam prep' : genMode === 'practice' ? 'Build guided practice' : 'Create a quick study output'}</strong>
-                <span>{pasteMode ? 'Text mode stays fast for quick experiments.' : 'File mode is best when you want grounded output from a real document.'}</span>
+                <span className="workspace-focus-eyebrow">{t('Best fit')}</span>
+                <strong>{genMode === 'notes' ? t('Turn sources into notes') : genMode === 'exam' ? t('Simulate exam prep') : genMode === 'practice' ? t('Build guided practice') : t('Create a quick study output')}</strong>
+                <span>{pasteMode ? t('Text mode stays fast for quick experiments.') : t('File mode is best when you want grounded output from a real document.')}</span>
               </div>
             </div>
 
@@ -1652,7 +1652,7 @@ export function WorkspacePanel({
                   </span>
                   <span style={{ width: 1, height: 14, background: 'var(--border-2)', flexShrink: 0, marginRight: 3 }} />
                   {GENERATE_TABS.filter(tab => (group.ids as readonly string[]).includes(tab.id)).map(tab => (
-                    <button key={tab.id} title={tab.hint}
+                    <button key={tab.id} title={t(tab.hint)}
                       onClick={() => { setGenMode(tab.id); setOutput(''); }}
                       style={{
                         padding: '4px 11px', borderRadius: 20, fontSize: 'var(--text-xs)',
@@ -1687,19 +1687,19 @@ export function WorkspacePanel({
                     </div>
                   ) : files.length > 0 ? (
                     <select defaultValue="" onChange={e => { const f = files.find(x => x.id === e.target.value); if (f) { setSelFile(f); setExtractedText(''); setOutput(''); } }} style={{ flex: 1, minWidth: 180 }}>
-                      <option value="" disabled>Choose a file…</option>
+                      <option value="" disabled>{t('Choose a file…')}</option>
                       {files.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                     </select>
                   ) : (
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>No files yet —</span>
-                      <button className="btn btn-ghost btn-sm" onClick={() => setMainTab('files')}>Go to Files ↗</button>
+                      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>{t('No files yet —')}</span>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setMainTab('files')}>{t('Go to Files ↗')}</button>
                     </div>
                   )}
                   {selFile && !extractedText && (
                     <button className="btn btn-secondary btn-sm" disabled={extracting}
                       onClick={() => extractFromFile(selFile)}>
-                      {extracting ? 'Extracting…' : '↓ Extract text'}
+                      {extracting ? t('Extracting…') : `↓ ${t('Extract text')}`}
                     </button>
                   )}
                   {selFile && extractedText && (
@@ -1707,18 +1707,18 @@ export function WorkspacePanel({
                       href="/coach"
                       className="btn btn-ghost btn-sm"
                       style={{ fontSize: 11, textDecoration: 'none', opacity: 0.75 }}
-                      title="Analyze this content deeply in Scholar Hub"
+                      title={t('Analyze this content deeply in Scholar Hub')}
                       onClick={() => {
                         writeScholarContext({ label: selFile.name, sourceText: extractedText, kind: 'source' });
                       }}
                     >
-                      Scholar Hub ↗
+                      {t('Scholar Hub ↗')}
                     </a>
                   )}
                 </>
               )}
 
-              {pasteMode && !extractedText && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>Paste content below →</span>}
+              {pasteMode && !extractedText && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>{t('Paste content below →')}</span>}
               {pasteMode && extractedText && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span className="badge badge-accent">{wordCount(extractedText).toLocaleString()} words</span>
@@ -1730,7 +1730,7 @@ export function WorkspacePanel({
                 <div className="workspace-generate-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, marginLeft: 'auto' }}>
                   {['quiz','mcq','exam'].includes(genMode) && (
                     <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                      Count:
+                      {t('Count')}:
                       <input type="number" value={count} min={2} max={25}
                         onChange={e => setCount(Math.max(2, Math.min(25, +e.target.value)))}
                         style={{ width: 52, padding: '3px 7px', fontSize: 'var(--text-xs)' }} />
@@ -1739,15 +1739,15 @@ export function WorkspacePanel({
                   {generating ? (
                     <button className="btn btn-sm btn-ghost" style={{ color: 'var(--text-3)' }}
                       onClick={() => { abortRef.current?.abort(); setGenerating(false); }}>
-                      ✕ Cancel
+                      ✕ {t('Cancel')}
                     </button>
                   ) : (
                     <button
                       className={`btn btn-sm ${output ? 'btn-secondary' : 'btn-primary'}`}
                       disabled={!extractedText.trim() && pasteMode}
                       onClick={() => runGenerate(genMode as ToolMode)}
-                      title="Generate (Ctrl+G)">
-                      {output ? `↻ Regenerate` : `${currentGen.icon} Generate ${currentGen.label}`}
+                      title={t('Generate (Ctrl+G)')}>
+                      {output ? `↻ ${t('Regenerate')}` : `${currentGen.icon} ${t('Generate')} ${t(currentGen.label)}`}
                     </button>
                   )}
                 </div>
@@ -1759,7 +1759,7 @@ export function WorkspacePanel({
               <div style={{ padding: '12px 14px', flexShrink: 0 }}>
                 <textarea
                   ref={pasteRef}
-                  placeholder="Paste your notes, essay, textbook content, or any study material here…"
+                  placeholder={t('Paste your notes, essay, textbook content, or any study material here…')}
                   style={{ width: '100%', minHeight: 140, resize: 'vertical', background: 'var(--surface)', border: '1.5px solid var(--border-2)', borderRadius: 10, padding: '12px 14px', fontSize: 'var(--text-sm)', lineHeight: 1.6, color: 'var(--text)', fontFamily: 'inherit' }}
                   onKeyDown={e => {
                     // Ctrl+Enter to confirm paste
@@ -1772,13 +1772,13 @@ export function WorkspacePanel({
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, alignItems: 'center' }}>
                   <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                    <kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Ctrl+Enter</kbd> to confirm
+                    <kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Ctrl+Enter</kbd> {t('to confirm')}
                   </span>
                   <button className="btn btn-primary btn-sm"
                     onClick={() => {
                       const v = pasteRef.current?.value.trim();
                       if (v) setExtractedText(v);
-                    }}>Use this text →</button>
+                    }}>{t('Use this text →')}</button>
                 </div>
               </div>
             )}
@@ -1788,7 +1788,7 @@ export function WorkspacePanel({
               {generating && !output && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '48px 20px', justifyContent: 'center' }}>
                   <div style={{ width: 22, height: 22, border: '2.5px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                  <span style={{ color: 'var(--text-3)' }}>Generating {currentGen.label.toLowerCase()}…</span>
+                  <span style={{ color: 'var(--text-3)' }}>{t('Generating {label}…', { label: t(currentGen.label).toLowerCase() })}</span>
                 </div>
               )}
 
@@ -1796,24 +1796,24 @@ export function WorkspacePanel({
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 18 }}>{currentGen.icon}</span>
-                    <span style={{ fontWeight: 600 }}>{currentGen.label}</span>
-                    {selFile && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160, whiteSpace: 'nowrap' }}>from &ldquo;{selFile.name}&rdquo;</span>}
+                    <span style={{ fontWeight: 600 }}>{t(currentGen.label)}</span>
+                    {selFile && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160, whiteSpace: 'nowrap' }}>{t('from “{name}”', { name: selFile.name })}</span>}
                     {!generating && output && (
                       <span className="badge badge-accent" style={{ fontSize: 10 }}>{wordCount(output).toLocaleString()} words</span>
                     )}
-                    {generating && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginLeft: 4 }}>● streaming…</span>}
-                    {!generating && streamSource === 'offline' && <span className="badge" style={{ fontSize: 10, opacity: 0.6 }}>offline</span>}
-                    {!generating && streamSource === 'local' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(74,222,128,0.15)', color: '#4ade80', borderColor: 'rgba(74,222,128,0.3)' }}>● Local AI</span>}
-                    {!generating && streamSource === 'openai' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(79,134,247,0.15)', color: '#4f86f7', borderColor: 'rgba(79,134,247,0.3)' }}>● Cloud AI</span>}
+                    {generating && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginLeft: 4 }}>● {t('streaming…')}</span>}
+                    {!generating && streamSource === 'offline' && <span className="badge" style={{ fontSize: 10, opacity: 0.6 }}>{t('offline')}</span>}
+                    {!generating && streamSource === 'local' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(74,222,128,0.15)', color: '#4ade80', borderColor: 'rgba(74,222,128,0.3)' }}>● {t('Local AI')}</span>}
+                    {!generating && streamSource === 'openai' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(79,134,247,0.15)', color: '#4f86f7', borderColor: 'rgba(79,134,247,0.3)' }}>● {t('Cloud AI')}</span>}
                     {/* Edit toggle — available for all modes, not while streaming */}
                     {!generating && (
                       <button
                         className={`btn btn-sm ${editMode ? 'btn-accent' : 'btn-ghost'}`}
                         style={{ marginLeft: 'auto', fontSize: 12 }}
                         onClick={() => setEditMode(v => !v)}
-                        title={editMode ? 'Done editing (view rendered)' : 'Edit output inline'}
+                        title={editMode ? t('Done editing (view rendered)') : t('Edit output inline')}
                       >
-                        {editMode ? '✓ Done' : '✏ Edit'}
+                        {editMode ? `✓ ${t('Done')}` : `✏ ${t('Edit')}`}
                       </button>
                     )}
                   </div>
@@ -1839,14 +1839,14 @@ export function WorkspacePanel({
                   {!generating && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
                       <button className="btn btn-secondary btn-sm"
-                        onClick={() => navigator.clipboard.writeText(output).then(() => toast('Copied!', 'success'))}>
-                        📋 Copy
+                        onClick={() => navigator.clipboard.writeText(output).then(() => toast(t('Copied!'), 'success'))}>
+                        📋 {t('Copy')}
                       </button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => downloadOutput('md')} title="Download as Markdown (Ctrl+E)">⬇ .md</button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => downloadOutput('txt')} title="Download as plain text">⬇ .txt</button>
-                      <button className="btn btn-ghost btn-sm" onClick={saveToLibrary} title="Save to Library (Ctrl+S)">🗂 Save</button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => { setNotesInject(output); setMainTab('notes'); toast('Opened in Notes ✓', 'success'); }} title="Send to Notes editor">📓 Notes</button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => { setOutput(''); setEditMode(false); }}>✕ Clear</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => downloadOutput('md')} title={t('Download as Markdown (Ctrl+E)')}>⬇ .md</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => downloadOutput('txt')} title={t('Download as plain text')}>⬇ .txt</button>
+                      <button className="btn btn-ghost btn-sm" onClick={saveToLibrary} title={t('Save to Library (Ctrl+S)')}>🗂 {t('Save')}</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setNotesInject(output); setMainTab('notes'); toast(t('Opened in Notes ✓'), 'success'); }} title={t('Send to Notes editor')}>📓 {t('Notes')}</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setOutput(''); setEditMode(false); }}>✕ {t('Clear')}</button>
                     </div>
                   )}
                 </>
@@ -1855,19 +1855,19 @@ export function WorkspacePanel({
               {!generating && !output && extractedText && (
                 <div className="empty-state" style={{ padding: '36px 20px' }}>
                   <div className="empty-icon">{currentGen.icon}</div>
-                  <h3>{currentGen.label}</h3>
-                  <p style={{ maxWidth: 340 }}>{currentGen.hint}</p>
+                  <h3>{t(currentGen.label)}</h3>
+                  <p style={{ maxWidth: 340 }}>{t(currentGen.hint)}</p>
                   <div style={{ marginTop: 4, marginBottom: 16, display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <span className="badge badge-accent" style={{ fontSize: 11 }}>
-                      {wordCount(extractedText).toLocaleString()} words ready
+                      {t('{count} words ready', { count: wordCount(extractedText).toLocaleString() })}
                     </span>
-                    {selFile && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>from &ldquo;{selFile.name}&rdquo;</span>}
+                    {selFile && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{t('from “{name}”', { name: selFile.name })}</span>}
                   </div>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button className="btn btn-primary" onClick={() => runGenerate(genMode as ToolMode)}>
-                      {currentGen.icon} Generate {currentGen.label}
+                      {currentGen.icon} {t('Generate')} {t(currentGen.label)}
                     </button>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>or <kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 3, padding: '0 4px', fontFamily: 'monospace' }}>Ctrl+G</kbd></span>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', alignSelf: 'center' }}>{t('or')} <kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 3, padding: '0 4px', fontFamily: 'monospace' }}>Ctrl+G</kbd></span>
                   </div>
                   {/* Also show all other tools so user can pick without going back */}
                   <div style={{ marginTop: 20, display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -1884,27 +1884,27 @@ export function WorkspacePanel({
               {!generating && !output && !extractedText && !pasteMode && (
                 <div className="empty-state" style={{ padding: '40px 20px' }}>
                   <div className="empty-icon">⚡</div>
-                  <h3>AI Tools</h3>
+                  <h3>{t('AI Tools')}</h3>
                   <p style={{ marginBottom: 18 }}>
-                    Open a file in <strong>Files</strong>, paste text, or jump in with a starter path below.
+                    {t('Open a file in Files, paste text, or jump in with a starter path below.')}
                   </p>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-                    <button className="btn btn-primary btn-sm" onClick={() => setMainTab('files')}>Open files</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setPasteMode(true)}>Paste text</button>
+                    <button className="btn btn-primary btn-sm" onClick={() => setMainTab('files')}>{t('Open files')}</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setPasteMode(true)}>{t('Paste text')}</button>
                   </div>
                   <div className="workspace-generate-empty-grid" style={{ display: 'grid', gap: 8, width: '100%', maxWidth: 520, margin: '0 auto 18px', textAlign: 'left' }}>
                     <div style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3)', fontWeight: 700 }}>
-                      Starter paths
+                      {t('Starter paths')}
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                       <a href="/coach?starter=cell%20respiration&section=research" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
-                        🔬 Start from a topic
+                        🔬 {t('Start from a topic')}
                       </a>
                       <a href="/planner" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
-                        📅 Build a study plan
+                        📅 {t('Build a study plan')}
                       </a>
                       <a href="/library" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
-                        🗂 Browse saved work
+                        🗂 {t('Browse saved work')}
                       </a>
                     </div>
                   </div>
@@ -1937,14 +1937,14 @@ export function WorkspacePanel({
           <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
             <div className="workspace-focus-strip" style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
               <div className="workspace-focus-card">
-                <span className="workspace-focus-eyebrow">Flashcards</span>
-                <strong>{activeReviewSet ? activeReviewSet.name : 'Review Sets live here'}</strong>
-                <span>{activeReviewSet ? `${activeReviewDueCount} due now · ${activeReviewSet.cards.length} cards in this set` : 'Import, review, edit, and export your sets from one place in Workspace.'}</span>
+                <span className="workspace-focus-eyebrow">{t('Flashcards')}</span>
+                <strong>{activeReviewSet ? activeReviewSet.name : t('Review sets live here')}</strong>
+                <span>{activeReviewSet ? t('{due} due now · {count} cards in this set', { due: activeReviewDueCount, count: activeReviewSet.cards.length }) : t('Import, review, edit, and export your sets from one place in Workspace.')}</span>
               </div>
               <div className="workspace-focus-card workspace-focus-card--actions">
-                <button className="btn btn-secondary btn-sm" onClick={() => setRequestedReviewPhase('review')}>Review now</button>
-                <button className="btn btn-ghost btn-sm" onClick={() => setRequestedReviewPhase('import')}>Import set</button>
-                <button className="btn btn-ghost btn-sm" onClick={() => router.push('/library')}>Open Library</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setRequestedReviewPhase('review')}>{t('Review now')}</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setRequestedReviewPhase('import')}>{t('Import set')}</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => router.push('/library')}>{t('Open Library')}</button>
               </div>
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
