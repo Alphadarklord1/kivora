@@ -107,13 +107,13 @@ export function FolderPanel({
         const nextFolder = { ...f, topics: f.topics ?? [] };
         setFolders(p => [...p.filter(existing => existing.id !== nextFolder.id), nextFolder]);
         if (f.localOnly) localSave([...folders.filter(existing => existing.id !== nextFolder.id), nextFolder]);
-        toast(f.localOnly ? 'Folder saved locally' : 'Folder created', f.localOnly ? 'info' : 'success');
+        toast(f.localOnly ? t('Folder saved locally') : t('Folder created'), f.localOnly ? 'info' : 'success');
       } else throw new Error();
     } catch {
       const f: Folder = { id: uuidv4(), name, expanded: true, topics: [] };
       const updated = [...folders, f];
       localSave(updated); setFolders(updated);
-      toast('Folder saved locally', 'info');
+      toast(t('Folder saved locally'), 'info');
     }
     setNewFolderName(''); setCreatingFolder(false);
   }
@@ -131,7 +131,7 @@ export function FolderPanel({
     localSave(updated); setFolders(updated);
     if (selectedFolder === folder.id) onSelect(folder.id, name, selectedTopic, '');
     setRenamingFolder(null);
-    toast('Renamed', 'success');
+    toast(t('Renamed'), 'success');
   }
 
   async function deleteFolder(e: React.MouseEvent, folder: Folder) {
@@ -142,7 +142,7 @@ export function FolderPanel({
     const updated = folders.filter(f => f.id !== folder.id);
     localSave(updated); setFolders(updated);
     if (selectedFolder === folder.id) onSelect(null, '', null, '');
-    toast('Folder deleted', 'info');
+    toast(t('Folder deleted'), 'info');
   }
 
   // ── Topic CRUD ────────────────────────────────────────────────────────
@@ -157,21 +157,21 @@ export function FolderPanel({
         body: JSON.stringify({ name }),
       });
       if (res.ok) {
-        const t = await res.json();
+        const topic = await res.json();
         setFolders(p => {
-          const updated = p.map(f => f.id === folderId ? { ...f, topics: [...f.topics.filter(topic => topic.id !== t.id), t] } : f);
-          if (t.localOnly) localSave(updated);
+          const updated = p.map(f => f.id === folderId ? { ...f, topics: [...f.topics.filter(existingTopic => existingTopic.id !== topic.id), topic] } : f);
+          if (topic.localOnly) localSave(updated);
           return updated;
         });
-        toast(t.localOnly ? 'Topic saved locally' : 'Topic created', t.localOnly ? 'info' : 'success');
+        toast(topic.localOnly ? t('Topic saved locally') : t('Topic created'), topic.localOnly ? 'info' : 'success');
       } else throw new Error();
     } catch {
-      const t: Topic = { id: uuidv4(), name, folderId };
+      const localTopic: Topic = { id: uuidv4(), name, folderId };
       setFolders(p => {
-        const u = p.map(f => f.id === folderId ? { ...f, topics: [...f.topics, t] } : f);
+        const u = p.map(f => f.id === folderId ? { ...f, topics: [...f.topics, localTopic] } : f);
         localSave(u); return u;
       });
-      toast('Topic saved locally', 'info');
+      toast(t('Topic saved locally'), 'info');
     }
     setNewTopicName(''); setAddTopicFor(null);
   }
@@ -193,7 +193,7 @@ export function FolderPanel({
     localSave(updated); setFolders(updated);
     if (selectedTopic === topic.id) onSelect(folder.id, folder.name, topic.id, name);
     setRenamingTopic(null);
-    toast('Renamed', 'success');
+    toast(t('Renamed'), 'success');
   }
 
   async function deleteTopic(e: React.MouseEvent, folder: Folder, topic: Topic) {
@@ -205,7 +205,7 @@ export function FolderPanel({
       ? { ...f, topics: f.topics.filter(t => t.id !== topic.id) } : f);
     localSave(updated); setFolders(updated);
     if (selectedTopic === topic.id) onSelect(folder.id, folder.name, null, '');
-    toast('Topic deleted', 'info');
+    toast(t('Topic deleted'), 'info');
   }
 
   // ── Upload ────────────────────────────────────────────────────────────

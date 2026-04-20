@@ -181,6 +181,7 @@ function FileViewer({
   onUseInMath: (file: FileRecord, text: string) => void;
 }) {
   const { toast } = useToast();
+  const { t } = useI18n();
   const [blobUrl,     setBlobUrl]     = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [loading,     setLoading]     = useState(true);
@@ -230,7 +231,7 @@ function FileViewer({
   async function resolveFileText(successLabel: string) {
     if (textContent) return textContent;
     const blob = await resolveStoredFileBlob(file);
-    if (!blob) { toast('File not found locally or in remote storage.', 'error'); return; }
+    if (!blob) { toast(t('File not found locally or in remote storage.'), 'error'); return; }
     const res = await extractTextFromBlob(blob, file.name);
     if (res.error) { toast(res.error, 'error'); return; }
     toast(`${res.wordCount.toLocaleString()} words loaded into ${successLabel}`, 'success');
@@ -258,7 +259,7 @@ function FileViewer({
       return;
     }
     if (!file.localBlobId) {
-      toast('This file is not available locally for math context.', 'warning');
+      toast(t('This file is not available locally for math context.'), 'warning');
       return;
     }
     const text = await resolveFileText('Math');
@@ -578,7 +579,7 @@ export function WorkspacePanel({
     setExtracting(true);
     try {
       const blob = await resolveStoredFileBlob(file);
-      if (!blob) { toast('File not found in local or remote storage.', 'error'); return null; }
+      if (!blob) { toast(t('File not found in local or remote storage.'), 'error'); return null; }
       const res = await extractTextFromBlob(blob, file.name);
       if (res.error) { toast(res.error, 'error'); return null; }
       setExtractedText(res.text);
@@ -591,7 +592,7 @@ export function WorkspacePanel({
   }
 
   async function uploadFile(file: File) {
-    if (!selectedFolder) { toast('Select a folder first.', 'warning'); return; }
+    if (!selectedFolder) { toast(t('Select a folder first.'), 'warning'); return; }
     const blobId = uuidv4(), fileId = uuidv4(), createdAt = new Date().toISOString();
     await idbStore.put(blobId, { blob: file, name: file.name, type: file.type, size: file.size });
     const local = { id: fileId, folderId: selectedFolder, topicId: selectedTopic ?? null, name: file.name, type: 'upload', localBlobId: blobId, mimeType: file.type, fileSize: file.size, createdAt };
@@ -647,7 +648,7 @@ export function WorkspacePanel({
     setFiles(p => p.filter(f => f.id !== file.id));
     if (viewFile?.id === file.id) setViewFile(null);
     if (selFile?.id === file.id) { setSelFile(null); setExtractedText(''); setOutput(''); }
-    toast('File deleted', 'info');
+    toast(t('File deleted'), 'info');
   }
 
   // ── AI generation (streaming) ──────────────────────────────────────────
@@ -655,7 +656,7 @@ export function WorkspacePanel({
   async function runGenerate(mode: ToolMode, sourceOverride?: string) {
     let src = sourceOverride?.trim() ?? extractedText.trim();
     if (!src && selFile) src = (await extractFromFile(selFile))?.trim() ?? '';
-    if (!src) { toast('Select a file or paste content first.', 'warning'); return; }
+    if (!src) { toast(t('Select a file or paste content first.'), 'warning'); return; }
 
     // Read privacy preference — what can we send to AI?
     const aiDataMode = (typeof window !== 'undefined'
@@ -670,8 +671,8 @@ export function WorkspacePanel({
         const result = offlineGenerate(mode as ToolMode, src, { count });
         setOutput(result);
         setStreamSource('offline');
-        toast('Generated offline (Offline-only mode is active)', 'info');
-      } catch { toast('Offline generation failed.', 'error'); }
+        toast(t('Generated offline (Offline-only mode is active)'), 'info');
+      } catch { toast(t('Offline generation failed.'), 'error'); }
       finally { setGenerating(false); }
       return;
     }
@@ -695,7 +696,7 @@ export function WorkspacePanel({
         if (result.ok) {
           setOutput(result.content.displayText);
           setStreamSource('local');
-          toast('Generated locally on-device', 'success');
+          toast(t('Generated locally on-device'), 'success');
           return;
         }
 
@@ -714,7 +715,7 @@ export function WorkspacePanel({
         const { offlineGenerate } = await import('@/lib/offline/generate');
         setOutput(offlineGenerate(mode as ToolMode, src, { count }));
         setStreamSource('offline');
-        toast('Local generation failed — used offline fallback instead', 'warning');
+        toast(t('Local generation failed — used offline fallback instead'), 'warning');
         return;
       } finally {
         setGenerating(false);
@@ -747,7 +748,7 @@ export function WorkspacePanel({
             return;
           }
         } catch { /* not JSON */ }
-        toast('Too many requests — please wait a moment.', 'error');
+        toast(t('Too many requests — please wait a moment.'), 'error');
         return;
       }
 
@@ -765,7 +766,7 @@ export function WorkspacePanel({
               return;
             }
           } catch { /* not JSON */ }
-          toast('Too many requests — please wait a moment.', 'error');
+          toast(t('Too many requests — please wait a moment.'), 'error');
           return;
         }
         const data = await fallback.json();
@@ -806,7 +807,7 @@ export function WorkspacePanel({
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return; // cancelled
       if (err instanceof RateLimitedError) { emitRateLimitEvent(err); return; }
-      toast('Generation failed. Please try again.', 'error');
+      toast(t('Generation failed. Please try again.'), 'error');
     } finally {
       setGenerating(false);
     }
@@ -816,7 +817,7 @@ export function WorkspacePanel({
     let src = extractedText.trim();
     if (!src && selFile) src = (await extractFromFile(selFile))?.trim() ?? '';
     if (!src) {
-      toast('Choose a PDF or document first, then generate notes from it.', 'warning');
+      toast(t('Choose a PDF or document first, then generate notes from it.'), 'warning');
       return;
     }
 
@@ -872,9 +873,9 @@ export function WorkspacePanel({
       setNotesInject(generated);
       setMainTab('notes');
       if (source === 'offline') {
-        toast('Notes were generated with offline fallback — the output may be simpler than cloud or local AI.', 'info');
+        toast(t('Notes were generated with offline fallback — the output may be simpler than cloud or local AI.'), 'info');
       }
-      toast('Structured notes are ready in Notes', 'success');
+      toast(t('Structured notes are ready in Notes'), 'success');
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Could not generate notes', 'error');
     }
@@ -890,7 +891,7 @@ export function WorkspacePanel({
       setRequestedReviewPhase(handoff.panel === 'review' ? 'review' : null);
       setPendingReviewImportUrl(null);
       setMainTab('flashcards');
-      toast('Review set opened in Flashcards', 'success');
+      toast(t('Review set opened in Flashcards'), 'success');
       return;
     }
 
@@ -1003,10 +1004,10 @@ export function WorkspacePanel({
       body: JSON.stringify({ mode: genMode, content: output }),
     });
     if (res.ok) {
-      toast('Saved to Library ✓', 'success');
+      toast(t('Saved to Library ✓'), 'success');
       broadcastInvalidate(LIBRARY_CHANNEL);
     } else {
-      toast('Could not save — DB may not be configured', 'warning');
+      toast(t('Could not save — DB may not be configured'), 'warning');
     }
   }
 
@@ -1069,7 +1070,7 @@ export function WorkspacePanel({
     setSelFile(null);
     setOutput('');
     setExtractedText(trimmed);
-    toast('Notes are ready in Chat', 'success');
+    toast(t('Notes are ready in Chat'), 'success');
   }
 
   function quizFromNotes(text: string) {
@@ -1085,7 +1086,7 @@ export function WorkspacePanel({
     setOutput('');
     setGenMode('quiz');
     setExtractedText(trimmed);
-    toast('Building quiz prompts from your notes…', 'info');
+    toast(t('Building quiz prompts from your notes…'), 'info');
     void runGenerate('quiz', trimmed);
   }
 
@@ -1112,7 +1113,7 @@ export function WorkspacePanel({
 
   async function loadSelectedFileIntoChat() {
     if (!selFile) {
-      toast('Choose a file first.', 'warning');
+      toast(t('Choose a file first.'), 'warning');
       return;
     }
     const text = await extractFromFile(selFile);
@@ -1125,7 +1126,7 @@ export function WorkspacePanel({
   function clearChatContext() {
     setSelFile(null);
     setExtractedText('');
-    toast('Chat file cleared', 'info');
+    toast(t('Chat file cleared'), 'info');
   }
 
   function clearGen() { abortRef.current?.abort(); setSelFile(null); setExtractedText(''); setOutput(''); setPasteMode(false); setGenerating(false); }
@@ -1177,7 +1178,7 @@ export function WorkspacePanel({
       phase: 'import',
       importUrl: reviewSetImport,
     });
-    toast('Review-set import is ready in Workspace', 'success');
+    toast(t('Review-set import is ready in Workspace'), 'success');
     router.replace('/workspace');
   }, [createWorkspaceReviewSet, router, searchParams, toast]);
 

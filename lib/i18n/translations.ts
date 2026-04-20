@@ -654,8 +654,20 @@ export const GLOBAL_TRANSLATIONS: Record<string, Partial<Record<SupportedLocale,
     ar: 'لا توجد مجلدات بعد. اضغط ＋ لإنشاء واحد.',
     fr: 'Aucun dossier pour le moment. Cliquez sur ＋ pour en créer un.',
   },
+  'Folder saved locally': { ar: 'تم حفظ المجلد محليًا', fr: 'Dossier enregistré localement' },
+  'Folder created': { ar: 'تم إنشاء المجلد', fr: 'Dossier créé' },
+  Renamed: { ar: 'تمت إعادة التسمية', fr: 'Renommé' },
+  'Folder deleted': { ar: 'تم حذف المجلد', fr: 'Dossier supprimé' },
+  'Topic saved locally': { ar: 'تم حفظ الموضوع محليًا', fr: 'Sujet enregistré localement' },
+  'Topic created': { ar: 'تم إنشاء الموضوع', fr: 'Sujet créé' },
+  'Topic deleted': { ar: 'تم حذف الموضوع', fr: 'Sujet supprimé' },
   "Today's goal": { ar: 'هدف اليوم', fr: "Objectif du jour" },
   '✓ Goal done!': { ar: '✓ تم إنجاز الهدف!', fr: '✓ Objectif atteint !' },
+  'You can start immediately in guest mode and connect sync later if you want cross-device history.': {
+    ar: 'يمكنك البدء فورًا في وضع الضيف ثم توصيل المزامنة لاحقًا إذا أردت سجلًا عبر الأجهزة.',
+    fr: 'Vous pouvez commencer immédiatement en mode invité puis activer la synchronisation plus tard si vous voulez un historique entre appareils.',
+  },
+  'Open my first path': { ar: 'افتح أول مسار لي', fr: 'Ouvrir mon premier parcours' },
 
   // ─── Math surface ─────────────────────────────────────────────────────────
   'Loading visual analyzer…': { ar: 'جارٍ تحميل المحلل البصري…', fr: 'Chargement de l’analyseur visuel…' },
@@ -680,6 +692,71 @@ export const GLOBAL_TRANSLATIONS: Record<string, Partial<Record<SupportedLocale,
   'SOLVER TOPICS': { ar: 'مواضيع المحلل', fr: 'SUJETS DU SOLVEUR' },
   INPUT: { ar: 'الإدخال', fr: 'ENTRÉE' },
   VISUALIZE: { ar: 'تصوير', fr: 'VISUALISER' },
+  'Explain it': { ar: 'اشرحه', fr: 'Expliquez-le' },
+
+  // ─── Workspace feedback ───────────────────────────────────────────────────
+  'File not found locally or in remote storage.': {
+    ar: 'الملف غير موجود محليًا أو في التخزين البعيد.',
+    fr: 'Fichier introuvable localement ou dans le stockage distant.',
+  },
+  'This file is not available locally for math context.': {
+    ar: 'هذا الملف غير متاح محليًا لسياق الرياضيات.',
+    fr: 'Ce fichier n’est pas disponible localement pour le contexte maths.',
+  },
+  'File not found in local or remote storage.': {
+    ar: 'الملف غير موجود في التخزين المحلي أو البعيد.',
+    fr: 'Fichier introuvable dans le stockage local ou distant.',
+  },
+  'Select a folder first.': { ar: 'اختر مجلدًا أولًا.', fr: 'Sélectionnez d’abord un dossier.' },
+  'File deleted': { ar: 'تم حذف الملف', fr: 'Fichier supprimé' },
+  'Select a file or paste content first.': {
+    ar: 'اختر ملفًا أو الصق محتوى أولًا.',
+    fr: 'Sélectionnez d’abord un fichier ou collez du contenu.',
+  },
+  'Generated offline (Offline-only mode is active)': {
+    ar: 'تم الإنشاء دون اتصال (وضع عدم الاتصال فقط نشط)',
+    fr: 'Généré hors ligne (le mode hors ligne seul est actif)',
+  },
+  'Offline generation failed.': { ar: 'فشل الإنشاء دون اتصال.', fr: 'La génération hors ligne a échoué.' },
+  'Generated locally on-device': { ar: 'تم الإنشاء محليًا على الجهاز', fr: 'Généré localement sur l’appareil' },
+  'Local generation failed — used offline fallback instead': {
+    ar: 'فشل الإنشاء المحلي — تم استخدام البديل دون اتصال بدلًا من ذلك',
+    fr: 'La génération locale a échoué — le mode hors ligne de secours a été utilisé',
+  },
+  'Too many requests — please wait a moment.': {
+    ar: 'طلبات كثيرة جدًا — يرجى الانتظار قليلًا.',
+    fr: 'Trop de requêtes — veuillez patienter un instant.',
+  },
+  'Generation failed. Please try again.': {
+    ar: 'فشل الإنشاء. يرجى المحاولة مرة أخرى.',
+    fr: 'La génération a échoué. Veuillez réessayer.',
+  },
+  'Choose a PDF or document first, then generate notes from it.': {
+    ar: 'اختر ملف PDF أو مستندًا أولًا، ثم أنشئ منه ملاحظات.',
+    fr: 'Choisissez d’abord un PDF ou un document, puis générez des notes à partir de celui-ci.',
+  },
+  'Notes were generated with offline fallback — the output may be simpler than cloud or local AI.': {
+    ar: 'تم إنشاء الملاحظات باستخدام البديل دون اتصال — قد يكون الناتج أبسط من الذكاء المحلي أو السحابي.',
+    fr: 'Les notes ont été générées avec le mode hors ligne de secours — le résultat peut être plus simple que l’IA cloud ou locale.',
+  },
+  'Structured notes are ready in Notes': { ar: 'الملاحظات المنظمة جاهزة في الملاحظات', fr: 'Les notes structurées sont prêtes dans Notes' },
+  'Review set opened in Flashcards': { ar: 'تم فتح مجموعة المراجعة في البطاقات', fr: 'Le set de révision a été ouvert dans Fiches' },
+  'Saved to Library ✓': { ar: 'تم الحفظ في المكتبة ✓', fr: 'Enregistré dans la bibliothèque ✓' },
+  'Could not save — DB may not be configured': {
+    ar: 'تعذر الحفظ — قد لا تكون قاعدة البيانات مهيأة',
+    fr: 'Impossible d’enregistrer — la base de données n’est peut-être pas configurée',
+  },
+  'Notes are ready in Chat': { ar: 'الملاحظات جاهزة في الدردشة', fr: 'Les notes sont prêtes dans Chat' },
+  'Building quiz prompts from your notes…': {
+    ar: 'جارٍ إنشاء مطالبات الاختبار من ملاحظاتك…',
+    fr: 'Création des invites de quiz à partir de vos notes…',
+  },
+  'Choose a file first.': { ar: 'اختر ملفًا أولًا.', fr: 'Choisissez d’abord un fichier.' },
+  'Chat file cleared': { ar: 'تم مسح ملف الدردشة', fr: 'Fichier de chat effacé' },
+  'Review-set import is ready in Workspace': {
+    ar: 'استيراد مجموعة المراجعة أصبح جاهزًا في مساحة العمل',
+    fr: 'L’import du set de révision est prêt dans l’espace de travail',
+  },
   'Upload images or diagrams to extract and analyze visual math content with AI.': {
     ar: 'حمّل صورًا أو مخططات لاستخراج وتحليل المحتوى الرياضي البصري باستخدام الذكاء الاصطناعي.',
     fr: 'Téléversez des images ou schémas pour extraire et analyser du contenu mathématique visuel avec l’IA.',
