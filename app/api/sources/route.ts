@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { getUserId } from '@/lib/auth/get-user-id';
+import { GUEST_SESSION_HEADER, isGuestSessionId } from '@/lib/auth/guest-session';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { savedSources } from '@/lib/db/schema';
 
@@ -19,6 +20,8 @@ export interface SavedSourcePayload {
 
 /** GET /api/sources — list the user's saved sources */
 export async function GET(request: NextRequest) {
+  const guestSessionId = request.headers.get(GUEST_SESSION_HEADER)?.trim() ?? null;
+  const hasGuestSession = isGuestSessionId(guestSessionId);
   if (!isDatabaseConfigured) return NextResponse.json([]);
   const userId = await getUserId(request);
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,6 +35,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(rows);
   } catch (err) {
     console.error('[sources][GET]', err);
+    if (hasGuestSession) return NextResponse.json([]);
     return NextResponse.json({ error: 'Failed to load sources' }, { status: 500 });
   }
 }

@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { srsDecks } from '@/lib/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
+import { GUEST_SESSION_HEADER, isGuestSessionId } from '@/lib/auth/guest-session';
 
 // GET  /api/srs   — return all decks for the current user
 export async function GET(req: NextRequest) {
+  const guestSessionId = req.headers.get(GUEST_SESSION_HEADER)?.trim() ?? null;
+  const hasGuestSession = isGuestSessionId(guestSessionId);
   const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!isDatabaseConfigured) return NextResponse.json([]);
@@ -15,6 +18,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(rows.map(r => r.deckData));
   } catch (e) {
     console.error('[srs/GET]', e);
+    if (hasGuestSession) return NextResponse.json([]);
     return NextResponse.json({ error: 'Database error' }, { status: 500 });
   }
 }
