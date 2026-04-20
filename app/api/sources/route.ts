@@ -25,6 +25,9 @@ export async function GET(request: NextRequest) {
   if (!isDatabaseConfigured) return NextResponse.json([]);
   const userId = await getUserId(request);
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (hasGuestSession || userId === 'local-demo-user' || userId.startsWith('guest:')) {
+    return NextResponse.json([]);
+  }
 
   try {
     const rows = await db

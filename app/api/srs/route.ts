@@ -12,6 +12,9 @@ export async function GET(req: NextRequest) {
   const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!isDatabaseConfigured) return NextResponse.json([]);
+  if (hasGuestSession || userId === 'local-demo-user' || userId.startsWith('guest:')) {
+    return NextResponse.json([]);
+  }
 
   try {
     const rows = await db.select().from(srsDecks).where(eq(srsDecks.userId, userId));
