@@ -3193,9 +3193,12 @@ details[open] .detailsSummary::before {
 /* Sticky search header */
 .plxSearchHeader {
   flex-shrink: 0;
-  padding: 1rem 1.25rem 0.65rem;
-  background: var(--bg-surface, #fff);
-  border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+  padding: 1rem 1.25rem 0.75rem;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--primary, #6366f1) 8%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-surface, #fff) 96%, white 4%), var(--bg-surface, #fff));
+  border-bottom: 1px solid color-mix(in srgb, var(--primary, #6366f1) 10%, var(--border-subtle, #e2e8f0));
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.05);
   display: grid;
   gap: 0.55rem;
 }
@@ -3296,10 +3299,10 @@ details[open] .detailsSummary::before {
   flex-wrap: wrap;
   gap: 0.65rem;
   align-items: center;
-  padding: 0.65rem 0.75rem;
-  background: var(--bg-inset, #f8fafc);
-  border: 1px solid var(--border-subtle, #e2e8f0);
-  border-radius: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-inset, #f8fafc) 92%, white 8%), color-mix(in srgb, var(--primary, #6366f1) 4%, transparent));
+  border: 1px solid color-mix(in srgb, var(--primary, #6366f1) 10%, var(--border-subtle, #e2e8f0));
+  border-radius: 0.95rem;
 }
 
 /* Scrollable body */
@@ -3317,6 +3320,39 @@ details[open] .detailsSummary::before {
   text-align: center;
   padding: 4rem 1.5rem 3rem;
   gap: 0.9rem;
+}
+
+.plxHeroStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+  width: min(100%, 48rem);
+  margin-top: 0.4rem;
+}
+
+.plxHeroStat {
+  display: grid;
+  gap: 0.22rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary, #6366f1) 10%, var(--border-subtle, #e2e8f0));
+  border-radius: 1rem;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-surface, #fff) 94%, white 6%), color-mix(in srgb, var(--primary, #6366f1) 4%, transparent));
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+  text-align: left;
+}
+
+.plxHeroStat strong {
+  color: var(--text-primary, #0f172a);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.plxHeroStatLabel {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted, #64748b);
 }
 
 .plxHeroIcon {
@@ -3419,6 +3455,10 @@ details[open] .detailsSummary::before {
     border-right: none;
     border-bottom: 1px solid var(--border-subtle, #e2e8f0);
   }
+
+  .plxHeroStats {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Left — Answer column */
@@ -3428,6 +3468,7 @@ details[open] .detailsSummary::before {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-surface, #fff) 98%, white 2%), color-mix(in srgb, var(--primary, #6366f1) 2%, transparent));
 }
 
 .plxAnswerLead {
@@ -3464,6 +3505,27 @@ details[open] .detailsSummary::before {
   font-size: 0.84rem;
   color: var(--text-muted, #64748b);
   line-height: 1.5;
+}
+
+.plxMiniMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.2rem;
+}
+
+.plxMiniMetaBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 1.85rem;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--primary, #6366f1) 12%, var(--border-subtle, #e2e8f0));
+  background: color-mix(in srgb, var(--primary, #6366f1) 6%, white);
+  color: color-mix(in srgb, var(--text-primary, #0f172a) 92%, var(--primary, #6366f1) 8%);
+  font-size: 0.74rem;
+  font-weight: 650;
 }
 
 .plxAnswerActions {
@@ -3519,6 +3581,11 @@ details[open] .detailsSummary::before {
 .plxSection {
   display: grid;
   gap: 0.75rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid color-mix(in srgb, var(--primary, #6366f1) 8%, var(--border-subtle, #e2e8f0));
+  border-radius: 1rem;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-surface, #fff) 96%, white 4%), color-mix(in srgb, var(--primary, #6366f1) 2%, transparent));
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.04);
 }
 
 .plxSectionHead {
@@ -3602,9 +3669,16 @@ details[open] .detailsSummary::before {
   padding: 0.9rem 1rem;
   border: 1px solid var(--border-subtle, #e2e8f0);
   border-radius: 0.95rem;
-  background: var(--bg-surface, #fff);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-surface, #fff) 94%, white 6%), color-mix(in srgb, var(--primary, #6366f1) 3%, transparent));
   text-decoration: none;
   color: inherit;
+  transition: border-color 150ms, box-shadow 150ms, transform 150ms;
+}
+
+.plxCitationCard:hover {
+  border-color: color-mix(in srgb, var(--primary, #6366f1) 24%, var(--border-subtle, #e2e8f0));
+  box-shadow: 0 16px 32px color-mix(in srgb, var(--primary, #6366f1) 10%, transparent);
+  transform: translateY(-1px);
 }
 
 .plxCitationCard strong {
@@ -3754,6 +3828,7 @@ details[open] .detailsSummary::before {
   position: sticky;
   top: 0;
   align-self: start;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-inset, #f8fafc) 78%, white 22%), color-mix(in srgb, var(--bg-surface, #fff) 92%, white 8%));
 }
 
 .plxSourcesHead {
@@ -3901,8 +3976,6 @@ details[open] .detailsSummary::before {
 
 .plxFollowSection {
   margin-top: 0.25rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border-subtle, #e2e8f0);
 }
 
 .plxFollowHint {
