@@ -749,7 +749,9 @@ export default function PlannerPage() {
   const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) ?? null;
   const weekStart = startOfWeek(cursor);
   const weekEnd = addDays(weekStart, 6);
-  const weeklyEventsCount = useMemo(() => events.filter((evt) => evt.date >= toDateStr(weekStart) && evt.date <= toDateStr(weekEnd)).length, [events, weekEnd, weekStart]);
+  const weekStartStr = toDateStr(weekStart);
+  const weekEndStr = toDateStr(weekEnd);
+  const weeklyEventsCount = events.filter((evt) => evt.date >= weekStartStr && evt.date <= weekEndStr).length;
 
   // Upcoming exams for sidebar countdown
   const upcomingExams = useMemo(() => {
@@ -838,13 +840,24 @@ export default function PlannerPage() {
     return `${DAYS[cursor.getDay()]}, ${MONTHS[cursor.getMonth()]} ${cursor.getDate()}, ${cursor.getFullYear()}`;
   }, [view, cursor]);
 
+  const plannerModeTitle = plannerMode === 'timetable'
+    ? t('Timetable Builder')
+    : plannerMode === 'calendar'
+      ? t('Study Calendar')
+      : t('Study Plans');
+
+  const plannerModeSummary = plannerMode === 'timetable'
+    ? t("Paste your catalog export, fine-tune constraints, and we'll build the best schedule for you.")
+    : plannerMode === 'calendar'
+      ? t('Map exams, deadlines, classes, and study blocks in one calm command center.')
+      : t('Build an exam-ready revision path from your topics, daily minutes, and deadline.');
+
   return (
     <div className="cal-shell">
-      <section className="planner-hero">
-        <div className="planner-hero-copy">
-          <span className="planner-hero-eyebrow">{t('Planner board')}</span>
-          <h1>{t('Academic Planner')}</h1>
-          <p>{t('Map exams, deadlines, classes, and study blocks in one calm command center.')}</p>
+      <section className="planner-topbar">
+        <div className="planner-topbar-copy">
+          <h1>{plannerModeTitle}</h1>
+          <p>{plannerModeSummary}</p>
         </div>
         <div className="planner-mode-switcher" role="tablist" aria-label="Planner modes">
           {([
@@ -864,57 +877,60 @@ export default function PlannerPage() {
             </button>
           ))}
         </div>
-        <div className="planner-hero-stats">
-          <article className="hero-stat">
-            <span>{t('Active plans')}</span>
-            <strong>{activePlansCount}</strong>
-          </article>
-          <article className="hero-stat">
-            <span>{t('Upcoming exams')}</span>
-            <strong>{upcomingExams.length}</strong>
-          </article>
-          <article className="hero-stat">
-            <span>{t('Events this week')}</span>
-            <strong>{weeklyEventsCount}</strong>
-          </article>
-          <article className="hero-stat">
-            <span>{t("Today's sessions")}</span>
-            <strong>{todayEvents.length}</strong>
-          </article>
-        </div>
       </section>
 
-      <section className="planner-status-bar">
-        <div className="planner-status-item">
-          <span>{t('Selected plan')}</span>
-          <strong>{selectedPlan?.title ?? t('No plan selected yet')}</strong>
-        </div>
+      <section className="planner-status-bar compact">
         <div className="planner-status-item">
           <span>{t('Current range')}</span>
           <strong>{navLabel}</strong>
         </div>
-        <div className="planner-status-item">
-          <span>{t('View')}</span>
-          <strong>{view.charAt(0).toUpperCase()+view.slice(1)}</strong>
-        </div>
-        <div className="planner-status-item">
-          <span>{t('Today agenda')}</span>
-          <strong>{todayEvents[0]?.title ?? t('No events scheduled for today.')}</strong>
-        </div>
+        {plannerMode === 'calendar' && (
+          <>
+            <div className="planner-status-item">
+              <span>{t('Today agenda')}</span>
+              <strong>{todayEvents[0]?.title ?? t('No events scheduled for today.')}</strong>
+            </div>
+            <div className="planner-status-item">
+              <span>{t("Today's sessions")}</span>
+              <strong>{todayEvents.length}</strong>
+            </div>
+          </>
+        )}
+        {plannerMode === 'plans' && (
+          <>
+            <div className="planner-status-item">
+              <span>{t('Selected plan')}</span>
+              <strong>{selectedPlan?.title ?? t('No plan selected yet')}</strong>
+            </div>
+            <div className="planner-status-item">
+              <span>{t('Active plans')}</span>
+              <strong>{activePlansCount}</strong>
+            </div>
+          </>
+        )}
+        {plannerMode === 'timetable' && (
+          <>
+            <div className="planner-status-item">
+              <span>{t('Courses')}</span>
+              <strong>{timetableCourses.length}</strong>
+            </div>
+            <div className="planner-status-item">
+              <span>{t('Valid schedules')}</span>
+              <strong>{timetableCandidates.length}</strong>
+            </div>
+          </>
+        )}
       </section>
 
       {plannerMode === 'timetable' && (
         <section className="timetable-shell">
-        <div className="timetable-header">
-          <div>
-            <span className="planner-hero-eyebrow">{t('Build your timetable')}</span>
-            <h2>{t("Paste your catalog export, fine-tune constraints, and we'll build the best schedule for you.")}</h2>
+        <div className="timetable-header simplified">
+          <div className="timetable-header-copy">
+            <p>{t('Paste one registrar export chunk, hit add, and repeat for each course.')}</p>
           </div>
-          <div className="timetable-stats">
-            <article className="timetable-stat"><span>{t('Courses')}</span><strong>{timetableCourses.length}</strong></article>
+          <div className="timetable-stats compact">
             <article className="timetable-stat"><span>{t('Seat-open options')}</span><strong>{seatOpenOptionCount}</strong></article>
             <article className="timetable-stat"><span>{t('Pinned')}</span><strong>{pinnedTimetables.length}</strong></article>
-            <article className="timetable-stat"><span>{t('Valid schedules')}</span><strong>{timetableCandidates.length}</strong></article>
           </div>
         </div>
 
@@ -1050,17 +1066,9 @@ export default function PlannerPage() {
           </section>
         </div>
 
-        <div className="timetable-help">
-          <div>
-            <span className="planner-hero-eyebrow">{t('Need help?')}</span>
-            <h3>{t('How to find your best fit schedule')}</h3>
-            <p>{t('Paste your courses, generate multiple timetables, and pick the one that works best for you.')}</p>
-          </div>
-          <div className="help-grid">
-            <article><strong>{t('Simple workflow')}</strong><p>{t('Paste course text from your registrar portal above. The planner generates all valid combinations from the sections it can read.')}</p></article>
-            <article><strong>{t('Multiple options')}</strong><p>{t('Use focus and day filters to narrow down a calmer week, an earlier start, or seat-open sections only.')}</p></article>
-            <article><strong>{t('Pick the best')}</strong><p>{t('Pin your favorite schedules and keep your study plans, deadlines, and revision blocks in the same command center.')}</p></article>
-          </div>
+        <div className="timetable-help compact">
+          <p>{t('Paste course text from your registrar portal above. The planner generates all valid combinations from the sections it can read.')}</p>
+          <p>{t('Use focus and day filters to narrow down a calmer week, an earlier start, or seat-open sections only.')}</p>
         </div>
         </section>
       )}
@@ -1436,26 +1444,34 @@ export default function PlannerPage() {
             radial-gradient(circle at top left, color-mix(in srgb, var(--primary) 10%, transparent), transparent 24%),
             linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 55%, white 45%), var(--bg-surface));
         }
-        .planner-hero {
+        .planner-topbar {
           grid-column: 1 / -1;
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
-          gap: 20px;
-          padding: 24px 24px 16px;
-          border-bottom: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-subtle));
-          background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 7%, white), color-mix(in srgb, var(--bg-elevated) 70%, white));
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          flex-wrap: wrap;
+          padding: 18px 24px 12px;
+          border-bottom: 1px solid color-mix(in srgb, var(--primary) 8%, var(--border-subtle));
+          background: color-mix(in srgb, var(--bg-surface) 92%, white 8%);
         }
-        .planner-hero-copy h1 {
+        .planner-topbar-copy {
+          display: grid;
+          gap: 4px;
+          min-width: 0;
+        }
+        .planner-topbar-copy h1 {
           margin: 0;
-          font-size: clamp(1.8rem, 3vw, 2.5rem);
-          letter-spacing: -0.04em;
+          font-size: clamp(1.1rem, 2vw, 1.45rem);
+          letter-spacing: -0.03em;
           color: var(--text-primary);
         }
-        .planner-hero-copy p {
-          margin: 10px 0 0;
-          max-width: 60ch;
+        .planner-topbar-copy p {
+          margin: 0;
+          max-width: 58ch;
           color: var(--text-secondary);
-          font-size: 0.98rem;
+          font-size: 0.9rem;
+          line-height: 1.45;
         }
         .planner-hero-eyebrow {
           display: inline-block;
@@ -1522,39 +1538,25 @@ export default function PlannerPage() {
         }
         .hero-btn.compact { min-height: 36px; padding: 0 13px; }
 
-        .planner-hero-stats {
-          grid-column: 1 / -1;
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 12px;
-        }
-        .hero-stat {
-          display: grid;
-          gap: 6px;
-          padding: 14px 16px;
-          border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-subtle));
-          border-radius: 18px;
-          background: color-mix(in srgb, var(--bg-surface) 92%, white 8%);
-          box-shadow: var(--shadow-sm);
-        }
-        .hero-stat span { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 700; }
-        .hero-stat strong { font-size: 1.35rem; color: var(--text-primary); }
         .planner-status-bar {
           grid-column: 1 / -1;
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 10px;
-          padding: 12px 24px 16px;
-          background: color-mix(in srgb, var(--bg-surface) 84%, white 16%);
+          padding: 10px 24px 14px;
+          background: color-mix(in srgb, var(--bg-surface) 90%, white 10%);
           border-bottom: 1px solid var(--border-subtle);
+        }
+        .planner-status-bar.compact {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
         .planner-status-item {
           display: grid;
           gap: 4px;
           min-width: 0;
-          padding: 10px 12px;
-          border-radius: 14px;
-          background: color-mix(in srgb, var(--bg-elevated) 82%, white 18%);
+          padding: 9px 12px;
+          border-radius: 12px;
+          background: color-mix(in srgb, var(--bg-elevated) 78%, white 22%);
           border: 1px solid var(--border-subtle);
         }
         .planner-status-item span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 700; }
@@ -1956,7 +1958,7 @@ export default function PlannerPage() {
         .help-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
         .help-grid article { padding: 14px; border-radius: 16px; background: color-mix(in srgb, var(--bg-surface) 88%, white 12%); border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border-subtle)); }
         @media (max-width: 1024px) {
-          .planner-hero,
+          .planner-topbar,
           .planner-status-bar,
           .timetable-header,
           .timetable-help {
@@ -1965,7 +1967,6 @@ export default function PlannerPage() {
           .planner-mode-switcher {
             justify-content: flex-start;
           }
-          .planner-hero-stats,
           .timetable-stats,
           .help-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1976,9 +1977,8 @@ export default function PlannerPage() {
         }
         @media (max-width: 768px) {
           .cal-shell { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
-          .planner-hero,
+          .planner-topbar,
           .planner-status-bar,
-          .planner-hero-stats,
           .timetable-header,
           .timetable-help,
           .timetable-stats,
@@ -1986,8 +1986,8 @@ export default function PlannerPage() {
           .pref-grid {
             grid-template-columns: 1fr;
           }
-          .planner-hero {
-            padding: 18px 16px 12px;
+          .planner-topbar {
+            padding: 16px 16px 10px;
           }
           .planner-mode-switcher, .mode-section-head, .calendar-header-actions {
             justify-content: flex-start;
