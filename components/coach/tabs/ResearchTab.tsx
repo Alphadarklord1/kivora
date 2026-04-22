@@ -971,7 +971,7 @@ export function ResearchTab({
           <h2>{t('Search any study topic')}</h2>
           <p>{t('Scholar Hub compares multiple sources, ranks stronger ones higher, and keeps every claim grounded with visible citations.')}</p>
           <div className={styles.plxSuggestions}>
-            {SUGGESTED_TOPICS.map((topicLabel) => (
+            {SUGGESTED_TOPICS.slice(0, 6).map((topicLabel) => (
               <button
                 key={topicLabel}
                 type="button"
@@ -1054,16 +1054,6 @@ export function ResearchTab({
                     {savingToLibrary ? t('Saving…') : t('Save')}
                   </button>
                 )}
-                <button type="button" className={styles.plxAdvancedToggle} disabled={docxExporting} onClick={() => void downloadResearchDocx()}>
-                  {docxExporting ? t('Exporting…') : t('Word')}
-                </button>
-                <button
-                  type="button"
-                  className={styles.plxAdvancedToggle}
-                  onClick={() => void copyResearchBrief()}
-                >
-                  {briefCopied ? `✓ ${t('Copied')}` : t('Copy brief')}
-                </button>
                 <button
                   type="button"
                   className={`${styles.plxAdvancedToggle} ${styles.plxPrimaryGhost}`}
@@ -1158,6 +1148,17 @@ export function ResearchTab({
 
                 {/* Citation export row */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
+                  <button
+                    type="button"
+                    className={styles.plxAdvancedToggle}
+                    style={{ padding: '0.2rem 0.65rem', fontSize: '0.78rem' }}
+                    onClick={() => void copyResearchBrief()}
+                  >
+                    {briefCopied ? `✓ ${t('Copied')}` : t('Copy brief')}
+                  </button>
+                  <button type="button" className={styles.plxAdvancedToggle} style={{ padding: '0.2rem 0.65rem', fontSize: '0.78rem' }} disabled={docxExporting} onClick={() => void downloadResearchDocx()}>
+                    {docxExporting ? t('Exporting…') : t('Word')}
+                  </button>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Export as:')}</span>
                   {(['apa', 'mla', 'chicago', 'harvard'] as CitationFormat[]).map(fmt => (
                     <button

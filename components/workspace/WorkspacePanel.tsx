@@ -1304,7 +1304,7 @@ export function WorkspacePanel({
                   setOutput('');
                 }}
               >
-                {t('Use as source ↓')}
+                {t('Use in Tools')}
               </button>
             )}
             {scholarCtx.reviewSetContent && (
@@ -1321,7 +1321,7 @@ export function WorkspacePanel({
                   setRequestedReviewPhase(null);
                 }}
               >
-                {t('Build review set ↓')}
+                {t('Open Flashcards')}
               </button>
             )}
             <button
@@ -1455,70 +1455,14 @@ export function WorkspacePanel({
                               </div>
                               <div className="workspace-file-actions" style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                                 {!isMissing && (
-                                  <>
-                                    <button
-                                      className="btn btn-primary btn-sm"
-                                      style={{ fontSize: 11, padding: '2px 8px' }}
-                                      title="Extract text and open in Generate"
-                                      aria-label={`Use ${file.name} in Tools`}
-                                      onClick={async () => {
-                                        const text = await extractFromFile(file);
-                                        if (text) {
-                                          setSelFile(file);
-                                          setMainTab('generate');
-                                        }
-                                      }}>
-                                      ⚡ {t('Use')}
-                                    </button>
-                                    <button
-                                      className="btn btn-secondary btn-sm"
-                                      style={{ fontSize: 11, padding: '2px 8px' }}
-                                      title="Extract text and open in Chat"
-                                      aria-label={`Use ${file.name} in Chat`}
-                                      onClick={async () => {
-                                        const text = await extractFromFile(file);
-                                        if (text) {
-                                          setSelFile(file);
-                                          setMainTab('chat');
-                                        }
-                                      }}>
-                                      💬 {t('Chat')}
-                                    </button>
-                                    <button
-                                      className="btn btn-secondary btn-sm"
-                                      style={{ fontSize: 11, padding: '2px 8px' }}
-                                      title="Extract text and open PDF to Notes"
-                                      aria-label={`Use ${file.name} in Notes`}
-                                      onClick={async () => {
-                                        const text = await extractFromFile(file);
-                                        if (text) {
-                                          handleUseForNotes(file, text);
-                                        }
-                                      }}>
-                                      📓 {t('Notes')}
-                                    </button>
-                                    <button
-                                      className="btn btn-secondary btn-sm"
-                                      style={{ fontSize: 11, padding: '2px 8px' }}
-                                      title="Send this file into Math"
-                                      aria-label={`Use ${file.name} in Math`}
-                                      onClick={async () => {
-                                        const text = await extractFromFile(file);
-                                        if (text) {
-                                          await sendFileToMath(file, text);
-                                        }
-                                      }}>
-                                      ∑ {t('Math')}
-                                    </button>
-                                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}
-                                      aria-label={`${viewFile?.id === file.id ? 'Close preview for' : 'View'} ${file.name}`}
-                                      onClick={() => {
-                                        void markRecentFile(file.id);
-                                        setViewFile(v => v?.id === file.id ? null : file);
-                                      }}>
-                                      {viewFile?.id === file.id ? t('Close') : t('View')}
-                                    </button>
-                                  </>
+                                  <button className="btn btn-secondary btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}
+                                    aria-label={`${viewFile?.id === file.id ? 'Close preview for' : 'Open'} ${file.name}`}
+                                    onClick={() => {
+                                      void markRecentFile(file.id);
+                                      setViewFile(v => v?.id === file.id ? null : file);
+                                    }}>
+                                    {viewFile?.id === file.id ? t('Close') : t('Open')}
+                                  </button>
                                 )}
                                 <button className="btn-icon" style={{ color: 'var(--danger)', width: 26, height: 26 }}
                                   title={`Delete "${file.name}"`}
@@ -1595,7 +1539,6 @@ export function WorkspacePanel({
                     ? t('Paste text directly, then generate notes, summaries, quizzes, or exam prep.')
                     : t('Pick a file from Workspace or switch to Paste text to start generating study material.')}
               </span>
-              <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{t(currentGen.label)}</span>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
@@ -1646,8 +1589,8 @@ export function WorkspacePanel({
             {/* Source row */}
             <div className="workspace-generate-toolbar" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-                <button className={`btn btn-sm ${!pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setPasteMode(false)}>{t('From file')}</button>
-                <button className={`btn btn-sm ${pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => { setPasteMode(true); setSelFile(null); if (!pasteMode) setExtractedText(''); }}>{t('Paste text')}</button>
+                <button className={`btn btn-sm ${!pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setPasteMode(false)}>{t('File')}</button>
+                <button className={`btn btn-sm ${pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => { setPasteMode(true); setSelFile(null); if (!pasteMode) setExtractedText(''); }}>{t('Paste')}</button>
               </div>
 
               {!pasteMode && (
@@ -1864,7 +1807,7 @@ export function WorkspacePanel({
                   </p>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
                     <button className="btn btn-primary btn-sm" onClick={() => setMainTab('files')}>{t('Open files')}</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setPasteMode(true)}>{t('Paste text')}</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setPasteMode(true)}>{t('Paste')}</button>
                   </div>
                   <div className="workspace-generate-empty-grid" style={{ display: 'grid', gap: 8, width: '100%', maxWidth: 520, margin: '0 auto 18px', textAlign: 'left' }}>
                     <div style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3)', fontWeight: 700 }}>

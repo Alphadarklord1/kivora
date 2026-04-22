@@ -2797,7 +2797,7 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
         <div style={{ padding: '0 0 8px' }}>
           {sidebarOpen && (
             <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '6px 20px 4px', opacity: 0.6 }}>
-              {tr('Solver Topics')}
+              {tr('Solver')}
             </div>
           )}
           {PRIMARY_TOPICS.map(t => <NavItem key={t.id} id={t.id} icon={t.icon} label={t.label} color={t.color} />)}
@@ -2933,7 +2933,7 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
             {/* Quick examples — hidden for categories that use the structured form */}
             {currentTopic && !CATEGORY_FORMS[String(active)] && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {currentTopic.examples.map(ex => (
+                {currentTopic.examples.slice(0, 4).map(ex => (
                   <button key={ex} onClick={() => { setInput(ex); void solve(ex, currentTopic.id); }}
                     style={{ padding: '4px 12px', borderRadius: 20, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer', transition: 'all 0.1s' }}
                     onMouseEnter={e => { (e.currentTarget).style.borderColor = currentTopic.color; (e.currentTarget).style.color = currentTopic.color; }}
@@ -3162,29 +3162,6 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
                 </div>
               );
             })()}
-
-            {/* Recent history chips — free-text categories only */}
-            {!CATEGORY_FORMS[String(active)] && history.length > 0 && !loading && !result && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{tr('Recent:')}</span>
-                {history.slice(0, 3).map(h => (
-                  <button key={h.id}
-                    onClick={() => {
-                      const nextCategory = (TOPICS.find(t => t.id === h.category)?.id ?? 'algebra') as TopicId;
-                      setInput(h.problem);
-                      setActive(nextCategory);
-                      setTimeout(() => { void solve(h.problem, nextCategory); }, 0);
-                    }}
-                    style={{ padding: '4px 12px', borderRadius: 20, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', transition: 'all 0.1s', fontFamily: '"JetBrains Mono", monospace' }}
-                    title={`${h.problem} = ${h.answer}`}
-                    onMouseEnter={e => { (e.currentTarget).style.borderColor = 'var(--primary)'; (e.currentTarget).style.color = 'var(--primary)'; }}
-                    onMouseLeave={e => { (e.currentTarget).style.borderColor = 'var(--border-subtle)'; (e.currentTarget).style.color = 'var(--text-secondary)'; }}
-                  >
-                    {h.problem.length > 28 ? h.problem.slice(0, 28) + '…' : h.problem}
-                  </button>
-                ))}
-              </div>
-            )}
 
             {/* Loading skeleton */}
             {loading && (
