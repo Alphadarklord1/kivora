@@ -260,6 +260,20 @@ const LOCAL_AR: Record<string, string> = {
   'Preview': 'المعاينة',
   'Context / what you tried': 'السياق / ما الذي جرّبته',
   'optional': 'اختياري',
+  'Question builder': 'منشئ السؤال',
+  'Build the problem on the left, then use the preview and topic tools on the right.': 'اكتب المسألة في اليسار، ثم استخدم المعاينة وأدوات الموضوع في اليمين.',
+  'Scan helper': 'مساعد المسح',
+  'Upload first, then open the extracted question in the solver or writer.': 'ارفع الملف أولًا، ثم افتح السؤال المستخرج في المحلل أو الكاتب.',
+  'Nothing extracted yet. Upload a worksheet, textbook page, or exam question to fill this panel.': 'لا يوجد نص مستخرج بعد. ارفع ورقة عمل أو صفحة كتاب أو سؤال اختبار لملء هذه اللوحة.',
+  'After you scan': 'بعد المسح',
+  'Move the extracted question straight into the solver, writer, or clipboard.': 'انقل السؤال المستخرج مباشرة إلى المحلل أو الكاتب أو الحافظة.',
+  'Visual workspace': 'مساحة عمل بصرية',
+  'Use diagrams and screenshots here, then send the result back into Math when you are ready.': 'استخدم الرسوم والصور هنا، ثم أرسل النتيجة إلى الرياضيات عندما تكون جاهزًا.',
+  'Open Question Scan': 'افتح مسح السؤال',
+  'Need to type instead?': 'تحتاج إلى الكتابة بدلًا من ذلك؟',
+  'Open Write a Question': 'افتح اكتب سؤالًا',
+  'Topic controls': 'عناصر التحكم بالموضوع',
+  'Preview + routing': 'المعاينة + التوجيه',
   'Save to Library': 'احفظ في المكتبة',
   'Saved to Library!': 'تم الحفظ في المكتبة!',
   'Have a photo or PDF instead?': 'هل لديك صورة أو PDF بدلًا من ذلك؟',
@@ -3771,52 +3785,70 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
           </div>
         )}
 
-                {/* ── QUESTION SCAN ── */}
+        {/* ── QUESTION SCAN ── */}
         {active === 'scan' && (
-          <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 900, overflowY: 'auto' }}>
+          <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 1180, overflowY: 'auto' }}>
             <WorkflowCard accent={SPECIAL_VIEW_META.scan.accent} title={SPECIAL_VIEW_META.scan.workflowTitle} steps={SPECIAL_VIEW_META.scan.workflow} />
-            <div style={{ padding: '14px 16px', borderRadius: 12, border: '1px dashed var(--border-subtle)', background: 'var(--bg-2)' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{tr('Upload a screenshot or PDF')}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
-                {tr('Best for photos of worksheets, textbook pages, or exam papers.')}{' '}
-                <button
-                  onClick={() => setActive('write')}
-                  style={{ background: 'none', border: 'none', color: '#38bdf8', fontWeight: 600, fontSize: 12, cursor: 'pointer', padding: 0 }}
-                >
-                  {tr('Prefer to type? Use Write a Question →')}
-                </button>
-              </div>
-              <input type="file" accept="image/*,.pdf" style={{ fontSize: 13 }} onChange={e => { const f = e.target.files?.[0]; if (f) loadQuestionFromFile(f); }} />
-            </div>
-            {scanBusy && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>⏳ {tr('Reading file…')}</div>}
-            {scanError && <div style={{ fontSize: 13, color: '#f87171', padding: '10px 14px', borderRadius: 10, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>⚠️ {scanError}</div>}
-            {scanExtracted && (
+            <div style={{ display: 'grid', gridTemplateColumns: compactMathLayout ? '1fr' : 'minmax(0, 1.05fr) minmax(280px, 0.95fr)', gap: 16 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Extracted question')}</div>
-                <div style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 13, color: 'var(--text-secondary)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.65 }}>{scanExtracted}</div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); inputRef.current?.focus(); }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{tr('Open in solver')}</button>
-                  <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); setTimeout(() => { void solve(scanExtracted, nextTopic); }, 0); }} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{tr('Solve now')}</button>
-                  <button
-                    onClick={() => {
-                      setTypeInput(scanExtracted);
-                      setActive('write');
-                    }}
-                    style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    {tr('Open in writer')}
-                  </button>
-                  <button
-                    onClick={() => void copyToClipboard(scanExtracted, tr('Question copied!'), tr('Could not copy question.'), setScanToast)}
-                    style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    {tr('Copy extracted question')}
-                  </button>
-                  <button onClick={() => setScanExtracted('')} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>{tr('Clear')}</button>
+                <div style={{ padding: '14px 16px', borderRadius: 12, border: '1px dashed var(--border-subtle)', background: 'var(--bg-2)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{tr('Upload a screenshot or PDF')}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                    {tr('Best for photos of worksheets, textbook pages, or exam papers.')}{' '}
+                    <button
+                      onClick={() => setActive('write')}
+                      style={{ background: 'none', border: 'none', color: '#38bdf8', fontWeight: 600, fontSize: 12, cursor: 'pointer', padding: 0 }}
+                    >
+                      {tr('Prefer to type? Use Write a Question →')}
+                    </button>
+                  </div>
+                  <input type="file" accept="image/*,.pdf" style={{ fontSize: 13 }} onChange={e => { const f = e.target.files?.[0]; if (f) loadQuestionFromFile(f); }} />
+                </div>
+                {scanBusy && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>⏳ {tr('Reading file…')}</div>}
+                {scanError && <div style={{ fontSize: 13, color: '#f87171', padding: '10px 14px', borderRadius: 10, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>⚠️ {scanError}</div>}
+                {scanExtracted && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Extracted question')}</div>
+                    <div style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 13, color: 'var(--text-secondary)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.65 }}>{scanExtracted}</div>
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ padding: '14px 16px', borderRadius: 12, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: SPECIAL_VIEW_META.scan.accent, marginBottom: 8 }}>
+                    {tr(scanExtracted ? 'After you scan' : 'Scan helper')}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: scanExtracted ? 12 : 0 }}>
+                    {scanExtracted
+                      ? tr('Move the extracted question straight into the solver, writer, or clipboard.')
+                      : tr('Nothing extracted yet. Upload a worksheet, textbook page, or exam question to fill this panel.')}
+                  </div>
+                  {scanExtracted && (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); inputRef.current?.focus(); }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{tr('Open in solver')}</button>
+                      <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); setTimeout(() => { void solve(scanExtracted, nextTopic); }, 0); }} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{tr('Solve now')}</button>
+                      <button
+                        onClick={() => {
+                          setTypeInput(scanExtracted);
+                          setActive('write');
+                        }}
+                        style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {tr('Open in writer')}
+                      </button>
+                      <button
+                        onClick={() => void copyToClipboard(scanExtracted, tr('Question copied!'), tr('Could not copy question.'), setScanToast)}
+                        style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {tr('Copy extracted question')}
+                      </button>
+                      <button onClick={() => setScanExtracted('')} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>{tr('Clear')}</button>
+                    </div>
+                  )}
                 </div>
                 {scanToast && <span style={{ fontSize: 12, color: scanToast === tr('Question copied!') ? '#22c55e' : '#ef4444', fontWeight: 600 }}>{scanToast}</span>}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -3826,88 +3858,103 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
           const resolvedTopic = writeTopicOverride || solverTopicForQuestion(typeInput);
           const topicColor = TOPICS.find(t => t.id === resolvedTopic)?.color ?? accent;
           return (
-            <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 860, overflowY: 'auto' }}>
+            <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 1180, overflowY: 'auto' }}>
               <WorkflowCard accent={accent} title={SPECIAL_VIEW_META.write.workflowTitle} steps={SPECIAL_VIEW_META.write.workflow} />
-
-              {/* Topic override */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Topic (optional — auto-detected if blank)')}</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  <button
-                    onClick={() => setWriteTopicOverride('')}
-                    style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: `1.5px solid ${writeTopicOverride === '' ? accent : 'var(--border-subtle)'}`, background: writeTopicOverride === '' ? `${accent}18` : 'var(--bg-2)', color: writeTopicOverride === '' ? accent : 'var(--text-secondary)', cursor: 'pointer' }}
-                  >
-                    {tr('Auto')}
-                  </button>
-                  {PRIMARY_TOPICS.map((topic) => (
-                    <button
-                      key={topic.id}
-                      onClick={() => setWriteTopicOverride(topic.id)}
-                      style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: `1.5px solid ${writeTopicOverride === topic.id ? topic.color : 'var(--border-subtle)'}`, background: writeTopicOverride === topic.id ? `${topic.color}18` : 'var(--bg-2)', color: writeTopicOverride === topic.id ? topic.color : 'var(--text-secondary)', cursor: 'pointer' }}
-                    >
-                      {topic.icon} {tr(topic.label)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Symbol keyboard */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Question')}</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '8px 10px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)' }}>
-                  {QUESTION_INPUT_SYMBOLS.map((sym) => (
-                    <button
-                      key={sym.label + sym.insert}
-                      onClick={() => {
-                        const el = document.getElementById('write-question-input') as HTMLTextAreaElement | null;
-                        insertQuestionSymbol(typeInput, sym.insert, el, setTypeInput, sym.cursorOffset ?? 0);
-                      }}
-                      style={{ padding: '4px 9px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace' }}
-                    >
-                      {sym.label}
-                    </button>
-                  ))}
-                </div>
-                <textarea
-                  id="write-question-input"
-                  value={typeInput}
-                  onChange={e => setTypeInput(e.target.value)}
-                  placeholder={`مثال:  solve x^2 - 5x + 6 = 0\n       find the derivative of sin(x^2)\n       integrate 1/(1 + x^2) dx`}
-                  rows={5}
-                  style={{ padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${typeInput.trim() ? `${topicColor}40` : 'var(--border-subtle)'}`, background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 14, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.65, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' as const, transition: 'border-color 0.15s' }}
-                />
-              </div>
-
-              {/* Context / notes */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Context / what you tried')} <span style={{ fontWeight: 400, opacity: 0.6 }}>({tr('optional')})</span></label>
-                <textarea
-                  value={writeContext}
-                  onChange={e => setWriteContext(e.target.value)}
-                  placeholder="مثال: جرّبت التحليل لكنني لم أتمكن من إيجاد الجذور..."
-                  rows={2}
-                  style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 13, lineHeight: 1.6, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' as const }}
-                />
-              </div>
-
-              {/* Live preview */}
-              {typeInput.trim() && (
-                <div style={{ padding: '12px 16px', borderRadius: 12, background: `${topicColor}06`, border: `1px solid ${topicColor}22`, minHeight: 52 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: topicColor, marginBottom: 8, opacity: 0.8 }}>{tr('Preview')}</div>
-                  {shouldRenderMathPreview(typeInput) ? (
-                    <MathRenderer math={typeInput.trim()} display />
-                  ) : (
-                    <MathText>{autoWrapMath(typeInput)}</MathText>
-                  )}
-                  {!writeTopicOverride && (
-                    <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                      {tr('Auto-detected topic:')} <span style={{ color: topicColor, fontWeight: 600 }}>{tr(TOPICS.find((topic) => topic.id === resolvedTopic)?.label ?? resolvedTopic)}</span>
+              <div style={{ display: 'grid', gridTemplateColumns: compactMathLayout ? '1fr' : 'minmax(0, 1.2fr) minmax(280px, 0.8fr)', gap: 16, alignItems: 'start' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div style={{ padding: '14px 16px', borderRadius: 12, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: accent, marginBottom: 8 }}>
+                      {tr('Question builder')}
                     </div>
-                  )}
-                </div>
-              )}
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                      {tr('Build the problem on the left, then use the preview and topic tools on the right.')}
+                    </div>
+                  </div>
 
-              {/* Actions */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Question')}</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '8px 10px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)' }}>
+                      {QUESTION_INPUT_SYMBOLS.map((sym) => (
+                        <button
+                          key={sym.label + sym.insert}
+                          onClick={() => {
+                            const el = document.getElementById('write-question-input') as HTMLTextAreaElement | null;
+                            insertQuestionSymbol(typeInput, sym.insert, el, setTypeInput, sym.cursorOffset ?? 0);
+                          }}
+                          style={{ padding: '4px 9px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace' }}
+                        >
+                          {sym.label}
+                        </button>
+                      ))}
+                    </div>
+                    <textarea
+                      id="write-question-input"
+                      value={typeInput}
+                      onChange={e => setTypeInput(e.target.value)}
+                      placeholder={`مثال:  solve x^2 - 5x + 6 = 0\n       find the derivative of sin(x^2)\n       integrate 1/(1 + x^2) dx`}
+                      rows={7}
+                      style={{ padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${typeInput.trim() ? `${topicColor}40` : 'var(--border-subtle)'}`, background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 14, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.65, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' as const, transition: 'border-color 0.15s', minHeight: 180 }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Context / what you tried')} <span style={{ fontWeight: 400, opacity: 0.6 }}>({tr('optional')})</span></label>
+                    <textarea
+                      value={writeContext}
+                      onChange={e => setWriteContext(e.target.value)}
+                      placeholder="مثال: جرّبت التحليل لكنني لم أتمكن من إيجاد الجذور..."
+                      rows={3}
+                      style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 13, lineHeight: 1.6, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' as const }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>{tr('Topic controls')}</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      <button
+                        onClick={() => setWriteTopicOverride('')}
+                        style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: `1.5px solid ${writeTopicOverride === '' ? accent : 'var(--border-subtle)'}`, background: writeTopicOverride === '' ? `${accent}18` : 'var(--bg-2)', color: writeTopicOverride === '' ? accent : 'var(--text-secondary)', cursor: 'pointer' }}
+                      >
+                        {tr('Auto')}
+                      </button>
+                      {PRIMARY_TOPICS.map((topic) => (
+                        <button
+                          key={topic.id}
+                          onClick={() => setWriteTopicOverride(topic.id)}
+                          style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: `1.5px solid ${writeTopicOverride === topic.id ? topic.color : 'var(--border-subtle)'}`, background: writeTopicOverride === topic.id ? `${topic.color}18` : 'var(--bg-2)', color: writeTopicOverride === topic.id ? topic.color : 'var(--text-secondary)', cursor: 'pointer' }}
+                        >
+                          {topic.icon} {tr(topic.label)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '12px 16px', borderRadius: 12, background: `${topicColor}06`, border: `1px solid ${topicColor}22`, minHeight: 160 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: topicColor, marginBottom: 8, opacity: 0.8 }}>{tr('Preview + routing')}</div>
+                    {typeInput.trim() ? (
+                      <>
+                        {shouldRenderMathPreview(typeInput) ? (
+                          <MathRenderer math={typeInput.trim()} display />
+                        ) : (
+                          <MathText>{autoWrapMath(typeInput)}</MathText>
+                        )}
+                        {!writeTopicOverride && (
+                          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                            {tr('Auto-detected topic:')} <span style={{ color: topicColor, fontWeight: 600 }}>{tr(TOPICS.find((topic) => topic.id === resolvedTopic)?.label ?? resolvedTopic)}</span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                        {tr('Build the problem on the left, then use the preview and topic tools on the right.')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <button
                   disabled={!typeInput.trim()}
@@ -3976,8 +4023,6 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
                   <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>{writeSavedToast}</span>
                 )}
               </div>
-
-              {/* Shortcut to scan */}
               <div style={{ fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
                 {tr('Have a photo or PDF instead?')}{' '}
                 <button onClick={() => setActive('scan')} style={{ background: 'none', border: 'none', color: '#38bdf8', fontWeight: 600, fontSize: 12, cursor: 'pointer', padding: 0 }}>
@@ -3990,14 +4035,30 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
 
         {/* ── VISUAL ANALYZER ── */}
         {active === 'visual' && (
-          <div style={{ flex: 1, overflow: 'auto' }}>
-            <VisualAnalyzer
-              mathMode={true}
-              onSendToSolver={(q) => {
-                setTypeInput(q);
-                setActive('write');
-              }}
-            />
+          <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
+            <div style={{ maxWidth: 1180, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ flex: 1, minWidth: 220 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: SPECIAL_VIEW_META.visual.accent, marginBottom: 6 }}>
+                    {tr('Visual workspace')}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    {tr('Use diagrams and screenshots here, then send the result back into Math when you are ready.')}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setActive('scan')}>{tr('Open Question Scan')}</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setActive('write')}>{tr('Open Write a Question')}</button>
+                </div>
+              </div>
+              <VisualAnalyzer
+                mathMode={true}
+                onSendToSolver={(q) => {
+                  setTypeInput(q);
+                  setActive('write');
+                }}
+              />
+            </div>
           </div>
         )}
 

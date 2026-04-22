@@ -31,7 +31,6 @@ const SUPPORT_NAV_ITEMS = [
   { href: '/library',   key: 'Library',   icon: '🗂️' },
   { href: '/planner',   key: 'Planner',   icon: '📅' },
   { href: '/analytics', key: 'Analytics', icon: '📊' },
-  { href: '/graphing',  key: 'Grapher',   icon: '📈' },
   { href: '/podcast',   key: 'Study Audio', icon: '🎧' },
   { href: '/groups',    key: 'Groups',    icon: '👥' },
   { href: '/sharing',   key: 'Sharing',   icon: '🔗' },
