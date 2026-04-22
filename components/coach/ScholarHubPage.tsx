@@ -44,6 +44,12 @@ const GuidelinesTab = dynamic(
 
 type CoachPanel   = 'review' | 'manage';
 type CoachSection = 'research' | 'write' | 'recovery' | 'guidelines';
+type WritePreloadState = {
+  topic: string;
+  reportType?: 'essay' | 'report' | 'literature_review';
+  wordCount?: number;
+  keyPoints?: string;
+};
 
 const TAB_LABELS: Record<CoachSection, { label: string; icon: string }> = {
   research:   { label: 'Research',    icon: '🔍' },
@@ -82,7 +88,7 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
   /** Topic to pre-load in Research tab (e.g. from Recovery "Reading" button) */
   const [researchPreload, setResearchPreload] = useState<string | undefined>(undefined);
   /** Topic to pre-fill in the Write tab when navigating from Research */
-  const [writePreload,    setWritePreload]    = useState<string | undefined>(undefined);
+  const [writePreload,    setWritePreload]    = useState<WritePreloadState | string | undefined>(undefined);
 
   // ── SRS state ──────────────────────────────────────────────────────────────
 
@@ -367,6 +373,10 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
                 onPreloadConsumed={() => setResearchPreload(undefined)}
                 onNavigateToWrite={() => {
                   setWritePreload(researchResult?.topic);
+                  setActiveSection('write');
+                }}
+                onBuildReport={(seed) => {
+                  setWritePreload(seed);
                   setActiveSection('write');
                 }}
               />

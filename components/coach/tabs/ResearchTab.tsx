@@ -35,6 +35,13 @@ interface RecentTopicEntry {
   sourceCount: number;
 }
 
+type ReportSeed = {
+  topic: string;
+  reportType?: 'essay' | 'report' | 'literature_review';
+  wordCount?: number;
+  keyPoints?: string;
+};
+
 const RECENT_TOPICS_KEY = 'kivora.scholar.recent-topics';
 
 function loadRecentTopics(): RecentTopicEntry[] {
@@ -132,6 +139,17 @@ const LOCAL_AR: Record<string, string> = {
   'Word': 'Word',
   'Open Writing Studio with this topic pre-filled': 'افتح Writing Studio مع تعبئة هذا الموضوع مسبقًا',
   'Write report': 'اكتب تقريرًا',
+  'Report builder': 'منشئ التقرير',
+  'Turn this research into a draft brief before you open Writing Studio.': 'حوّل هذا البحث إلى موجز مسودة قبل فتح استوديو الكتابة.',
+  'Essay': 'مقال',
+  'Report': 'تقرير',
+  'Lit Review': 'مراجعة أدبية',
+  'Report type': 'نوع التقرير',
+  'Target words': 'عدد الكلمات المستهدف',
+  'Build from key ideas': 'ابنِ من الأفكار الرئيسية',
+  'Open builder': 'افتح المنشئ',
+  'Build in Writing Studio': 'ابنِ في استوديو الكتابة',
+  'Report builder ready in Writing Studio': 'أصبح منشئ التقرير جاهزًا في استوديو الكتابة',
   'Overview': 'نظرة عامة',
   'Ranking mode': 'نمط الترتيب',
   'Key takeaways': 'أهم الخلاصات',
@@ -212,6 +230,7 @@ interface Props {
   onPreloadConsumed?: () => void;
   /** Called when the user clicks "Write report →" to switch to Writing Studio */
   onNavigateToWrite?: () => void;
+  onBuildReport?: (seed: ReportSeed) => void;
 }
 
 export function ResearchTab({
@@ -220,6 +239,7 @@ export function ResearchTab({
   preloadTopic,
   onPreloadConsumed,
   onNavigateToWrite,
+  onBuildReport,
 }: Props) {
   const { toast }       = useToast();
   const { t } = useI18n(LOCAL_AR);
@@ -251,6 +271,9 @@ export function ResearchTab({
   const [savingAllSources,   setSavingAllSources]   = useState(false);
   const [recentTopics,       setRecentTopics]       = useState<RecentTopicEntry[]>([]);
   const [referenceQuery,     setReferenceQuery]     = useState('');
+  const [reportType,         setReportType]         = useState<'essay' | 'report' | 'literature_review'>('report');
+  const [reportWordCount,    setReportWordCount]    = useState(1200);
+  const [reportKeyPoints,    setReportKeyPoints]    = useState('');
 
   // ── Reference Library state ────────────────────────────────────────────────
   const [savedSourcesList,  setSavedSourcesList]  = useState<SavedSourceRow[]>([]);
@@ -259,6 +282,11 @@ export function ResearchTab({
   const [bibCopiedId,       setBibCopiedId]       = useState<string | null>(null);
   const [refExportFmt,      setRefExportFmt]      = useState<'bibtex' | 'apa'>('bibtex');
   const [noteDrafts,        setNoteDrafts]        = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!researchResult) return;
+    setReportKeyPoints(researchResult.keyIdeas.slice(0, 4).join('\n'));
+  }, [researchResult?.topic, researchResult?.keyIdeas]);
   const [savingNoteId,      setSavingNoteId]      = useState<string | null>(null);
 
   // ── DOI / arXiv resolver state ────────────────────────────────────────────
@@ -521,6 +549,17 @@ export function ResearchTab({
     } finally {
       setSavingAllSources(false);
     }
+  }
+
+  function handleBuildReport() {
+    if (!researchResult || !onBuildReport) return;
+    onBuildReport({
+      topic: researchResult.topic,
+      reportType,
+      wordCount: reportWordCount,
+      keyPoints: reportKeyPoints.trim(),
+    });
+    toast(t('Report builder ready in Writing Studio'), 'success');
   }
 
   function exportAllBibTeX() {
@@ -1081,6 +1120,84 @@ export function ResearchTab({
                 <h3>{t('Overview')}</h3>
               </div>
               <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.7 }}>{researchResult.overview}</p>
+            </section>
+
+            <section className={styles.plxSection}>
+              <div className={styles.plxSectionHead}>
+                <h3>{t('Report builder')}</h3>
+                <span>{t('Turn this research into a draft brief before you open Writing Studio.')}</span>
+              </div>
+              <div className={styles.reportControls} style={{ padding: 0, border: 'none', background: 'transparent' }}>
+                <div className={styles.buildHead}>
+                  <div>
+                    <strong>{researchResult.topic}</strong>
+                    <p>{t('Turn this research into a draft brief before you open Writing Studio.')}</p>
+                  </div>
+                  <span className={styles.buildHint}>{researchResult.sources.length} {t('sources')}</span>
+                </div>
+                <div className={styles.reportMeta}>
+                  <div className={styles.controlGroup}>
+                    <label className={styles.controlLabel}>{t('Report type')}</label>
+                    <div className={styles.segControl}>
+                      {([
+                        ['essay', t('Essay')],
+                        ['report', t('Report')],
+                        ['literature_review', t('Lit Review')],
+                      ] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          className={`${styles.segBtn} ${reportType === value ? styles.segBtnActive : ''}`}
+                          onClick={() => setReportType(value)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className={styles.controlGroup}>
+                    <label className={styles.controlLabel}>{t('Target words')}</label>
+                    <input
+                      type="number"
+                      min={300}
+                      max={5000}
+                      step={100}
+                      value={reportWordCount}
+                      onChange={(event) => setReportWordCount(Math.max(300, Math.min(5000, Number(event.target.value) || 1200)))}
+                      className={styles.textInput}
+                    />
+                  </div>
+                </div>
+                <div className={styles.controlGroup}>
+                  <label className={styles.controlLabel}>{t('Build from key ideas')}</label>
+                  <textarea
+                    value={reportKeyPoints}
+                    onChange={(event) => setReportKeyPoints(event.target.value)}
+                    rows={4}
+                    className={styles.textArea}
+                  />
+                </div>
+                <div className={styles.buildActionRow} style={{ marginLeft: 0 }}>
+                  {onNavigateToWrite && (
+                    <button
+                      type="button"
+                      className={styles.plxAdvancedToggle}
+                      onClick={onNavigateToWrite}
+                    >
+                      {t('Open builder')}
+                    </button>
+                  )}
+                  {onBuildReport && (
+                    <button
+                      type="button"
+                      className={`${styles.plxAdvancedToggle} ${styles.plxPrimaryGhost}`}
+                      onClick={handleBuildReport}
+                    >
+                      {t('Build in Writing Studio')}
+                    </button>
+                  )}
+                </div>
+              </div>
             </section>
 
             {researchResult.keyIdeas.length > 0 && (

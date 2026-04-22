@@ -225,7 +225,12 @@ interface Props {
   researchResult: TopicResearchResult | null;
   onNavigateToResearch: (topic: string) => void;
   /** When set, pre-fills the report topic and auto-switches to Build Report panel. */
-  preloadTopic?: string;
+  preloadTopic?: string | {
+    topic: string;
+    reportType?: ReportType;
+    wordCount?: number;
+    keyPoints?: string;
+  };
   onPreloadConsumed?: () => void;
 }
 
@@ -390,7 +395,17 @@ export function AssignmentWriterTab({
   // ── Pre-load topic from Research tab ─────────────────────────────────────
   useEffect(() => {
     if (!preloadTopic) return;
-    setReportTopic(preloadTopic);
+    if (typeof preloadTopic === 'string') {
+      setReportTopic(preloadTopic);
+    } else {
+      setReportTopic(preloadTopic.topic);
+      if (preloadTopic.reportType) setReportType(preloadTopic.reportType);
+      if (typeof preloadTopic.wordCount === 'number') setReportWordCount(preloadTopic.wordCount);
+      if (typeof preloadTopic.keyPoints === 'string') {
+        setReportKeyPoints(preloadTopic.keyPoints);
+        setShowKeyPoints(Boolean(preloadTopic.keyPoints.trim()));
+      }
+    }
     setInnerTab('build');
     onPreloadConsumed?.();
   // eslint-disable-next-line react-hooks/exhaustive-deps
