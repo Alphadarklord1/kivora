@@ -1257,14 +1257,6 @@ export function WorkspacePanel({
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentSourceLabel}</span>
             </span>
           )}
-          <button
-            className="btn btn-sm btn-ghost"
-            onClick={() => router.push('/library')}
-            title={t('Open review sets and saved outputs')}
-            style={{ fontSize: 12, padding: '3px 8px' }}
-          >
-            📇 {t('Review sets')} {srsDecks.length ? `(${srsDecks.length})` : ''}
-          </button>
           {onToggleReports && (
             <button
               className={`btn btn-sm ${reportsOpen ? 'btn-accent' : 'btn-ghost'}`}
@@ -1304,7 +1296,7 @@ export function WorkspacePanel({
                   setOutput('');
                 }}
               >
-                {t('Use in Tools')}
+                {t('Use')}
               </button>
             )}
             {scholarCtx.reviewSetContent && (
@@ -1321,7 +1313,7 @@ export function WorkspacePanel({
                   setRequestedReviewPhase(null);
                 }}
               >
-                {t('Open Flashcards')}
+                {t('Flashcards')}
               </button>
             )}
             <button
@@ -1413,17 +1405,21 @@ export function WorkspacePanel({
                     </div>
                   </div>
 
-                  <div className="workspace-focus-strip" style={{ margin: '10px 10px 0', flexShrink: 0 }}>
-                    <div className="workspace-focus-card">
-                      <span className="workspace-focus-eyebrow">{t('Files')}</span>
-                      <strong>{files.length ? t(files.length === 1 ? '{count} study file' : '{count} study files', { count: files.length }) : t('Build your study source library')}</strong>
-                      <span>{viewFile ? t('Previewing {name}', { name: viewFile.name }) : selFile ? t('Current source: {name}', { name: selFile.name }) : t('Upload once, then send a file into Tools, Notes, Chat, or Math.')}</span>
-                    </div>
-                    <div className="workspace-focus-card">
-                      <span className="workspace-focus-eyebrow">{t('Best next step')}</span>
-                      <strong>{selFile ? t('Turn this file into notes or questions') : t('Open a file and route it anywhere')}</strong>
-                      <span>{selFile ? t('Use the quick actions on the file card or preview to move faster.') : t('Every file card now has one-click actions for Generate, Chat, Notes, and Math.')}</span>
-                    </div>
+                  <div style={{
+                    margin: '10px 10px 0',
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface)',
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--text-2)',
+                    flexShrink: 0,
+                  }}>
+                    {viewFile
+                      ? t('Previewing {name}', { name: viewFile.name })
+                      : selFile
+                        ? t('Current source: {name}', { name: selFile.name })
+                        : t('Upload a file, then open it when you want to send it into Tools, Notes, Chat, or Math.')}
                   </div>
 
                   {/* File list */}
@@ -1541,23 +1537,18 @@ export function WorkspacePanel({
               </span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
-              <div className="workspace-focus-card">
-                <span className="workspace-focus-eyebrow">{t('Tools')}</span>
-                <strong>{t(currentGen.label)}</strong>
-                <span>
-                  {selFile
-                    ? t('Working from {name}{suffix}.', { name: selFile.name, suffix: extractedText ? ` · ${wordCount(extractedText).toLocaleString()} ${t('words loaded')}` : '' })
-                    : pasteMode
-                      ? t('Paste text directly, then generate notes, summaries, quizzes, or exam prep.')
-                      : t('Pick a file from Workspace or switch to Paste text to start generating study material.')}
-                </span>
-              </div>
-              <div className="workspace-focus-card">
-                <span className="workspace-focus-eyebrow">{t('Best fit')}</span>
-                <strong>{genMode === 'notes' ? t('Turn sources into notes') : genMode === 'exam' ? t('Simulate exam prep') : genMode === 'practice' ? t('Build guided practice') : t('Create a quick study output')}</strong>
-                <span>{pasteMode ? t('Text mode stays fast for quick experiments.') : t('File mode is best when you want grounded output from a real document.')}</span>
-              </div>
+            <div style={{
+              padding: '8px 14px',
+              borderBottom: '1px solid var(--border)',
+              fontSize: 'var(--text-xs)',
+              color: 'var(--text-2)',
+              background: 'var(--surface)',
+              flexShrink: 0,
+            }}>
+              <strong style={{ color: 'var(--text)' }}>{t(currentGen.label)}.</strong>{' '}
+              {pasteMode
+                ? t('Paste mode stays fast when you want to try something quickly.')
+                : t('File mode is best when you want output grounded in a real document.')}
             </div>
 
             {/* Tool mode pills — grouped */}
@@ -1852,13 +1843,25 @@ export function WorkspacePanel({
         {/* ─────────────────── FLASHCARDS ────────────── */}
         {mainTab === 'flashcards' && (
           <div style={{ display: 'flex', flex: 1, flexDirection: 'column', overflow: 'hidden' }}>
-            <div className="workspace-focus-strip" style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-              <div className="workspace-focus-card">
-                <span className="workspace-focus-eyebrow">{t('Flashcards')}</span>
-                <strong>{activeReviewSet ? activeReviewSet.name : t('Review sets live here')}</strong>
-                <span>{activeReviewSet ? t('{due} due now · {count} cards in this set', { due: activeReviewDueCount, count: activeReviewSet.cards.length }) : t('Import, review, edit, and export your sets from one place in Workspace.')}</span>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+              padding: '10px 14px',
+              borderBottom: '1px solid var(--border)',
+              background: 'var(--surface)',
+              flexShrink: 0,
+            }}>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)', flex: 1, minWidth: 180 }}>
+                <strong style={{ color: 'var(--text)' }}>
+                  {activeReviewSet ? activeReviewSet.name : t('Review sets live here')}
+                </strong>{' '}
+                {activeReviewSet
+                  ? t('{due} due now · {count} cards in this set', { due: activeReviewDueCount, count: activeReviewSet.cards.length })
+                  : t('Import, review, edit, and export your sets from one place in Workspace.')}
               </div>
-              <div className="workspace-focus-card workspace-focus-card--actions">
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button className="btn btn-secondary btn-sm" onClick={() => setRequestedReviewPhase('review')}>{t('Review now')}</button>
                 <button className="btn btn-ghost btn-sm" onClick={() => setRequestedReviewPhase('import')}>{t('Import set')}</button>
                 <button className="btn btn-ghost btn-sm" onClick={() => router.push('/library')}>{t('Open Library')}</button>

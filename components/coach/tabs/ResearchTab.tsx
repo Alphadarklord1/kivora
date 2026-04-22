@@ -967,7 +967,6 @@ export function ResearchTab({
       {/* ── Hero empty state ─────────────────────────────────────────── */}
       {!researchResult && !researchLoading && (
         <div className={styles.plxHero}>
-          <div className={styles.plxHeroIcon}>🔍</div>
           <h2>{t('Search any study topic')}</h2>
           <p>{t('Scholar Hub compares multiple sources, ranks stronger ones higher, and keeps every claim grounded with visible citations.')}</p>
           <div className={styles.plxSuggestions}>
@@ -1040,6 +1039,9 @@ export function ResearchTab({
                 <p className={styles.plxAnswerMeta}>
                   {t('Synthesized from {sources} ranked sources with {citations} visible citations', { sources: researchResult.sources.length, citations: researchResult.citations.length })} · {researchResult.provider}
                 </p>
+                <p className={styles.plxAnswerMeta} style={{ marginTop: '0.25rem' }}>
+                  {researchResult.rankingSummary}
+                </p>
              </div>
               <div className={styles.plxAnswerActions}>
                 {savedLibraryId ? (
@@ -1074,16 +1076,12 @@ export function ResearchTab({
               </div>
             </div>
 
-            <div className={styles.plxSignalRow}>
-              <div className={styles.plxSignalCard}>
-                <span className={styles.plxSignalLabel}>{t('Overview')}</span>
-                <p>{researchResult.overview}</p>
+            <section className={styles.plxSection}>
+              <div className={styles.plxSectionHead}>
+                <h3>{t('Overview')}</h3>
               </div>
-              <div className={styles.plxSignalCard}>
-                <span className={styles.plxSignalLabel}>{t('Ranking mode')}</span>
-                <p>{researchResult.rankingSummary}</p>
-              </div>
-            </div>
+              <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.7 }}>{researchResult.overview}</p>
+            </section>
 
             {researchResult.keyIdeas.length > 0 && (
               <section className={styles.plxSection}>

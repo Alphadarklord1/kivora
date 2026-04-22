@@ -945,35 +945,35 @@ function WorkflowCard({ accent, title, steps }: { accent: string; title: string;
   return (
     <div
       style={{
-        padding: '12px 14px',
-        borderRadius: 12,
-        border: `1px solid ${accent}30`,
-        background: `${accent}10`,
+        padding: '9px 12px',
+        borderRadius: 10,
+        border: `1px solid ${accent}26`,
+        background: 'var(--bg-2)',
         display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
+        alignItems: 'center',
+        gap: 8,
+        flexWrap: 'wrap',
       }}
     >
-      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: accent }}>
+      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: accent, flexShrink: 0 }}>
         {tr(title)}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {steps.map((step, index) => (
           <div
             key={`${step.label}-${index}`}
             style={{
-              padding: '10px 12px',
-              borderRadius: 10,
+              padding: '5px 9px',
+              borderRadius: 999,
               background: 'var(--bg-elevated)',
               border: '1px solid var(--border-subtle)',
+              fontSize: 11,
+              color: 'var(--text-secondary)',
             }}
+            title={tr(step.detail)}
           >
-            <div style={{ fontSize: 11, color: accent, fontWeight: 700, marginBottom: 4 }}>
-              {index + 1}. {tr(step.label)}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-              {tr(step.detail)}
-            </div>
+            <span style={{ color: accent, fontWeight: 700, marginRight: 4 }}>{index + 1}.</span>
+            {tr(step.label)}
           </div>
         ))}
       </div>
@@ -2837,19 +2837,17 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
 
         {/* Header */}
         <div style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', flexShrink: 0 }}>
-          <div style={{ padding: '12px 24px', display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ minWidth: 0, display: 'grid', gap: 3, flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontStyle: 'normal' }}>{currentTopic?.icon ?? specialMeta?.icon ?? '∑'}</span>
                 <span>{activeTitle}</span>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, maxWidth: 760 }}>
-                {contextName
-                  ? tr('Connected to {name}. You can keep this file in context while solving, graphing, or exploring formulas.', { name: contextName })
-                  : currentTopic
-                    ? tr('Use structured forms and quick examples without leaving the current topic.')
-                    : tr('Switch between graphing, scanning, formulas, units, visual analysis, and MATLAB-style work from the same space.')}
-              </div>
+              {contextName && (
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45, maxWidth: 760 }}>
+                  {tr('Connected to {name}. You can keep this file in context while solving, graphing, or exploring formulas.', { name: contextName })}
+                </div>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
               {compactMathLayout && (
