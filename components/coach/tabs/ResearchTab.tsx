@@ -970,20 +970,6 @@ export function ResearchTab({
           <div className={styles.plxHeroIcon}>🔍</div>
           <h2>{t('Search any study topic')}</h2>
           <p>{t('Scholar Hub compares multiple sources, ranks stronger ones higher, and keeps every claim grounded with visible citations.')}</p>
-          <div className={styles.plxHeroStats}>
-            <div className={styles.plxHeroStat}>
-              <span className={styles.plxHeroStatLabel}>{t('Research workspace')}</span>
-              <strong>{t('Topic-led research')}</strong>
-            </div>
-            <div className={styles.plxHeroStat}>
-              <span className={styles.plxHeroStatLabel}>{t('Answer')}</span>
-              <strong>{t('Evidence-first synthesis')}</strong>
-            </div>
-            <div className={styles.plxHeroStat}>
-              <span className={styles.plxHeroStatLabel}>{t('Ranking mode')}</span>
-              <strong>{t('Auto / manual / hybrid')}</strong>
-            </div>
-          </div>
           <div className={styles.plxSuggestions}>
             {SUGGESTED_TOPICS.map((topicLabel) => (
               <button
@@ -1054,12 +1040,7 @@ export function ResearchTab({
                 <p className={styles.plxAnswerMeta}>
                   {t('Synthesized from {sources} ranked sources with {citations} visible citations', { sources: researchResult.sources.length, citations: researchResult.citations.length })} · {researchResult.provider}
                 </p>
-                <div className={styles.plxMiniMeta}>
-                  <span className={styles.plxMiniMetaBadge}>{t('Provider: {provider}', { provider: researchResult.provider })}</span>
-                  <span className={styles.plxMiniMetaBadge}>{t('Ranking: {ranking}', { ranking: researchResult.rankingSummary })}</span>
-                  <span className={styles.plxMiniMetaBadge}>{researchResult.citations.length} {t('citations')}</span>
-                </div>
-              </div>
+             </div>
               <div className={styles.plxAnswerActions}>
                 {savedLibraryId ? (
                   <a href="/library" className={styles.plxHeaderLink}>Saved</a>

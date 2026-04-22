@@ -1228,13 +1228,15 @@ export function WorkspacePanel({
 
       {/* Header */}
       <div className="panel-header" style={{ gap: 10, flexShrink: 0 }}>
-        <span className="panel-title">
-          {breadcrumb
-            ? <>{selectedFolderName}<span style={{ color: 'var(--text-3)' }}>{selectedTopicName ? ` › ${selectedTopicName}` : ''}</span></>
-            : t('Kivora Workspace')}
+        <div style={{ display: 'grid', gap: 2, minWidth: 0 }}>
+          <span className="panel-title">
+            {breadcrumb
+              ? <>{selectedFolderName}<span style={{ color: 'var(--text-3)' }}>{selectedTopicName ? ` › ${selectedTopicName}` : ''}</span></>
+              : t('Kivora Workspace')}
           </span>
-        {!selectedFolder && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', fontWeight: 400 }}>{t('← Select a folder to get started')}</span>}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+          {!selectedFolder && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', fontWeight: 400 }}>{t('← Select a folder to get started')}</span>}
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {currentSourceLabel && (
             <span
               style={{
@@ -1255,12 +1257,6 @@ export function WorkspacePanel({
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentSourceLabel}</span>
             </span>
           )}
-          {streak > 0 && (
-            <span title={t('{count}-day study streak', { count: streak })} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 'var(--text-xs)', color: 'var(--text-2)', background: 'var(--warning-bg)', border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)', borderRadius: 20, padding: '2px 8px', cursor: 'default' }}>
-              🔥 {t('{count}d', { count: streak })}
-            </span>
-          )}
-          {files.length > 0 && <span className="badge badge-accent">{t(files.length === 1 ? '{count} file' : '{count} files', { count: files.length })}</span>}
           <button
             className="btn btn-sm btn-ghost"
             onClick={() => router.push('/library')}
@@ -1292,7 +1288,7 @@ export function WorkspacePanel({
         }}>
           <span style={{ color: 'var(--text-2)' }}>
             {scholarCtx.kind === 'research' ? '🔍' : '📄'}{' '}
-            <strong style={{ color: 'var(--text)' }}>{t('Scholar Hub')}:</strong>{' '}
+            <strong style={{ color: 'var(--text)' }}>{t('From Scholar Hub')}:</strong>{' '}
             <span style={{ color: 'var(--text-2)' }}>{scholarCtx.label.slice(0, 60)}{scholarCtx.label.length > 60 ? '…' : ''}</span>
           </span>
           <div className="workspace-scholar-actions" style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
@@ -1328,13 +1324,6 @@ export function WorkspacePanel({
                 {t('Build review set ↓')}
               </button>
             )}
-            <a
-              href="/coach"
-              className="btn btn-sm btn-ghost"
-              style={{ fontSize: 11, padding: '2px 8px', textDecoration: 'none' }}
-            >
-              {t('Open Scholar Hub ↗')}
-            </a>
             <button
               className="btn btn-sm btn-ghost"
               style={{ fontSize: 11, padding: '2px 8px', opacity: 0.7 }}
@@ -1598,34 +1587,18 @@ export function WorkspacePanel({
         {mainTab === 'generate' && (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
 
-            {/* Analytics strip */}
-            {(streak > 0 || weekScore !== null) && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '5px 14px',
-                background: 'color-mix(in srgb, var(--accent,#6366f1) 6%, var(--surface))',
-                borderBottom: '1px solid var(--border)', flexShrink: 0, flexWrap: 'wrap',
-              }}>
-                {streak > 0 && (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                    🔥 <strong>{streak}</strong>{t('d streak')}
-                  </span>
-                )}
-                {weekScore !== null && (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                    📊 <strong>{weekScore}%</strong> {t('avg · {count} quizzes this week', { count: weekQuizzes })}
-                  </span>
-                )}
-                <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ fontSize: 10, padding: '1px 7px', marginLeft: 'auto', opacity: 0.7 }}
-                  onClick={() => setMainTab('analytics')}
-                >
-                  {t('Full analytics →')}
-                </button>
-              </div>
-            )}
+            <div className="workspace-generate-toolbar workspace-generate-toolbar--summary" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', flexShrink: 0 }}>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)' }}>
+                {selFile
+                  ? t('Working from {name}{suffix}.', { name: selFile.name, suffix: extractedText ? ` · ${wordCount(extractedText).toLocaleString()} ${t('words loaded')}` : '' })
+                  : pasteMode
+                    ? t('Paste text directly, then generate notes, summaries, quizzes, or exam prep.')
+                    : t('Pick a file from Workspace or switch to Paste text to start generating study material.')}
+              </span>
+              <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{t(currentGen.label)}</span>
+            </div>
 
-            <div className="workspace-focus-strip" style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
               <div className="workspace-focus-card">
                 <span className="workspace-focus-eyebrow">{t('Tools')}</span>
                 <strong>{t(currentGen.label)}</strong>

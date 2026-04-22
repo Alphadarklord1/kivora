@@ -2836,100 +2836,47 @@ export function MathSolverPage({ defaultPanel }: { defaultPanel?: string } = {})
       <div style={S.main}>
 
         {/* Header */}
-        <div style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', flexShrink: 0, position: 'relative' }}>
-          {/* Accent color strip at the very top */}
-          <div style={{ height: 3, background: `linear-gradient(90deg, ${currentAccent}, ${currentAccent}80)`, position: 'absolute', top: 0, left: 0, right: 0, borderRadius: '0 0 0 0' }} />
-          <div style={{ padding: '14px 24px 12px', display: 'flex', alignItems: 'center', gap: 14, paddingTop: 17 }}>
-            {/* Category icon with colored circle backdrop */}
-            <div style={{
-              width: 38, height: 38, borderRadius: 10, flexShrink: 0,
-              background: `${currentAccent}18`,
-              border: `1.5px solid ${currentAccent}30`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18, fontStyle: 'normal',
-            }}>
-              {currentTopic?.icon ?? specialMeta?.icon ?? '∑'}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                {activeTitle}
-                {currentTopic && (
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: `${currentAccent}15`, color: currentAccent, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
-                    {tr('Solver')}
-                  </span>
-                )}
+        <div style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', flexShrink: 0 }}>
+          <div style={{ padding: '12px 24px', display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 0, display: 'grid', gap: 3, flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontStyle: 'normal' }}>{currentTopic?.icon ?? specialMeta?.icon ?? '∑'}</span>
+                <span>{activeTitle}</span>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {activeSubtitle}
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, maxWidth: 760 }}>
+                {contextName
+                  ? tr('Connected to {name}. You can keep this file in context while solving, graphing, or exploring formulas.', { name: contextName })
+                  : currentTopic
+                    ? tr('Use structured forms and quick examples without leaving the current topic.')
+                    : tr('Switch between graphing, scanning, formulas, units, visual analysis, and MATLAB-style work from the same space.')}
               </div>
             </div>
-            {history.length > 0 && (
-              <button onClick={() => setShowHistory(h => !h)}
-                style={{ marginLeft: 'auto', padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${showHistory ? currentAccent : 'var(--border-subtle)'}`, background: showHistory ? `${currentAccent}12` : 'var(--bg-elevated)', color: showHistory ? currentAccent : 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s', flexShrink: 0 }}>
-                🕐 {tr('History')}
-                <span style={{ background: showHistory ? currentAccent : 'var(--border-mid, var(--border-subtle))', color: showHistory ? '#fff' : 'var(--text-muted)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, minWidth: 16, textAlign: 'center' }}>{history.length}</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 12,
-            flexWrap: 'wrap',
-            padding: '10px 24px',
-            borderBottom: '1px solid var(--border-subtle)',
-            background: 'linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 75%, transparent), var(--bg-base))',
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: 'grid', gap: 3, minWidth: 0 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-              {tr('Math focus')}
-            </span>
-            <strong style={{ color: 'var(--text-primary)', fontSize: 14 }}>
-              {currentTopic ? `${tr(currentTopic.label)} ${tr('problem-solving')}` : `${tr(specialMeta?.title ?? 'Math tools')} ${tr('workspace')}`}
-            </strong>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, maxWidth: 760 }}>
-              {contextName
-                ? tr('Connected to {name}. You can keep this file in context while solving, graphing, or exploring formulas.', { name: contextName })
-                : currentTopic
-                  ? tr('Use structured forms and quick examples without leaving the current topic.')
-                  : tr('Switch between graphing, scanning, formulas, units, visual analysis, and MATLAB-style work from the same space.')}
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            {compactMathLayout && (
-              <button
-                onClick={() => setSidebarOpen((value) => !value)}
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: 999,
-                  border: '1px solid var(--border-subtle)',
-                  background: 'var(--bg-elevated)',
-                  color: 'var(--text-secondary)',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                {sidebarOpen ? tr('Hide topics') : tr('Show topics')}
-              </button>
-            )}
-            <span style={{ padding: '4px 10px', borderRadius: 999, background: `${currentAccent}14`, color: currentAccent, fontSize: 11, fontWeight: 700 }}>
-              {currentTopic ? tr('Solver mode') : tr(specialMeta?.title ?? 'Tool mode')}
-            </span>
-            <span style={{ padding: '4px 10px', borderRadius: 999, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}>
-              {history.length} {tr('recent problems')}
-            </span>
-            {currentCategoryConfig && (
-              <span style={{ padding: '4px 10px', borderRadius: 999, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}>
-                {currentCategoryConfig.supportedActions.length} {tr('supported actions')}
-              </span>
-            )}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              {compactMathLayout && (
+                <button
+                  onClick={() => setSidebarOpen((value) => !value)}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-elevated)',
+                    color: 'var(--text-secondary)',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {sidebarOpen ? tr('Hide topics') : tr('Show topics')}
+                </button>
+              )}
+              {history.length > 0 && (
+                <button onClick={() => setShowHistory(h => !h)}
+                  style={{ padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${showHistory ? currentAccent : 'var(--border-subtle)'}`, background: showHistory ? `${currentAccent}12` : 'var(--bg-elevated)', color: showHistory ? currentAccent : 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s', flexShrink: 0 }}>
+                  🕐 {tr('History')}
+                  <span style={{ background: showHistory ? currentAccent : 'var(--border-mid, var(--border-subtle))', color: showHistory ? '#fff' : 'var(--text-muted)', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, minWidth: 16, textAlign: 'center' }}>{history.length}</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
