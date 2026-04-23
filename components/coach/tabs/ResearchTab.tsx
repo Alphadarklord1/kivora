@@ -1127,18 +1127,18 @@ export function ResearchTab({
                 <h3>{t('Report builder')}</h3>
                 <span>{t('Turn this research into a draft brief before you open Writing Studio.')}</span>
               </div>
-              <div className={styles.reportControls} style={{ padding: 0, border: 'none', background: 'transparent' }}>
-                <div className={styles.buildHead}>
+              <div className={styles.plxReportBuilder}>
+                <div className={styles.plxReportIntro}>
                   <div>
                     <strong>{researchResult.topic}</strong>
                     <p>{t('Turn this research into a draft brief before you open Writing Studio.')}</p>
                   </div>
-                  <span className={styles.buildHint}>{researchResult.sources.length} {t('sources')}</span>
+                  <span className={styles.plxReportSourcePill}>{researchResult.sources.length} {t('sources')}</span>
                 </div>
-                <div className={styles.reportMeta}>
-                  <div className={styles.controlGroup}>
-                    <label className={styles.controlLabel}>{t('Report type')}</label>
-                    <div className={styles.segControl}>
+                <div className={styles.plxReportGrid}>
+                  <div className={styles.plxReportField}>
+                    <label className={styles.plxReportLabel}>{t('Report type')}</label>
+                    <div className={styles.plxReportSeg}>
                       {([
                         ['essay', t('Essay')],
                         ['report', t('Report')],
@@ -1147,7 +1147,7 @@ export function ResearchTab({
                         <button
                           key={value}
                           type="button"
-                          className={`${styles.segBtn} ${reportType === value ? styles.segBtnActive : ''}`}
+                          className={`${styles.plxReportSegBtn} ${reportType === value ? styles.plxReportSegBtnActive : ''}`}
                           onClick={() => setReportType(value)}
                         >
                           {label}
@@ -1155,8 +1155,8 @@ export function ResearchTab({
                       ))}
                     </div>
                   </div>
-                  <div className={styles.controlGroup}>
-                    <label className={styles.controlLabel}>{t('Target words')}</label>
+                  <div className={styles.plxReportField}>
+                    <label className={styles.plxReportLabel}>{t('Target words')}</label>
                     <input
                       type="number"
                       min={300}
@@ -1164,20 +1164,20 @@ export function ResearchTab({
                       step={100}
                       value={reportWordCount}
                       onChange={(event) => setReportWordCount(Math.max(300, Math.min(5000, Number(event.target.value) || 1200)))}
-                      className={styles.textInput}
+                      className={styles.plxReportInput}
                     />
                   </div>
                 </div>
-                <div className={styles.controlGroup}>
-                  <label className={styles.controlLabel}>{t('Build from key ideas')}</label>
+                <div className={styles.plxReportField}>
+                  <label className={styles.plxReportLabel}>{t('Build from key ideas')}</label>
                   <textarea
                     value={reportKeyPoints}
                     onChange={(event) => setReportKeyPoints(event.target.value)}
                     rows={4}
-                    className={styles.textArea}
+                    className={styles.plxReportTextarea}
                   />
                 </div>
-                <div className={styles.buildActionRow} style={{ marginLeft: 0 }}>
+                <div className={styles.plxReportActions}>
                   {onNavigateToWrite && (
                     <button
                       type="button"
