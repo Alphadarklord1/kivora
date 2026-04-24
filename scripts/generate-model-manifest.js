@@ -7,7 +7,9 @@ const crypto = require('crypto');
 const PROJECT_ROOT = path.join(__dirname, '..');
 const DEFAULT_OUTPUT = path.join(PROJECT_ROOT, 'electron', 'runtime', 'model-manifest.json');
 const DEFAULT_MODELS_DIR = path.join(PROJECT_ROOT, 'electron', 'runtime', 'models');
-const DEFAULT_REPO = process.env.STUDYPILOT_MODEL_REPO || 'Alphadarklord1/kivora';
+const DEFAULT_REPO = process.env.KIVORA_MODEL_REPO || 'Alphadarklord1/kivora';
+const DEFAULT_PRO_MODEL_URL =
+  'https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf';
 
 const MODEL_DEFS = [
   { key: 'mini', modelId: 'Qwen2.5-1.5B-Instruct', quantization: 'Q4_K_M', file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', minRamGb: 8 },
@@ -43,10 +45,10 @@ function sha256File(filePath) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const tag = normalizeTag(args.tag || process.env.STUDYPILOT_RELEASE_TAG);
-  const repo = (args.repo || process.env.STUDYPILOT_RELEASE_REPO || DEFAULT_REPO).trim();
+  const tag = normalizeTag(args.tag || process.env.KIVORA_RELEASE_TAG);
+  const repo = (args.repo || process.env.KIVORA_RELEASE_REPO || DEFAULT_REPO).trim();
   const outPath = path.resolve(args.out || DEFAULT_OUTPUT);
-  const modelsDir = path.resolve(args['models-dir'] || process.env.STUDYPILOT_MODELS_DIR || DEFAULT_MODELS_DIR);
+  const modelsDir = path.resolve(args['models-dir'] || process.env.KIVORA_MODELS_DIR || DEFAULT_MODELS_DIR);
 
   if (!repo.includes('/')) {
     throw new Error(`Invalid repo "${repo}". Use owner/name format.`);
@@ -68,6 +70,9 @@ async function main() {
       throw new Error(`Invalid sha256 for ${def.file}`);
     }
 
+    const releaseUrl = `https://github.com/${repo}/releases/download/${tag}/${def.file}`;
+    const externalProUrl = String(args['pro-url'] || process.env.KIVORA_PRO_MODEL_URL || DEFAULT_PRO_MODEL_URL).trim();
+
     models.push({
       key: def.key,
       modelId: def.modelId,
@@ -76,7 +81,7 @@ async function main() {
       sizeBytes: stat.size,
       sha256,
       minRamGb: def.minRamGb,
-      url: `https://github.com/${repo}/releases/download/${tag}/${def.file}`,
+      url: def.key === 'pro' ? externalProUrl : releaseUrl,
     });
   }
 

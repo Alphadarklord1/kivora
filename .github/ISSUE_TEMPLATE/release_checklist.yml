@@ -1,5 +1,5 @@
 name: Release checklist
-description: Track a beta or stable release from validation through publish
+description: Track a public release from validation through publish
 title: "[Release] "
 labels:
   - release
@@ -8,7 +8,7 @@ body:
     id: version
     attributes:
       label: Version / tag
-      placeholder: v1.2.0-beta.2
+      placeholder: v1.0.0
     validations:
       required: true
   - type: textarea
@@ -23,7 +23,7 @@ body:
     attributes:
       label: Validation
       options:
-        - label: `npm run test:beta`
+        - label: `npm run test:release`
         - label: `npm run build`
         - label: guest-mode smoke test completed
         - label: desktop smoke test completed

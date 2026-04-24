@@ -99,6 +99,10 @@ type ActiveView = TopicId | SpecialView;
 
 const DEFAULT_ACCENT = 'var(--primary)';
 
+interface MathSolverPageProps {
+  defaultPanel?: ActiveView;
+}
+
 const SPECIAL_VIEW_META: Record<SpecialView, { title: string; subtitle: string; icon: string; accent: string; workflowTitle: string; workflow: WorkflowStep[] }> = {
   formulas: {
     title: 'Formula Sheets',
@@ -2057,8 +2061,8 @@ function solverTopicForQuestion(problem: string): TopicId {
   return detected;
 }
 
-export function MathSolverPage() {
-  const [active, setActive] = useState<ActiveView>('algebra');
+export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps = {}) {
+  const [active, setActive] = useState<ActiveView>(defaultPanel);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
     try { return localStorage.getItem(MATH_SIDEBAR_KEY) !== 'closed'; } catch { return true; }
   });

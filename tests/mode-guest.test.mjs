@@ -8,7 +8,7 @@ async function withEnv(nextEnv, fn) {
     AUTH_REQUIRED: process.env.AUTH_REQUIRED,
     AUTH_GUEST_MODE: process.env.AUTH_GUEST_MODE,
     LOCAL_DEMO_MODE: process.env.LOCAL_DEMO_MODE,
-    STUDYPILOT_DESKTOP_ONLY: process.env.STUDYPILOT_DESKTOP_ONLY,
+    KIVORA_DESKTOP_ONLY: process.env.KIVORA_DESKTOP_ONLY,
   };
 
   for (const [key, value] of Object.entries(nextEnv)) {
@@ -36,7 +36,7 @@ test('guest mode defaults to enabled when no env is provided', async () => {
       AUTH_REQUIRED: undefined,
       AUTH_GUEST_MODE: undefined,
       LOCAL_DEMO_MODE: undefined,
-      STUDYPILOT_DESKTOP_ONLY: undefined,
+      KIVORA_DESKTOP_ONLY: undefined,
     },
     async () => {
       const mod = await loadModeModule();
@@ -51,7 +51,7 @@ test('AUTH_REQUIRED=1 disables guest mode even if AUTH_GUEST_MODE=1', async () =
       AUTH_REQUIRED: '1',
       AUTH_GUEST_MODE: '1',
       LOCAL_DEMO_MODE: '1',
-      STUDYPILOT_DESKTOP_ONLY: '1',
+      KIVORA_DESKTOP_ONLY: '1',
     },
     async () => {
       const mod = await loadModeModule();
@@ -66,7 +66,7 @@ test('AUTH_GUEST_MODE=0 disables guest mode when AUTH_REQUIRED is unset', async 
       AUTH_REQUIRED: undefined,
       AUTH_GUEST_MODE: '0',
       LOCAL_DEMO_MODE: '1',
-      STUDYPILOT_DESKTOP_ONLY: '1',
+      KIVORA_DESKTOP_ONLY: '1',
     },
     async () => {
       const mod = await loadModeModule();

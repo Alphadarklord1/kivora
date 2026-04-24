@@ -11,6 +11,7 @@ const eslintConfig = defineConfig([
         argsIgnorePattern: "^_",
         varsIgnorePattern: "^_",
       }],
+      "react-hooks/set-state-in-effect": "off",
     },
   },
   // Override default ignores of eslint-config-next.
@@ -23,6 +24,7 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "scripts/**",
     "electron/**",
+    "public/pdf.worker.min.mjs",
   ]),
 ]);
 

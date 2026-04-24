@@ -9,8 +9,8 @@ function parseArg(name, fallback) {
 }
 
 const host = parseArg('--host', '127.0.0.1');
-const port = Number(parseArg('--port', process.env.STUDYPILOT_AI_PORT || 48612));
-const model = parseArg('--model', process.env.STUDYPILOT_AI_MODEL || 'unknown');
+const port = Number(parseArg('--port', process.env.KIVORA_AI_PORT || 48612));
+const model = parseArg('--model', process.env.KIVORA_AI_MODEL || 'unknown');
 
 function summarize(text) {
   const clean = String(text || '').replace(/\s+/g, ' ').trim();

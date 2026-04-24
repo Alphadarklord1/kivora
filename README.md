@@ -1,4 +1,4 @@
-Kivora is a desktop-first AI study workspace built for stable offline Mac use, with a supported web beta companion, guest-by-default access, and optional cloud fallback.
+Kivora 1.0.0 is a desktop-first AI study workspace built for stable offline Mac and Windows use, with a supported web companion, guest-by-default access, and optional cloud fallback.
 
 The final product is built around three pillars:
 
@@ -9,7 +9,7 @@ The final product is built around three pillars:
 ## Product Status
 
 - Desktop app is the primary supported runtime.
-- Web remains available as a supported beta companion.
+- Web is a supported companion for browser access and account sync.
 - Guest mode is enabled by default unless `AUTH_REQUIRED=1`.
 - Encryption password flows are intentionally disabled for the current 1.0 cycle.
 
@@ -88,10 +88,12 @@ Core app/runtime:
 AUTH_SECRET=...
 AUTH_GUEST_MODE=1
 AUTH_REQUIRED=0
-STUDYPILOT_DESKTOP_AUTH_PORT=3893
+KIVORA_DESKTOP_AUTH_PORT=3893
+GROK_API_KEY=...
+GROK_MODEL_DEFAULT=grok-3-fast
 OPENAI_API_KEY=...
 OPENAI_MODEL_DEFAULT=gpt-4o-mini
-STUDYPILOT_DESKTOP_ONLY=0
+KIVORA_DESKTOP_ONLY=0
 ENCRYPTION_DISABLED=1
 ```
 
@@ -130,12 +132,12 @@ GOOGLE_CLIENT_SECRET=...
 AUTH_SECRET=...
 AUTH_GUEST_MODE=1
 AUTH_REQUIRED=0
-STUDYPILOT_DESKTOP_AUTH_PORT=3893
+KIVORA_DESKTOP_AUTH_PORT=3893
 ```
 
 Google OAuth redirect URIs:
 
-- `https://kivora-app.vercel.app/api/auth/callback/google`
+- `https://study-alpha-three.vercel.app/api/auth/callback/google`
 - `http://localhost:3000/api/auth/callback/google`
 - `http://127.0.0.1:3893/api/auth/callback/google`
 
@@ -147,7 +149,7 @@ Desktop note:
 ## Core Build and Test Flow
 
 ```bash
-npm run test:beta
+npm run test:release
 npm run build
 ```
 
@@ -167,19 +169,23 @@ npm run build
 - `/login`
 - `/register`
 
-Compatibility redirects still exist for older links such as `/tools`, `/study`, `/decks`, `/models`, `/report`, and `/downloads`.
+Compatibility redirects still exist for older links such as `/graphing`, `/podcast`, `/tools`, `/study`, `/decks`, `/models`, `/report`, and `/downloads`.
 
-Standalone audio navigation and Office-to-PDF visual conversion are intentionally cut from the 1.0 surface until their dependencies are stable.
+Standalone audio navigation and Office-to-PDF visual conversion are intentionally hidden from the 1.0 surface until their dependencies are stable.
 
 ## Release Flow
 
-1. Run `npm run test:beta`
+1. Run `npm run test:release`
 2. Run `npm run build`
 3. Stage bundled Mini with `npm run models:prepare:laptop`
 4. Build desktop artifacts
 5. Publish desktop release assets
-6. Publish optional model assets with `model-manifest.json` and `SHA256SUMS.txt`
-7. Run release consistency validation before announcing the tag
+6. Generate `model-manifest.json` from the real release model files so every optional model has a real `sha256` and `sizeBytes`
+7. Generate `SHA256SUMS.txt` from those same files
+8. Upload Mini/Balanced release model assets, `model-manifest.json`, and `SHA256SUMS.txt` to the same GitHub release tag; keep Pro pointed at its external HTTPS host in the manifest
+9. Run release consistency validation before announcing the tag
+
+Do not ship the scaffolded fallback manifest as if it were release metadata. Optional installs are only trustworthy once the manifest, checksums, GitHub release assets, and Pro external URL all match.
 
 Detailed runtime/model docs:
 

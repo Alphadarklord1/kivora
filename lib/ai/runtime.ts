@@ -11,7 +11,7 @@ export interface AiRuntimePreferences {
 export const AI_PREFS_UPDATED_EVENT = 'kivora:ai-preferences-updated';
 
 export const DEFAULT_LOCAL_MODEL  = 'qwen2.5';
-export const DEFAULT_CLOUD_MODEL  = 'llama-3.3-70b-versatile';
+export const DEFAULT_CLOUD_MODEL  = 'grok-3-fast';
 export const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 
 // ── Local (Ollama / offline) models — Qwen is default ────────────────────────
@@ -26,23 +26,19 @@ export const LOCAL_MODEL_OPTIONS = [
   { id: 'deepseek-r1:7b',  label: 'DeepSeek R1 7B',      hint: 'Heavy reasoning on stronger machines' },
 ] as const;
 
-// ── Cloud models — Groq is primary, others are fallback ───────────────────────
+// ── Cloud models — Grok is primary, OpenAI is fallback ─────────────────────
 export const CLOUD_MODEL_OPTIONS = [
-  // ── Groq — primary online provider ─────────────────────────────────────────
-  { id: 'llama-3.3-70b-versatile', label: 'Groq Llama 3.3 70B', hint: 'Best online model — recommended for all study tasks', provider: 'groq' as const },
-  { id: 'llama-3.1-70b-versatile', label: 'Groq Llama 3.1 70B', hint: 'Strong online reasoning on Groq', provider: 'groq' as const },
-  { id: 'llama-3.1-8b-instant',    label: 'Groq Llama 3.1 8B',  hint: 'Fastest online option for quick study tasks', provider: 'groq' as const },
-  { id: 'mixtral-8x7b-32768',      label: 'Groq Mixtral 8×7B',  hint: 'Great for long documents and summaries', provider: 'groq' as const },
-  { id: 'gemma2-9b-it',            label: 'Groq Gemma 2 9B',    hint: 'Compact and fast for notes and quizzes', provider: 'groq' as const },
-  // ── Grok (xAI) — secondary ─────────────────────────────────────────────────
-  { id: 'grok-3-fast',  label: 'Grok 3 Fast',  hint: 'xAI backup — good balance of speed and quality', provider: 'grok' as const },
-  { id: 'grok-3-mini',  label: 'Grok 3 Mini',  hint: 'xAI backup — compact and quick',                 provider: 'grok' as const },
-  // ── OpenAI — tertiary / backup ─────────────────────────────────────────────
-  { id: 'gpt-4o-mini',  label: 'GPT-4o mini',  hint: 'OpenAI backup — fast and lower cost',  provider: 'openai' as const },
-  { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini', hint: 'OpenAI backup — stronger reasoning',   provider: 'openai' as const },
+  // ── Grok (xAI) — primary ───────────────────────────────────────────────────
+  { id: 'grok-3-fast',      label: 'Grok 3 Fast',      hint: 'Best online model — recommended for most study tasks', provider: 'grok' as const },
+  { id: 'grok-3-mini',      label: 'Grok 3 Mini',      hint: 'Compact and quick for lighter cloud usage',            provider: 'grok' as const },
+  { id: 'grok-3-mini-fast', label: 'Grok 3 Mini Fast', hint: 'Fastest xAI option for quick study help',              provider: 'grok' as const },
+  // ── OpenAI — fallback ──────────────────────────────────────────────────────
+  { id: 'gpt-4o-mini',      label: 'GPT-4o mini',      hint: 'OpenAI fallback — fast and lower cost',                provider: 'openai' as const },
+  { id: 'gpt-4o',           label: 'GPT-4o',           hint: 'OpenAI fallback — broader multimodal support',         provider: 'openai' as const },
+  { id: 'gpt-4.1-mini',     label: 'GPT-4.1 mini',     hint: 'OpenAI fallback — stronger reasoning',                 provider: 'openai' as const },
 ] as const;
 
-export type CloudProvider = 'groq' | 'grok' | 'openai';
+export type CloudProvider = 'grok' | 'openai';
 
 /** Determine which provider a model ID belongs to */
 export function cloudProviderForModel(modelId: string): CloudProvider {
@@ -50,7 +46,7 @@ export function cloudProviderForModel(modelId: string): CloudProvider {
   if (configured) return configured;
   if (modelId.startsWith('grok')) return 'grok';
   if (modelId.startsWith('gpt-')) return 'openai';
-  return 'groq';
+  return 'grok';
 }
 
 export function normalizeAiMode(value: string | null | undefined): AiMode {
@@ -61,7 +57,6 @@ export function normalizeAiMode(value: string | null | undefined): AiMode {
     case 'offline':
       return 'local';
     case 'cloud':
-    case 'groq':
     case 'openai':
     case 'grok':
       return 'cloud';

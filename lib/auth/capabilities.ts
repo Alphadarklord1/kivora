@@ -22,7 +22,7 @@ function isGuestModeEnabledForCapabilities(): boolean {
   const guestModeOverride = readOptionalBooleanEnv(process.env.AUTH_GUEST_MODE);
   if (guestModeOverride !== undefined) return guestModeOverride;
 
-  if (readBooleanEnv(process.env.LOCAL_DEMO_MODE) || readBooleanEnv(process.env.STUDYPILOT_DESKTOP_ONLY)) {
+  if (readBooleanEnv(process.env.LOCAL_DEMO_MODE) || readBooleanEnv(process.env.KIVORA_DESKTOP_ONLY)) {
     return true;
   }
 
@@ -38,7 +38,7 @@ function parsePort(value: string | undefined): number {
 }
 
 export function getDesktopAuthPort(): number {
-  return parsePort(process.env.STUDYPILOT_DESKTOP_AUTH_PORT);
+  return parsePort(process.env.KIVORA_DESKTOP_AUTH_PORT);
 }
 
 export function hasConfiguredAuthSecret(): boolean {
@@ -61,7 +61,7 @@ export function getAuthCapabilities() {
   const guestModeEnabled = isGuestModeEnabledForCapabilities();
   const authSecretConfigured = hasConfiguredAuthSecret();
   const authDisabledByMissingSecret = process.env.NODE_ENV === 'production' && !authSecretConfigured;
-  const explicitOauthDisabled = process.env.STUDYPILOT_OAUTH_DISABLED === '1';
+  const explicitOauthDisabled = process.env.KIVORA_OAUTH_DISABLED === '1';
   const authDisabled = authDisabledByMissingSecret;
   const authDisabledReason = authDisabledByMissingSecret
     ? 'Sign-in is disabled until AUTH_SECRET is configured. Guest access remains available.'
@@ -69,8 +69,8 @@ export function getAuthCapabilities() {
   const oauthDisabled = authDisabled || explicitOauthDisabled;
   const oauthDisabledReason = authDisabled
     ? authDisabledReason
-    : (process.env.STUDYPILOT_OAUTH_DISABLED_REASON || null);
-  const desktopAuthPort = process.env.STUDYPILOT_DESKTOP_ONLY === '1' ? getDesktopAuthPort() : null;
+    : (process.env.KIVORA_OAUTH_DISABLED_REASON || null);
+  const desktopAuthPort = process.env.KIVORA_DESKTOP_ONLY === '1' ? getDesktopAuthPort() : null;
 
   return {
     googleConfigured,

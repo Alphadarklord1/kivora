@@ -61,7 +61,7 @@ export interface TopicResearchResult {
   relatedLinks: ArticleSuggestion[];
   followUpPrompts: string[];
   rankingSummary: string;
-  provider: 'groq' | 'grok' | 'openai' | 'local' | 'offline';
+  provider: 'grok' | 'openai' | 'local' | 'offline';
 }
 
 function dedupe<T>(items: T[]) {

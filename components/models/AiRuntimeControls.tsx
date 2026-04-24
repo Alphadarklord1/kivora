@@ -73,7 +73,7 @@ function QwenSetupBanner() {
           >
             {QWEN_CMD}
           </code>{' '}
-          in your terminal to enable local AI. Groq (online) is active as fallback.
+          in your terminal to enable local AI. Grok or OpenAI can take over if cloud mode is enabled.
         </p>
         <button
           type="button"

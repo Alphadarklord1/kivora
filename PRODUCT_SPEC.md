@@ -4,7 +4,7 @@
 
 Kivora is an offline-first AI study workspace for students. It helps users organize study material, generate study outputs from their own files, solve technical problems, plan study time, and track progress in one product.
 
-Desktop is the primary experience. Web is a beta/prototype surface.
+Desktop is the primary experience. Web is a supported companion surface for browser access and sync.
 
 ## 2. Product Goal
 
@@ -31,7 +31,7 @@ Help students turn raw course material into usable learning output and a clear s
   - macOS
   - Windows
 - Web app
-  - supported as a beta/prototype
+  - supported companion surface
 - Mobile browser
   - limited support compared with desktop
 
@@ -65,7 +65,7 @@ Supported input:
 
 Behavior requirements:
 - Must support guest mode
-- Must remain usable in beta/no-DB mode with local fallback where applicable
+- Must remain usable in no-DB mode with local fallback where applicable
 
 ### 7.2 Folder System
 
@@ -280,12 +280,12 @@ Primary persistence:
 - PostgreSQL / Neon-backed database when configured
 
 Fallback persistence:
-- Local browser or local app storage in beta-safe mode
+- Local browser or local app storage in fallback-safe mode
 
 Requirements:
 - Reads should degrade gracefully
 - Writes should use local fallback where reasonable
-- User-critical flows should not hard crash in no-DB beta mode
+- User-critical flows should not hard crash in no-DB fallback mode
 
 ## 13. Themes and Language
 
@@ -343,27 +343,27 @@ Goal:
 - Cleaner release flow for desktop artifacts and model assets
 - Better DB-backed persistence in deployed environments
 
-## 18. Stable Beta Definition
+## 18. Public 1.0 Definition
 
-Kivora is stable beta-ready when:
+Kivora is public 1.0-ready when:
 - Guest users can use core flows without sign-in
 - Folders, files, planner, and analytics work without crashing
 - AI tools produce useful output in desktop local mode
 - Desktop builds ship with bundled Mini model
 - Settings/account/security behavior is coherent
-- Web beta works with graceful fallbacks
+- Web companion works with graceful fallbacks
 - Release process is repeatable
 
 ## 19. Release Criteria
 
-Before a beta release:
+Before a public release:
 - `npm run build` passes
-- `npm run test:beta` passes
+- `npm run test:release` passes
 - desktop packaging succeeds
 - model manifest and checksums validate
 - guest mode works
 - login flows work when configured
-- planner, analytics, workspace, tools, and library are smoke-tested
+- planner, analytics, workspace, Scholar Hub, Math, and library are smoke-tested
 
 ## 20. Future Directions
 

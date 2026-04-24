@@ -488,7 +488,7 @@ export function ResearchTab({
                     Ready to write about this?
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 1 }}>
-                    Open Writing Studio with "{researchResult.topic}" pre-filled and your research as context.
+                    Open Writing Studio with &quot;{researchResult.topic}&quot; pre-filled and your research as context.
                   </div>
                 </div>
                 <button

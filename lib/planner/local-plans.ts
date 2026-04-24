@@ -134,7 +134,7 @@ export function buildAnalyticsFromLocalPlans<T extends AnalyticsDataLike>(base: 
   };
 
   const localInsight = plans.length > 0
-    ? `Planner data is using local beta storage on this device.`
+    ? `Planner data is using local storage on this device.`
     : '';
 
   return {

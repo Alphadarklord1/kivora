@@ -6,16 +6,16 @@ const ORIGINAL_ENV = {
   AUTH_REQUIRED: process.env.AUTH_REQUIRED,
   AUTH_GUEST_MODE: process.env.AUTH_GUEST_MODE,
   LOCAL_DEMO_MODE: process.env.LOCAL_DEMO_MODE,
-  STUDYPILOT_DESKTOP_ONLY: process.env.STUDYPILOT_DESKTOP_ONLY,
-  STUDYPILOT_DESKTOP_AUTH_PORT: process.env.STUDYPILOT_DESKTOP_AUTH_PORT,
+  KIVORA_DESKTOP_ONLY: process.env.KIVORA_DESKTOP_ONLY,
+  KIVORA_DESKTOP_AUTH_PORT: process.env.KIVORA_DESKTOP_AUTH_PORT,
   AUTH_SECRET: process.env.AUTH_SECRET,
   NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
   GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
   GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET,
-  STUDYPILOT_OAUTH_DISABLED: process.env.STUDYPILOT_OAUTH_DISABLED,
-  STUDYPILOT_OAUTH_DISABLED_REASON: process.env.STUDYPILOT_OAUTH_DISABLED_REASON,
+  KIVORA_OAUTH_DISABLED: process.env.KIVORA_OAUTH_DISABLED,
+  KIVORA_OAUTH_DISABLED_REASON: process.env.KIVORA_OAUTH_DISABLED_REASON,
 };
 
 function restoreEnv() {
@@ -34,15 +34,15 @@ test('getAuthCapabilities reflects configured providers and desktop auth port', 
   delete process.env.AUTH_REQUIRED;
   process.env.AUTH_GUEST_MODE = '1';
   delete process.env.LOCAL_DEMO_MODE;
-  process.env.STUDYPILOT_DESKTOP_ONLY = '1';
-  process.env.STUDYPILOT_DESKTOP_AUTH_PORT = '3893';
+  process.env.KIVORA_DESKTOP_ONLY = '1';
+  process.env.KIVORA_DESKTOP_AUTH_PORT = '3893';
   process.env.AUTH_SECRET = 'test-secret';
   process.env.GOOGLE_CLIENT_ID = 'gid';
   process.env.GOOGLE_CLIENT_SECRET = 'gsecret';
   process.env.GITHUB_CLIENT_ID = '';
   process.env.GITHUB_CLIENT_SECRET = '';
-  process.env.STUDYPILOT_OAUTH_DISABLED = '0';
-  delete process.env.STUDYPILOT_OAUTH_DISABLED_REASON;
+  process.env.KIVORA_OAUTH_DISABLED = '0';
+  delete process.env.KIVORA_OAUTH_DISABLED_REASON;
 
   const mod = await loadAuthCapabilitiesModule();
   const caps = mod.getAuthCapabilities();
@@ -60,8 +60,8 @@ test('getAuthCapabilities disables sign-in in production when auth secret is mis
   process.env.NODE_ENV = 'production';
   delete process.env.AUTH_SECRET;
   delete process.env.NEXTAUTH_SECRET;
-  delete process.env.STUDYPILOT_OAUTH_DISABLED;
-  delete process.env.STUDYPILOT_OAUTH_DISABLED_REASON;
+  delete process.env.KIVORA_OAUTH_DISABLED;
+  delete process.env.KIVORA_OAUTH_DISABLED_REASON;
 
   const mod = await loadAuthCapabilitiesModule();
   const caps = mod.getAuthCapabilities();
@@ -73,7 +73,7 @@ test('getAuthCapabilities disables sign-in in production when auth secret is mis
 });
 
 test('desktop auth port falls back to default for invalid env values', async () => {
-  process.env.STUDYPILOT_DESKTOP_AUTH_PORT = 'invalid';
+  process.env.KIVORA_DESKTOP_AUTH_PORT = 'invalid';
   const mod = await loadAuthCapabilitiesModule();
   assert.equal(mod.getDesktopAuthPort(), 3893);
 });

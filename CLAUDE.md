@@ -25,7 +25,7 @@ npx drizzle-kit studio  # Open Drizzle Studio GUI
 **Stack:**
 - Next.js 14 with App Router
 - Supabase or PostgreSQL via Drizzle ORM
-- NextAuth.js v5 (beta) for authentication
+- NextAuth.js v5 for authentication
 - IndexedDB for local file blob storage
 - JSZip for Word/PowerPoint text extraction
 - PDF.js for PDF text extraction
@@ -76,5 +76,5 @@ GOOGLE_CLIENT_SECRET=...
 AUTH_SECRET=your-secret
 AUTH_GUEST_MODE=1
 AUTH_REQUIRED=0
-STUDYPILOT_DESKTOP_AUTH_PORT=3893
+KIVORA_DESKTOP_AUTH_PORT=3893
 ```

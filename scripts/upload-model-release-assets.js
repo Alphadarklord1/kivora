@@ -5,15 +5,15 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const DEFAULT_REPO = process.env.STUDYPILOT_RELEASE_REPO || 'Alphadarklord1/kivora';
-const DEFAULT_MODELS_DIR = process.env.STUDYPILOT_MODELS_DIR || path.join(process.env.HOME || '', 'Kivora-model-store');
+const DEFAULT_REPO = process.env.KIVORA_RELEASE_REPO || 'Alphadarklord1/kivora';
+const DEFAULT_MODELS_DIR = process.env.KIVORA_MODELS_DIR || path.join(process.env.HOME || '', 'Kivora-model-store');
 const DEFAULT_MANIFEST = path.join(PROJECT_ROOT, 'electron', 'runtime', 'model-manifest.json');
 const DEFAULT_CHECKSUMS = path.join(PROJECT_ROOT, 'electron', 'runtime', 'SHA256SUMS.txt');
-const MODEL_FILES = [
-  'qwen2.5-1.5b-instruct-q4_k_m.gguf',
-  'qwen2.5-3b-instruct-q4_k_m.gguf',
-  'qwen2.5-7b-instruct-q4_k_m.gguf',
-];
+const MODEL_FILES = new Map([
+  ['mini', 'qwen2.5-1.5b-instruct-q4_k_m.gguf'],
+  ['balanced', 'qwen2.5-3b-instruct-q4_k_m.gguf'],
+  ['pro', 'qwen2.5-7b-instruct-q4_k_m.gguf'],
+]);
 
 function parseArgs(argv) {
   const args = {};
@@ -52,20 +52,36 @@ function ensureFilesExist(files) {
   }
 }
 
+function parseModelKeys(value, fallback) {
+  const keys = String(value || fallback)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  for (const key of keys) {
+    if (!MODEL_FILES.has(key)) {
+      throw new Error(`Unsupported model key "${key}". Allowed: mini, balanced, pro.`);
+    }
+  }
+  return [...new Set(keys)];
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const tag = normalizeTag(args.tag || process.env.STUDYPILOT_RELEASE_TAG);
+  const tag = normalizeTag(args.tag || process.env.KIVORA_RELEASE_TAG);
   const repo = String(args.repo || DEFAULT_REPO).trim();
   const modelsDir = path.resolve(args['models-dir'] || DEFAULT_MODELS_DIR);
   const manifestPath = path.resolve(args.manifest || DEFAULT_MANIFEST);
   const checksumsPath = path.resolve(args.checksums || DEFAULT_CHECKSUMS);
+  const checksumKeys = parseModelKeys(args.models, 'mini,balanced,pro');
+  const releaseKeys = parseModelKeys(args['release-models'], 'mini,balanced');
 
   if (!repo.includes('/')) {
     throw new Error(`Invalid repo "${repo}". Use owner/name format.`);
   }
 
-  const modelPaths = MODEL_FILES.map((file) => path.join(modelsDir, file));
-  ensureFilesExist(modelPaths);
+  const checksumModelPaths = checksumKeys.map((key) => path.join(modelsDir, MODEL_FILES.get(key)));
+  const releaseModelPaths = releaseKeys.map((key) => path.join(modelsDir, MODEL_FILES.get(key)));
+  ensureFilesExist([...new Set([...checksumModelPaths, ...releaseModelPaths])]);
 
   run(process.execPath, [
     path.join(PROJECT_ROOT, 'scripts', 'generate-model-manifest.js'),
@@ -78,7 +94,7 @@ function main() {
   run(process.execPath, [
     path.join(PROJECT_ROOT, 'scripts', 'generate-model-checksums.js'),
     `--models-dir=${modelsDir}`,
-    '--models=mini,balanced,pro',
+    `--models=${checksumKeys.join(',')}`,
     `--out=${checksumsPath}`,
   ]);
 
@@ -99,7 +115,7 @@ function main() {
     'release',
     'upload',
     tag,
-    ...modelPaths,
+    ...releaseModelPaths,
     manifestPath,
     checksumsPath,
     '--repo',

@@ -74,7 +74,7 @@ export async function getUserId(
     if (isGuestSessionId(guestSessionId)) {
       if (
         process.env.NODE_ENV !== 'production' ||
-        process.env.STUDYPILOT_DESKTOP_ONLY === '1' ||
+        process.env.KIVORA_DESKTOP_ONLY === '1' ||
         process.env.LOCAL_DEMO_MODE === '1'
       ) {
         return `guest:${guestSessionId}`;
