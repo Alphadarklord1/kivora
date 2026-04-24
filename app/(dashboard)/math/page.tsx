@@ -2,9 +2,17 @@
 
 import dynamic from 'next/dynamic';
 
+function loadingLabel() {
+  if (typeof document !== 'undefined') {
+    if (document.documentElement.lang === 'ar') return 'جارٍ تحميل مساحة الرياضيات…';
+    if (document.documentElement.lang === 'fr') return 'Chargement de Mathématiques…';
+  }
+  return 'Loading Math…';
+}
+
 const MathSolverPage = dynamic(
   () => import('@/components/math/MathSolverPage'),
-  { ssr: false, loading: () => <div className="math-loading">Loading Math Solver…</div> }
+  { ssr: false, loading: () => <div className="math-loading">{loadingLabel()}</div> }
 );
 
 export default function MathPage() {

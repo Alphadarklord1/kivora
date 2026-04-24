@@ -62,7 +62,7 @@ export default async function DownloadsPage() {
               </a>
             ) : (
               <a href={downloads.releaseUrl} style={buttonStyle(true)}>
-                Open Release Page
+                View desktop downloads
               </a>
             )}
             <Link href="/settings#ai-models" style={buttonStyle(false)}>
@@ -105,7 +105,7 @@ export default async function DownloadsPage() {
                 </p>
               </div>
                 <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(34,197,94,0.12)', color: '#15803d', fontSize: '0.76rem', fontWeight: 700 }}>
-                  {macReady ? 'Mac asset ready' : 'Waiting on release asset'}
+                  {macReady ? 'Mac ready' : 'Desktop app publishing'}
                 </span>
               </div>
 
@@ -128,7 +128,7 @@ export default async function DownloadsPage() {
 
           <div style={cardStyle(false)}>
             <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted, #64748b)', fontWeight: 800 }}>
-              Other Assets
+              Windows Downloads
             </span>
             <div style={{ display: 'grid', gap: 10 }}>
               <div>
@@ -163,7 +163,7 @@ export default async function DownloadsPage() {
         <section style={{ display: 'grid', gap: 14 }}>
           <div style={{ display: 'grid', gap: 6 }}>
             <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted, #64748b)', fontWeight: 800 }}>
-              Optional AI Model Downloads
+              Optional Local AI Models
             </span>
             <h2 style={{ margin: 0, fontSize: '1.35rem' }}>Download bigger local models when you actually need them.</h2>
             <p style={{ margin: 0, color: 'var(--text-secondary, #475569)', lineHeight: 1.55 }}>
@@ -191,15 +191,15 @@ export default async function DownloadsPage() {
                   <span>{model.quantization}</span>
                   <span>
                     {model.downloadSource === 'release'
-                      ? 'Available through Kivora’s published download files.'
+                      ? 'Ready to install inside Kivora.'
                       : model.downloadSource === 'manifest'
-                        ? 'Available from Kivora’s external model host.'
-                        : 'No download is published yet.'}
+                        ? 'Ready to install inside Kivora.'
+                        : 'Coming soon.'}
                   </span>
                   {model.integrityWarning ? (
                     <span style={{ color: '#b45309' }}>{model.integrityWarning}</span>
                   ) : (
-                    <span style={{ color: '#15803d' }}>Verified and ready to use.</span>
+                    <span style={{ color: '#15803d' }}>Ready.</span>
                   )}
                 </div>
 
@@ -214,11 +214,6 @@ export default async function DownloadsPage() {
                     </Link>
                   ) : (
                     <span style={{ fontSize: '0.82rem', color: 'var(--text-muted, #64748b)' }}>No published download yet</span>
-                  )}
-                  {!model.bundled && (
-                    <a href={model.downloadUrl || downloads.releaseUrl} style={buttonStyle(false)}>
-                      View file source
-                    </a>
                   )}
                 </div>
               </article>
