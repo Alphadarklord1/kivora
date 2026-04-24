@@ -18,6 +18,7 @@ import { buildCoachUrl } from '@/lib/coach/routes';
 import { loadDecks, type SRSDeck } from '@/lib/srs/sm2';
 import { persistDeckLocally } from '@/lib/srs/deck-utils';
 import type { TopicResearchResult } from '@/lib/coach/research';
+import type { OutlineSection } from '@/app/api/coach/report/route';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 
 function TabLoadingFallback() {
@@ -49,6 +50,7 @@ type WritePreloadState = {
   reportType?: 'essay' | 'report' | 'literature_review';
   wordCount?: number;
   keyPoints?: string;
+  outline?: OutlineSection[];
 };
 
 const TAB_LABELS: Record<CoachSection, { label: string; icon: string }> = {

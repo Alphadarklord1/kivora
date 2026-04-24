@@ -230,6 +230,7 @@ interface Props {
     reportType?: ReportType;
     wordCount?: number;
     keyPoints?: string;
+    outline?: OutlineSection[];
   };
   onPreloadConsumed?: () => void;
 }
@@ -405,6 +406,7 @@ export function AssignmentWriterTab({
         setReportKeyPoints(preloadTopic.keyPoints);
         setShowKeyPoints(Boolean(preloadTopic.keyPoints.trim()));
       }
+      if (Array.isArray(preloadTopic.outline)) setOutline(preloadTopic.outline);
     }
     setInnerTab('build');
     onPreloadConsumed?.();

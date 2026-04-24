@@ -12,6 +12,7 @@ import type { ArticleSuggestion } from '@/lib/coach/articles';
 import type { ResearchMode, ResearchRanking, TopicResearchResult, CitationFormat } from '@/lib/coach/research';
 import { formatCitations, buildMyBibUrl, buildMyBibCiteUrl } from '@/lib/coach/research';
 import type { ResolvedPaper } from '@/lib/coach/doi';
+import type { OutlineSection } from '@/app/api/coach/report/route';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 
@@ -40,6 +41,7 @@ type ReportSeed = {
   reportType?: 'essay' | 'report' | 'literature_review';
   wordCount?: number;
   keyPoints?: string;
+  outline?: OutlineSection[];
 };
 
 const RECENT_TOPICS_KEY = 'kivora.scholar.recent-topics';
@@ -148,6 +150,12 @@ const LOCAL_AR: Record<string, string> = {
   'Target words': 'عدد الكلمات المستهدف',
   'Build from key ideas': 'ابنِ من الأفكار الرئيسية',
   'Open builder': 'افتح المنشئ',
+  'Build outline': 'أنشئ المخطط',
+  'Building outline…': 'جارٍ إنشاء المخطط…',
+  'Outline ready': 'المخطط جاهز',
+  'Could not build outline': 'تعذر إنشاء المخطط',
+  'Outline preview': 'معاينة المخطط',
+  'Review this structure, then continue in Writing Studio for the full draft.': 'راجع هذه البنية، ثم تابع في استوديو الكتابة لإنشاء المسودة الكاملة.',
   'Build in Writing Studio': 'ابنِ في استوديو الكتابة',
   'Report builder ready in Writing Studio': 'أصبح منشئ التقرير جاهزًا في استوديو الكتابة',
   'Overview': 'نظرة عامة',
@@ -274,6 +282,8 @@ export function ResearchTab({
   const [reportType,         setReportType]         = useState<'essay' | 'report' | 'literature_review'>('report');
   const [reportWordCount,    setReportWordCount]    = useState(1200);
   const [reportKeyPoints,    setReportKeyPoints]    = useState('');
+  const [reportOutline,      setReportOutline]      = useState<OutlineSection[]>([]);
+  const [reportOutlineLoading, setReportOutlineLoading] = useState(false);
 
   // ── Reference Library state ────────────────────────────────────────────────
   const [savedSourcesList,  setSavedSourcesList]  = useState<SavedSourceRow[]>([]);
@@ -286,6 +296,7 @@ export function ResearchTab({
   useEffect(() => {
     if (!researchResult) return;
     setReportKeyPoints(researchResult.keyIdeas.slice(0, 4).join('\n'));
+    setReportOutline([]);
   }, [researchResult?.topic, researchResult?.keyIdeas]);
   const [savingNoteId,      setSavingNoteId]      = useState<string | null>(null);
 
@@ -558,8 +569,49 @@ export function ResearchTab({
       reportType,
       wordCount: reportWordCount,
       keyPoints: reportKeyPoints.trim(),
+      outline: reportOutline.length ? reportOutline : undefined,
     });
     toast(t('Report builder ready in Writing Studio'), 'success');
+  }
+
+  async function handleBuildReportOutline() {
+    if (!researchResult || reportOutlineLoading) return;
+    setReportOutlineLoading(true);
+    setReportOutline([]);
+    try {
+      const sourceContext = researchResult.sources
+        .slice(0, 6)
+        .map((source, index) => `[S${index + 1}] ${source.title}: ${source.excerpt}`)
+        .join('\n');
+      const res = await fetch('/api/coach/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: researchResult.topic,
+          type: reportType,
+          wordCount: reportWordCount,
+          keyPoints: reportKeyPoints.trim(),
+          context: [
+            researchResult.overview,
+            researchResult.rankingSummary,
+            sourceContext,
+          ].filter(Boolean).join('\n\n'),
+          ai: loadAiRuntimePreferences(),
+          privacyMode,
+          step: 'outline',
+        }),
+      });
+      const payload = await res.json().catch(() => null) as { outline?: OutlineSection[]; error?: string } | null;
+      if (!res.ok || !Array.isArray(payload?.outline)) {
+        throw new Error(payload?.error ?? t('Could not build outline'));
+      }
+      setReportOutline(payload.outline);
+      toast(t('Outline ready'), 'success');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : t('Could not build outline'), 'error');
+    } finally {
+      setReportOutlineLoading(false);
+    }
   }
 
   function exportAllBibTeX() {
@@ -1178,6 +1230,14 @@ export function ResearchTab({
                   />
                 </div>
                 <div className={styles.plxReportActions}>
+                  <button
+                    type="button"
+                    className={styles.plxAdvancedToggle}
+                    disabled={reportOutlineLoading}
+                    onClick={() => void handleBuildReportOutline()}
+                  >
+                    {reportOutlineLoading ? t('Building outline…') : t('Build outline')}
+                  </button>
                   {onNavigateToWrite && (
                     <button
                       type="button"
@@ -1197,6 +1257,22 @@ export function ResearchTab({
                     </button>
                   )}
                 </div>
+                {reportOutline.length > 0 && (
+                  <div className={styles.plxReportOutline}>
+                    <div className={styles.plxReportOutlineHead}>
+                      <strong>{t('Outline preview')}</strong>
+                      <span>{t('Review this structure, then continue in Writing Studio for the full draft.')}</span>
+                    </div>
+                    <ol>
+                      {reportOutline.map((section) => (
+                        <li key={`${section.heading}-${section.summary}`}>
+                          <strong>{section.heading}</strong>
+                          <p>{section.summary}</p>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
               </div>
             </section>
 
