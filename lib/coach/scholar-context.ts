@@ -8,37 +8,43 @@
  * It stays until the student explicitly clears it or it's overwritten.
  */
 
-const KEY = 'kivora_scholar_context';
+const KEY        = 'kivora_scholar_context';
+const EXPIRY_MS  = 24 * 60 * 60 * 1000; // 24 hours
 
 export interface ScholarContext {
   /** Short display title (source title or research topic) */
-  label:           string;
+  label:             string;
   /** Full extracted text — used to pre-fill Workspace tools */
-  sourceText?:     string;
+  sourceText?:       string;
   /** URL of the source, if applicable */
-  sourceUrl?:      string;
+  sourceUrl?:        string;
   /** Research overview text */
   researchOverview?: string;
   /** Whether this came from a source analysis or a research run */
-  kind:            'source' | 'research';
-  writtenAt:       number;
+  kind:              'source' | 'research';
+  writtenAt:         number;
 }
 
 export function writeScholarContext(ctx: Omit<ScholarContext, 'writtenAt'>): void {
   try {
     const stored: ScholarContext = { ...ctx, writtenAt: Date.now() };
-    sessionStorage.setItem(KEY, JSON.stringify(stored));
+    localStorage.setItem(KEY, JSON.stringify(stored));
   } catch { /* storage unavailable */ }
 }
 
 export function readScholarContext(): ScholarContext | null {
   try {
-    const raw = sessionStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as ScholarContext;
+    const ctx = JSON.parse(raw) as ScholarContext;
+    if (Date.now() - ctx.writtenAt > EXPIRY_MS) {
+      localStorage.removeItem(KEY);
+      return null;
+    }
+    return ctx;
   } catch { return null; }
 }
 
 export function clearScholarContext(): void {
-  try { sessionStorage.removeItem(KEY); } catch {}
+  try { localStorage.removeItem(KEY); } catch {}
 }

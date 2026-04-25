@@ -9,8 +9,8 @@ const MathSolverPage = dynamic(
   { ssr: false, loading: () => <div className="math-loading">Loading Math Solver…</div> }
 );
 
-type MathPanel = 'algebra' | 'graph' | 'scan' | 'formulas' | 'visual' | 'matlab' | 'units' | 'write';
-const MATH_PANELS = new Set<MathPanel>(['algebra', 'graph', 'scan', 'formulas', 'visual', 'matlab', 'units', 'write']);
+type MathPanel = 'algebra' | 'graph' | 'formulas' | 'visual' | 'matlab' | 'units' | 'write';
+const MATH_PANELS = new Set<MathPanel>(['algebra', 'graph', 'formulas', 'visual', 'matlab', 'units', 'write']);
 
 function MathContent() {
   const params = useSearchParams();

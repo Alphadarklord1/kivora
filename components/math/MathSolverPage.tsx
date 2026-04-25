@@ -94,7 +94,7 @@ const PRIMARY_TOPICS = TOPICS.filter(
 );
 
 type TopicId = MathCategoryId;
-type SpecialView = 'formulas' | 'graph' | 'units' | 'scan' | 'visual' | 'matlab' | 'write';
+type SpecialView = 'formulas' | 'graph' | 'units' | 'visual' | 'matlab' | 'write';
 type ActiveView = TopicId | SpecialView;
 
 const DEFAULT_ACCENT = 'var(--primary)';
@@ -140,19 +140,6 @@ const SPECIAL_VIEW_META: Record<SpecialView, { title: string; subtitle: string; 
       { label: 'Set from and to units', detail: 'Choose your source unit and the unit you want to end up with.' },
       { label: 'Enter a value', detail: 'Type one value and let the converter return a clean answer immediately.' },
       { label: 'Swap when needed', detail: 'Use the swap control to reverse the conversion without re-entering everything.' },
-    ],
-  },
-  scan: {
-    title: 'Question Scan',
-    subtitle: 'Upload a screenshot or PDF of a math question, extract it, and send it to the solver. OCR now follows your selected app language where possible.',
-    icon: '🧾',
-    accent: '#38bdf8',
-    workflowTitle: 'Question-scan workflow',
-    workflow: [
-      { label: 'Upload a screenshot or PDF', detail: 'This tab only accepts images and PDFs that contain math questions.' },
-      { label: 'Extract the question text', detail: 'Images use OCR and PDFs use text extraction so we can turn the file into solver-ready input, with OCR guided by the current interface language.' },
-      { label: 'Review what was captured', detail: 'Check the extracted question before sending it into the solver.' },
-      { label: 'Solve it step by step', detail: 'Use “Solve now” to move the extracted text straight into the Solver tab.' },
     ],
   },
   visual: {
@@ -2091,7 +2078,6 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
   const [contextName, setContextName] = useState('');
   const [scanBusy, setScanBusy] = useState(false);
   const [scanError, setScanError] = useState('');
-  const [scanExtracted, setScanExtracted] = useState('');
   const [typeInput,  setTypeInput]  = useState('');
   const [writeContext, setWriteContext] = useState('');
   const [writeTopicOverride, setWriteTopicOverride] = useState<TopicId | ''>('');
@@ -2171,45 +2157,37 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
     setGraphExprs([{ id: crypto.randomUUID(), expr, color: GRAPH_COLORS[0], enabled: true }]);
   }, []);
 
+
   const loadQuestionFromFile = useCallback(async (file: File) => {
     const isImage = file.type.startsWith('image/');
-    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-
+    const isPdf   = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     if (!isImage && !isPdf) {
-      setScanError('Upload a screenshot image or a PDF that contains a math question.');
+      setScanError('Upload a screenshot image or a PDF containing a math question.');
       return;
     }
-
     setScanBusy(true);
     setScanError('');
-    setScanExtracted('');
     try {
       if (isImage) {
         const imageBase64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result ?? ''));
+          reader.onload  = () => resolve(String(reader.result ?? ''));
           reader.onerror = () => reject(new Error('Could not read the image.'));
           reader.readAsDataURL(file);
         });
-
-        const response = await fetch('/api/math-ocr', {
+        const res  = await fetch('/api/math-ocr', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64 }),
         });
-        const data = await response.json();
-        if (!response.ok || !data.expression) {
-          throw new Error(data.error ?? 'Could not extract a math expression from the screenshot.');
-        }
-        setScanExtracted(String(data.expression).trim());
-        return;
+        const data = await res.json();
+        if (!res.ok || !data.expression) throw new Error(data.error ?? 'Could not extract a math expression from the image.');
+        setTypeInput(String(data.expression).trim());
+      } else {
+        const extracted = await extractTextFromBlob(file, file.name);
+        if (extracted.error || !extracted.text.trim()) throw new Error(extracted.error ?? 'The PDF did not contain readable text.');
+        setTypeInput(extracted.text.replace(/\s+/g, ' ').trim().slice(0, 4000));
       }
-
-      const extracted = await extractTextFromBlob(file, file.name);
-      if (extracted.error || !extracted.text.trim()) {
-        throw new Error(extracted.error ?? 'The PDF did not contain readable text.');
-      }
-      setScanExtracted(extracted.text.replace(/\s+/g, ' ').trim().slice(0, 4000));
     } catch (error) {
       setScanError(error instanceof Error ? error.message : 'Could not process this file.');
     } finally {
@@ -2403,8 +2381,6 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
             </div>
           )}
           <NavItem id="write"  icon="✍️" label="Write a Question" color="#f43f5e" />
-          <NavItem id="scan"   icon="🧾" label="Question Scan"    color="#38bdf8" />
-          <NavItem id="visual" icon="🔬" label="Visual Analyzer"  color="#a78bfa" />
 
           <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
           {sidebarOpen && (
@@ -2414,6 +2390,7 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
           )}
           <NavItem id="graph"  icon="📈" label="Graph Plotter" color="#22c55e" />
           <NavItem id="matlab" icon="🧮" label="MATLAB Lab"    color="#f97316" />
+          <NavItem id="visual" icon="🔬" label="Visual Analyzer" color="#a78bfa" />
 
           <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
           {sidebarOpen && (
@@ -2492,7 +2469,7 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                 ? `Connected to ${contextName}. You can keep this file in context while solving, graphing, or exploring formulas.`
                 : currentTopic
                   ? `Use structured forms and quick examples without leaving the current topic.`
-                  : `Switch between graphing, scanning, formulas, units, visual analysis, and MATLAB-style work from the same space.`}
+                  : `Switch between graphing, formulas, units, visual analysis, and MATLAB-style work from the same space.`}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -2574,7 +2551,7 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
         )}
 
         {/* ── SOLVER PHASE ── */}
-        {active !== 'formulas' && active !== 'graph' && active !== 'units' && active !== 'scan' && active !== 'visual' && active !== 'matlab' && (
+        {active !== 'formulas' && active !== 'graph' && active !== 'units' && active !== 'visual' && active !== 'matlab' && active !== 'write' && (
           <div style={{ padding: '18px 24px 24px', display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
 
             {/* Quick examples — hidden for categories that use the structured form */}
@@ -3292,39 +3269,6 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
           </div>
         )}
 
-                {/* ── QUESTION SCAN ── */}
-        {active === 'scan' && (
-          <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 900, overflowY: 'auto' }}>
-            <WorkflowCard accent={SPECIAL_VIEW_META.scan.accent} title={SPECIAL_VIEW_META.scan.workflowTitle} steps={SPECIAL_VIEW_META.scan.workflow} />
-            <div style={{ padding: '14px 16px', borderRadius: 12, border: '1px dashed var(--border-subtle)', background: 'var(--bg-2)' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Upload a screenshot or PDF</div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
-                Best for photos of worksheets, textbook pages, or exam papers.{' '}
-                <button
-                  onClick={() => setActive('write')}
-                  style={{ background: 'none', border: 'none', color: '#38bdf8', fontWeight: 600, fontSize: 12, cursor: 'pointer', padding: 0 }}
-                >
-                  Prefer to type? Use Write a Question →
-                </button>
-              </div>
-              <input type="file" accept="image/*,.pdf" style={{ fontSize: 13 }} onChange={e => { const f = e.target.files?.[0]; if (f) loadQuestionFromFile(f); }} />
-            </div>
-            {scanBusy && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>⏳ Reading file…</div>}
-            {scanError && <div style={{ fontSize: 13, color: '#f87171', padding: '10px 14px', borderRadius: 10, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>⚠️ {scanError}</div>}
-            {scanExtracted && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Extracted question</div>
-                <div style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--border-subtle)', fontSize: 13, color: 'var(--text-secondary)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.65 }}>{scanExtracted}</div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); inputRef.current?.focus(); }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Open in solver</button>
-                  <button onClick={() => { const nextTopic = solverTopicForQuestion(scanExtracted); setInput(scanExtracted); setActive(nextTopic); setTimeout(() => { void solve(scanExtracted, nextTopic); }, 0); }} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#38bdf8', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Solve now</button>
-                  <button onClick={() => setScanExtracted('')} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>Clear</button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* ── WRITE A QUESTION ── */}
         {active === 'write' && (() => {
           const accent = SPECIAL_VIEW_META.write.accent;
@@ -3381,6 +3325,30 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                   rows={5}
                   style={{ padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${typeInput.trim() ? `${topicColor}40` : 'var(--border-subtle)'}`, background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 14, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.65, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' as const, transition: 'border-color 0.15s' }}
                 />
+
+                {/* ── Inline scan option ── */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+                  <label
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px dashed var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, cursor: scanBusy ? 'default' : 'pointer', opacity: scanBusy ? 0.6 : 1, transition: 'all 0.15s', userSelect: 'none' as const }}
+                    title="Upload a photo or PDF and extract the question automatically"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    {scanBusy ? 'Reading…' : 'Scan from photo or PDF'}
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      style={{ display: 'none' }}
+                      disabled={scanBusy}
+                      onChange={e => { const f = e.target.files?.[0]; if (f) { e.target.value = ''; void loadQuestionFromFile(f); } }}
+                    />
+                  </label>
+                  {scanError && (
+                    <span style={{ fontSize: 12, color: '#f87171' }}>⚠ {scanError}</span>
+                  )}
+                  {typeInput.trim() && !scanBusy && !scanError && (
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>✓ question loaded</span>
+                  )}
+                </div>
               </div>
 
               {/* Context / notes */}
@@ -3481,13 +3449,6 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                 )}
               </div>
 
-              {/* Shortcut to scan */}
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
-                Have a photo or PDF instead?{' '}
-                <button onClick={() => setActive('scan')} style={{ background: 'none', border: 'none', color: '#38bdf8', fontWeight: 600, fontSize: 12, cursor: 'pointer', padding: 0 }}>
-                  Use Question Scan →
-                </button>
-              </div>
             </div>
           );
         })()}

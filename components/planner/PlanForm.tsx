@@ -20,7 +20,7 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
   const { t } = useI18n({
     'Enter a plan title': 'أدخل عنوان الخطة',
     'Pick an exam date': 'اختر تاريخ الاختبار',
-    'Exam date must be in the future': 'يجب أن يكون تاريخ الاختبار في المستقبل',
+    'Exam date must be today or in the future': 'يجب أن يكون تاريخ الاختبار اليوم أو في المستقبل',
     'Add at least one topic': 'أضف موضوعًا واحدًا على الأقل',
     'Create Study Plan': 'إنشاء خطة دراسة',
     'Plan Title': 'عنوان الخطة',
@@ -49,9 +49,9 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
   const [error, setError] = useState('');
   const [preview, setPreview] = useState<GeneratedSchedule | null>(null);
 
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const minDate = tomorrow.toISOString().split('T')[0];
+  const todayDate = new Date();
+  todayDate.setHours(0, 0, 0, 0);
+  const minDate = todayDate.toISOString().split('T')[0];
 
   const addTopic = () => {
     setTopics(prev => [...prev, { name: '', difficulty: 3, estimatedHours: 2 }]);
@@ -70,7 +70,9 @@ export function PlanForm({ onGenerate, onCancel }: PlanFormProps) {
     setError('');
     if (!title.trim()) { setError(t('Enter a plan title')); return; }
     if (!examDate) { setError(t('Pick an exam date')); return; }
-    if (new Date(examDate) <= new Date()) { setError(t('Exam date must be in the future')); return; }
+    const examMidnight = new Date(examDate); // date-only strings parse as UTC midnight
+    const nowMidnight = new Date(); nowMidnight.setUTCHours(0, 0, 0, 0);
+    if (examMidnight < nowMidnight) { setError(t('Exam date must be today or in the future')); return; }
     const validTopics = topics.filter(t => t.name.trim());
     if (validTopics.length === 0) { setError(t('Add at least one topic')); return; }
     const schedule = generateStudySchedule(new Date(examDate), validTopics, dailyMinutes);

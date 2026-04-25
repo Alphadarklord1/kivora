@@ -10,7 +10,7 @@ const securityHeaders = [
       "frame-ancestors 'none'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data: https:",
-      "style-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://fonts.bunny.net",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "connect-src 'self' https: ws: wss: http://127.0.0.1:* http://localhost:*",
       "media-src 'self' blob: data:",

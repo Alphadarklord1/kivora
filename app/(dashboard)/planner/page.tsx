@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useStudyPlans } from '@/hooks/useStudyPlans';
-import { PlanList } from '@/components/planner/PlanList';
+import { PlanList, type PlanFilter } from '@/components/planner/PlanList';
 import { PlanForm } from '@/components/planner/PlanForm';
+import { CourseScheduleImporter, type ImportedCalendarEvent } from '@/components/planner/CourseScheduleImporter';
+import { TimetableBuilder, type TimetableImportEvent } from '@/components/planner/TimetableBuilder';
 import { generateStudySchedule } from '@/lib/planner/generate';
 import type { StudyPlan } from '@/lib/planner/study-plan-types';
 
@@ -67,7 +69,6 @@ const LS_KEY = 'kivora-calendar-events';
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 function toDateStr(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
-function toTimeStr(d: Date) { return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 function parseDate(s: string): Date { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
 function addDays(d: Date, n: number) { const r = new Date(d); r.setDate(r.getDate()+n); return r; }
 function startOfWeek(d: Date) { const r = new Date(d); r.setDate(r.getDate()-r.getDay()); return r; }
@@ -158,9 +159,18 @@ export default function PlannerPage() {
   });
   const weekScrollRef = useRef<HTMLDivElement>(null);
   const [dragOverSlot, setDragOverSlot] = useState<{ date: string; hour: number } | null>(null);
-  const { plans, createPlan, deletePlan, loading: plansLoading } = useStudyPlans();
+  const { plans, createPlan, deletePlan, fetchPlans, loading: plansLoading } = useStudyPlans();
+  const [planFilter, setPlanFilter] = useState<PlanFilter>('all');
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+
+  // Re-fetch from server when filter changes
+  useEffect(() => {
+    void fetchPlans(planFilter === 'all' ? undefined : planFilter);
+  // fetchPlans is stable (useCallback with no deps); planFilter drives the refetch
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planFilter]);
 
   // Load from API (falling back to localStorage) + inject from study plans
   useEffect(() => {
@@ -222,6 +232,14 @@ export default function PlannerPage() {
     saveEventsLocal(toSave);
     setEvents(updated);
   }, []);
+
+  const importEvents = useCallback((imported: Array<ImportedCalendarEvent | TimetableImportEvent>) => {
+    const newEvents = imported.filter((incoming) => !events.some((existing) => existing.id === incoming.id));
+    if (newEvents.length === 0) return;
+    const updated = [...events, ...newEvents];
+    persistEvents(updated);
+    void Promise.all(newEvents.map((event) => apiCreateEvent(event as Parameters<typeof apiCreateEvent>[0])));
+  }, [events, persistEvents]);
 
   // Scroll week view to 8am on mount
   useEffect(() => {
@@ -352,7 +370,9 @@ export default function PlannerPage() {
   }, [view, cursor]);
 
   return (
-    <div className="cal-shell">
+    <>
+      <TimetableBuilder onImport={importEvents} />
+      <div className="cal-shell">
 
       {/* ── Left Sidebar ────────────────────────────────────────────── */}
       <aside className="cal-sidebar">
@@ -424,6 +444,8 @@ export default function PlannerPage() {
           <PlanList
             plans={plans}
             loading={plansLoading}
+            filter={planFilter}
+            onFilterChange={setPlanFilter}
             selectedPlanId={selectedPlanId}
             onSelectPlan={(plan: StudyPlan) => {
               setSelectedPlanId(plan.id);
@@ -448,16 +470,21 @@ export default function PlannerPage() {
             <button className="nav-btn icon-btn" onClick={navNext}>›</button>
             <h2 className="cal-title">{navLabel}</h2>
           </div>
-          <div className="view-switcher">
-            {(['month','week','day','agenda'] as CalendarView[]).map(v => (
-              <button
-                key={v}
-                className={`view-btn${view === v ? ' active' : ''}`}
-                onClick={() => setView(v)}
-              >
-                {v.charAt(0).toUpperCase()+v.slice(1)}
-              </button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button className="import-schedule-btn" onClick={() => setShowImportModal(true)} title="Import course schedule from text">
+              Import Schedule
+            </button>
+            <div className="view-switcher">
+              {(['month','week','day','agenda'] as CalendarView[]).map(v => (
+                <button
+                  key={v}
+                  className={`view-btn${view === v ? ' active' : ''}`}
+                  onClick={() => setView(v)}
+                >
+                  {v.charAt(0).toUpperCase()+v.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
         </header>
 
@@ -629,6 +656,14 @@ export default function PlannerPage() {
         </div>
       )}
 
+      {/* ── Course Schedule Importer ─────────────────────────────────── */}
+      {showImportModal && (
+        <CourseScheduleImporter
+          onClose={() => setShowImportModal(false)}
+          onImport={importEvents}
+        />
+      )}
+
       {/* ── Study Plan Form Modal ────────────────────────────────────── */}
       {showPlanForm && (
         <div className="modal-overlay" onClick={() => setShowPlanForm(false)}>
@@ -761,6 +796,15 @@ export default function PlannerPage() {
         }
         .view-btn.active { background: var(--primary); color: white; }
         .view-btn:hover:not(.active) { color: var(--text-primary); }
+        .import-schedule-btn {
+          padding: 5px 12px; border-radius: 8px;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-elevated);
+          color: var(--text-secondary);
+          font-size: 12px; font-weight: 600; cursor: pointer;
+          transition: all 0.12s; white-space: nowrap;
+        }
+        .import-schedule-btn:hover { border-color: var(--primary); color: var(--primary); }
 
         /* ── Detail panel ──────────────────────────────────────────── */
         .detail-overlay {
@@ -866,7 +910,8 @@ export default function PlannerPage() {
           .cal-sidebar { display: none; }
         }
       `}</style>
-    </div>
+      </div>
+    </>
   );
 }
 

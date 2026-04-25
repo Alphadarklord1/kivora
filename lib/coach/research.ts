@@ -305,7 +305,9 @@ function buildRankingSummary(sources: ResearchSource[], ranking: ResearchRanking
     : ranking === 'broad-web'
       ? 'Broad-web ranking keeps a wider spread of source types in play.'
       : 'Balanced ranking mixes authority with readability.';
-  const webLabel = includeWeb ? 'Web search is enabled.' : 'Web search is limited to academic and local suggestions.';
+  const webLabel = includeWeb
+    ? 'Wikipedia and encyclopedic sources are included alongside academic databases.'
+    : 'Only peer-reviewed academic databases (Semantic Scholar, OpenAlex) were searched.';
   return `${rankingLabel} ${webLabel} Source mix: ${parts.join(', ')}.`;
 }
 
