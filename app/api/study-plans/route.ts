@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { studyPlans } from '@/lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
 import { betaReadFallback, databaseUnavailable, unauthorized } from '@/lib/api/runtime-guards';
@@ -29,14 +29,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
 
-    let plans = await db.query.studyPlans.findMany({
-      where: eq(studyPlans.userId, userId),
+    const plans = await db.query.studyPlans.findMany({
+      where: status
+        ? and(eq(studyPlans.userId, userId), eq(studyPlans.status, status))
+        : eq(studyPlans.userId, userId),
       orderBy: [desc(studyPlans.createdAt)],
     });
-
-    if (status) {
-      plans = plans.filter(plan => plan.status === status);
-    }
 
     return NextResponse.json(plans);
   } catch (error) {
@@ -71,6 +69,17 @@ export async function POST(request: NextRequest) {
       return apiError(400, {
         errorCode: 'INVALID_STUDY_PLAN',
         reason: 'Title, exam date, topics, and schedule are required',
+        requestId,
+      });
+    }
+
+    const examDateObj = new Date(examDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (isNaN(examDateObj.getTime()) || examDateObj < today) {
+      return apiError(400, {
+        errorCode: 'INVALID_EXAM_DATE',
+        reason: 'Exam date must be today or in the future',
         requestId,
       });
     }

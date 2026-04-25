@@ -1,22 +1,24 @@
 'use client';
 
 import { StudyPlan } from '@/hooks/useStudyPlans';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { formatScheduleDate } from '@/lib/planner/generate';
 import { useI18n } from '@/lib/i18n/useI18n';
+
+export type PlanFilter = 'all' | 'active' | 'completed';
 
 interface PlanListProps {
   plans: StudyPlan[];
   loading: boolean;
+  filter: PlanFilter;
+  onFilterChange: (f: PlanFilter) => void;
   selectedPlanId: string | null;
   onSelectPlan: (plan: StudyPlan) => void;
   onNewPlan: () => void;
   onDeletePlan: (planId: string) => void;
 }
 
-type Filter = 'all' | 'active' | 'completed';
-
-export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPlan, onDeletePlan }: PlanListProps) {
+export function PlanList({ plans, loading, filter, onFilterChange, selectedPlanId, onSelectPlan, onNewPlan, onDeletePlan }: PlanListProps) {
   const { t, locale, formatNumber } = useI18n({
     'Study Plans': 'خطط الدراسة',
     'Calendar view': 'عرض التقويم',
@@ -36,14 +38,10 @@ export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPl
     Exam: 'الاختبار',
     Today: 'اليوم',
   });
-  const [filter, setFilter] = useState<Filter>('all');
 
-  const filtered = useMemo(() => {
-    return filter === 'all' ? plans : plans.filter((p) => p.status === filter);
-  }, [filter, plans]);
-
-  const activePlans = plans.filter((p) => p.status === 'active').length;
-  const completedPlans = plans.filter((p) => p.status === 'completed').length;
+  // plans is already server-filtered; counts computed from what was returned
+  const activePlans = useMemo(() => plans.filter((p) => p.status === 'active').length, [plans]);
+  const completedPlans = useMemo(() => plans.filter((p) => p.status === 'completed').length, [plans]);
 
   return (
     <div className="plan-list">
@@ -58,13 +56,13 @@ export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPl
       </div>
 
       <div className="filter-tabs">
-        <button className={`filter-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
+        <button className={`filter-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => onFilterChange('all')}>
           {t('All')} <span>{formatNumber(plans.length)}</span>
         </button>
-        <button className={`filter-tab ${filter === 'active' ? 'active' : ''}`} onClick={() => setFilter('active')}>
+        <button className={`filter-tab ${filter === 'active' ? 'active' : ''}`} onClick={() => onFilterChange('active')}>
           {t('Active')} <span>{formatNumber(activePlans)}</span>
         </button>
-        <button className={`filter-tab ${filter === 'completed' ? 'active' : ''}`} onClick={() => setFilter('completed')}>
+        <button className={`filter-tab ${filter === 'completed' ? 'active' : ''}`} onClick={() => onFilterChange('completed')}>
           {t('Done')} <span>{formatNumber(completedPlans)}</span>
         </button>
       </div>
@@ -73,7 +71,7 @@ export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPl
         <div className="plan-list-loading">
           {[1, 2, 3].map((i) => <div key={i} className="skeleton-card" />)}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : plans.length === 0 ? (
         <div className="plan-list-empty">
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}>
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
@@ -82,7 +80,7 @@ export function PlanList({ plans, loading, selectedPlanId, onSelectPlan, onNewPl
         </div>
       ) : (
         <div className="plans-scroll">
-          {filtered.map((plan) => {
+          {plans.map((plan) => {
             const examDate = new Date(plan.examDate);
             const isToday = examDate.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
 

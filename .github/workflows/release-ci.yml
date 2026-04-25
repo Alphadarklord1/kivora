@@ -1,4 +1,4 @@
-name: Beta CI
+name: Release CI
 
 on:
   push:
@@ -15,7 +15,7 @@ on:
       repo:
         description: owner/repo for release verification
         required: false
-        default: Alphadarklord1/studypilot
+        default: Alphadarklord1/kivora
         type: string
 
 permissions:
@@ -40,11 +40,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Run beta tests
-        run: npm run test:beta
+      - name: Run release tests
+        run: npm run test:release
 
       - name: Validate model manifest
-        run: npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/studypilot --allow-placeholders=1
+        run: npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/kivora
 
   release-consistency:
     if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}

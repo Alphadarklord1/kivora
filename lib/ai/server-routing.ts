@@ -1,6 +1,5 @@
 import { callOpenAIChat, type OpenAIMessage } from '@/lib/ai/openai';
 import { callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
-import { callGroqChat, isGroqConfigured } from '@/lib/ai/groq';
 import { resolveAiRuntimeRequest, cloudProviderForModel, type AiMode } from '@/lib/ai/runtime';
 
 export { resolveAiRuntimeRequest };
@@ -71,7 +70,7 @@ export async function tryLocalGeneration(args: {
   return { ok: false as const };
 }
 
-// ── Cloud routing across Groq, Grok/xAI, and OpenAI ──────────────────────────
+// ── Cloud routing across Grok/xAI and OpenAI ─────────────────────────────────
 
 /**
  * Try the requested cloud provider first, then other configured providers.
@@ -85,25 +84,11 @@ export async function tryCloudGeneration(args: {
   const provider = cloudProviderForModel(args.model);
   const order = [
     provider,
-    ...(['groq', 'grok', 'openai'] as const).filter((candidate) => candidate !== provider),
+    ...(['grok', 'openai'] as const).filter((candidate) => candidate !== provider),
   ];
   let lastMessage = 'No cloud provider is configured.';
 
   for (const candidate of order) {
-    if (candidate === 'groq' && isGroqConfigured()) {
-      const groqModel = provider === 'groq' ? args.model : 'llama-3.3-70b-versatile';
-      const groqResult = await callGroqChat({
-        model: groqModel,
-        messages: args.messages,
-        maxTokens: args.maxTokens ?? 1600,
-        temperature: 0.7,
-      });
-      if (groqResult.ok) {
-        return { ok: true as const, content: groqResult.content, source: 'groq' as const };
-      }
-      lastMessage = groqResult.message;
-    }
-
     if (candidate === 'grok' && isGrokConfigured()) {
       const grokModel = provider === 'grok' ? args.model : 'grok-3-fast';
       const grokResult = await callGrokChat({

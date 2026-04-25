@@ -1,5 +1,5 @@
 type PdfJsModule = {
-  getDocument: (params: { data: ArrayBuffer }) => { promise: Promise<any> };
+  getDocument: (params: { data: ArrayBuffer }) => { promise: Promise<unknown> };
   GlobalWorkerOptions: { workerSrc: string };
 };
 

@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-const PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://kivora-app.vercel.app';
+const PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://study-alpha-three.vercel.app';
 
 function extractToken(input: string) {
   const trimmed = input.trim();

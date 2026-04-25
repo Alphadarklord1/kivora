@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useStudyPlans } from '@/hooks/useStudyPlans';
-import { PlanList } from '@/components/planner/PlanList';
+import { PlanList, type PlanFilter } from '@/components/planner/PlanList';
 import { PlanForm } from '@/components/planner/PlanForm';
+import { CourseScheduleImporter, type ImportedCalendarEvent } from '@/components/planner/CourseScheduleImporter';
+import { TimetableBuilder, type TimetableImportEvent } from '@/components/planner/TimetableBuilder';
 import { generateStudySchedule } from '@/lib/planner/generate';
 import type { StudyPlan } from '@/lib/planner/study-plan-types';
 
@@ -11,6 +13,7 @@ import type { StudyPlan } from '@/lib/planner/study-plan-types';
 
 type EventType = 'study' | 'exam' | 'deadline' | 'class' | 'break' | 'revision';
 type CalendarView = 'month' | 'week' | 'day' | 'agenda';
+type PlannerMode = 'timetable' | 'calendar' | 'plans';
 
 interface CalendarEvent {
   id: string;
@@ -67,7 +70,6 @@ const LS_KEY = 'kivora-calendar-events';
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 function toDateStr(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
-function toTimeStr(d: Date) { return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 function parseDate(s: string): Date { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
 function addDays(d: Date, n: number) { const r = new Date(d); r.setDate(r.getDate()+n); return r; }
 function startOfWeek(d: Date) { const r = new Date(d); r.setDate(r.getDate()-r.getDay()); return r; }
@@ -145,6 +147,7 @@ function daysUntil(dateStr: string): number {
 export default function PlannerPage() {
   useEffect(() => { document.title = 'Planner — Kivora'; }, []);
   const today = useMemo(() => new Date(), []);
+  const [plannerMode, setPlannerMode] = useState<PlannerMode>('timetable');
   const [view, setView] = useState<CalendarView>('week');
   const [cursor, setCursor] = useState<Date>(today);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -158,9 +161,18 @@ export default function PlannerPage() {
   });
   const weekScrollRef = useRef<HTMLDivElement>(null);
   const [dragOverSlot, setDragOverSlot] = useState<{ date: string; hour: number } | null>(null);
-  const { plans, createPlan, deletePlan, loading: plansLoading } = useStudyPlans();
+  const { plans, createPlan, deletePlan, fetchPlans, loading: plansLoading } = useStudyPlans();
+  const [planFilter, setPlanFilter] = useState<PlanFilter>('all');
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+
+  // Re-fetch from server when filter changes
+  useEffect(() => {
+    void fetchPlans(planFilter === 'all' ? undefined : planFilter);
+  // fetchPlans is stable (useCallback with no deps); planFilter drives the refetch
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planFilter]);
 
   // Load from API (falling back to localStorage) + inject from study plans
   useEffect(() => {
@@ -222,6 +234,14 @@ export default function PlannerPage() {
     saveEventsLocal(toSave);
     setEvents(updated);
   }, []);
+
+  const importEvents = useCallback((imported: Array<ImportedCalendarEvent | TimetableImportEvent>) => {
+    const newEvents = imported.filter((incoming) => !events.some((existing) => existing.id === incoming.id));
+    if (newEvents.length === 0) return;
+    const updated = [...events, ...newEvents];
+    persistEvents(updated);
+    void Promise.all(newEvents.map((event) => apiCreateEvent(event as Parameters<typeof apiCreateEvent>[0])));
+  }, [events, persistEvents]);
 
   // Scroll week view to 8am on mount
   useEffect(() => {
@@ -325,6 +345,10 @@ export default function PlannerPage() {
 
   // Today events
   const todayEvents = useMemo(() => eventsForDate(toDateStr(today)), [eventsForDate, today]);
+  const selectedPlan = useMemo(
+    () => plans.find((plan) => plan.id === selectedPlanId) ?? plans[0] ?? null,
+    [plans, selectedPlanId],
+  );
 
   // Navigation
   const goToday = () => { setCursor(new Date(today)); setMiniDate(new Date(today)); };
@@ -352,7 +376,120 @@ export default function PlannerPage() {
   }, [view, cursor]);
 
   return (
-    <div className="cal-shell">
+    <>
+      <section className="planner-board">
+        <div className="planner-hero">
+          <div>
+            <div className="planner-eyebrow">Planner board</div>
+            <h1>Academic Planner</h1>
+            <p>Build your timetable, place real calendar events, and turn deadlines into study plans without bouncing between tools.</p>
+          </div>
+          <div className="planner-mode-switcher" role="tablist" aria-label="Planner modes">
+            <button className={`planner-mode-btn${plannerMode === 'timetable' ? ' active' : ''}`} onClick={() => setPlannerMode('timetable')}>Timetable Builder</button>
+            <button className={`planner-mode-btn${plannerMode === 'calendar' ? ' active' : ''}`} onClick={() => setPlannerMode('calendar')}>Study Calendar</button>
+            <button className={`planner-mode-btn${plannerMode === 'plans' ? ' active' : ''}`} onClick={() => setPlannerMode('plans')}>Study Plans</button>
+          </div>
+        </div>
+
+        {plannerMode === 'timetable' && (
+          <div className="planner-mode-panel">
+            <div className="planner-mode-head">
+              <div>
+                <span className="mode-kicker">Default mode</span>
+                <h2>Paste your course sections and let Kivora build the cleanest schedule.</h2>
+              </div>
+              <div className="mode-actions">
+                <button className="mode-btn ghost" onClick={() => setPlannerMode('calendar')}>Open calendar</button>
+                <button className="mode-btn" onClick={() => setPlannerMode('plans')}>Create study plan</button>
+              </div>
+            </div>
+            <TimetableBuilder onImport={importEvents} />
+          </div>
+        )}
+
+        {plannerMode === 'plans' && (
+          <section className="plans-mode-shell">
+            <div className="plans-mode-card">
+              <div className="planner-mode-head">
+                <div>
+                  <span className="mode-kicker">Study plans</span>
+                  <h2>Turn one exam date into a steady, realistic study schedule.</h2>
+                  <p>Pick the active plan, check the progress, then jump back into the calendar when you need the full week view.</p>
+                </div>
+                <div className="mode-actions">
+                  <button className="mode-btn" onClick={() => setShowPlanForm(true)}>Create study plan</button>
+                  <button className="mode-btn ghost" onClick={() => setPlannerMode('calendar')}>Open calendar</button>
+                </div>
+              </div>
+            </div>
+
+            <div className="plans-mode-grid">
+              <div className="plans-mode-card">
+                <PlanList
+                  plans={plans}
+                  loading={plansLoading}
+                  filter={planFilter}
+                  onFilterChange={setPlanFilter}
+                  selectedPlanId={selectedPlan?.id ?? null}
+                  onSelectPlan={(plan: StudyPlan) => {
+                    setSelectedPlanId(plan.id);
+                    const examD = new Date(plan.examDate);
+                    setCursor(examD);
+                    setMiniDate(examD);
+                  }}
+                  onNewPlan={() => setShowPlanForm(true)}
+                  onDeletePlan={(planId: string) => { void deletePlan(planId); }}
+                />
+              </div>
+
+              <div className="plans-mode-card plans-mode-summary">
+                {selectedPlan ? (
+                  <>
+                    <span className="mode-kicker">Selected plan</span>
+                    <h3>{selectedPlan.title}</h3>
+                    <div className="plan-summary-grid">
+                      <div><span>Exam</span><strong>{selectedPlan.examDate}</strong></div>
+                      <div><span>Daily load</span><strong>{selectedPlan.dailyMinutes}m/day</strong></div>
+                      <div><span>Topics</span><strong>{selectedPlan.topics.length}</strong></div>
+                      <div><span>Progress</span><strong>{selectedPlan.progress}%</strong></div>
+                    </div>
+                    <div className="plan-topic-list">
+                      {selectedPlan.topics.slice(0, 6).map((topic) => (
+                        <span key={topic.name} className="plan-topic-chip">{topic.name}</span>
+                      ))}
+                    </div>
+                    <div className="mode-actions">
+                      <button className="mode-btn ghost" onClick={() => setPlannerMode('calendar')}>Open calendar view</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="mode-kicker">No plan yet</span>
+                    <h3>Start with one exam or deadline.</h3>
+                    <p>As soon as you create a plan, Kivora will turn it into day-by-day study blocks you can track from this page.</p>
+                    <div className="mode-actions">
+                      <button className="mode-btn" onClick={() => setShowPlanForm(true)}>Create study plan</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {plannerMode === 'calendar' && (
+          <div className="planner-mode-panel">
+            <div className="planner-mode-head">
+              <div>
+                <span className="mode-kicker">Study calendar</span>
+                <h2>Place classes, exams, deadlines, and study blocks in one timeline.</h2>
+              </div>
+              <div className="mode-actions">
+                <button className="mode-btn" onClick={() => openNewEvent()}>Add calendar event</button>
+                <button className="mode-btn ghost" onClick={() => setShowImportModal(true)}>Import course text</button>
+              </div>
+            </div>
+            <div className="cal-shell">
 
       {/* ── Left Sidebar ────────────────────────────────────────────── */}
       <aside className="cal-sidebar">
@@ -424,6 +561,8 @@ export default function PlannerPage() {
           <PlanList
             plans={plans}
             loading={plansLoading}
+            filter={planFilter}
+            onFilterChange={setPlanFilter}
             selectedPlanId={selectedPlanId}
             onSelectPlan={(plan: StudyPlan) => {
               setSelectedPlanId(plan.id);
@@ -448,16 +587,21 @@ export default function PlannerPage() {
             <button className="nav-btn icon-btn" onClick={navNext}>›</button>
             <h2 className="cal-title">{navLabel}</h2>
           </div>
-          <div className="view-switcher">
-            {(['month','week','day','agenda'] as CalendarView[]).map(v => (
-              <button
-                key={v}
-                className={`view-btn${view === v ? ' active' : ''}`}
-                onClick={() => setView(v)}
-              >
-                {v.charAt(0).toUpperCase()+v.slice(1)}
-              </button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button className="import-schedule-btn" onClick={() => setShowImportModal(true)} title="Import course schedule from text">
+              Import Schedule
+            </button>
+            <div className="view-switcher">
+              {(['month','week','day','agenda'] as CalendarView[]).map(v => (
+                <button
+                  key={v}
+                  className={`view-btn${view === v ? ' active' : ''}`}
+                  onClick={() => setView(v)}
+                >
+                  {v.charAt(0).toUpperCase()+v.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
         </header>
 
@@ -629,6 +773,14 @@ export default function PlannerPage() {
         </div>
       )}
 
+      {/* ── Course Schedule Importer ─────────────────────────────────── */}
+      {showImportModal && (
+        <CourseScheduleImporter
+          onClose={() => setShowImportModal(false)}
+          onImport={importEvents}
+        />
+      )}
+
       {/* ── Study Plan Form Modal ────────────────────────────────────── */}
       {showPlanForm && (
         <div className="modal-overlay" onClick={() => setShowPlanForm(false)}>
@@ -649,13 +801,153 @@ export default function PlannerPage() {
       )}
 
       <style jsx>{`
+        .planner-board {
+          display: grid;
+          gap: 18px;
+        }
+        .planner-hero,
+        .planner-mode-panel,
+        .plans-mode-card {
+          border: 1px solid var(--border-subtle);
+          border-radius: 22px;
+          background: color-mix(in srgb, var(--bg-elevated) 94%, white);
+          box-shadow: var(--shadow-sm);
+        }
+        .planner-hero {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 16px;
+          padding: 20px;
+          background:
+            radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 12%, transparent), transparent 34%),
+            color-mix(in srgb, var(--bg-elevated) 94%, white);
+        }
+        .planner-eyebrow,
+        .mode-kicker {
+          display: inline-block;
+          margin-bottom: 6px;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+        }
+        .planner-hero h1,
+        .planner-mode-head h2,
+        .plans-mode-card h3 {
+          margin: 0;
+        }
+        .planner-hero p,
+        .planner-mode-head p,
+        .plans-mode-card p {
+          margin: 8px 0 0;
+          color: var(--text-secondary);
+          line-height: 1.6;
+          max-width: 65ch;
+        }
+        .planner-mode-switcher {
+          display: inline-flex;
+          gap: 4px;
+          padding: 4px;
+          border-radius: 999px;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+          flex-wrap: wrap;
+        }
+        .planner-mode-btn,
+        .mode-btn {
+          border: 1px solid transparent;
+          border-radius: 999px;
+          padding: 10px 14px;
+          background: transparent;
+          color: var(--text-secondary);
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .planner-mode-btn.active,
+        .mode-btn {
+          background: var(--primary);
+          color: white;
+        }
+        .mode-btn.ghost {
+          background: var(--bg-surface);
+          color: var(--text-primary);
+          border-color: var(--border-subtle);
+        }
+        .planner-mode-panel,
+        .plans-mode-shell {
+          display: grid;
+          gap: 16px;
+        }
+        .planner-mode-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 16px;
+          padding: 18px 20px 0;
+        }
+        .mode-actions {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+        .plans-mode-grid {
+          display: grid;
+          gap: 16px;
+          grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+        }
+        .plans-mode-card {
+          padding: 18px;
+        }
+        .plans-mode-summary {
+          align-content: start;
+        }
+        .plan-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          margin: 16px 0;
+        }
+        .plan-summary-grid div {
+          display: grid;
+          gap: 4px;
+          padding: 12px;
+          border-radius: 14px;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-surface);
+        }
+        .plan-summary-grid span {
+          font-size: 12px;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+        }
+        .plan-topic-list {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-bottom: 16px;
+        }
+        .plan-topic-chip {
+          padding: 7px 10px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--primary) 10%, var(--bg-surface));
+          color: var(--text-primary);
+          font-size: 13px;
+          font-weight: 500;
+        }
         /* ── Shell ─────────────────────────────────────────────────── */
         .cal-shell {
           display: grid;
           grid-template-columns: 260px minmax(0,1fr);
-          height: calc(100dvh - 40px);
+          min-height: 72vh;
           overflow: hidden;
           background: var(--bg-surface);
+          border-top: 1px solid var(--border-subtle);
+          border-radius: 0 0 22px 22px;
         }
 
         /* ── Sidebar ───────────────────────────────────────────────── */
@@ -667,6 +959,7 @@ export default function PlannerPage() {
           border-right: 1px solid var(--border-subtle);
           overflow-y: auto;
           background: var(--bg-elevated);
+          max-height: 72vh;
         }
         .new-event-btn {
           display: flex;
@@ -734,7 +1027,7 @@ export default function PlannerPage() {
 
         /* ── Main ──────────────────────────────────────────────────── */
         .cal-main {
-          display: flex; flex-direction: column; overflow: hidden;
+          display: flex; flex-direction: column; overflow: hidden; min-width: 0;
         }
         .cal-header {
           display: flex; align-items: center; justify-content: space-between;
@@ -761,6 +1054,15 @@ export default function PlannerPage() {
         }
         .view-btn.active { background: var(--primary); color: white; }
         .view-btn:hover:not(.active) { color: var(--text-primary); }
+        .import-schedule-btn {
+          padding: 5px 12px; border-radius: 8px;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-elevated);
+          color: var(--text-secondary);
+          font-size: 12px; font-weight: 600; cursor: pointer;
+          transition: all 0.12s; white-space: nowrap;
+        }
+        .import-schedule-btn:hover { border-color: var(--primary); color: var(--primary); }
 
         /* ── Detail panel ──────────────────────────────────────────── */
         .detail-overlay {
@@ -862,11 +1164,21 @@ export default function PlannerPage() {
         .modal-btn.save:disabled { opacity: 0.4; cursor: not-allowed; }
 
         @media (max-width: 768px) {
+          .planner-hero,
+          .planner-mode-head {
+            flex-direction: column;
+          }
+          .plans-mode-grid,
+          .plan-summary-grid,
           .cal-shell { grid-template-columns: 1fr; }
           .cal-sidebar { display: none; }
         }
       `}</style>
-    </div>
+            </div>
+          </div>
+        )}
+      </section>
+    </>
   );
 }
 

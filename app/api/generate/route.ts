@@ -13,8 +13,7 @@ const OFFLINE_MODES: ToolMode[] = [
   'mcq', 'flashcards', 'assignment',
 ];
 
-// All modes including AI-only extras
-const VALID_MODES = [...OFFLINE_MODES, 'outline', 'exam'] as const;
+const VALID_MODES = [...OFFLINE_MODES, 'outline', 'exam', 'practice'] as const;
 type AllModes = typeof VALID_MODES[number];
 
 const SYSTEM_PROMPT = 'You are a study assistant. Be concise, accurate, and helpful.';
@@ -24,7 +23,7 @@ const SYSTEM_PROMPT = 'You are a study assistant. Be concise, accurate, and help
  * Body: { mode: AllModes, text: string, options?: Record<string, unknown> }
  *
  * AI Provider Priority:
- *  1. Shared cloud router (Groq → Grok/xAI → OpenAI, based on selected model)
+ *  1. Shared cloud router (Grok/xAI → OpenAI, based on selected model)
  *  2. Ollama local — offline feature (OLLAMA_URL, default localhost:11434)
  *  3. Deterministic offline generation — always available, no API needed
  */
@@ -206,6 +205,7 @@ function buildUserPrompt(mode: AllModes, text: string, options?: Record<string, 
     assignment: `Generate a structured assignment with ${count} questions based on:\n\n${text}`,
     outline:    `Create a detailed hierarchical outline with main topics and subtopics from:\n\n${text}`,
     exam:       `Create a realistic exam paper with ${count} mixed questions (MCQ, short answer, essay) worth 100 marks total. Include a marking scheme. Based on:\n\n${text}`,
+    practice:   `Create one strong practice problem based on this material. Use this format exactly: ## Problem, ## Hint 1, ## Hint 2, ## Hint 3, ## Solution.\n\n${text}`,
   };
 
   return instructions[mode];

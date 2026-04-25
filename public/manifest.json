@@ -75,28 +75,13 @@
   "share_target": {
     "action": "/workspace",
     "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
     "params": {
       "title": "title",
       "text": "text",
       "url": "url"
     }
   },
-  "screenshots": [
-    {
-      "src": "/screenshots/workspace.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Kivora Workspace"
-    },
-    {
-      "src": "/screenshots/mobile.png",
-      "sizes": "390x844",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Kivora Mobile"
-    }
-  ],
   "handle_links": "preferred",
   "launch_handler": {
     "client_mode": "navigate-existing"

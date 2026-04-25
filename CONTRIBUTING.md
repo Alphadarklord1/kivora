@@ -1,13 +1,14 @@
 # Contributing to Kivora
 
-Kivora is a desktop-primary AI study workspace with a supported web beta. Contributions should protect the stable beta surface first.
+Kivora is a desktop-primary AI study workspace with a supported web companion. Contributions should protect the public 1.0 surface first.
 
 ## What to work on
 
 Prioritize changes in these supported surfaces:
 
 - `workspace`
-- `tools`
+- `coach`
+- `math`
 - `planner`
 - `library`
 - `analytics`
@@ -17,13 +18,13 @@ Prioritize changes in these supported surfaces:
 - `register`
 - `downloads`
 
-Avoid expanding incomplete or intentionally cut beta surfaces unless the change explicitly restores them to a stable state.
+Avoid expanding incomplete or intentionally hidden surfaces unless the change explicitly restores them to a stable state.
 
 ## Ground rules
 
 - Keep guest mode working unless the task explicitly changes auth behavior.
 - Keep desktop as the primary supported runtime.
-- Do not re-enable encryption-password flows during beta.
+- Do not re-enable encryption-password flows during the 1.0 cycle.
 - Do not introduce breaking changes to the offline model manifest or release flow without updating docs and tests.
 - Keep Arabic/RTL compatibility for user-facing UI changes.
 
@@ -37,7 +38,7 @@ npm run dev
 Useful commands:
 
 ```bash
-npm run test:beta
+npm run test:release
 npm run build
 ```
 
@@ -60,7 +61,7 @@ npm run build
 Run:
 
 ```bash
-npm run test:beta
+npm run test:release
 npm run build
 ```
 
@@ -72,8 +73,8 @@ If your change touches releases or model downloads, also validate the manifest/c
 ## Pull request checklist
 
 - Scope is clear and limited
-- Stable beta surfaces still work
+- Public 1.0 surfaces still work
 - Guest mode still works if relevant
 - English and Arabic UI are both considered if relevant
-- Build and beta tests pass
+- Build and release tests pass
 - Docs updated if contributor workflow, env vars, or release flow changed

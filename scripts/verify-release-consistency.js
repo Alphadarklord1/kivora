@@ -34,7 +34,7 @@ const assets = assetsCsv
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean);
-const requiredModels = (args['required-models'] || 'mini,balanced,pro')
+const requiredModels = (args['required-models'] || 'mini,balanced')
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean);
@@ -75,6 +75,7 @@ for (const key of requiredModels) {
 
 const mismatched = assets.filter((name) => {
   if (REQUIRED_STATIC_ASSETS.includes(name)) return false;
+  if (name === 'latest.yml' || name === 'latest-mac.yml' || name === 'latest-linux.yml') return false;
   if (name.endsWith('.gguf')) return false;
   if (name.endsWith('.blockmap')) return false;
   return !name.includes(version);

@@ -57,7 +57,7 @@ function parseArgs(argv) {
 
 function resolveSourceDir(sourceArg) {
   if (sourceArg) return path.resolve(sourceArg);
-  if (process.env.STUDYPILOT_MODEL_STORE) return path.resolve(process.env.STUDYPILOT_MODEL_STORE);
+  if (process.env.KIVORA_MODEL_STORE) return path.resolve(process.env.KIVORA_MODEL_STORE);
   return path.join(os.homedir(), 'Kivora-model-store');
 }
 

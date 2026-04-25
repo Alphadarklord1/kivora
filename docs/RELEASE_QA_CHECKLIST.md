@@ -1,12 +1,12 @@
-# Kivora 1.0 Desktop QA Checklist
+# Kivora 1.0 Release QA Checklist
 
-Run this checklist before creating a 1.0 desktop release tag.
+Run this checklist before publishing or promoting a 1.0 release.
 
 ## Core reliability
 
 - [ ] Fresh launch works without account sign-in (`AUTH_REQUIRED` unset).
 - [ ] Folder create/edit/delete works on first run in guest mode.
-- [ ] Planner create/update/delete works with and without `DATABASE_URL` (DB-backed or local beta fallback).
+- [ ] Planner create/update/delete works with and without `DATABASE_URL` (DB-backed or local fallback).
 - [ ] `/analytics` opens without `Failed to load analytics`.
 - [ ] Analytics fallback banner appears only when fallback payload is returned.
 
@@ -19,7 +19,7 @@ Run this checklist before creating a 1.0 desktop release tag.
   - [ ] `GOOGLE_CLIENT_ID`
   - [ ] `GOOGLE_CLIENT_SECRET`
   - [ ] `AUTH_SECRET`
-  - [ ] redirect URI `https://kivora-app.vercel.app/api/auth/callback/google`
+  - [ ] redirect URI `https://study-alpha-three.vercel.app/api/auth/callback/google`
 - [ ] Desktop OAuth still works on `127.0.0.1:3893` or shows a clear disabled reason.
 
 ## Appearance + themes
@@ -40,7 +40,7 @@ Run this checklist before creating a 1.0 desktop release tag.
 - [ ] Desktop local runtime fallback behavior remains functional.
 - [ ] Policy-blocked prompts show refusal path (no fallback generation).
 - [ ] Mini model is bundled in the desktop build and works without extra downloads.
-- [ ] Optional Balanced/Pro installs succeed from the published GitHub release assets.
+- [ ] Optional Balanced installs from the published GitHub release asset and Pro installs from its external manifest URL.
 
 ## Arabic + RTL
 
@@ -52,23 +52,23 @@ Run this checklist before creating a 1.0 desktop release tag.
 ## Release gates
 
 - [ ] `npm run build`
-- [ ] `npm run test:beta`
+- [ ] `npm run test:release`
 - [ ] `npm run models:prepare:laptop`
 - [ ] `node scripts/verify-desktop-bundle.js --platform=mac`
-- [ ] `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/kivora --allow-placeholders=1`
+- [ ] `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/kivora`
 - [ ] `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/kivora --models-dir=~/Kivora-model-store`
 - [ ] `npm run release:verify -- --tag=vX.Y.Z --assets='<comma-separated asset names>'`
-- [ ] `beta-ci` and `model-manifest` GitHub workflows are green.
+- [ ] `release-ci` and `model-manifest` GitHub workflows are green.
 - [ ] Branch changes are merged from `codex/...` into `main` before deploying or tagging a release.
 - [ ] Desktop assets attached to the release use the Kivora names:
   - [ ] `Kivora-<version>-arm64.dmg`
   - [ ] `Kivora-<version>-arm64-mac.zip`
-  - [ ] `Kivora Setup <version>.exe`
-  - [ ] `Kivora <version>.exe`
+  - [ ] `Kivora-Setup-<version>.exe`
+  - [ ] `Kivora-<version>.exe`
 - [ ] Published release includes:
   - [ ] `model-manifest.json`
   - [ ] `SHA256SUMS.txt`
   - [ ] `qwen2.5-1.5b-instruct-q4_k_m.gguf`
   - [ ] `qwen2.5-3b-instruct-q4_k_m.gguf`
-  - [ ] `qwen2.5-7b-instruct-q4_k_m.gguf`
+  - [ ] Pro model URL in `model-manifest.json` resolves and verifies in-app
 - [ ] Vercel is deployed from the expected commit on `main`.

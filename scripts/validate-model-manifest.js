@@ -5,7 +5,7 @@ const path = require('path');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 const DEFAULT_MANIFEST = path.join(PROJECT_ROOT, 'electron', 'runtime', 'model-manifest.json');
-const DEFAULT_REPO = process.env.STUDYPILOT_MODEL_REPO || 'Alphadarklord1/kivora';
+const DEFAULT_REPO = process.env.KIVORA_MODEL_REPO || 'Alphadarklord1/kivora';
 const ALLOWED_KEYS = new Set(['mini', 'balanced', 'pro']);
 
 function parseArgs(argv) {
@@ -27,10 +27,26 @@ function fail(message) {
   throw new Error(message);
 }
 
+function isSafeExternalModelUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:') return false;
+    const host = url.hostname.toLowerCase();
+    return !(
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host.endsWith('.local')
+    );
+  } catch {
+    return false;
+  }
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const manifestPath = path.resolve(args.manifest || DEFAULT_MANIFEST);
-  const repo = (args.repo || process.env.STUDYPILOT_RELEASE_REPO || DEFAULT_REPO).trim();
+  const repo = (args.repo || process.env.KIVORA_RELEASE_REPO || DEFAULT_REPO).trim();
   const allowPlaceholders = args['allow-placeholders'] === '1' || args['allow-placeholders'] === 'true';
 
   if (!fs.existsSync(manifestPath)) {
@@ -71,10 +87,14 @@ function main() {
       fail(`minRamGb must be > 0 for ${model.key}`);
     }
     if (!allowPlaceholders) {
-      if (typeof model.url !== 'string' || !model.url.startsWith(`https://github.com/${repo}/releases/download/${versionTag}/`)) {
+      const isExternalProUrl = model.key === 'pro' && isSafeExternalModelUrl(model.url);
+      if (
+        typeof model.url !== 'string' ||
+        (!isExternalProUrl && !model.url.startsWith(`https://github.com/${repo}/releases/download/${versionTag}/`))
+      ) {
         fail(`url is invalid or tag/repo mismatch for ${model.key}`);
       }
-      if (!model.url.endsWith(`/${model.file}`)) {
+      if (!isExternalProUrl && !model.url.endsWith(`/${model.file}`)) {
         fail(`url/file mismatch for ${model.key}`);
       }
     }
