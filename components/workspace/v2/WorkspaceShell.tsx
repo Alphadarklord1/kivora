@@ -62,16 +62,24 @@ export function WorkspaceShell({
   children,
 }: WorkspaceShellProps) {
   const { data: session } = useSession();
-  const [todayCollapsed, setTodayCollapsed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return window.localStorage.getItem('kivora_workspace_today_collapsed') === '1';
-  });
-  // Persist the drawer collapsed state so the user doesn't have to
-  // re-collapse it every page load.
+  // Initial state must match the server render (no localStorage on the server).
+  // Reading localStorage during the initial render causes a hydration mismatch
+  // on the data-collapsed attribute, so defer the read to a post-mount effect
+  // and accept a single re-render to apply the persisted preference.
+  const [todayCollapsed, setTodayCollapsed] = useState<boolean>(false);
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    setTodayCollapsed(window.localStorage.getItem('kivora_workspace_today_collapsed') === '1');
+    setHydrated(true);
+  }, []);
+  // Persist the drawer collapsed state so the user doesn't have to
+  // re-collapse it every page load. Skip the first render so we don't
+  // overwrite the persisted value with the SSR default before reading it.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !hydrated) return;
     window.localStorage.setItem('kivora_workspace_today_collapsed', todayCollapsed ? '1' : '0');
-  }, [todayCollapsed]);
+  }, [todayCollapsed, hydrated]);
 
   const greeting = useMemo(() => timeOfDayGreeting(), []);
   const userFirst = firstName(session?.user?.name, 'there');
