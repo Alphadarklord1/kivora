@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { quizAttempts, files } from '@/lib/db/schema';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
@@ -18,6 +18,15 @@ export async function GET(request: NextRequest) {
     const userId = await getUserId(request);
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    // Guest / no-DB mode: return an empty history with zero stats so the
+    // analytics surface degrades gracefully instead of throwing 500.
+    if (!isDatabaseConfigured) {
+      return NextResponse.json({
+        attempts: [],
+        stats: { totalAttempts: 0, averageScore: 0, byMode: {} },
+        total: 0,
+      });
     }
 
     const { searchParams } = new URL(request.url);
@@ -125,6 +134,11 @@ export async function POST(request: NextRequest) {
     const userId = await getUserId(request);
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    // No-DB mode: accept the attempt but don't persist. Frontend uses
+    // fire-and-forget semantics, so a 202 lets it move on cleanly.
+    if (!isDatabaseConfigured) {
+      return NextResponse.json({ persisted: false }, { status: 202 });
     }
 
     const body = await request.json();
