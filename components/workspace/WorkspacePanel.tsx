@@ -30,7 +30,6 @@ const NotesPanel     = dynamic(() => import('@/components/workspace/NotesPanel')
 const ExamPlannerPanel = dynamic(() => import('@/components/workspace/ExamPlannerPanel').then(m => ({ default: m.ExamPlannerPanel })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const MCQView        = dynamic(() => import('@/components/workspace/views/MCQView').then(m => ({ default: m.MCQView })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const QuizView       = dynamic(() => import('@/components/workspace/views/QuizView').then(m => ({ default: m.QuizView })), { ssr: false, loading: () => <div className="tool-loading" /> });
-const FlashcardPreview = dynamic(() => import('@/components/workspace/views/FlashcardPreview').then(m => ({ default: m.FlashcardPreview })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const PracticeView   = dynamic(() => import('@/components/workspace/views/PracticeView').then(m => ({ default: m.PracticeView })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const FlashcardView  = dynamic(() => import('@/components/workspace/views/FlashcardView').then(m => ({ default: m.FlashcardView })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const ExamView       = dynamic(() => import('@/components/workspace/views/ExamView').then(m => ({ default: m.ExamView })), { ssr: false, loading: () => <div className="tool-loading" /> });
@@ -84,20 +83,20 @@ interface LibraryItemRecord {
 // ── Tab config ─────────────────────────────────────────────────────────────
 
 // "notes" generation lives on the dedicated 📓 Notes tab (which has its own
-// "Generate notes" button + style picker), so it is not duplicated here.
+// "Generate notes" button + style picker). "flashcards" generation lives on
+// the dedicated 🃏 Flashcards tab — neither is duplicated here.
 const GENERATE_TABS = [
   { id: 'summarize',  label: 'Summarize',  icon: '📝', hint: 'Key-point summary of your content' },
   { id: 'outline',    label: 'Outline',    icon: '📑', hint: 'Chapter outline with learning objectives' },
   { id: 'practice',   label: 'Practice',   icon: '🎯', hint: 'Practice problem with progressive hints and solution' },
   { id: 'mcq',        label: 'MCQ',        icon: '🧩', hint: 'Multiple-choice questions with answers' },
   { id: 'quiz',       label: 'Quiz',       icon: '❓', hint: 'Open-ended quiz questions' },
-  { id: 'flashcards', label: 'Flashcards', icon: '🃏', hint: 'Term/definition cards you can flip through and save as a deck' },
   { id: 'exam',       label: 'Exam Prep',  icon: '🏆', hint: 'Timed exam with scoring and weak-area analysis' },
 ] as const;
 
 const GENERATE_TAB_GROUPS = [
   { label: 'Written',  ids: ['summarize', 'outline'] },
-  { label: 'Practice', ids: ['practice', 'mcq', 'quiz', 'flashcards'] },
+  { label: 'Practice', ids: ['practice', 'mcq', 'quiz'] },
   { label: 'Exam',     ids: ['exam'] },
 ] as const;
 
@@ -1019,15 +1018,33 @@ export function WorkspacePanel({
 
   async function saveToLibrary() {
     if (!output) return;
-    const res = await fetch('/api/library', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: genMode, content: output }),
-    });
-    if (res.ok) {
-      toast('Saved to Library ✓', 'success');
-      broadcastInvalidate(LIBRARY_CHANNEL);
-    } else {
-      toast('Could not save — DB may not be configured', 'warning');
+    try {
+      const res = await fetch('/api/library', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: genMode, content: output }),
+      });
+      if (res.ok) {
+        toast('Saved to Library ✓', 'success');
+        broadcastInvalidate(LIBRARY_CHANNEL);
+        return;
+      }
+      if (res.status === 503) {
+        const { saveOfflineItem } = await import('@/lib/library/offline-store');
+        saveOfflineItem({ mode: genMode, content: output });
+        toast('Saved locally (sign in to sync to cloud)', 'success');
+        broadcastInvalidate(LIBRARY_CHANNEL);
+        return;
+      }
+      toast('Could not save — try again', 'warning');
+    } catch {
+      try {
+        const { saveOfflineItem } = await import('@/lib/library/offline-store');
+        saveOfflineItem({ mode: genMode, content: output });
+        toast('Saved locally — network was unreachable', 'success');
+        broadcastInvalidate(LIBRARY_CHANNEL);
+      } catch {
+        toast('Could not save — try again', 'warning');
+      }
     }
   }
 
@@ -1734,7 +1751,6 @@ export function WorkspacePanel({
                     : genMode === 'mcq'        ? <MCQView content={output} fileId={selFile?.id ?? null} />
                     : genMode === 'quiz'       ? <QuizView content={output} fileId={selFile?.id ?? null} />
                     : genMode === 'exam'       ? <ExamView content={output} fileId={selFile?.id ?? null} />
-                    : genMode === 'flashcards' ? <FlashcardPreview content={output} title={pasteMode ? 'Pasted text' : selFile?.name} />
                     : <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) }} />
                   }
 
@@ -1872,6 +1888,18 @@ export function WorkspacePanel({
                 <span>{activeReviewSet ? `${activeReviewDueCount} due now · ${activeReviewSet.cards.length} cards in this set` : 'Import, review, edit, and export your sets from one place in Workspace.'}</span>
               </div>
               <div className="workspace-focus-card workspace-focus-card--actions">
+                {extractedText && !generating && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => { setOutput(''); void runGenerate('flashcards'); }}
+                    title={selFile ? `Generate flashcards from ${selFile.name}` : 'Generate flashcards from pasted text'}
+                  >
+                    ✨ Generate from {pasteMode ? 'pasted text' : (selFile?.name ?? 'source')}
+                  </button>
+                )}
+                {generating && (
+                  <span className="badge" style={{ fontSize: 'var(--text-xs)' }}>Generating cards…</span>
+                )}
                 <button className="btn btn-secondary btn-sm" onClick={() => setRequestedReviewPhase('review')}>Review now</button>
                 <button className="btn btn-ghost btn-sm" onClick={() => setRequestedReviewPhase('import')}>Import set</button>
                 <button className="btn btn-ghost btn-sm" onClick={() => router.push('/library')}>Open Library</button>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { saveOfflineItem } from '@/lib/library/offline-store';
 
 export type NoteStyle = 'study' | 'summary' | 'revision' | 'cornell';
 
@@ -165,33 +166,42 @@ export function NotesPanel({
   async function saveToLibrary() {
     if (savingLib || !content.trim()) return;
     setSavingLib(true);
+    // Title heuristic: first markdown heading or the first non-empty line
+    // (clamped), so the library entry is recognisable.
+    const firstLine = content.split('\n').find((l) => l.trim()) ?? 'Notes';
+    const title = firstLine.replace(/^#+\s*/, '').slice(0, 80) || 'Notes';
+    const metadata = {
+      title,
+      wordCount,
+      sourceLabel: sourceLabel ?? null,
+      savedFrom: '/workspace/notes',
+    };
     try {
-      // Title heuristic: first markdown heading or the first non-empty line
-      // (clamped), so the library entry is recognisable.
-      const firstLine = content.split('\n').find((l) => l.trim()) ?? 'Notes';
-      const title = firstLine.replace(/^#+\s*/, '').slice(0, 80) || 'Notes';
       const res = await fetch('/api/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'notes',
-          title,
-          content,
-          metadata: {
-            title,
-            wordCount,
-            sourceLabel: sourceLabel ?? null,
-            savedFrom: '/workspace/notes',
-          },
-        }),
+        body: JSON.stringify({ mode: 'notes', title, content, metadata }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json().catch(() => null);
-      setSavedLibId(data?.id ?? 'saved');
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        setSavedLibId(data?.id ?? 'saved');
+      } else if (res.status === 503) {
+        // Guest / no-DATABASE_URL: persist locally so the Save button is
+        // useful instead of silently failing.
+        const item = saveOfflineItem({ mode: 'notes', content, metadata });
+        setSavedLibId(item.id);
+      } else {
+        throw new Error(`HTTP ${res.status}`);
+      }
       setTimeout(() => setSavedLibId(null), 2400);
     } catch {
-      // Surface a transient indicator without blocking the editor.
-      setSavedLibId('error');
+      // Last-resort offline save covers network errors too.
+      try {
+        const item = saveOfflineItem({ mode: 'notes', content, metadata });
+        setSavedLibId(item.id);
+      } catch {
+        setSavedLibId('error');
+      }
       setTimeout(() => setSavedLibId(null), 2400);
     } finally {
       setSavingLib(false);

@@ -138,13 +138,31 @@ export default function LibraryPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError('');
+    // Always merge in offline items first so guests see their saves even if
+    // the server fetch fails.
+    let offlineItems: LibItem[] = [];
+    try {
+      const { loadOfflineItems } = await import('@/lib/library/offline-store');
+      offlineItems = loadOfflineItems().map((item) => ({
+        ...item,
+        contentPreview: typeof item.content === 'string' ? item.content.slice(0, 260) : '',
+        contentLength: typeof item.content === 'string' ? item.content.length : 0,
+      })) as unknown as LibItem[];
+    } catch { /* localStorage unavailable */ }
+
     try {
       const res = await fetch('/api/library?summary=1');
       if (!res.ok) throw new Error('Failed to load library');
-      setItems(await res.json());
+      const remote = await res.json() as LibItem[];
+      // Dedup by id; offline items have an "offline-" prefix so they can never
+      // collide with server UUIDs.
+      const merged = [...offlineItems, ...remote.filter((r) => !offlineItems.find((o) => o.id === r.id))];
+      setItems(merged);
     } catch {
-      setLoadError('Could not load library. Check your connection and try again.');
-      setItems([]);
+      if (offlineItems.length === 0) {
+        setLoadError('Could not load library. Check your connection and try again.');
+      }
+      setItems(offlineItems);
     } finally {
       setLoading(false);
     }
@@ -169,6 +187,21 @@ export default function LibraryPage() {
   async function deleteItem(id: string) {
     const prev = items;
     setItems(p => p.filter(i => i.id !== id)); // optimistic
+
+    // Offline-only items live in localStorage and have no server row to delete.
+    if (id.startsWith('offline-')) {
+      try {
+        const { deleteOfflineItem } = await import('@/lib/library/offline-store');
+        deleteOfflineItem(id);
+        broadcastInvalidate(LIBRARY_CHANNEL);
+        toast(t('Deleted'), 'info');
+      } catch {
+        setItems(prev);
+        toast('Failed to delete. Please try again.', 'error');
+      }
+      return;
+    }
+
     try {
       const res = await fetch(`/api/library/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error();
