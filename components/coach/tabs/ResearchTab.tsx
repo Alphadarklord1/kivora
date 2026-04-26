@@ -363,13 +363,13 @@ export function ResearchTab({
                   className={`${styles.segBtn} ${ranking === option ? styles.segBtnActive : ''}`}
                   onClick={() => setRanking(option)}
                 >
-                  {option === 'academic-first' ? 'Academic first' : option === 'broad-web' ? 'Broad web' : 'Balanced'}
+                  {option === 'academic-first' ? 'Academic first' : option === 'broad-web' ? 'Encyclopedic' : 'Balanced'}
                 </button>
               ))}
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
               <input type="checkbox" checked={includeWeb} disabled={privacyMode === 'offline'} onChange={e => setIncludeWeb(e.target.checked)} />
-              Search the web
+              Include Wikipedia
             </label>
             {researchMode !== 'automatic' && (
               <textarea
@@ -488,7 +488,7 @@ export function ResearchTab({
                     Ready to write about this?
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 1 }}>
-                    Open Writing Studio with "{researchResult.topic}" pre-filled and your research as context.
+                    Open Writing Studio with &quot;{researchResult.topic}&quot; pre-filled and your research as context.
                   </div>
                 </div>
                 <button

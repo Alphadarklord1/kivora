@@ -16,7 +16,7 @@ Put these files there:
 
 You can also use another folder by setting:
 
-`STUDYPILOT_MODEL_STORE=/absolute/path/to/models`
+`KIVORA_MODEL_STORE=/absolute/path/to/models`
 
 ## 2) Pick installer profile
 
@@ -56,24 +56,24 @@ Output:
 For the 1.0 desktop release story (Mini bundled, bigger models optional):
 
 1. Build and publish app installer.
-2. Publish model assets + manifest + checksums in one command:
-   - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/kivora --models-dir=~/Kivora-model-store`
+2. Publish release-hosted model assets + manifest + checksums in one command:
+   - `npm run release:models:publish -- --tag=vX.Y.Z --repo=Alphadarklord1/kivora --models-dir=~/Kivora-model-store --release-models=mini,balanced`
 3. Required release assets after publish:
    - `qwen2.5-1.5b-instruct-q4_k_m.gguf`
    - `qwen2.5-3b-instruct-q4_k_m.gguf`
-   - `qwen2.5-7b-instruct-q4_k_m.gguf`
    - `model-manifest.json`
    - `SHA256SUMS.txt`
+   - Pro uses the external HTTPS URL stored in `model-manifest.json`; it does not need to be a GitHub release asset.
 4. Generate/validate manually (optional, if you do not use the publish command):
    - `npm run models:manifest:generate -- --tag=vX.Y.Z --repo=Alphadarklord1/kivora --models-dir=<path-to-gguf-files>`
    - `npm run models:manifest:validate -- --manifest=electron/runtime/model-manifest.json --repo=Alphadarklord1/kivora`
    - `npm run models:checksums:generate -- --models-dir=<path-to-gguf-files> --out=electron/runtime/SHA256SUMS.txt`
    - `npm run models:checksums:validate -- --checksums=electron/runtime/SHA256SUMS.txt --manifest=electron/runtime/model-manifest.json --models-dir=<path-to-gguf-files>`
-5. Verify release naming consistency (includes required model assets/checksum files):
+5. Verify release naming consistency (includes required release-hosted model assets/checksum files):
    - `npm run release:verify -- --tag=vX.Y.Z --assets='<comma-separated release asset list>'`
-6. Smoke test on clean machine: install app, confirm bundled Mini is detected offline, then optionally install Balanced model.
+6. Smoke test on clean machine: install app, confirm bundled Mini is detected offline, then optionally install Balanced and Pro models in-app.
 
-CI also enforces these checks in `.github/workflows/beta-ci.yml` and `.github/workflows/model-manifest.yml`.
+CI also enforces these checks in `.github/workflows/release-ci.yml` and `.github/workflows/model-manifest.yml`.
 
 Notes:
 
@@ -89,7 +89,7 @@ Replace `vX.Y.Z` with your release tag:
 - Checksums: `https://github.com/Alphadarklord1/kivora/releases/download/vX.Y.Z/SHA256SUMS.txt`
 - Mini model: `https://github.com/Alphadarklord1/kivora/releases/download/vX.Y.Z/qwen2.5-1.5b-instruct-q4_k_m.gguf`
 - Balanced model: `https://github.com/Alphadarklord1/kivora/releases/download/vX.Y.Z/qwen2.5-3b-instruct-q4_k_m.gguf`
-- Pro model: `https://github.com/Alphadarklord1/kivora/releases/download/vX.Y.Z/qwen2.5-7b-instruct-q4_k_m.gguf`
+- Pro model: use the external HTTPS URL embedded in `model-manifest.json`.
 
 ## 7) If something fails
 

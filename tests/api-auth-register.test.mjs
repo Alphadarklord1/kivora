@@ -43,11 +43,16 @@ mock.module(resolve(ROOT, 'lib/supabase/auth-admin.ts'), {
 });
 
 const { POST } = await import('../app/api/auth/register/route.ts');
+let requestCounter = 0;
 
 function req(body) {
+  requestCounter += 1;
   return new Request('http://localhost/api/auth/register', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-forwarded-for': `127.0.0.${requestCounter}`,
+    },
     body: JSON.stringify(body),
   });
 }
@@ -98,7 +103,7 @@ test('returns 400 when name exceeds 80 characters', async () => {
 test('returns 400 for invalid JSON body', async () => {
   const res = await POST(new Request('http://localhost/api/auth/register', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '127.0.0.250' },
     body: 'not json',
   }));
   assert.equal(res.status, 400);

@@ -85,8 +85,8 @@ const DESKTOP_AI_MODELS = [
 
 const DEFAULT_MODEL_KEY = 'mini';
 const MODEL_MANIFEST_FILENAME = 'model-manifest.json';
-const MODEL_RELEASE_REPO = process.env.KIVORA_MODEL_REPO || process.env.STUDYPILOT_MODEL_REPO || 'Alphadarklord1/kivora';
-const MODEL_WIZARD_ENABLED = (process.env.KIVORA_MODEL_WIZARD || process.env.STUDYPILOT_MODEL_WIZARD || '1') !== '0';
+const MODEL_RELEASE_REPO = process.env.KIVORA_MODEL_REPO || process.env.KIVORA_MODEL_REPO || 'Alphadarklord1/kivora';
+const MODEL_WIZARD_ENABLED = (process.env.KIVORA_MODEL_WIZARD || process.env.KIVORA_MODEL_WIZARD || '1') !== '0';
 const DOWNLOAD_EVENT = 'desktop-ai-download-progress';
 const DOWNLOAD_STATE_IDLE = 'idle';
 
@@ -440,7 +440,7 @@ function getDeviceProfile() {
 }
 
 function getRecommendedModelKey() {
-  const forcedModelKey = process.env.STUDYPILOT_AI_MODEL_KEY;
+  const forcedModelKey = process.env.KIVORA_AI_MODEL_KEY;
   if (forcedModelKey && DESKTOP_AI_MODELS.some((model) => model.key === forcedModelKey)) {
     return forcedModelKey;
   }
@@ -782,13 +782,34 @@ function clearDesktopAiState() {
   desktopAiState.modelPath = null;
 }
 
-function stopDesktopAiRuntime() {
+function stopDesktopAiRuntime({ graceMs = 5000 } = {}) {
   desktopAiState.manualStop = true;
-  if (desktopAiState.process && !desktopAiState.process.killed) {
-    desktopAiState.process.kill();
-  }
+  const child = desktopAiState.process;
   desktopAiState.process = null;
   clearDesktopAiState();
+  if (!child || child.killed) return;
+
+  // Send SIGTERM first so the runtime can flush state, then SIGKILL after the grace window.
+  // Windows: child_process treats kill('SIGTERM') as a force kill, but we still arm the
+  // backup timer for symmetry on POSIX shells launched via shebang.
+  try {
+    child.kill('SIGTERM');
+  } catch {
+    // Process is already gone — nothing to do.
+  }
+
+  const killer = setTimeout(() => {
+    if (child && !child.killed) {
+      try {
+        child.kill('SIGKILL');
+        console.warn('[desktop-ai] runtime did not exit within grace period; sent SIGKILL');
+      } catch {
+        // Already exited between checks.
+      }
+    }
+  }, graceMs);
+  // Don't keep Electron alive solely for this timer.
+  if (typeof killer.unref === 'function') killer.unref();
 }
 
 function classifyInstallError(error) {
@@ -1029,8 +1050,8 @@ async function startDesktopAiRuntime() {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        STUDYPILOT_AI_MODEL: modelPath,
-        STUDYPILOT_AI_PORT: String(port),
+        KIVORA_AI_MODEL: modelPath,
+        KIVORA_AI_PORT: String(port),
       },
     });
 
@@ -1162,18 +1183,18 @@ function spawnAppServer(port, oauthDisabledReason = null) {
   const serverUrl = `http://127.0.0.1:${port}`;
   const nextCliPath = path.join(__dirname, '../node_modules/next/dist/bin/next');
   const appRoot = path.join(__dirname, '..');
-  const desktopAuthPort = parseDesktopAuthPort(process.env.STUDYPILOT_DESKTOP_AUTH_PORT);
+  const desktopAuthPort = parseDesktopAuthPort(process.env.KIVORA_DESKTOP_AUTH_PORT);
 
   appServerProcess = spawn(process.execPath, [nextCliPath, 'start', '-p', String(port), '-H', '127.0.0.1'], {
     cwd: appRoot,
     env: {
       ...process.env,
       NODE_ENV: 'production',
-      STUDYPILOT_DESKTOP_ONLY: process.env.STUDYPILOT_DESKTOP_ONLY || '1',
+      KIVORA_DESKTOP_ONLY: process.env.KIVORA_DESKTOP_ONLY || '1',
       AUTH_GUEST_MODE: process.env.AUTH_GUEST_MODE || '1',
-      STUDYPILOT_DESKTOP_AUTH_PORT: String(desktopAuthPort),
-      STUDYPILOT_OAUTH_DISABLED: oauthDisabledReason ? '1' : '0',
-      STUDYPILOT_OAUTH_DISABLED_REASON: oauthDisabledReason || '',
+      KIVORA_DESKTOP_AUTH_PORT: String(desktopAuthPort),
+      KIVORA_OAUTH_DISABLED: oauthDisabledReason ? '1' : '0',
+      KIVORA_OAUTH_DISABLED_REASON: oauthDisabledReason || '',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -1215,8 +1236,8 @@ async function ensureAppServerUrl() {
   if (isDev) return 'http://localhost:3000';
   if (appServerUrl) return appServerUrl;
 
-  const desktopAuthPort = parseDesktopAuthPort(process.env.STUDYPILOT_DESKTOP_AUTH_PORT);
-  const allowRandomFallback = process.env.STUDYPILOT_ALLOW_RANDOM_AUTH_PORT_FALLBACK === '1' || isGuestModeFromEnv();
+  const desktopAuthPort = parseDesktopAuthPort(process.env.KIVORA_DESKTOP_AUTH_PORT);
+  const allowRandomFallback = process.env.KIVORA_ALLOW_RANDOM_AUTH_PORT_FALLBACK === '1' || isGuestModeFromEnv();
   let launchPort = desktopAuthPort;
   let oauthDisabledReason = null;
 

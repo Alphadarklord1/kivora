@@ -37,7 +37,7 @@ Use the issue templates in `.github/ISSUE_TEMPLATE/` instead of free-form issues
 
 Use the `Release checklist` issue template for every public release.
 
-## Beta triage order
+## Release triage order
 
 1. crashes / broken routes
 2. auth / data loss / sharing issues

@@ -14,7 +14,7 @@
   <key>com.apple.security.cs.disable-library-validation</key>
   <true/>
 
-  <!-- Outbound network for model downloads and Groq/Grok/OpenAI API calls -->
+  <!-- Outbound network for model downloads and Grok/OpenAI API calls -->
   <key>com.apple.security.network.client</key>
   <true/>
 

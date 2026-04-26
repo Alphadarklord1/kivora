@@ -35,6 +35,7 @@ import { AssignmentFileBanner } from './assignment/AssignmentFileBanner';
 import { WriteCheckPanel } from './assignment/WriteCheckPanel';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
+import { mdToHtml } from '@/lib/utils/md';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -895,7 +896,17 @@ export function AssignmentWriterTab({
                 </div>
               </div>
               {reportSavedLib && <div className={styles.savedStrip}>✓ Saved to Library</div>}
-              <div className={styles.reportDoc}>{reportResult}</div>
+              {/*
+                Render the AI-generated draft as HTML so markdown headings
+                (## Introduction, ## Conclusion …) become real <h2>s and
+                **bold** becomes real bold. Without this the user sees
+                literal '##' tokens in the document body. mdToHtml escapes
+                input first so injected tags can't cause XSS.
+              */}
+              <div
+                className={styles.reportDoc}
+                dangerouslySetInnerHTML={{ __html: mdToHtml(reportResult) }}
+              />
               {selectedSources.length > 0 && (
                 <div style={{ padding: '0 2rem 1.5rem' }}>
                   <div className={styles.refSection}>
@@ -960,7 +971,12 @@ export function AssignmentWriterTab({
                     <strong>Result</strong>
                     <button className={styles.btnSecondary} onClick={() => { setAssignResult(''); setAssignText(''); }}>Clear</button>
                   </div>
-                  <pre className={styles.preText}>{assignResult}</pre>
+                  {/* Same fix as the report draft above — render markdown
+                      to HTML rather than dropping raw tokens into <pre>. */}
+                  <div
+                    className={styles.preText}
+                    dangerouslySetInnerHTML={{ __html: mdToHtml(assignResult) }}
+                  />
                 </div>
               )}
             </div>

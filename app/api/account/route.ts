@@ -380,9 +380,11 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update user
+    const emailChanging = Boolean(normalizedEmail && normalizedEmail !== currentUser?.email);
     const updateData: Record<string, string | Date | null> = { updatedAt: new Date() };
     if (name !== undefined) updateData.name = name.trim();
     if (normalizedEmail) updateData.email = normalizedEmail;
+    if (emailChanging) updateData.emailVerified = null; // new address is unverified
     if (image !== undefined) updateData.image = typeof image === 'string' && image.trim() ? image.trim() : null;
     if (bio !== undefined) updateData.bio = typeof bio === 'string' && bio.trim() ? bio.trim() : null;
     if (studyInterests !== undefined) updateData.studyInterests = typeof studyInterests === 'string' && studyInterests.trim() ? studyInterests.trim() : null;
@@ -407,7 +409,7 @@ export async function PUT(request: NextRequest) {
       name: updated[0].name,
       image: updated[0].image,
       bio: updated[0].bio,
-      emailConfirmed: true,
+      emailConfirmed: !emailChanging, // don't confirm an address that hasn't been verified
     });
 
     if (syncedAuthId && syncedAuthId !== updated[0].supabaseAuthId) {
@@ -502,16 +504,25 @@ export async function DELETE(request: NextRequest) {
       },
     });
 
-    await Promise.all(
-      ownedFiles
-        .filter((file) => file.storageBucket && file.storagePath)
-        .map((file) => deleteFileFromSupabaseStorage(file.storageBucket!, file.storagePath!).catch(() => undefined)),
-    );
-
-    await deleteSupabaseAuthUser(currentUser?.supabaseAuthId);
-
-    // Delete user (cascades to all related data)
+    // Delete the DB record first so the account is gone regardless of whether
+    // external cleanup succeeds. The cascade handles all related rows.
     await db.delete(users).where(eq(users.id, userId));
+
+    // Best-effort cleanup of external resources — failures are logged but do
+    // not block the response; the account is already deleted.
+    const supabaseAuthId = currentUser?.supabaseAuthId;
+    void Promise.allSettled([
+      deleteSupabaseAuthUser(supabaseAuthId),
+      ...ownedFiles
+        .filter((file) => file.storageBucket && file.storagePath)
+        .map((file) => deleteFileFromSupabaseStorage(file.storageBucket!, file.storagePath!)),
+    ]).then((results) => {
+      results.forEach((r) => {
+        if (r.status === 'rejected') {
+          console.error(`[Account][${requestId}] External cleanup failed`, r.reason);
+        }
+      });
+    });
 
     return NextResponse.json({ success: true, message: 'Account deleted' });
   } catch (error) {

@@ -1,0 +1,156 @@
+/* ============================================================
+   Dashboard chrome theme — overlay on top of globals.css that
+   maps the AppShell visual language to the warm cream + pastel
+   tokens used by the landing page and auth surfaces.
+
+   Loaded only inside the (dashboard) route group so it doesn't
+   affect marketing or auth pages. AppShell uses class names like
+   .sidebar-header / .nav-item / .sidebar-logo-mark, so we restyle
+   them here instead of editing the component (which uses inline
+   styles for layout).
+   ============================================================ */
+
+/* Light theme overrides — apply only when no explicit data-theme
+   is set (default) or when light is selected. Dark theme keeps the
+   existing globals.css palette. */
+:root:not([data-theme='dark']) {
+  --bg:        var(--kv-cream);
+  --bg-2:      var(--kv-cream-2);
+  --bg-3:      #ffffff;
+  --surface:   #ffffff;
+  --surface-2: var(--kv-cream-2);
+  --surface-3: #fbf8f1;
+
+  --border:    var(--kv-rule);
+  --border-2:  var(--kv-rule-strong);
+  --border-3:  rgba(0, 0, 0, 0.22);
+
+  --text:      var(--kv-ink);
+  --text-2:    var(--kv-ink-2);
+  --text-3:    var(--kv-ink-3);
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────── */
+
+.sidebar,
+[class*='sidebar'][class*='wrapper'] {
+  background: var(--kv-cream);
+  border-right: 1px solid var(--kv-rule);
+}
+
+.sidebar-header {
+  border-bottom: 1px solid var(--kv-rule);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent);
+}
+
+/* Replace the flat green tile with the brand gradient + amber accent
+   dot used on the landing page and in auth. The "K" letter inside
+   the .sidebar-logo-mark span stays — we just give it the new tile. */
+.sidebar-logo-mark {
+  background: var(--kv-brand-grad);
+  color: #fff;
+  border-radius: var(--kv-radius-sm);
+  font-family: var(--kv-font-body);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  position: relative;
+  box-shadow: 0 4px 14px rgba(29, 184, 142, 0.24);
+}
+
+.sidebar-logo-mark::after {
+  /* Live/AI accent dot — same motif as auth + landing */
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--kv-brand-amber);
+  box-shadow: 0 0 0 1.5px var(--kv-cream);
+}
+
+.sidebar-logo-name {
+  font-family: var(--kv-font-body);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--kv-ink);
+}
+
+/* Section labels — small, warm, tracked-out */
+.sidebar-section-label {
+  font-family: var(--kv-font-body);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--kv-ink-3);
+}
+
+/* ── Nav items ───────────────────────────────────────────────── */
+
+.nav-item {
+  font-family: var(--kv-font-body);
+  border-radius: var(--kv-radius);
+  color: var(--kv-ink-2);
+  transition: background var(--kv-fast), color var(--kv-fast),
+              transform var(--kv-fast);
+}
+
+.nav-item:hover {
+  background: var(--kv-cream-2);
+  color: var(--kv-ink);
+}
+
+.nav-item.active {
+  background: var(--kv-mint);
+  color: var(--kv-mint-ink);
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--kv-brand-green);
+}
+
+.nav-item.active .nav-icon {
+  opacity: 1;
+}
+
+/* ── Surface cards within the dashboard ──────────────────────── */
+
+.card,
+.panel,
+.surface-card {
+  background: #ffffff;
+  border: 1px solid var(--kv-rule);
+  border-radius: var(--kv-radius-lg);
+  box-shadow: var(--kv-shadow-md);
+}
+
+/* ── Display headings inside the dashboard ───────────────────── */
+
+.dashboard-heading,
+h1.page-title,
+.page-greeting {
+  font-family: var(--kv-font-display);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--kv-ink);
+}
+
+/* ── Sidebar footer dividers ─────────────────────────────────── */
+
+.sidebar-footer {
+  border-top: 1px solid var(--kv-rule);
+  background: linear-gradient(0deg, rgba(255, 255, 255, 0.4), transparent);
+}
+
+/* ── Sidebar toggle pill ─────────────────────────────────────── */
+
+.sidebar-toggle {
+  background: #ffffff;
+  border: 1px solid var(--kv-rule-strong);
+  color: var(--kv-ink-2);
+}
+
+.sidebar-toggle:hover {
+  background: var(--kv-cream-2);
+  color: var(--kv-ink);
+}

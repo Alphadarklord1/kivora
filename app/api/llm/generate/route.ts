@@ -4,7 +4,7 @@ import { evaluateAiScope } from '@/lib/ai/policy';
 import { InMemoryRateLimiter } from '@/lib/ai/web-rate-limit';
 import { tryCloudGeneration } from '@/lib/ai/server-routing';
 
-type Provider = 'cloud' | 'openai' | 'groq' | 'grok';
+type Provider = 'cloud' | 'openai' | 'grok' | 'groq';
 
 const DEFAULT_CLOUD_MODEL =
   process.env.GROQ_MODEL_DEFAULT ||
@@ -14,18 +14,17 @@ const DEFAULT_CLOUD_MODEL =
 
 // Allowlist of models clients are permitted to request
 const ALLOWED_MODELS = new Set([
-  // Groq — primary
+  // Groq — primary (LPU inference, open-weight models)
   'llama-3.3-70b-versatile',
-  'llama-3.1-70b-versatile',
   'llama-3.1-8b-instant',
   'mixtral-8x7b-32768',
   'gemma2-9b-it',
-  'llama-3.2-90b-vision-preview',
-  // Grok — secondary
+  'deepseek-r1-distill-llama-70b',
+  // Grok (xAI) — secondary
   'grok-3-fast',
   'grok-3-mini',
   'grok-3-mini-fast',
-  // OpenAI — backup
+  // OpenAI — tertiary
   'gpt-4o-mini',
   'gpt-4o',
   'gpt-4.1-mini',
@@ -192,7 +191,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing text or mode' }, { status: 400 });
     }
 
-    if (!['cloud', 'openai', 'groq', 'grok'].includes(provider)) {
+    if (!['cloud', 'openai', 'grok'].includes(provider)) {
       return NextResponse.json({ error: 'Unsupported provider' }, { status: 400 });
     }
 

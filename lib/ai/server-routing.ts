@@ -3,6 +3,8 @@ import { callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
 import { callGroqChat, isGroqConfigured } from '@/lib/ai/groq';
 import { resolveAiRuntimeRequest, cloudProviderForModel, type AiMode } from '@/lib/ai/runtime';
 
+const DEFAULT_GROQ_MODEL = process.env.GROQ_MODEL_DEFAULT || 'llama-3.3-70b-versatile';
+
 export { resolveAiRuntimeRequest };
 
 // ── Local (Ollama) ────────────────────────────────────────────────────────────
@@ -71,11 +73,13 @@ export async function tryLocalGeneration(args: {
   return { ok: false as const };
 }
 
-// ── Cloud routing across Groq, Grok/xAI, and OpenAI ──────────────────────────
+// ── Cloud routing across Groq, Grok/xAI and OpenAI ──────────────────────────
 
 /**
  * Try the requested cloud provider first, then other configured providers.
  * Source tag lets the UI show users which provider was actually used.
+ *
+ * Default order when the requested model doesn't pin a provider: Groq → Grok → OpenAI.
  */
 export async function tryCloudGeneration(args: {
   model: string;
@@ -91,7 +95,7 @@ export async function tryCloudGeneration(args: {
 
   for (const candidate of order) {
     if (candidate === 'groq' && isGroqConfigured()) {
-      const groqModel = provider === 'groq' ? args.model : 'llama-3.3-70b-versatile';
+      const groqModel = provider === 'groq' ? args.model : DEFAULT_GROQ_MODEL;
       const groqResult = await callGroqChat({
         model: groqModel,
         messages: args.messages,

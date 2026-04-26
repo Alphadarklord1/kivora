@@ -3,6 +3,8 @@ import { requireAppAccess } from '@/lib/api/guard';
 import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { solveMathProblem } from '@/lib/math/symbolic-solver';
 import type { MathSolveRequest, SolverResult } from '@/lib/math/types';
+import { callAi } from '@/lib/ai/call';
+import { resolveAiDataMode, type AiDataMode } from '@/lib/privacy/ai-data';
 
 const AI_SYSTEM_PROMPT = `You are a careful math tutor for high-school and undergraduate students.
 Return ONLY valid JSON in this shape:
@@ -36,66 +38,68 @@ function jsonResponse(result: SolverResult, body: MathSolveRequest) {
   });
 }
 
-async function tryAiSolve(problem: string, category: string | null, contextText?: string | null): Promise<SolverResult | null> {
-  const base = process.env.OLLAMA_URL ?? 'http://localhost:11434';
-  const model = process.env.OLLAMA_MATH_MODEL ?? process.env.OLLAMA_MODEL ?? 'mistral';
+async function tryAiSolve(
+  problem: string,
+  category: string | null,
+  contextText?: string | null,
+  aiPrefs?: unknown,
+  privacyMode: AiDataMode = 'full',
+): Promise<SolverResult | null> {
   const contextBlock = contextText?.trim()
     ? `\n\nStudy context:\n${contextText.slice(0, 2500)}`
     : '';
 
-  const payload = {
-    model,
+  // Use the unified AI cascade (Groq → Grok → Ollama → offline).
+  // The math route used to call Ollama directly; now it benefits from the
+  // primary cloud provider whenever it's configured, falling back through
+  // Grok and the local runtime exactly like every other AI surface.
+  const callResult = await callAi({
     messages: [
       { role: 'system', content: AI_SYSTEM_PROMPT },
       { role: 'user', content: `Category hint: ${category ?? 'auto'}\nProblem: ${problem}${contextBlock}` },
     ],
+    maxTokens: 1200,
     temperature: 0.05,
-    stream: false,
-  };
+    aiPrefs,
+    privacyMode,
+    // The math route never wants the deterministic offline summarizer here —
+    // its job is to attempt a real AI solve, and let the caller decide what
+    // to do if no provider is configured. Returning an empty string makes
+    // the parser below treat this as a miss.
+    offlineFallback: () => '',
+  });
 
-  for (const url of [`${base}/v1/chat/completions`, `${base}/api/chat`]) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (!res.ok) continue;
+  const raw = callResult.result.trim();
+  if (!raw || callResult.source === 'offline') return null;
 
-      const data = await res.json();
-      const raw = String(data?.choices?.[0]?.message?.content ?? data?.message?.content ?? '').trim();
-      if (!raw) continue;
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
 
-      const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) continue;
-
-      const parsed = JSON.parse(jsonMatch[0]) as Partial<SolverResult> & { steps?: Array<Record<string, unknown>> };
-      if (!parsed.answer || !Array.isArray(parsed.steps) || parsed.steps.length === 0) continue;
-
-      return {
-        category: (parsed.category as SolverResult['category']) ?? (category as SolverResult['category']) ?? 'algebra',
-        normalizedInput: problem,
-        previewLatex: problem,
-        answer: String(parsed.answer),
-        answerLatex: String(parsed.answerLatex ?? parsed.answer),
-        steps: parsed.steps.map((step, index) => ({
-          step: Number(step.step ?? index + 1),
-          description: String(step.description ?? ''),
-          expression: String(step.expression ?? ''),
-          explanation: String(step.explanation ?? ''),
-        })),
-        explanation: String(parsed.explanation ?? 'Solved with the AI fallback tutor.'),
-        graphExpr: typeof parsed.graphExpr === 'string' && parsed.graphExpr.trim() ? parsed.graphExpr : undefined,
-        verified: true,
-        engine: 'ai',
-      };
-    } catch {
-      // Try the next Ollama-compatible endpoint.
-    }
+  let parsed: Partial<SolverResult> & { steps?: Array<Record<string, unknown>> };
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    return null;
   }
+  if (!parsed.answer || !Array.isArray(parsed.steps) || parsed.steps.length === 0) return null;
 
-  return null;
+  return {
+    category: (parsed.category as SolverResult['category']) ?? (category as SolverResult['category']) ?? 'algebra',
+    normalizedInput: problem,
+    previewLatex: problem,
+    answer: String(parsed.answer),
+    answerLatex: String(parsed.answerLatex ?? parsed.answer),
+    steps: parsed.steps.map((step, index) => ({
+      step: Number(step.step ?? index + 1),
+      description: String(step.description ?? ''),
+      expression: String(step.expression ?? ''),
+      explanation: String(step.explanation ?? ''),
+    })),
+    explanation: String(parsed.explanation ?? `Solved via ${callResult.source} cloud fallback.`),
+    graphExpr: typeof parsed.graphExpr === 'string' && parsed.graphExpr.trim() ? parsed.graphExpr : undefined,
+    verified: true,
+    engine: 'ai',
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -118,7 +122,15 @@ export async function POST(request: NextRequest) {
     return jsonResponse(solved, body ?? { problem });
   }
 
-  const aiSolved = await tryAiSolve(problem, body?.category ?? null, body?.contextText ?? null);
+  const bodyRecord = (body ?? {}) as Record<string, unknown>;
+  const privacyMode = resolveAiDataMode(bodyRecord);
+  const aiSolved = await tryAiSolve(
+    problem,
+    body?.category ?? null,
+    body?.contextText ?? null,
+    bodyRecord.ai,
+    privacyMode,
+  );
   if (aiSolved) {
     return jsonResponse(aiSolved, body ?? { problem });
   }

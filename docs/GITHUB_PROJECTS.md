@@ -39,7 +39,7 @@ Use GitHub Projects for coordination, not as a second issue tracker.
 - `release`: versioning, packaging, assets, checksums
 - `security`: private or sensitive handling required
 - `desktop`: Electron/runtime/installer work
-- `web`: browser/Vercel/web beta work
+- `web`: browser/Vercel/web companion work
 - `auth`: sign-in, guest mode, OAuth, sessions
 - `ai`: generation, policy, runtime, model management
 - `planner`: planner/calendar/timer

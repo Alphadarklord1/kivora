@@ -1,3 +1,18 @@
+/**
+ * Groq API client.
+ *
+ * Groq exposes an OpenAI-compatible REST API at https://api.groq.com/openai/v1,
+ * so the same message format and response shape work — we just swap the base
+ * URL and auth header. Groq hosts open-weight models (Llama, Mixtral, Gemma,
+ * DeepSeek-R1 distillations) on LPU hardware for very low latency.
+ *
+ * Environment variables:
+ *   GROQ_API_KEY=gsk_...
+ *
+ * Optional:
+ *   GROQ_MODEL_DEFAULT=llama-3.3-70b-versatile   (used as a fallback model name)
+ */
+
 import type { OpenAIMessage } from '@/lib/ai/openai';
 
 export const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
@@ -9,6 +24,8 @@ export function getGroqApiKey(): string | undefined {
 export function isGroqConfigured(): boolean {
   return Boolean(getGroqApiKey());
 }
+
+// ── Non-streaming call ────────────────────────────────────────────────────────
 
 export async function callGroqChat(args: {
   model: string;
@@ -58,6 +75,8 @@ export async function callGroqChat(args: {
     };
   }
 }
+
+// ── Streaming call — returns raw fetch Response for SSE passthrough ──────────
 
 export async function fetchGroqStream(args: {
   model: string;

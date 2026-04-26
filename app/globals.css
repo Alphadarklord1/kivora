@@ -1,8 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&display=swap');
-
 /* ============================================================
    KIVORA — Global Styles
-   Clean, consistent dark UI with full CSS variable system
+   Design System: DM Sans (body/UI), Instrument Serif (display), JetBrains Mono (code/data)
+   Fonts loaded via Bunny Fonts in layout.tsx for privacy-friendly CDN
    ============================================================ */
 
 *, *::before, *::after {
@@ -13,25 +12,26 @@
 
 :root {
   /* ── Palette (dark default) ── */
-  --bg:        #09101f;
-  --bg-2:      #0d1525;
-  --bg-3:      #111c30;
-  --surface:   #172035;
-  --surface-2: #1c2840;
-  --surface-3: #222e48;
+  --bg:        #1a1f3a;       /* SahlCal dark navy footer */
+  --bg-2:      #202544;
+  --bg-3:      #272c4f;
+  --surface:   #2a3055;
+  --surface-2: #33385f;
+  --surface-3: #3d4269;
 
-  --border:    rgba(255,255,255,0.07);
+  --border:    rgba(255,255,255,0.08);
   --border-2:  rgba(255,255,255,0.12);
   --border-3:  rgba(255,255,255,0.18);
 
-  --text:      #e4ecfa;
-  --text-2:    #96aac6;
-  --text-3:    #5f7398;
+  --text:      #e8eaf2;
+  --text-2:    #a0a5b8;
+  --text-3:    #6a7080;
 
-  --accent:      #3b82f6;
-  --accent-h:    #2563eb;
-  --accent-glow: rgba(59,130,246,0.22);
-  --accent-bg:   rgba(59,130,246,0.08);
+  /* SahlCal green accent for dark mode too */
+  --accent:      #1db88e;
+  --accent-h:    #24d4a5;
+  --accent-glow: rgba(29,184,142,0.25);
+  --accent-bg:   rgba(29,184,142,0.12);
 
   --danger:    #f87171;
   --danger-bg: rgba(248,113,113,0.1);
@@ -111,8 +111,9 @@
   --color-purple:   var(--purple);
   --color-cyan:     var(--cyan);
 
-  /* ── Typography ── */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  /* ── Typography (Design System) ── */
+  --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Instrument Serif', Georgia, serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', Menlo, monospace;
 
   --text-xs:   0.72rem;
@@ -124,14 +125,14 @@
   --text-3xl:  1.9rem;
   --text-4xl:  2.4rem;
 
-  /* ── Radii ── */
-  --r-xs: 4px;
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 16px;
-  --r-xl: 22px;
-  --r-2xl: 28px;
-  --r-3xl: 36px;
+  /* ── Radii (SahlCal-inspired - more generous) ── */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 24px;
+  --r-2xl: 32px;
+  --r-3xl: 40px;
 
   /* ── Shadows ── */
   --shadow-sm: 0 1px 4px rgba(0,0,0,0.5);
@@ -182,26 +183,39 @@
   --text-3:    #606060;
 }
 
-/* Light theme */
+/* Light theme - SahlCal-inspired soft pastels */
 [data-theme="light"] {
-  --bg:        #f3f6fc;
-  --bg-2:      #edf1fa;
-  --bg-3:      #e7edf6;
-  --surface:   #ffffff;
-  --surface-2: #f0f4fb;
-  --surface-3: #e8eef8;
-  --border:    rgba(0,0,0,0.07);
-  --border-2:  rgba(0,0,0,0.11);
+  --bg:        #fdfcfa;       /* Soft cream background */
+  --bg-2:      #f5efe7;       /* Warmer cream */
+  --bg-3:      #ebe5dd;       /* Light beige */
+  --surface:   #ffffff;       /* Pure white cards */
+  --surface-2: #f9f7f5;       /* Off-white hover */
+  --surface-3: #f3eeea;       /* Warm hover */
+  --border:    rgba(0,0,0,0.08);  /* Softer borders */
+  --border-2:  rgba(0,0,0,0.12);
   --border-3:  rgba(0,0,0,0.16);
-  --text:      #0f1a2e;
-  --text-2:    #4a5a72;
-  --text-3:    #8898b6;
-  --accent-glow: rgba(59,130,246,0.15);
-  --accent-bg:   rgba(59,130,246,0.08);
+  --text:      #1a1a1a;       /* Near-black text */
+  --text-2:    #666666;       /* Medium gray */
+  --text-3:    #999999;       /* Light gray */
+
+  /* SahlCal green accent */
+  --accent:      #1db88e;
+  --accent-h:    #189977;
+  --accent-glow: rgba(29,184,142,0.2);
+  --accent-bg:   rgba(29,184,142,0.08);
+
   --bg-inset:    var(--surface-2);
   --bg-hover:    var(--surface-3);
-  --primary-muted: rgba(59,130,246,0.08);
+  --primary-muted: rgba(29,184,142,0.08);
   --primary-text:  var(--accent);
+
+  /* Rounded corners - more generous like SahlCal */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 24px;
+  --r-2xl: 32px;
 }
 
 /* ============================================================
@@ -234,6 +248,7 @@ body {
    TYPOGRAPHY
    ============================================================ */
 h1,h2,h3,h4,h5,h6 {
+  font-family: var(--font-serif);
   color: var(--text);
   font-weight: 600;
   line-height: 1.2;

@@ -3,7 +3,7 @@
  * Usage: node --import ./tests/alias-loader.mjs --experimental-strip-types ...
  */
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { resolve as resolvePath } from 'node:path';
+import { resolve as resolvePath, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
 
 const ROOT = resolvePath(fileURLToPath(import.meta.url), '../../');
@@ -14,27 +14,45 @@ const NEXT_EXTENSIONLESS = new Set([
   'next/dist/server/web/spec-extension/request',
 ]);
 
+/** Probe a base path for the first existing TypeScript extension or index file. */
+function resolveTsExtensions(basePath) {
+  if (existsSync(basePath + '.ts')) return basePath + '.ts';
+  if (existsSync(basePath + '.tsx')) return basePath + '.tsx';
+  if (existsSync(resolvePath(basePath, 'index.ts'))) return resolvePath(basePath, 'index.ts');
+  if (existsSync(resolvePath(basePath, 'index.tsx'))) return resolvePath(basePath, 'index.tsx');
+  return null;
+}
+
 export function resolve(specifier, context, nextResolve) {
+  // 1. `@/` Next.js path aliases.
   if (specifier.startsWith('@/')) {
     const relative = specifier.slice(2); // strip '@/'
     const base = resolvePath(ROOT, relative);
     const hasExt = /\.(ts|tsx|js|mjs)$/.test(base);
-    let resolved;
-    if (hasExt) {
-      resolved = base;
-    } else if (existsSync(base + '.ts')) {
-      resolved = base + '.ts';
-    } else if (existsSync(base + '.tsx')) {
-      resolved = base + '.tsx';
-    } else if (existsSync(resolvePath(base, 'index.ts'))) {
-      resolved = resolvePath(base, 'index.ts');
-    } else {
-      resolved = base + '.ts'; // let Node emit a proper error
-    }
+    const resolved = hasExt ? base : (resolveTsExtensions(base) ?? base + '.ts');
     return nextResolve(pathToFileURL(resolved).href, context);
   }
+
+  // 2. Extensionless relative imports (./foo, ../foo) — Node's experimental
+  // strip-types loader doesn't auto-add .ts on relative specifiers, which
+  // breaks any TS source that imports a sibling without writing the extension.
+  // Resolve them ourselves against the importing file's directory.
+  if ((specifier.startsWith('./') || specifier.startsWith('../')) && context.parentURL) {
+    const hasExt = /\.(ts|tsx|js|mjs|cjs|json)$/.test(specifier);
+    if (!hasExt) {
+      const parentPath = fileURLToPath(context.parentURL);
+      const base = resolvePath(dirname(parentPath), specifier);
+      const resolved = resolveTsExtensions(base);
+      if (resolved) {
+        return nextResolve(pathToFileURL(resolved).href, context);
+      }
+    }
+  }
+
+  // 3. next/* bare imports.
   if (NEXT_EXTENSIONLESS.has(specifier)) {
     return nextResolve(specifier + '.js', context);
   }
+
   return nextResolve(specifier, context);
 }

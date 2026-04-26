@@ -18,7 +18,7 @@ interface UseStudyPlansReturn {
   plans: StudyPlan[];
   loading: boolean;
   error: string | null;
-  fetchPlans: () => Promise<void>;
+  fetchPlans: (status?: string) => Promise<void>;
   createPlan: (data: CreatePlanData) => Promise<StudyPlan | null>;
   updatePlan: (id: string, data: UpdatePlanData) => Promise<StudyPlan | null>;
   deletePlan: (id: string) => Promise<boolean>;
@@ -39,12 +39,15 @@ export function useStudyPlans(): UseStudyPlansReturn {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPlans = useCallback(async () => {
+  const fetchPlans = useCallback(async (status?: string) => {
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch('/api/study-plans', { credentials: 'include' });
+      const url = status && status !== 'all'
+        ? `/api/study-plans?status=${encodeURIComponent(status)}`
+        : '/api/study-plans';
+      const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
         throw new Error(getApiErrorReason(payload, 'Failed to fetch study plans'));

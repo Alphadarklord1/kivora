@@ -18,7 +18,7 @@
 
 ## Checks
 
-- [ ] `npm run test:beta`
+- [ ] `npm run test:release`
 - [ ] `npm run build`
 - [ ] English UI reviewed if relevant
 - [ ] Arabic/RTL reviewed if relevant

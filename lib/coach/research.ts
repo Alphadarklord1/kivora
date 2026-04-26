@@ -1,5 +1,7 @@
 import { callAi } from '@/lib/ai/call';
 import { cloudAccessAllowed, type AiDataMode } from '@/lib/privacy/ai-data';
+import { formatAll, toCitationInput, type CitationSet } from '@/lib/coach/citations';
+import { isWebSearchConfigured, searchWeb } from '@/lib/coach/web-search';
 import {
   buildStaticSuggestions,
   fetchWikiSummary,
@@ -31,6 +33,8 @@ export interface ResearchCitation {
   excerpt: string;
   origin: ResearchSource['origin'];
   readingMinutes: number;
+  /** Pre-formatted citations (APA, MLA, Chicago) the UI can copy. */
+  formatted: CitationSet;
 }
 
 export interface ResearchSource {
@@ -221,6 +225,13 @@ async function fetchAutomaticSources(
   const encyclopedia = wikiSummaries
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
+  // Broad web hits via Tavily — only requested when ranking is 'broad-web'
+  // and the API key is set. Empty array otherwise so the existing flow is
+  // unaffected for users without Tavily configured.
+  const webHits = options.ranking === 'broad-web' && isWebSearchConfigured()
+    ? await searchWeb(topic, 5).catch((): ArticleSuggestion[] => [])
+    : [];
+
   const all = [
     ...academic.map((item) => ({
       id: item.url,
@@ -248,6 +259,23 @@ async function fetchAutomaticSources(
       keyPoints: [item.excerpt],
       confidenceLabel: options.ranking === 'broad-web' ? 'Baseline' as const : 'Medium' as const,
       confidenceScore: options.ranking === 'broad-web' ? 58 : 70,
+      citationLabel: '',
+    })),
+    ...webHits.map((item) => ({
+      id: item.url,
+      title: item.title,
+      url: item.url,
+      source: item.source,
+      type: item.type,
+      excerpt: item.excerpt,
+      readingMinutes: item.readingMinutes,
+      origin: 'automatic' as const,
+      keyPoints: item.excerpt ? [item.excerpt] : [],
+      // Web hits are baseline confidence — they're current and broad but
+      // not peer-reviewed. The ranker will weight them below academic
+      // sources unless ranking is 'broad-web'.
+      confidenceLabel: 'Baseline' as const,
+      confidenceScore: 55,
       citationLabel: '',
     })),
   ];
@@ -305,7 +333,9 @@ function buildRankingSummary(sources: ResearchSource[], ranking: ResearchRanking
     : ranking === 'broad-web'
       ? 'Broad-web ranking keeps a wider spread of source types in play.'
       : 'Balanced ranking mixes authority with readability.';
-  const webLabel = includeWeb ? 'Web search is enabled.' : 'Web search is limited to academic and local suggestions.';
+  const webLabel = includeWeb
+    ? 'Wikipedia and encyclopedic sources are included alongside academic databases.'
+    : 'Only peer-reviewed academic databases (Semantic Scholar, OpenAlex) were searched.';
   return `${rankingLabel} ${webLabel} Source mix: ${parts.join(', ')}.`;
 }
 
@@ -397,6 +427,11 @@ export async function researchTopic(args: {
       excerpt: source.excerpt,
       origin: source.origin,
       readingMinutes: source.readingMinutes,
+      // Pre-formatted citations in the three styles students commonly need.
+      // The current ResearchSource doesn't carry structured author/year, so
+      // these are best-effort web-style citations; the formatters degrade
+      // cleanly when fields are missing.
+      formatted: formatAll(toCitationInput(source)),
     })),
     relatedLinks,
     followUpPrompts: buildFollowUpPrompts(topic, parseKeyIdeas(result).length ? parseKeyIdeas(result) : fallback.keyIdeas),

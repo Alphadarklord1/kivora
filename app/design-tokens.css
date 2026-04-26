@@ -1,0 +1,126 @@
+/* ============================================================
+   KIVORA — Shared design tokens
+   Warm cream + pastel accent palette used by landing, auth, and
+   dashboard surfaces so they all feel like the same product.
+   Inspired by the SahlCal-style aesthetic already in place on the
+   marketing page; consolidates the colours so future surfaces can
+   reference them via `var(--token)` instead of hardcoding hex.
+   ============================================================ */
+
+:root {
+  /* ── Surfaces ───────────────────────────────────────────────── */
+  --kv-cream:        #fdfcfa;     /* primary background */
+  --kv-cream-2:      #f7f4ee;     /* secondary surface (cards on cream) */
+  --kv-ink:          #1a1a1a;     /* primary text */
+  --kv-ink-2:        #4a4a4a;     /* secondary text */
+  --kv-ink-3:        #7a7a7a;     /* tertiary text / captions */
+  --kv-rule:         rgba(0, 0, 0, 0.08);  /* default border */
+  --kv-rule-strong:  rgba(0, 0, 0, 0.16);
+
+  /* ── Brand gradient (used in logomark, accents) ────────────── */
+  --kv-brand-blue:   #4a90e2;
+  --kv-brand-cyan:   #3aa6c2;
+  --kv-brand-green:  #1db88e;
+  --kv-brand-amber:  #ffd166;
+  --kv-brand-grad:   linear-gradient(135deg, var(--kv-brand-blue) 0%, var(--kv-brand-cyan) 55%, var(--kv-brand-green) 100%);
+
+  /* ── Pastel accent surfaces (named after the SahlCal palette) ─ */
+  --kv-mint:         #d8efe3;
+  --kv-mint-ink:     #0e6b50;
+  --kv-peach:        #ffe6cf;
+  --kv-peach-ink:    #a04e1a;
+  --kv-blush:        #ffd8d4;
+  --kv-blush-ink:    #a3382f;
+  --kv-butter:       #fff0c2;
+  --kv-butter-ink:   #8a6a08;
+  --kv-sage:         #dde9d4;
+  --kv-sage-ink:     #3f6235;
+  --kv-sky:          #d8e8f5;
+  --kv-sky-ink:      #2a5a87;
+
+  /* ── Soft shadows ──────────────────────────────────────────── */
+  --kv-shadow-sm:    0 1px 2px rgba(20, 20, 20, 0.04), 0 2px 6px rgba(20, 20, 20, 0.04);
+  --kv-shadow-md:    0 4px 14px rgba(20, 20, 20, 0.06), 0 2px 6px rgba(20, 20, 20, 0.04);
+  --kv-shadow-lg:    0 16px 40px rgba(20, 20, 20, 0.08), 0 4px 12px rgba(20, 20, 20, 0.04);
+
+  /* ── Radii ─────────────────────────────────────────────────── */
+  --kv-radius-sm:    8px;
+  --kv-radius:       12px;
+  --kv-radius-lg:    20px;
+  --kv-radius-xl:    32px;
+
+  /* ── Motion ────────────────────────────────────────────────── */
+  --kv-ease:         cubic-bezier(0.2, 0.7, 0.2, 1);
+  --kv-fast:         150ms var(--kv-ease);
+  --kv-medium:       250ms var(--kv-ease);
+
+  /* ── Typography ────────────────────────────────────────────── */
+  --kv-font-body:    'DM Sans', system-ui, -apple-system, sans-serif;
+  --kv-font-display: 'Instrument Serif', Georgia, serif;
+  --kv-font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+}
+
+/* Dark theme — invert the surfaces but keep the brand gradient
+   recognisable. Only flips when the data-theme attribute is set,
+   matching the existing themeScript in app/layout.tsx. */
+[data-theme='dark'] {
+  --kv-cream:        #14161c;
+  --kv-cream-2:      #1c1f28;
+  --kv-ink:          #ecedf2;
+  --kv-ink-2:        #b9bcc8;
+  --kv-ink-3:        #7c8095;
+  --kv-rule:         rgba(255, 255, 255, 0.08);
+  --kv-rule-strong:  rgba(255, 255, 255, 0.18);
+
+  --kv-mint:         #1d3b30;
+  --kv-mint-ink:     #95dcc1;
+  --kv-peach:        #432a17;
+  --kv-peach-ink:    #ffc99a;
+  --kv-blush:        #3e1f1c;
+  --kv-blush-ink:    #ffb0a8;
+  --kv-butter:       #3a2f0a;
+  --kv-butter-ink:   #ffe28a;
+  --kv-sage:         #283626;
+  --kv-sage-ink:     #b9d2a8;
+  --kv-sky:          #1c2c3c;
+  --kv-sky-ink:      #a4cae8;
+}
+
+/* ── Reusable primitives ────────────────────────────────────── */
+
+.kv-card {
+  background: #fff;
+  border: 1px solid var(--kv-rule);
+  border-radius: var(--kv-radius-lg);
+  box-shadow: var(--kv-shadow-md);
+}
+
+.kv-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.kv-display {
+  font-family: var(--kv-font-display);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+}
+
+.kv-accent-name {
+  font-family: var(--kv-font-display);
+  font-style: italic;
+  background: var(--kv-brand-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-decoration: underline;
+  text-decoration-color: rgba(29, 184, 142, 0.4);
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+}

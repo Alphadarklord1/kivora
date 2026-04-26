@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { files } from '@/lib/db/schema';
 import { getUserId, GUEST_USER_ID } from '@/lib/auth/session';
-import { uploadFileToSupabaseStorage } from '@/lib/supabase/storage';
+import { uploadFileToSupabaseStorage, deleteFileFromSupabaseStorage } from '@/lib/supabase/storage';
 import { betaReadFallback } from '@/lib/api/runtime-guards';
 
 // Allowed mime types for uploaded study materials
@@ -220,6 +220,21 @@ export async function POST(req: NextRequest) {
     }, { status: 201 });
   } catch (error) {
     console.error('[files] POST failed, falling back to local-only file', error);
+
+    // Rollback: if we already uploaded the blob to Supabase but the metadata
+    // insert failed, delete the orphaned blob so we don't leave dangling
+    // objects in storage that no row points to.
+    if (storageBucket && storagePath) {
+      try {
+        await deleteFileFromSupabaseStorage(storageBucket, storagePath);
+      } catch (rollbackError) {
+        console.error(
+          '[files] failed to roll back orphaned Supabase blob',
+          { bucket: storageBucket, path: storagePath, error: rollbackError },
+        );
+      }
+    }
+
     return NextResponse.json({
       id: body.id,
       userId,

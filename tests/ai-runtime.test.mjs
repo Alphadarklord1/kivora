@@ -23,8 +23,8 @@ test('normalizeAiMode maps Ollama aliases to "local"', () => {
 test('normalizeAiMode maps cloud provider names to "cloud"', () => {
   assert.equal(normalizeAiMode('cloud'), 'cloud');
   assert.equal(normalizeAiMode('openai'), 'cloud');
-  assert.equal(normalizeAiMode('groq'), 'cloud');
   assert.equal(normalizeAiMode('grok'), 'cloud');
+  assert.equal(normalizeAiMode('groq'), 'cloud');
 });
 
 test('normalizeAiMode maps "auto" to "auto"', () => {
@@ -45,6 +45,7 @@ test('cloudProviderForModel identifies Groq models correctly', () => {
   assert.equal(cloudProviderForModel('llama-3.1-8b-instant'), 'groq');
   assert.equal(cloudProviderForModel('mixtral-8x7b-32768'), 'groq');
   assert.equal(cloudProviderForModel('gemma2-9b-it'), 'groq');
+  assert.equal(cloudProviderForModel('deepseek-r1-distill-llama-70b'), 'groq');
 });
 
 test('cloudProviderForModel identifies Grok (xAI) models correctly', () => {
@@ -96,7 +97,7 @@ test('CLOUD_MODEL_OPTIONS first entry is a Groq model', () => {
   assert.equal(CLOUD_MODEL_OPTIONS[0].provider, 'groq');
 });
 
-test('CLOUD_MODEL_OPTIONS contains all three providers', () => {
+test('CLOUD_MODEL_OPTIONS contains Groq, Grok and OpenAI providers', () => {
   const providers = new Set(CLOUD_MODEL_OPTIONS.map(m => m.provider));
   assert.ok(providers.has('groq'), 'should have groq');
   assert.ok(providers.has('grok'), 'should have grok');

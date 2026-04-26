@@ -32,7 +32,7 @@ export type AiScopeBlocked = {
 
 export type AiScopeDecision = AiScopeAllowed | AiScopeBlocked;
 
-export const STUDYPILOT_ALLOWED_AI_MODES: StudyAiMode[] = [
+export const KIVORA_ALLOWED_AI_MODES: StudyAiMode[] = [
   'assignment',
   'summarize',
   'mcq',
@@ -45,7 +45,7 @@ export const STUDYPILOT_ALLOWED_AI_MODES: StudyAiMode[] = [
   'rephrase',
 ];
 
-const allowedModes = new Set<string>(STUDYPILOT_ALLOWED_AI_MODES);
+const allowedModes = new Set<string>(KIVORA_ALLOWED_AI_MODES);
 
 const MODE_MIN_LENGTH: Partial<Record<StudyAiMode, number>> = {
   assignment: 30,

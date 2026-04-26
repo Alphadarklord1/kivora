@@ -15,10 +15,10 @@ export default function StatusPage() {
   const { t, isArabic } = useI18n({
     'Status & Support': 'الحالة والدعم',
     'Known product state, issue reporting, and team workflow in one place.': 'حالة المنتج الحالية والإبلاغ عن المشاكل ومسار عمل الفريق في مكان واحد.',
-    'Desktop 1.0 surface': 'سطح الإصدار 1.0 لسطح المكتب',
-    'Desktop-first, guest-friendly, and focused on the stable study workflow.': 'المنتج موجه لسطح المكتب أولًا ويدعم وضع الضيف ويركز على مسار الدراسة المستقر.',
+    'Kivora 1.0 surface': 'سطح Kivora 1.0',
+    'Desktop-first, web-supported, guest-friendly, and focused on the stable study workflow.': 'سطح مكتب أولًا، مع دعم للويب ووضع الضيف، ويركز على مسار الدراسة المستقر.',
     'Known limits': 'القيود المعروفة',
-    'Web remains a beta companion. Optional model installs depend on published release assets, and first-launch offline AI is guaranteed only when Mini is bundled into the desktop build.': 'الويب ما يزال رفيقًا بنسخة بيتا. تثبيت النماذج الاختيارية يعتمد على نشر ملفات الإصدار، والذكاء الاصطناعي المحلي من أول تشغيل يكون مضمونًا فقط عندما يكون Mini مضمّنًا داخل نسخة سطح المكتب.',
+    'Desktop includes the safest offline path with Mini. Larger local models stay optional and install inside Kivora after their files are published and verified.': 'يتضمن تطبيق سطح المكتب المسار الآمن دون اتصال مع Mini. تبقى النماذج المحلية الأكبر اختيارية وتُثبّت داخل Kivora بعد نشر ملفاتها والتحقق منها.',
     'Report the right issue': 'أبلغ عن النوع الصحيح من المشكلة',
     'Choose the issue type that matches what went wrong so the team can reproduce it quickly.': 'اختر نوع البلاغ الذي يطابق المشكلة حتى يتمكن الفريق من إعادة إنتاجها بسرعة.',
     'Error report': 'بلاغ خطأ',
@@ -69,8 +69,8 @@ export default function StatusPage() {
 
       <div className={styles.grid}>
         <article className={`sp-panel ${styles.card}`}>
-          <span className="sp-eyebrow">{t('Desktop 1.0 surface')}</span>
-          <p>{t('Desktop-first, guest-friendly, and focused on the stable study workflow.')}</p>
+          <span className="sp-eyebrow">{t('Kivora 1.0 surface')}</span>
+          <p>{t('Desktop-first, web-supported, guest-friendly, and focused on the stable study workflow.')}</p>
           <ul className={styles.list}>
             <li>`/workspace`</li>
             <li>`/coach`</li>
@@ -85,7 +85,7 @@ export default function StatusPage() {
 
         <article className={`sp-panel ${styles.card}`}>
           <span className="sp-eyebrow">{t('Known limits')}</span>
-          <p>{t('Web remains a beta companion. Optional model installs depend on published release assets, and first-launch offline AI is guaranteed only when Mini is bundled into the desktop build.')}</p>
+          <p>{t('Desktop includes the safest offline path with Mini. Larger local models stay optional and install inside Kivora after their files are published and verified.')}</p>
         </article>
       </div>
 

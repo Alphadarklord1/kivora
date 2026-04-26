@@ -3,7 +3,7 @@ import { drizzle as drizzleNeon } from 'drizzle-orm/neon-http';
 import { drizzle as drizzlePostgres } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
-import { isLocalPostgresUrl, isNeonUrl, resolveDatabaseUrl } from './config';
+import { getDatabaseSummary, isLocalPostgresUrl, isNeonUrl, resolveDatabaseUrl } from './config';
 
 type DatabaseInstance = ReturnType<typeof drizzleNeon<typeof schema>>;
 
@@ -44,6 +44,21 @@ if (configuredDb && databaseUrl) {
 }
 
 export const isDatabaseConfigured = Boolean(databaseUrl);
+
+// Boot-time signal — surface DB configuration in the server log so operators
+// can see at a glance whether they're running with persistence or in
+// local-only mode. We don't probe connectivity here because that would block
+// module evaluation; use /api/db/verify for an active health check.
+if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
+  if (databaseUrl) {
+    const summary = getDatabaseSummary(databaseUrl);
+    // eslint-disable-next-line no-console
+    console.log(`[db] configured: provider=${summary.provider} host=${summary.hostname ?? 'unknown'}`);
+  } else {
+    // eslint-disable-next-line no-console
+    console.warn('[db] no DATABASE_URL — running in local-only mode (data will not persist across sessions)');
+  }
+}
 
 type ConfiguredDb = NonNullable<typeof configuredDb>;
 

@@ -1,7 +1,10 @@
 node_modules
 .next
 dist-electron
+electron/runtime/models/*.gguf
+electron/runtime/SHA256SUMS.txt
 certificates
 *.pem
+.env*
 .git
 backup

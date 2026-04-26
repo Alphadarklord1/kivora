@@ -1,7 +1,18 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { recordQuizAttempt, type QuizAnswerSummary } from '@/lib/workspace/quiz-persistence';
 
-export function ExamView({ content, onDone }: { content: string; onDone?: (score: number, total: number) => void }) {
+export function ExamView({
+  content,
+  onDone,
+  fileId,
+  deckId,
+}: {
+  content: string;
+  onDone?: (score: number, total: number) => void;
+  fileId?: string | null;
+  deckId?: string | null;
+}) {
   const blocks = content
     .split(/\n(?=\*?\*?Q\d+[\.\)])/i)
     .map(b => b.trim())
@@ -12,6 +23,9 @@ export function ExamView({ content, onDone }: { content: string; onDone?: (score
   const [secsLeft, setSecsLeft] = useState(0);
   const [answers,  setAnswers]  = useState<Record<number, string>>({});
   const [score,    setScore]    = useState<{ correct: number; total: number; weak: string[] } | null>(null);
+  // Track exam start so we can compute timeTaken on submit (the timer
+  // counts down, so subtracting from the configured minutes is enough).
+  const [examStartedAt, setExamStartedAt] = useState<number | null>(null);
 
   useEffect(() => {
     if (phase !== 'exam') return;
@@ -29,21 +43,46 @@ export function ExamView({ content, onDone }: { content: string; onDone?: (score
     setSecsLeft(minutes * 60);
     setAnswers({});
     setScore(null);
+    setExamStartedAt(Date.now());
     setPhase('exam');
   }
 
   function submitExam() {
     let correct = 0;
     const weak: string[] = [];
+    const detailedAnswers: QuizAnswerSummary[] = [];
     blocks.forEach((block, qi) => {
       const ans  = block.match(/✓\s*([A-D])\)?/)?.[1] ?? block.match(/Answer:\s*([A-D])\b/i)?.[1];
-      const stem = block.split('\n')[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '').slice(0, 40);
-      if (ans && answers[qi] === ans) correct++;
-      else weak.push(stem + '…');
+      const stemFull = block.split('\n')[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '');
+      const userAnswer = answers[qi] ?? '';
+      const isCorrect = Boolean(ans && userAnswer === ans);
+      if (isCorrect) correct++;
+      else weak.push(stemFull.slice(0, 40) + '…');
+      // Per-question record for analytics — keeps the same shape the
+      // /api/quiz-attempts route already validates.
+      detailedAnswers.push({
+        questionId: `q${qi + 1}`,
+        question: stemFull.slice(0, 200),
+        userAnswer,
+        correctAnswer: ans ?? '',
+        isCorrect,
+      });
     });
     setScore({ correct, total: blocks.length, weak: weak.slice(0, 5) });
     setPhase('results');
     onDone?.(correct, blocks.length);
+    // Persist the attempt — fire-and-forget so a slow network never
+    // blocks the results screen.
+    const timeTaken = examStartedAt ? Math.round((Date.now() - examStartedAt) / 1000) : null;
+    void recordQuizAttempt({
+      mode: 'exam',
+      totalQuestions: blocks.length,
+      correctAnswers: correct,
+      fileId,
+      deckId,
+      timeTaken,
+      answers: detailedAnswers,
+    });
   }
 
   const mm  = String(Math.floor(secsLeft / 60)).padStart(2, '0');

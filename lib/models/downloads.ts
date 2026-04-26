@@ -1,7 +1,7 @@
 import localManifest from '@/electron/runtime/model-manifest.json';
 
 export const REPO_RELEASES_URL = 'https://github.com/Alphadarklord1/kivora/releases';
-export const FALLBACK_TAG = process.env.NEXT_PUBLIC_STUDYPILOT_RELEASE_TAG || 'v1.0.0';
+export const FALLBACK_TAG = process.env.NEXT_PUBLIC_KIVORA_RELEASE_TAG || 'v1.0.0';
 export const FALLBACK_RELEASE_URL = `https://github.com/Alphadarklord1/kivora/releases/tag/${FALLBACK_TAG}`;
 export const GITHUB_API_LATEST_RELEASE = 'https://api.github.com/repos/Alphadarklord1/kivora/releases/latest';
 
@@ -88,14 +88,25 @@ export async function getReleaseDownloadData() {
 
   const localModels = ((localManifest.models || []) as LocalManifestModel[]).map((model) => {
     const publishedAsset = findAsset(assets, (asset) => asset.name === model.file);
+    const copy = MODEL_COPY[model.key];
+    const bundled = copy?.bundled ?? false;
     return {
       ...model,
-      label: MODEL_COPY[model.key]?.label || model.modelId,
-      summary: MODEL_COPY[model.key]?.summary || 'Offline study model.',
-      bundled: MODEL_COPY[model.key]?.bundled ?? false,
-      fit: MODEL_COPY[model.key]?.fit || `${model.minRamGb} GB RAM`,
+      label: copy?.label || model.modelId,
+      summary: copy?.summary || 'Offline study model.',
+      bundled,
+      fit: copy?.fit || `${model.minRamGb} GB RAM`,
       publishedAsset,
+      downloadUrl: publishedAsset?.browser_download_url || model.url || null,
+      downloadSource: publishedAsset ? 'release' : model.url ? 'manifest' : bundled ? 'bundled' : 'missing',
+      integrityWarning: model.sha256 && model.sizeBytes > 0 ? null : 'Missing verification metadata.',
     };
+  });
+  const manifestLooksReleaseReady = Boolean(manifestAsset && checksumsAsset) && localModels.every((model) => {
+    const hasVerifiedMetadata = Boolean(model.sha256 && model.sizeBytes > 0);
+    if (!hasVerifiedMetadata) return false;
+    if (model.bundled) return true;
+    return Boolean(model.publishedAsset || model.url);
   });
 
   return {
@@ -109,6 +120,7 @@ export async function getReleaseDownloadData() {
     checksumsAsset,
     localModels,
     hasPublishedModelAssets: localModels.some((model) => Boolean(model.publishedAsset)),
+    manifestLooksReleaseReady,
   };
 }
 

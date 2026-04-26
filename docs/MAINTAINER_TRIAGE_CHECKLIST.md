@@ -25,7 +25,7 @@ If it cannot be reproduced, request one concrete missing detail instead of guess
 ## 3. Decide severity
 
 - `P0 Critical`: crash, auth break, data loss, broken core route
-- `P1 High`: core beta flow degraded
+- `P1 High`: core 1.0 flow degraded
 - `P2 Normal`: important but not blocking
 - `P3 Low`: polish, copy, low-risk improvement
 

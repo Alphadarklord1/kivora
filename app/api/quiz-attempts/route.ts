@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { quizAttempts, files } from '@/lib/db/schema';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
 
 interface QuizAnswer {
@@ -21,8 +21,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
-    const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10));
+    const rawLimit = parseInt(searchParams.get('limit') ?? '20', 10);
+    const limit = Math.min(100, Math.max(1, isNaN(rawLimit) ? 20 : rawLimit));
+    const rawOffset = parseInt(searchParams.get('offset') ?? '0', 10);
+    const offset = Math.max(0, isNaN(rawOffset) ? 0 : rawOffset);
     const fileId = searchParams.get('fileId');
     const deckId = searchParams.get('deckId');
 
@@ -75,7 +77,7 @@ export async function GET(request: NextRequest) {
         .offset(offset);
     }
 
-    // Calculate stats
+    // Calculate stats (always unfiltered — global summary for the user)
     const allAttempts = await db
       .select({
         score: quizAttempts.score,
@@ -95,7 +97,22 @@ export async function GET(request: NextRequest) {
       }, {} as Record<string, number>),
     };
 
-    return NextResponse.json({ attempts, stats });
+    // Count matching the applied filter so clients can paginate correctly
+    let filteredTotal: number;
+    if (fileId || deckId) {
+      const countFilters = [eq(quizAttempts.userId, userId)];
+      if (fileId) countFilters.push(eq(quizAttempts.fileId, fileId));
+      if (deckId) countFilters.push(eq(quizAttempts.deckId, deckId));
+      const [row] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(quizAttempts)
+        .where(and(...countFilters));
+      filteredTotal = row?.count ?? 0;
+    } else {
+      filteredTotal = allAttempts.length;
+    }
+
+    return NextResponse.json({ attempts, stats, total: filteredTotal });
   } catch (error) {
     console.error('Get quiz attempts error:', error);
     return NextResponse.json({ error: 'Failed to get quiz attempts' }, { status: 500 });
@@ -118,8 +135,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    if (
+      !Number.isInteger(totalQuestions) || totalQuestions < 1 ||
+      !Number.isInteger(correctAnswers) || correctAnswers < 0 || correctAnswers > totalQuestions
+    ) {
+      return NextResponse.json({ error: 'Invalid question counts' }, { status: 400 });
+    }
+
     // Calculate score
-    const score = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+    const score = Math.round((correctAnswers / totalQuestions) * 100);
 
     // Save the attempt
     const [attempt] = await db
@@ -133,7 +157,7 @@ export async function POST(request: NextRequest) {
         correctAnswers,
         score,
         timeTaken: timeTaken || null,
-        answers: answers as QuizAnswer[] || null,
+        answers: Array.isArray(answers) ? (answers as QuizAnswer[]) : null,
       })
       .returning();
 

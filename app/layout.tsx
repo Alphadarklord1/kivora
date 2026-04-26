@@ -1,14 +1,8 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
+import './design-tokens.css';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 import { ServiceWorkerRegistration } from '@/components/pwa/ServiceWorkerRegistration';
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-});
 
 const themeScript = `
 (function(){
@@ -76,29 +70,97 @@ const guestSessionScript = `
 })();
 `;
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://kivora.app';
+
 export const metadata: Metadata = {
-  title: 'Kivora',
-  description: 'Your study workspace — organize materials, generate summaries, quizzes, and more.',
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: 'Kivora - AI Study Workspace',
+    template: '%s | Kivora',
+  },
+  description: 'Research, review, and submit. Search sources, turn them into flashcards and notes, solve math, and plan your study flow in one private workspace.',
+  keywords: ['study app', 'AI study assistant', 'flashcards', 'research', 'note taking', 'academic research', 'spaced repetition', 'offline AI'],
+  authors: [{ name: 'Kivora' }],
+  creator: 'Kivora',
+  publisher: 'Kivora',
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: siteUrl,
+    siteName: 'Kivora',
+    title: 'Kivora - AI Study Workspace',
+    description: 'Research, review, and submit. Search sources, turn them into flashcards and notes, solve math, and plan your study flow in one private workspace.',
+    images: [
+      {
+        url: '/images/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Kivora - AI Study Workspace',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Kivora - AI Study Workspace',
+    description: 'Research, review, and submit. Search sources, turn them into flashcards and notes, solve math, and plan your study flow in one private workspace.',
+    images: ['/images/og-image.png'],
+    creator: '@kivora',
+  },
+  icons: {
+    icon: [
+      { url: '/icons/icon.svg', type: 'image/svg+xml' },
+      { url: '/icons/icon-128x128.png', sizes: '128x128', type: 'image/png' },
+      { url: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
+      { url: '/icons/icon.ico', sizes: 'any' },
+    ],
+    apple: [{ url: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' }],
+  },
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Kivora',
+  },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
+  userScalable: false,
+  themeColor: '#4a90e2',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#2563eb" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-title" content="Kivora" />
-        <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+        <link
+          rel="preconnect"
+          href="https://fonts.bunny.net"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="stylesheet"
+          href="https://fonts.bunny.net/css?family=dm-sans:400,500,700|instrument-serif:400,600|jetbrains-mono:400,500"
+        />
+
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <script dangerouslySetInnerHTML={{ __html: guestSessionScript }} />
       </head>
-      <body className={inter.variable}>
+      <body>
         {children}
         <ServiceWorkerRegistration />
         <InstallPrompt />

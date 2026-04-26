@@ -1,8 +1,9 @@
 'use client';
 import { useState } from 'react';
 import { mdToHtml } from '@/lib/utils/md';
+import { recordQuizAttempt, type QuizAnswerSummary } from '@/lib/workspace/quiz-persistence';
 
-export function MCQView({ content }: { content: string }) {
+export function MCQView({ content, fileId, deckId }: { content: string; fileId?: string | null; deckId?: string | null }) {
   const [selected, setSelected] = useState<Record<number, string>>({});
   const [revealed, setRevealed] = useState<Record<number, boolean>>({});
   const [score,    setScore]    = useState<number | null>(null);
@@ -20,12 +21,33 @@ export function MCQView({ content }: { content: string }) {
     blocks.forEach((_, i) => { r[i] = true; });
     setRevealed(r);
     let correct = 0;
+    const answers: QuizAnswerSummary[] = [];
     blocks.forEach((block, qi) => {
       const ans = block.match(/✓\s*([A-D])\)?/)?.[1]
         ?? block.match(/Answer:\s*([A-D])\b/i)?.[1];
-      if (ans && selected[qi] === ans) correct++;
+      const userAnswer = selected[qi] ?? '';
+      const isCorrect = Boolean(ans && userAnswer === ans);
+      if (isCorrect) correct++;
+      // Capture per-question detail so analytics can spot weak areas later.
+      const stem = block.split('\n')[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '').slice(0, 200);
+      answers.push({
+        questionId: `q${qi + 1}`,
+        question: stem,
+        userAnswer,
+        correctAnswer: ans ?? '',
+        isCorrect,
+      });
     });
     setScore(correct);
+    // Fire-and-forget — won't block the UI or surface errors.
+    void recordQuizAttempt({
+      mode: 'mcq',
+      totalQuestions: blocks.length,
+      correctAnswers: correct,
+      fileId,
+      deckId,
+      answers,
+    });
   }
 
   return (

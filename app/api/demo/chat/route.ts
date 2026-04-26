@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
-import { fetchGroqStream } from '@/lib/ai/groq';
+import { fetchGrokStream, isGrokConfigured } from '@/lib/ai/grok';
+import { fetchGroqStream, isGroqConfigured } from '@/lib/ai/groq';
 
 // ── Simple in-memory rate limiter (resets on server restart) ──────────────
 // Max 8 requests per IP per minute for the public demo
@@ -55,17 +56,26 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const model = process.env.GROQ_MODEL_DEFAULT || 'llama-3.3-70b-versatile';
+  const messages = [
+    { role: 'system' as const, content: SYSTEM_PROMPT },
+    { role: 'user'   as const, content: question },
+  ];
 
-  const stream = await fetchGroqStream({
-    model,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user',   content: question },
-    ],
-    maxTokens: 320,
-    temperature: 0.6,
-  });
+  // Try Groq first (LPU is fastest for the public demo), then Grok as backup.
+  let stream: Response | null = null;
+  let provider: 'groq' | 'grok' | null = null;
+
+  if (isGroqConfigured()) {
+    const groqModel = process.env.GROQ_MODEL_DEFAULT || 'llama-3.3-70b-versatile';
+    stream = await fetchGroqStream({ model: groqModel, messages, maxTokens: 320, temperature: 0.6 });
+    if (stream?.body) provider = 'groq';
+  }
+
+  if (!stream?.body && isGrokConfigured()) {
+    const grokModel = process.env.GROK_MODEL_DEFAULT || 'grok-3-fast';
+    stream = await fetchGrokStream({ model: grokModel, messages, maxTokens: 320, temperature: 0.6 });
+    if (stream?.body) provider = 'grok';
+  }
 
   if (!stream || !stream.body) {
     return new Response(
@@ -80,6 +90,7 @@ export async function POST(req: NextRequest) {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'X-Demo-Remaining': String(remaining),
+      'X-Demo-Provider': provider ?? 'unknown',
     },
   });
 }

@@ -333,3 +333,24 @@ export const calendarEvents = pgTable('calendar_events', {
   createdAt:   timestamp('created_at').defaultNow().notNull(),
   updatedAt:   timestamp('updated_at').defaultNow().notNull(),
 });
+
+// Scholar Hub persistence — research projects, generated reports, and
+// grading history. Single table keyed by `kind` so we don't need three
+// separate tables for what are essentially typed JSON envelopes.
+//
+//   kind = 'research' → payload is { topic, mode, ranking, sources, citations, overview, keyIdeas, ... }
+//   kind = 'report'   → payload is { topic, type, wordCount, outline, draft }
+//   kind = 'grade'    → payload is { reportId?, topic, type, criteria, overall, percentage }
+//
+// `title` is denormalised for fast list rendering; the full data lives in
+// `payload`. This mirrors how `quizAttempts` and `studyPlans` already store
+// shape-flexible state.
+export const coachSessions = pgTable('coach_sessions', {
+  id:        uuid('id').defaultRandom().primaryKey(),
+  userId:    uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  kind:      text('kind').notNull(),     // 'research' | 'report' | 'grade'
+  title:     text('title').notNull(),    // human-readable label for the list view
+  payload:   jsonb('payload').notNull(), // full state — type-checked at the API boundary
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});

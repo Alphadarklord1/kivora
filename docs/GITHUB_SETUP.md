@@ -16,7 +16,7 @@ On `main`, enable:
 
 Require the checks from:
 
-- `.github/workflows/beta-ci.yml`
+- `.github/workflows/release-ci.yml`
 - `.github/workflows/model-manifest.yml` when release/model work is involved
 
 ## 3. Labels

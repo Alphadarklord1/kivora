@@ -18,4 +18,9 @@ export default defineConfig({
   dbCredentials: {
     url: databaseUrl,
   },
+  // Only introspect the `public` schema. Supabase ships several reserved
+  // schemas (auth, storage, realtime, vault, extensions, graphql) whose
+  // CHECK constraints trip a drizzle-kit 0.31.x bug during `db:push`. We
+  // never want to manage those tables anyway.
+  schemaFilter: ['public'],
 });

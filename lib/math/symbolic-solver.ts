@@ -1723,7 +1723,471 @@ function solveMatrixProblem(normalizedInput: string, category: MathCategoryId): 
   return { ...result, verified: false, answer: 'Unsupported matrix problem', answerLatex: '\\text{Unsupported matrix problem}', explanation: 'Try add/subtract, multiply, scalar multiply, transpose, determinant, or inverse.' };
 }
 
+// ── Trigonometry: closed-form solvers for the catalog actions ────────────────
+//
+// These extend the original exact-value + identity matcher with four explicit
+// problem types the UI advertises: solving sin/cos/tan(x) = c on [0, 2π),
+// Law of Sines, Law of Cosines, and amplitude/period extraction for sinusoids.
+// Each returns a SolverResult with verified: true so the API route doesn't
+// fall through to the AI cascade.
+
+const TWO_PI = 2 * Math.PI;
+
+function normalizeAngleRadians(value: number): number {
+  let v = value % TWO_PI;
+  if (v < 0) v += TWO_PI;
+  return v;
+}
+
+function formatRadians(value: number): string {
+  // Express small rational multiples of π exactly when we recognize them.
+  const ratio = value / Math.PI;
+  if (Math.abs(ratio) < 1e-9) return '0';
+  for (const denom of [1, 2, 3, 4, 6, 8, 12]) {
+    const num = ratio * denom;
+    if (Math.abs(num - Math.round(num)) < 1e-9) {
+      const n = Math.round(num);
+      if (denom === 1) return n === 1 ? 'π' : n === -1 ? '-π' : `${n}π`;
+      if (n === 1) return `π/${denom}`;
+      if (n === -1) return `-π/${denom}`;
+      return `${n}π/${denom}`;
+    }
+  }
+  return formatNumber(value);
+}
+
+function formatRadiansLatex(value: number): string {
+  const ratio = value / Math.PI;
+  if (Math.abs(ratio) < 1e-9) return '0';
+  for (const denom of [1, 2, 3, 4, 6, 8, 12]) {
+    const num = ratio * denom;
+    if (Math.abs(num - Math.round(num)) < 1e-9) {
+      const n = Math.round(num);
+      if (denom === 1) return n === 1 ? '\\pi' : n === -1 ? '-\\pi' : `${n}\\pi`;
+      if (n === 1) return `\\frac{\\pi}{${denom}}`;
+      if (n === -1) return `-\\frac{\\pi}{${denom}}`;
+      return `\\frac{${n}\\pi}{${denom}}`;
+    }
+  }
+  return formatNumber(value);
+}
+
+function parseRhsScalar(rhs: string): number | null {
+  const trimmed = rhs.trim();
+  // Handle bare decimals/integers and common fractions like 1/2, sqrt(2)/2, etc.
+  try {
+    const v = Number(math.evaluate(trimmed));
+    return Number.isFinite(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Solve `sin(x) = c`, `cos(x) = c`, `tan(x) = c` for x ∈ [0, 2π).
+ *
+ * Roots:
+ *   sin: principal = arcsin(c); other = π - principal     (only if |c| ≤ 1)
+ *   cos: principal = arccos(c); other = 2π - principal     (only if |c| ≤ 1)
+ *   tan: principal = arctan(c); other = principal + π       (always defined)
+ */
+function solveTrigEquation(normalizedInput: string): SolverResult | null {
+  const compact = normalizedInput.toLowerCase().replace(/\s+/g, '');
+  const m = compact.match(/^(sin|cos|tan)\(x\)=([^=]+)$/);
+  if (!m) return null;
+
+  const fn = m[1] as 'sin' | 'cos' | 'tan';
+  const c = parseRhsScalar(m[2]);
+  if (c === null) return null;
+
+  const result = baseResult('trigonometry', normalizedInput, 'mathjs');
+
+  // Domain check for sin/cos.
+  if ((fn === 'sin' || fn === 'cos') && Math.abs(c) > 1) {
+    return {
+      ...result,
+      verified: true,
+      answer: 'No real solutions',
+      answerLatex: '\\text{No real solutions}',
+      explanation: `${fn}(x) is bounded between -1 and 1, so the equation has no real solution when |c| > 1.`,
+      steps: [
+        {
+          step: 1,
+          description: 'Check the range of the trig function',
+          expression: `|c| = ${formatNumber(Math.abs(c))} > 1`,
+          explanation: `${fn}(x) ∈ [-1, 1] for all real x.`,
+        },
+      ],
+    };
+  }
+
+  let roots: number[] = [];
+  let principalLabel = '';
+  let symmetryLabel = '';
+
+  if (fn === 'sin') {
+    const p = Math.asin(c);
+    roots = [normalizeAngleRadians(p), normalizeAngleRadians(Math.PI - p)];
+    principalLabel = 'arcsin(c)';
+    symmetryLabel = 'π − arcsin(c)';
+  } else if (fn === 'cos') {
+    const p = Math.acos(c);
+    roots = [normalizeAngleRadians(p), normalizeAngleRadians(-p)];
+    principalLabel = 'arccos(c)';
+    symmetryLabel = '2π − arccos(c)';
+  } else {
+    const p = Math.atan(c);
+    roots = [normalizeAngleRadians(p), normalizeAngleRadians(p + Math.PI)];
+    principalLabel = 'arctan(c)';
+    symmetryLabel = 'arctan(c) + π';
+  }
+
+  // Deduplicate (e.g. sin(x) = 1 → only π/2; cos(x) = 1 → only 0).
+  const unique = Array.from(new Set(roots.map((r) => Math.round(r * 1e9) / 1e9))).sort((a, b) => a - b);
+  const formatted = unique.map(formatRadians);
+  const formattedLatex = unique.map(formatRadiansLatex);
+
+  return {
+    ...result,
+    answer: `x ∈ {${formatted.join(', ')}}`,
+    answerLatex: `x \\in \\left\\{ ${formattedLatex.join(', ')} \\right\\}`,
+    explanation: `Closed-form solution of ${fn}(x) = ${formatNumber(c)} on [0, 2π).`,
+    steps: [
+      {
+        step: 1,
+        description: 'Identify the principal value',
+        expression: `${fn}^{-1}(${formatNumber(c)})`,
+        explanation: `The principal value (${principalLabel}) is the first root from the inverse function.`,
+      },
+      {
+        step: 2,
+        description: 'Apply trig symmetry to find the second root in [0, 2π)',
+        expression: symmetryLabel,
+        explanation: `${fn} is periodic; the second root in one period comes from ${symmetryLabel}.`,
+      },
+      {
+        step: 3,
+        description: 'List all roots in [0, 2π)',
+        expression: `x \\in \\left\\{ ${formattedLatex.join(', ')} \\right\\}`,
+        explanation: 'After normalizing each angle into the standard interval, deduplicate to get the final set.',
+      },
+    ],
+  };
+}
+
+function parseLawValues(input: string): Record<string, number> {
+  // Pull out tokens like "a=3", "B=45", "C=60deg" — case-sensitive on the
+  // variable name (capital letters are angles; lowercase are sides).
+  const out: Record<string, number> = {};
+  const re = /\b([a-cA-C])\s*=\s*(-?\d+(?:\.\d+)?)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(input)) !== null) {
+    const key = m[1];
+    const val = Number(m[2]);
+    if (Number.isFinite(val)) out[key] = val;
+  }
+  return out;
+}
+
+const DEG = Math.PI / 180;
+const RAD2DEG = 180 / Math.PI;
+
+/**
+ * Law of Sines: a/sin(A) = b/sin(B) = c/sin(C).
+ * Angles given in degrees by default. Handles AAS, ASA, and the SSA case
+ * (which can produce zero, one, or two valid triangles).
+ */
+function solveLawOfSines(normalizedInput: string): SolverResult | null {
+  if (!/law\s*of\s*sines/i.test(normalizedInput)) return null;
+  const v = parseLawValues(normalizedInput);
+  const result = baseResult('trigonometry', normalizedInput, 'mathjs');
+
+  // We need at least one (side, opposite-angle) pair to compute the common ratio.
+  const pairs: Array<['a' | 'b' | 'c', 'A' | 'B' | 'C']> = [['a', 'A'], ['b', 'B'], ['c', 'C']];
+  const knownPair = pairs.find(([s, a]) => v[s] !== undefined && v[a] !== undefined);
+  if (!knownPair) {
+    return {
+      ...result,
+      verified: false,
+      error: 'Law of Sines requires at least one matching side/angle pair (e.g., a and A).',
+      answer: 'Not enough information',
+      answerLatex: '\\text{Not enough information}',
+      explanation: 'Provide values like "law of sines a=3 A=45 B=60" — at least one side with its opposite angle is required.',
+    };
+  }
+
+  const [sKey, aKey] = knownPair;
+  const ratio = v[sKey] / Math.sin(v[aKey] * DEG);
+
+  // Try to fill in the unknowns and detect SSA ambiguity.
+  const computed: Array<{ label: string; value: string; latex: string }> = [];
+  let ambiguousNote = '';
+
+  for (const [s, a] of pairs) {
+    if (s === sKey && a === aKey) continue;
+    const haveSide = v[s] !== undefined;
+    const haveAngle = v[a] !== undefined;
+    if (haveSide && haveAngle) continue;
+
+    if (haveAngle && !haveSide) {
+      // Solve for the side: side = ratio * sin(angle).
+      const side = ratio * Math.sin(v[a] * DEG);
+      computed.push({
+        label: s,
+        value: formatNumber(side),
+        latex: `${s} = ${formatNumber(side)}`,
+      });
+    } else if (haveSide && !haveAngle) {
+      // SSA: angle = arcsin(side / ratio). Could be ambiguous.
+      const sinValue = v[s] / ratio;
+      if (Math.abs(sinValue) > 1 + 1e-9) {
+        return {
+          ...result,
+          answer: 'No triangle exists',
+          answerLatex: '\\text{No valid triangle}',
+          explanation: `For the given values, sin(${a}) would need to be ${formatNumber(sinValue)}, which is outside [-1, 1].`,
+          steps: [
+            {
+              step: 1,
+              description: `Apply law of sines to solve for angle ${a}`,
+              expression: `\\sin(${a}) = \\frac{${s}}{${sKey}/\\sin(${aKey})} = ${formatNumber(sinValue)}`,
+              explanation: 'Sine cannot exceed 1 in magnitude, so no triangle can satisfy these constraints.',
+            },
+          ],
+        };
+      }
+      const principal = Math.asin(Math.max(-1, Math.min(1, sinValue))) * RAD2DEG;
+      const supplement = 180 - principal;
+      // Both are valid only if the supplementary angle plus the known angle is < 180.
+      const validSupplement = supplement + v[aKey] < 180 - 1e-6 && supplement > 1e-6;
+      if (validSupplement && Math.abs(principal - supplement) > 1e-6) {
+        computed.push({
+          label: a,
+          value: `${formatNumber(principal)}° or ${formatNumber(supplement)}°`,
+          latex: `${a} = ${formatNumber(principal)}° \\text{ or } ${formatNumber(supplement)}°`,
+        });
+        ambiguousNote = ' This is the ambiguous SSA case — two triangles satisfy the constraints.';
+      } else {
+        computed.push({
+          label: a,
+          value: `${formatNumber(principal)}°`,
+          latex: `${a} = ${formatNumber(principal)}°`,
+        });
+      }
+    }
+  }
+
+  return {
+    ...result,
+    answer: computed.length
+      ? computed.map((c) => `${c.label} = ${c.value}`).join('; ')
+      : `Common ratio = ${formatNumber(ratio)}`,
+    answerLatex: computed.length
+      ? computed.map((c) => c.latex).join(', \\quad ')
+      : `\\frac{${sKey}}{\\sin(${aKey})} = ${formatNumber(ratio)}`,
+    explanation: `Used the law of sines with the (${sKey}, ${aKey}) pair as the common ratio.${ambiguousNote}`,
+    steps: [
+      {
+        step: 1,
+        description: 'State the law of sines',
+        expression: '\\frac{a}{\\sin(A)} = \\frac{b}{\\sin(B)} = \\frac{c}{\\sin(C)}',
+        explanation: 'Each side over the sine of its opposite angle equals the same constant for any triangle.',
+      },
+      {
+        step: 2,
+        description: 'Compute the common ratio from known values',
+        expression: `\\frac{${sKey}}{\\sin(${aKey})} = \\frac{${formatNumber(v[sKey])}}{\\sin(${formatNumber(v[aKey])}°)} = ${formatNumber(ratio)}`,
+        explanation: 'Plug in the matching side and angle to find the constant for this triangle.',
+      },
+      ...computed.map((c, i) => ({
+        step: 3 + i,
+        description: `Solve for ${c.label}`,
+        expression: c.latex,
+        explanation: 'Apply the same ratio to the remaining unknown.',
+      })),
+    ],
+  };
+}
+
+/**
+ * Law of Cosines: c² = a² + b² − 2ab·cos(C).
+ *
+ * Two common modes:
+ *   SAS — given two sides + included angle, find the third side.
+ *   SSS — given all three sides, find any angle.
+ */
+function solveLawOfCosines(normalizedInput: string): SolverResult | null {
+  if (!/law\s*of\s*cos(?:ines)?/i.test(normalizedInput)) return null;
+  const v = parseLawValues(normalizedInput);
+  const result = baseResult('trigonometry', normalizedInput, 'mathjs');
+
+  const sides = (['a', 'b', 'c'] as const).filter((k) => v[k] !== undefined);
+  const angles = (['A', 'B', 'C'] as const).filter((k) => v[k] !== undefined);
+
+  // SSS — solve for whichever angle the user implicitly wants. Default to all three.
+  if (sides.length === 3 && angles.length === 0) {
+    const { a, b, c } = v as { a: number; b: number; c: number };
+    const A = Math.acos((b * b + c * c - a * a) / (2 * b * c)) * RAD2DEG;
+    const B = Math.acos((a * a + c * c - b * b) / (2 * a * c)) * RAD2DEG;
+    const C = Math.acos((a * a + b * b - c * c) / (2 * a * b)) * RAD2DEG;
+    return {
+      ...result,
+      answer: `A = ${formatNumber(A)}°, B = ${formatNumber(B)}°, C = ${formatNumber(C)}°`,
+      answerLatex: `A = ${formatNumber(A)}°,\\ B = ${formatNumber(B)}°,\\ C = ${formatNumber(C)}°`,
+      explanation: 'SSS case — used the law of cosines rearranged for each angle.',
+      steps: [
+        {
+          step: 1,
+          description: 'Rearrange the law of cosines for an angle',
+          expression: '\\cos(A) = \\frac{b^2 + c^2 - a^2}{2bc}',
+          explanation: 'Solve the law of cosines for the cosine of the angle opposite the named side.',
+        },
+        {
+          step: 2,
+          description: 'Apply to each angle',
+          expression: `A = ${formatNumber(A)}°,\\ B = ${formatNumber(B)}°,\\ C = ${formatNumber(C)}°`,
+          explanation: 'Repeat for B (rearranged for side b) and C (rearranged for side c).',
+        },
+      ],
+    };
+  }
+
+  // SAS — two sides + the included angle.
+  // Convention: capital letter angle X is opposite lowercase side x.
+  // For SAS we expect e.g. a, b, and C → solve for c.
+  if (sides.length === 2 && angles.length === 1) {
+    const angleKey = angles[0];
+    const oppositeSide = angleKey.toLowerCase() as 'a' | 'b' | 'c';
+    const otherSides = (['a', 'b', 'c'] as const).filter((k) => k !== oppositeSide);
+    if (sides.includes(otherSides[0]) && sides.includes(otherSides[1])) {
+      const s1 = v[otherSides[0]];
+      const s2 = v[otherSides[1]];
+      const angleDeg = v[angleKey];
+      const oppositeSquared = s1 * s1 + s2 * s2 - 2 * s1 * s2 * Math.cos(angleDeg * DEG);
+      const opposite = Math.sqrt(Math.max(0, oppositeSquared));
+      return {
+        ...result,
+        answer: `${oppositeSide} = ${formatNumber(opposite)}`,
+        answerLatex: `${oppositeSide} = ${formatNumber(opposite)}`,
+        explanation: `SAS case — applied c² = a² + b² − 2ab·cos(C) with ${angleKey} as the included angle.`,
+        steps: [
+          {
+            step: 1,
+            description: 'State the law of cosines',
+            expression: `${oppositeSide}^2 = ${otherSides[0]}^2 + ${otherSides[1]}^2 - 2 \\cdot ${otherSides[0]} \\cdot ${otherSides[1]} \\cdot \\cos(${angleKey})`,
+            explanation: 'The square of any side equals the sum of squares of the other two minus twice their product times the cosine of the included angle.',
+          },
+          {
+            step: 2,
+            description: 'Substitute the known values',
+            expression: `${oppositeSide}^2 = ${formatNumber(s1)}^2 + ${formatNumber(s2)}^2 - 2(${formatNumber(s1)})(${formatNumber(s2)})\\cos(${formatNumber(angleDeg)}°)`,
+            explanation: 'Plug in the two sides and the included angle.',
+          },
+          {
+            step: 3,
+            description: 'Solve for the opposite side',
+            expression: `${oppositeSide} = \\sqrt{${formatNumber(oppositeSquared)}} = ${formatNumber(opposite)}`,
+            explanation: 'Take the positive square root.',
+          },
+        ],
+      };
+    }
+  }
+
+  return {
+    ...result,
+    verified: false,
+    error: 'Law of Cosines requires SAS (two sides + included angle) or SSS (three sides).',
+    answer: 'Not enough information',
+    answerLatex: '\\text{Not enough information}',
+    explanation: 'Provide values like "law of cosines a=3 b=4 C=60" or "law of cosines a=3 b=4 c=5".',
+  };
+}
+
+/**
+ * Extract amplitude, period, phase shift, and vertical shift from
+ * y = A·sin(B·x + C) + D (or cos / tan variants).
+ */
+function solveAmplitudePeriod(normalizedInput: string): SolverResult | null {
+  if (!/amplitude|period/i.test(normalizedInput)) return null;
+  const compact = normalizedInput.toLowerCase().replace(/\s+/g, '');
+
+  // Match optional A coefficient, the trig function, B coefficient on x, optional + C, optional + D.
+  // Examples accepted:
+  //   amplitude 2*sin(3*x)
+  //   period of 5sin(2x+pi/4)
+  //   amplitude and period of -3cos(x/2 - pi)+1
+  const re = /(-?\d*\.?\d*)\*?(sin|cos|tan)\(\s*(-?\d*\.?\d*)\*?x\s*([+\-][^)]*)?\)\s*([+\-]\s*\d+(?:\.\d+)?)?/;
+  const m = compact.match(re);
+  if (!m) return null;
+
+  const aStr = m[1];
+  const fn = m[2] as 'sin' | 'cos' | 'tan';
+  const bStr = m[3];
+  const phaseStr = m[4];
+  const dStr = m[5];
+
+  const A = aStr === '' || aStr === '-' || aStr === '+' ? (aStr === '-' ? -1 : 1) : Number(aStr);
+  const B = bStr === '' || bStr === '-' || bStr === '+' ? (bStr === '-' ? -1 : 1) : Number(bStr);
+  if (!Number.isFinite(A) || !Number.isFinite(B) || B === 0) return null;
+
+  let C = 0;
+  if (phaseStr) {
+    try {
+      C = Number(math.evaluate(phaseStr.replace(/\s+/g, '')));
+    } catch {
+      C = 0;
+    }
+  }
+  const D = dStr ? Number(dStr.replace(/\s+/g, '')) : 0;
+
+  const amplitude = Math.abs(A);
+  const period = (fn === 'tan' ? Math.PI : TWO_PI) / Math.abs(B);
+  const phaseShift = -C / B;
+
+  const result = baseResult('trigonometry', normalizedInput, 'mathjs');
+  return {
+    ...result,
+    answer: `amplitude = ${formatNumber(amplitude)}, period = ${formatRadians(period)}, phase shift = ${formatRadians(phaseShift)}, vertical shift = ${formatNumber(D)}`,
+    answerLatex: `\\text{amp}=${formatNumber(amplitude)},\\ \\text{period}=${formatRadiansLatex(period)},\\ \\text{phase}=${formatRadiansLatex(phaseShift)},\\ \\text{vshift}=${formatNumber(D)}`,
+    explanation: `Parsed y = A·${fn}(B·x + C) + D with A=${formatNumber(A)}, B=${formatNumber(B)}, C=${formatNumber(C)}, D=${formatNumber(D)}.`,
+    graphExpr: normalizedInput,
+    steps: [
+      {
+        step: 1,
+        description: 'Match the standard form',
+        expression: `y = A \\cdot \\${fn}(B x + C) + D`,
+        explanation: 'Compare the input against the standard sinusoid form to read off coefficients.',
+      },
+      {
+        step: 2,
+        description: 'Read off A, B, C, D',
+        expression: `A = ${formatNumber(A)},\\ B = ${formatNumber(B)},\\ C = ${formatNumber(C)},\\ D = ${formatNumber(D)}`,
+        explanation: 'A controls amplitude, B controls period, C is the inner phase, D is the vertical shift.',
+      },
+      {
+        step: 3,
+        description: 'Apply the standard formulas',
+        expression: `\\text{amp}=|A|,\\ \\text{period}=\\frac{${fn === 'tan' ? '\\pi' : '2\\pi'}}{|B|},\\ \\text{phase}=-\\frac{C}{B}`,
+        explanation: `${fn === 'tan' ? 'Tangent has period π' : 'Sine and cosine have period 2π'}; phase shift inverts the inner sign.`,
+      },
+    ],
+  };
+}
+
 function solveTrigonometry(normalizedInput: string): SolverResult {
+  // Specialised problem types — try each before falling through to the
+  // generic numeric/identity path. Each returns null when its pattern
+  // doesn't match, so the cost is just a few regex tests.
+  const trigEq = solveTrigEquation(normalizedInput);
+  if (trigEq) return trigEq;
+  const lawSines = solveLawOfSines(normalizedInput);
+  if (lawSines) return lawSines;
+  const lawCos = solveLawOfCosines(normalizedInput);
+  if (lawCos) return lawCos;
+  const ampPeriod = solveAmplitudePeriod(normalizedInput);
+  if (ampPeriod) return ampPeriod;
+
   const result = baseResult('trigonometry', normalizedInput, 'hybrid');
   const compact = normalizedInput.toLowerCase().replace(/\s+/g, '');
   const exact = exactTrigAnswer(compact);

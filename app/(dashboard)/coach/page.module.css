@@ -749,13 +749,29 @@
 
 /* ── Pre / output text ───────────────────────────────────────────────────── */
 .preText {
-  white-space: pre-wrap;
   font: inherit;
   font-size: 0.88rem;
   color: var(--text-primary, #0f172a);
   line-height: 1.7;
   margin: 0;
 }
+/* Same heading + list polish as .reportDoc, applied to the assignment
+   helper output and any other places using .preText for AI markdown. */
+.preText h1,
+.preText h2,
+.preText h3 {
+  font-family: var(--kv-font-display, 'Instrument Serif', Georgia, serif);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  margin: 1rem 0 0.4rem;
+  line-height: 1.25;
+}
+.preText h1 { font-size: 1.25rem; }
+.preText h2 { font-size: 1.1rem; }
+.preText h3 { font-size: 1rem; }
+.preText ul,
+.preText ol { margin: 0.4rem 0 0.6rem 1.2rem; padding: 0; }
+.preText li { margin: 0.15rem 0; }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 /*  SOURCE TAB                                                               */
@@ -1063,10 +1079,40 @@
   font-size: 0.92rem;
   line-height: 1.75;
   color: var(--text-primary, #0f172a);
-  white-space: pre-wrap;
   max-height: 60vh;
   overflow-y: auto;
 }
+
+/*
+  Nested rules for the rendered markdown — without these, mdToHtml's
+  <h2>/<h3>/<ul>/<strong> would inherit browser defaults that clash with
+  the academic look (oversized headings, awkward list margins).
+*/
+.reportDoc h1,
+.reportDoc h2,
+.reportDoc h3 {
+  font-family: var(--kv-font-display, 'Instrument Serif', Georgia, serif);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  color: var(--text-primary, #0f172a);
+  margin: 1.4rem 0 0.5rem;
+  line-height: 1.25;
+}
+.reportDoc h1 { font-size: 1.5rem; }
+.reportDoc h2 { font-size: 1.2rem; }
+.reportDoc h3 { font-size: 1.05rem; }
+.reportDoc h1:first-child,
+.reportDoc h2:first-child,
+.reportDoc h3:first-child { margin-top: 0; }
+.reportDoc strong { color: var(--text-primary, #0f172a); font-weight: 700; }
+.reportDoc em { color: inherit; }
+.reportDoc ul,
+.reportDoc ol {
+  margin: 0.5rem 0 0.75rem 1.25rem;
+  padding: 0;
+}
+.reportDoc li { margin: 0.2rem 0; }
+.reportDoc br + br { display: block; content: ''; margin-top: 0.4rem; }
 
 /* Details/summary */
 .detailsBlock {
@@ -1595,11 +1641,25 @@ details[open] .detailsSummary::before {
 }
 
 .feedbackText {
-  white-space: pre-wrap;
   font: 0.84rem/1.65 inherit;
   color: var(--text-primary, #0f172a);
   margin: 0;
 }
+.feedbackText h1,
+.feedbackText h2,
+.feedbackText h3 {
+  font-family: var(--kv-font-display, 'Instrument Serif', Georgia, serif);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  margin: 0.8rem 0 0.3rem;
+  line-height: 1.25;
+}
+.feedbackText h1 { font-size: 1.1rem; }
+.feedbackText h2 { font-size: 1rem; }
+.feedbackText h3 { font-size: 0.94rem; }
+.feedbackText ul,
+.feedbackText ol { margin: 0.3rem 0 0.5rem 1.1rem; padding: 0; }
+.feedbackText li { margin: 0.12rem 0; }
 
 .feedbackFooter {
   padding: 0.75rem 0.9rem;

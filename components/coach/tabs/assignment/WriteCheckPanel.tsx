@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import type { WritingSuggestion } from '@/app/api/coach/check/route';
 import type { AssistAction } from '@/app/api/coach/assist/route';
 import styles from '@/app/(dashboard)/coach/page.module.css';
+import { mdToHtml } from '@/lib/utils/md';
 
 type SuggType = WritingSuggestion['type'];
 type FilterType = 'all' | SuggType;
@@ -401,7 +402,14 @@ export function WriteCheckPanel({
 
             {legacyResult && (
               <div className={styles.feedbackBody}>
-                <pre className={styles.feedbackText}>{legacyResult}</pre>
+                {/* Legacy AI feedback path — used when the structured
+                    JSON response can't be parsed and we fall back to a
+                    raw string. Render through mdToHtml so the user sees
+                    formatted feedback rather than literal '##' / '**'. */}
+                <div
+                  className={styles.feedbackText}
+                  dangerouslySetInnerHTML={{ __html: mdToHtml(legacyResult) }}
+                />
               </div>
             )}
           </div>

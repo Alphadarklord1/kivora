@@ -15,7 +15,7 @@ function readOptionalBooleanEnv(value: string | undefined): boolean | undefined 
 }
 
 export function isDesktopOnlyModeEnabled(): boolean {
-  return readBooleanEnv(process.env.STUDYPILOT_DESKTOP_ONLY);
+  return readBooleanEnv(process.env.KIVORA_DESKTOP_ONLY);
 }
 
 export function isGuestModeEnabled(): boolean {

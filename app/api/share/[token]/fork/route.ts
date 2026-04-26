@@ -28,6 +28,16 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
       return apiError(410, { errorCode: 'SHARE_EXPIRED', reason: 'Share has expired', requestId });
     }
+    // View-only shares cannot be forked — copying produces an editable
+    // duplicate which exceeds the read-only contract the owner chose.
+    // The owner of the share can always fork their own content elsewhere.
+    if (share.permission === 'view' && share.ownerId !== userId) {
+      return apiError(403, {
+        errorCode: 'SHARE_VIEW_ONLY',
+        reason: 'This share is view-only and cannot be copied to your library.',
+        requestId,
+      });
+    }
     if (!share.libraryItemId) {
       return apiError(400, { errorCode: 'NO_LIBRARY_ITEM', reason: 'This share has no forkable content', requestId });
     }

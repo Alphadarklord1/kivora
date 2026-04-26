@@ -1,12 +1,17 @@
+import type { NextRequest } from 'next/server';
 import { headers } from 'next/headers';
 import { auth } from '@/auth';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 import { GUEST_SESSION_HEADER, isGuestSessionId } from '@/lib/auth/guest-session';
+import { getUserId as getUserIdFromRequest } from '@/lib/auth/get-user-id';
 
 const GUEST_USER_ID = 'guest';
 
 /** Returns the authenticated user ID, or 'guest' if in guest mode. */
-export async function getUserId(): Promise<string | null> {
+export async function getUserId(request?: NextRequest): Promise<string | null> {
+  if (request) {
+    return getUserIdFromRequest(request);
+  }
   const session = await auth();
   if (session?.user?.id) return session.user.id;
   if (isGuestModeEnabled()) {

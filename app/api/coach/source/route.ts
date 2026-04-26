@@ -2,11 +2,8 @@ import { requireAppAccess } from '@/lib/api/guard';
 import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { offlineGenerate } from '@/lib/offline/generate';
-import { callGrokChat, isGrokConfigured } from '@/lib/ai/grok';
-import { callGroqChat, isGroqConfigured } from '@/lib/ai/groq';
-import { callOpenAIChat } from '@/lib/ai/openai';
-import { resolveAiRuntimeRequest, shouldTryCloud, shouldTryLocal } from '@/lib/ai/server-routing';
-import { cloudProviderForModel } from '@/lib/ai/runtime';
+import { callAi } from '@/lib/ai/call';
+import type { AiDataMode } from '@/lib/privacy/ai-data';
 import {
   buildFallbackSourceBrief,
   extractSourceMetaFromText,
@@ -77,7 +74,23 @@ function assertNotPrivateUrl(url: URL): void {
   }
 }
 
-async function generateSourceBrief(meta: Omit<SourceBrief, 'summary' | 'keyPoints'>, aiPrefs: Record<string, unknown>) {
+function buildOfflineSourceBrief(meta: Omit<SourceBrief, 'summary' | 'keyPoints'>) {
+  const summary = offlineGenerate('summarize', meta.extractedText);
+  const notes = offlineGenerate('notes', meta.extractedText);
+  return `Summary: ${summary}\n\nKey points:\n${notes
+    .split('\n')
+    .map((line) => line.replace(/^[-*•\s]+/, '').trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .map((line) => `- ${line}`)
+    .join('\n')}`;
+}
+
+async function generateSourceBrief(
+  meta: Omit<SourceBrief, 'summary' | 'keyPoints'>,
+  aiPrefs: Record<string, unknown>,
+  privacyMode: AiDataMode = 'full',
+) {
   const prompt = [
     'Explain what this source is about for a student.',
     'Return plain text in exactly this shape:',
@@ -94,66 +107,22 @@ async function generateSourceBrief(meta: Omit<SourceBrief, 'summary' | 'keyPoint
     meta.extractedText.slice(0, 12_000),
   ].filter(Boolean).join('\n');
 
-  const messages = [
-    { role: 'system' as const, content: SYSTEM_PROMPT },
-    { role: 'user' as const, content: prompt },
-  ];
+  // Use the unified AI cascade (Groq → Grok → Ollama → offline) so this
+  // route honours user AI preferences identically to every other coach
+  // surface. The deterministic offline brief is the final fallback.
+  const callResult = await callAi({
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: prompt },
+    ],
+    maxTokens: 900,
+    temperature: 0.3,
+    aiPrefs,
+    privacyMode,
+    offlineFallback: () => buildOfflineSourceBrief(meta),
+  });
 
-  const { mode, localModel, cloudModel } = resolveAiRuntimeRequest({ ai: aiPrefs });
-  const provider = cloudProviderForModel(cloudModel);
-
-  if (shouldTryCloud(mode) && (provider === 'groq' || isGroqConfigured())) {
-    const groqModel = provider === 'groq' ? cloudModel : 'openai/gpt-oss-20b';
-    const result = await callGroqChat({ model: groqModel, messages, maxTokens: 900, temperature: 0.3 });
-    if (result.ok && result.content.trim()) {
-      return result.content.trim();
-    }
-  }
-
-  if (shouldTryCloud(mode) && (provider === 'grok' || isGrokConfigured())) {
-    const grokModel = provider === 'grok' ? cloudModel : 'grok-3-fast';
-    const result = await callGrokChat({ model: grokModel, messages, maxTokens: 900, temperature: 0.3 });
-    if (result.ok && result.content.trim()) {
-      return result.content.trim();
-    }
-  }
-
-  if (shouldTryLocal(mode)) {
-    const ollamaBase = process.env.OLLAMA_URL ?? 'http://localhost:11434';
-    try {
-      const res = await fetch(`${ollamaBase}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: localModel, messages, max_tokens: 900, temperature: 0.3, stream: false }),
-        signal: AbortSignal.timeout(45_000),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const content = data?.choices?.[0]?.message?.content ?? '';
-        if (content.trim()) return content.trim();
-      }
-    } catch {
-      // fall through to cloud/offline
-    }
-  }
-
-  if (shouldTryCloud(mode)) {
-    const openaiModel = provider === 'openai' ? cloudModel : 'gpt-4o-mini';
-    const result = await callOpenAIChat({ model: openaiModel, messages, maxTokens: 900, temperature: 0.3 });
-    if (result.ok && result.content.trim()) {
-      return result.content.trim();
-    }
-  }
-
-  const summary = offlineGenerate('summarize', meta.extractedText);
-  const notes = offlineGenerate('notes', meta.extractedText);
-  return `Summary: ${summary}\n\nKey points:\n${notes
-    .split('\n')
-    .map((line) => line.replace(/^[-*•\s]+/, '').trim())
-    .filter(Boolean)
-    .slice(0, 4)
-    .map((line) => `- ${line}`)
-    .join('\n')}`;
+  return callResult.result.trim();
 }
 
 export async function POST(req: NextRequest) {
@@ -254,7 +223,7 @@ export async function POST(req: NextRequest) {
 
   if (privacyMode === 'full') {
     try {
-      const generated = await generateSourceBrief(brief, ai);
+      const generated = await generateSourceBrief(brief, ai, privacyMode);
       const summary = parseSummary(generated).replace(/^summary:\s*/i, '').trim();
       const keyPoints = parseKeyPoints(generated, summary);
       brief = {

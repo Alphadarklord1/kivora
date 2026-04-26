@@ -13,16 +13,20 @@ export async function GET() {
     process.env.OPENAI_MODEL_DEFAULT ??
     DEFAULT_CLOUD_MODEL;
 
+  const activeCloudProvider = groqConfigured
+    ? 'groq'
+    : grokConfigured
+      ? 'grok'
+      : openaiConfigured
+        ? 'openai'
+        : null;
+
   return NextResponse.json({
     groqConfigured,
-    // Primary cloud provider
     grokConfigured,
-    // Secondary cloud fallback
     openaiConfigured,
-    // Legacy alias — true if any cloud provider is available
     cloudConfigured: groqConfigured || grokConfigured || openaiConfigured,
-    // Which provider is active
-    activeCloudProvider: groqConfigured ? 'groq' : grokConfigured ? 'grok' : openaiConfigured ? 'openai' : null,
+    activeCloudProvider,
     defaultCloudModel,
     // Local offline feature
     localRuntimeUrl: process.env.OLLAMA_URL ?? 'http://localhost:11434',

@@ -105,7 +105,7 @@ export function VaultStatus() {
         <button
           ref={indicatorRef}
           className="vault-indicator paused"
-          aria-label={t('Encryption disabled for beta')}
+          aria-label={t('Encryption disabled for this release')}
           onClick={() => setShowTooltip((prev) => !prev)}
           onFocus={() => setShowTooltip(true)}
         >
@@ -113,9 +113,9 @@ export function VaultStatus() {
           <span className="vault-text">{t('Encryption Paused')}</span>
         </button>
         {showTooltip && (
-          <div ref={tooltipRef} className="vault-tooltip beta-tooltip" style={tooltipStyle}>
-            <div className="tooltip-header">{t('Encryption disabled for beta')}</div>
-            <p className="tooltip-content">{t('Local vault password prompts are turned off until encryption returns in a later beta update.')}</p>
+          <div ref={tooltipRef} className="vault-tooltip paused-tooltip" style={tooltipStyle}>
+            <div className="tooltip-header">{t('Encryption disabled for this release')}</div>
+            <p className="tooltip-content">{t('Local vault password prompts are turned off until encryption returns in a later release.')}</p>
           </div>
         )}
         <style jsx>{`
@@ -139,7 +139,7 @@ export function VaultStatus() {
             color: var(--text-secondary);
           }
 
-          .beta-tooltip {
+          .paused-tooltip {
             padding: var(--space-3);
             border-radius: var(--radius-lg);
             border: 1px solid var(--border-subtle);

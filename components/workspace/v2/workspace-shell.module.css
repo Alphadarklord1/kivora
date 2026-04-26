@@ -1,0 +1,277 @@
+/* ============================================================
+   Workspace v2 — visual shell only
+   Wraps the existing FolderPanel + WorkspacePanel + (optional)
+   Today drawer in a header-plus-three-zone layout that uses the
+   shared design tokens (var(--kv-*)) defined in app/design-tokens.css.
+
+   Behaviour stays in the existing components; this layer only
+   reorganises the canvas and adds the new header strip.
+   ============================================================ */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 40px);
+  background: var(--kv-cream, #fdfcfa);
+  color: var(--kv-ink, #1a1a1a);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Header strip — greeting + breadcrumb + quick actions ────────────── */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1.25rem;
+  background:
+    radial-gradient(120% 200% at 0% 0%, rgba(255, 255, 255, 0.4), transparent 55%),
+    linear-gradient(180deg, var(--kv-cream-2, #f7f4ee) 0%, var(--kv-cream, #fdfcfa) 100%);
+  border-bottom: 1px solid var(--kv-rule, rgba(0, 0, 0, 0.08));
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.greetingBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.greeting {
+  font-family: var(--kv-font-display, 'Instrument Serif', Georgia, serif);
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--kv-ink, #1a1a1a);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.greetingAccent {
+  font-family: var(--kv-font-display, 'Instrument Serif', Georgia, serif);
+  font-style: italic;
+  background: var(--kv-brand-grad, linear-gradient(135deg, #4a90e2 0%, #3aa6c2 55%, #1db88e 100%));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-decoration: underline;
+  text-decoration-color: rgba(29, 184, 142, 0.4);
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+}
+
+.breadcrumb {
+  font-size: 0.82rem;
+  color: var(--kv-ink-3, #7a7a7a);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.breadcrumb strong {
+  color: var(--kv-ink-2, #4a4a4a);
+  font-weight: 600;
+}
+
+.breadcrumbSep {
+  opacity: 0.6;
+}
+
+/* ── Quick start chips ──────────────────────────────────────────────── */
+
+.quickActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.quickChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid var(--kv-rule, rgba(0, 0, 0, 0.08));
+  color: var(--kv-ink-2, #4a4a4a);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--kv-fast, 150ms), border-color var(--kv-fast, 150ms),
+              transform var(--kv-fast, 150ms);
+  text-decoration: none;
+}
+
+.quickChip:hover {
+  background: var(--kv-cream-2, #f7f4ee);
+  border-color: var(--kv-rule-strong, rgba(0, 0, 0, 0.16));
+  transform: translateY(-1px);
+}
+
+.quickChip[data-tone='mint']   { background: var(--kv-mint, #d8efe3);   color: var(--kv-mint-ink, #0e6b50);   border-color: rgba(29, 184, 142, 0.25); }
+.quickChip[data-tone='peach']  { background: var(--kv-peach, #ffe6cf);  color: var(--kv-peach-ink, #a04e1a);  border-color: rgba(255, 168, 86, 0.3); }
+.quickChip[data-tone='sky']    { background: var(--kv-sky, #d8e8f5);    color: var(--kv-sky-ink, #2a5a87);    border-color: rgba(74, 144, 226, 0.3); }
+.quickChip[data-tone='butter'] { background: var(--kv-butter, #fff0c2); color: var(--kv-butter-ink, #8a6a08); border-color: rgba(245, 158, 11, 0.3); }
+
+/* ── Three-zone body ────────────────────────────────────────────────── */
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+/* Existing FolderPanel + WorkspacePanel components are flex children of
+   this body — they keep their own internal styles. We only tag them so
+   the responsive media query can collapse them on small screens. */
+.body > :global(.folder-panel),
+.body > :global([class*='folder-panel']) {
+  flex-shrink: 0;
+}
+
+/* ── Today drawer (right zone) ──────────────────────────────────────── */
+
+.todayDrawer {
+  flex-shrink: 0;
+  width: 280px;
+  border-left: 1px solid var(--kv-rule, rgba(0, 0, 0, 0.08));
+  background: linear-gradient(180deg, var(--kv-cream, #fdfcfa) 0%, var(--kv-cream-2, #f7f4ee) 100%);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  transition: width var(--kv-medium, 250ms);
+}
+
+.todayDrawer[data-collapsed='true'] {
+  width: 44px;
+}
+
+.todayDrawer[data-collapsed='true'] .todayContent {
+  display: none;
+}
+
+.todayHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--kv-rule, rgba(0, 0, 0, 0.08));
+  flex-shrink: 0;
+}
+
+.todayHeader strong {
+  font-family: var(--kv-font-display, 'Instrument Serif', Georgia, serif);
+  font-weight: 400;
+  font-size: 1.05rem;
+  color: var(--kv-ink, #1a1a1a);
+  letter-spacing: -0.01em;
+}
+
+.todayToggle {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--kv-rule-strong, rgba(0, 0, 0, 0.16));
+  background: #ffffff;
+  color: var(--kv-ink-2, #4a4a4a);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background var(--kv-fast, 150ms);
+}
+
+.todayToggle:hover {
+  background: var(--kv-cream-2, #f7f4ee);
+}
+
+.todayContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+/* ── Stat cards in the today drawer — pastel coded by metric ────────── */
+
+.statCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--kv-radius, 12px);
+  border: 1px solid var(--kv-rule, rgba(0, 0, 0, 0.08));
+  background: #ffffff;
+}
+
+.statCard[data-tone='mint']   { background: var(--kv-mint, #d8efe3);   border-color: rgba(29, 184, 142, 0.2); }
+.statCard[data-tone='peach']  { background: var(--kv-peach, #ffe6cf);  border-color: rgba(255, 168, 86, 0.25); }
+.statCard[data-tone='sky']    { background: var(--kv-sky, #d8e8f5);    border-color: rgba(74, 144, 226, 0.25); }
+.statCard[data-tone='butter'] { background: var(--kv-butter, #fff0c2); border-color: rgba(245, 158, 11, 0.25); }
+
+.statValue {
+  font-family: var(--kv-font-display, 'Instrument Serif', Georgia, serif);
+  font-size: 1.6rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.statLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--kv-ink-3, #7a7a7a);
+}
+
+.sectionLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--kv-ink-3, #7a7a7a);
+  margin: 0.25rem 0 0;
+}
+
+.linkRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--kv-ink-2, #4a4a4a);
+  font-size: 0.85rem;
+  transition: background var(--kv-fast, 150ms);
+}
+
+.linkRow:hover {
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--kv-ink, #1a1a1a);
+}
+
+.linkRow span:last-child {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--kv-ink-3, #7a7a7a);
+}
+
+/* ── Responsive — hide the Today drawer on narrow screens ──────────── */
+
+@media (max-width: 1100px) {
+  .todayDrawer {
+    display: none;
+  }
+}

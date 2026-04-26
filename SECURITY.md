@@ -2,7 +2,7 @@
 
 ## Supported scope
 
-Kivora is currently in stable beta. Security issues affecting these areas should be reported privately:
+Kivora 1.0.0 supports the public web and desktop surfaces. Security issues affecting these areas should be reported privately:
 
 - authentication and session handling
 - guest-mode access boundaries

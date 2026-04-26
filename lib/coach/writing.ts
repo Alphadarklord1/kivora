@@ -36,15 +36,43 @@ export function applyWritingSuggestionToText(
   text: string,
   suggestion: WritingSuggestion,
 ) {
-  const index = text.indexOf(suggestion.original);
-  if (index === -1) return { applied: false, text };
+  const orig = suggestion.original;
+  let start = -1;
+  let end   = -1;
+
+  // 1. Exact match
+  const exact = text.indexOf(orig);
+  if (exact !== -1) {
+    start = exact;
+    end   = exact + orig.length;
+  }
+
+  // 2. Case-insensitive match
+  if (start === -1) {
+    const ci = text.toLowerCase().indexOf(orig.toLowerCase());
+    if (ci !== -1) {
+      start = ci;
+      end   = ci + orig.length;
+    }
+  }
+
+  // 3. Whitespace-tolerant regex (handles extra spaces / line-breaks introduced by editing)
+  if (start === -1) {
+    const pattern = orig
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/\s+/g, '\\s+');
+    const m = new RegExp(pattern, 'i').exec(text);
+    if (m) {
+      start = m.index;
+      end   = m.index + m[0].length;
+    }
+  }
+
+  if (start === -1) return { applied: false, text };
 
   return {
     applied: true,
-    text:
-      text.slice(0, index) +
-      suggestion.suggestion +
-      text.slice(index + suggestion.original.length),
+    text: text.slice(0, start) + suggestion.suggestion + text.slice(end),
   };
 }
 

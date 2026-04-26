@@ -627,6 +627,10 @@ export function WorkspacePanel({
   }
 
   async function handleReupload(newFile: File, target: FileRecord) {
+    // Capture the old blob id BEFORE we start writing the new one so we
+    // can clean it up after the metadata patch confirms. Without this,
+    // every reupload leaks the previous blob into IndexedDB.
+    const oldBlobId = target.localBlobId;
     const newBlobId = uuidv4();
     await idbStore.put(newBlobId, { blob: newFile, name: newFile.name, type: newFile.type, size: newFile.size });
     try {
@@ -637,7 +641,15 @@ export function WorkspacePanel({
         mimeType: newFile.type,
         file: newFile,
       });
-    } catch {}
+      // Metadata is now pointing at the new blob — safe to drop the old.
+      // We only delete on the success path so a failed reupload doesn't
+      // leave the user with no blob at all.
+      if (oldBlobId && oldBlobId !== newBlobId) {
+        await idbStore.delete(oldBlobId).catch(() => {});
+      }
+    } catch {
+      // Reupload failed; the old blob is still authoritative — leave it.
+    }
     setFiles(prev => prev.map(f => f.id === target.id ? { ...f, localBlobId: newBlobId, fileSize: newFile.size } : f));
     setMissingBlobs(prev => { const next = new Set(prev); next.delete(target.id); return next; });
     setReuploadTarget(null);
@@ -1487,23 +1499,44 @@ export function WorkspacePanel({
               </div>
             )}
 
-            <div className="workspace-focus-strip" style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-              <div className="workspace-focus-card">
-                <span className="workspace-focus-eyebrow">Tools</span>
-                <strong>{currentGen.label}</strong>
-                <span>
-                  {selFile
-                    ? `Working from ${selFile.name}${extractedText ? ` · ${wordCount(extractedText).toLocaleString()} words loaded` : ''}.`
-                    : pasteMode
-                      ? 'Paste text directly, then generate notes, summaries, quizzes, or exam prep.'
-                      : 'Pick a file from Workspace or switch to Paste text to start generating study material.'}
-                </span>
-              </div>
-              <div className="workspace-focus-card">
-                <span className="workspace-focus-eyebrow">Best fit</span>
-                <strong>{genMode === 'notes' ? 'Turn sources into notes' : genMode === 'exam' ? 'Simulate exam prep' : genMode === 'practice' ? 'Build guided practice' : 'Create a quick study output'}</strong>
-                <span>{pasteMode ? 'Text mode stays fast for quick experiments.' : 'File mode is best when you want grounded output from a real document.'}</span>
-              </div>
+            {/*
+              Single status bar — replaces the previous two side-by-side
+              "Tools" + "Best fit" cards which described the same thing
+              twice and pushed the actual controls below the fold.
+              Reads as one sentence: source · mode · readiness.
+            */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '10px 14px',
+                borderBottom: '1px solid var(--border)',
+                flexShrink: 0,
+                fontSize: 'var(--text-sm)',
+                color: 'var(--text-2)',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-3)' }}>
+                Tools
+              </span>
+              <span style={{ width: 1, height: 14, background: 'var(--border-2)' }} />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 14 }}>{currentGen.icon}</span>
+                <strong style={{ color: 'var(--text)' }}>{currentGen.label}</strong>
+              </span>
+              <span style={{ color: 'var(--text-3)' }}>·</span>
+              <span style={{ color: 'var(--text-3)' }}>
+                {selFile
+                  ? <>Source: <strong style={{ color: 'var(--text-2)' }}>{selFile.name}</strong>{extractedText ? ` · ${wordCount(extractedText).toLocaleString()} words` : ' · waiting for extract'}</>
+                  : pasteMode
+                    ? extractedText ? <>Source: <strong style={{ color: 'var(--text-2)' }}>pasted text</strong> · {wordCount(extractedText).toLocaleString()} words</> : 'Source: paste text below'
+                    : 'No source yet — pick a file or paste text below'}
+              </span>
+              <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                Step 1 source · Step 2 mode · Step 3 generate
+              </span>
             </div>
 
             {/* Tool mode pills — grouped */}
@@ -1694,8 +1727,8 @@ export function WorkspacePanel({
                     : generating
                     ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) + '<span class="stream-cursor">▍</span>' }} />
                     : genMode === 'practice'   ? <PracticeView content={output} />
-                    : genMode === 'mcq'        ? <MCQView content={output} />
-                    : genMode === 'exam'       ? <ExamView content={output} />
+                    : genMode === 'mcq'        ? <MCQView content={output} fileId={selFile?.id ?? null} />
+                    : genMode === 'exam'       ? <ExamView content={output} fileId={selFile?.id ?? null} />
                     : <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) }} />
                   }
 
@@ -1745,34 +1778,78 @@ export function WorkspacePanel({
               )}
 
               {!generating && !output && !extractedText && !pasteMode && (
-                <div className="empty-state" style={{ padding: '40px 20px' }}>
-                  <div className="empty-icon">⚡</div>
-                  <h3>AI Tools</h3>
-                  <p style={{ marginBottom: 18 }}>
-                    Open a file in <strong>Files</strong> and click <strong>⚡ Use</strong>, or switch to <strong>Paste text</strong> above.
+                /*
+                  Single linear empty state — no duplicate mode chips,
+                  no second source toggle. Just three numbered steps with
+                  the only-real-action-here at step 1.
+                  The mode chips already live in the row above; sending
+                  the user there avoids two sources of truth.
+                */
+                <div className="empty-state" style={{ padding: '40px 20px', maxWidth: 480, margin: '0 auto' }}>
+                  <div className="empty-icon" style={{ fontSize: 36, marginBottom: 8 }}>⚡</div>
+                  <h3 style={{ marginBottom: 4 }}>Pick a source to start</h3>
+                  <p style={{ marginBottom: 22, color: 'var(--text-3)' }}>
+                    Tools turn a source into notes, a quiz, an outline, or exam prep.
                   </p>
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-                    <button className="btn btn-primary btn-sm" onClick={() => setMainTab('files')}>Open files</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setPasteMode(true)}>Paste text</button>
-                  </div>
-                  {/* Quick-start tool buttons */}
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 20 }}>
-                    {GENERATE_TABS.slice(0, 6).map(t => (
-                      <button key={t.id}
-                        className={`btn btn-sm btn-ghost`}
-                        style={{ fontSize: 12 }}
-                        onClick={() => { setGenMode(t.id); setPasteMode(true); }}>
-                        {t.icon} {t.label}
+
+                  {/* Step 1 — the one real action on this screen */}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 24 }}>
+                    {files.length > 0 ? (
+                      <button className="btn btn-primary" onClick={() => setMainTab('files')}>
+                        📁 Open Files
                       </button>
-                    ))}
+                    ) : (
+                      <button className="btn btn-primary" onClick={() => setMainTab('files')}>
+                        📁 Add a file
+                      </button>
+                    )}
+                    <button className="btn btn-secondary" onClick={() => setPasteMode(true)}>
+                      ✍ Paste text instead
+                    </button>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', fontSize: 'var(--text-xs)', color: 'var(--text-3)', textAlign: 'left', maxWidth: 280, margin: '0 auto' }}>
-                    {GENERATE_SHORTCUTS.map((shortcut) => (
-                      <span key={shortcut.key}>
-                        <kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>{shortcut.key}</kbd> {shortcut.label}
-                      </span>
-                    ))}
-                  </div>
+
+                  {/* Steps 2 + 3 — non-clickable signposts that point UP at the
+                      controls instead of duplicating them. Keeps a single
+                      source of truth for mode selection (the chip row above). */}
+                  <ol style={{
+                    textAlign: 'left',
+                    listStyle: 'none',
+                    counterReset: 'step',
+                    padding: 0,
+                    margin: '0 auto',
+                    maxWidth: 360,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                    fontSize: 'var(--text-sm)',
+                    color: 'var(--text-2)',
+                  }}>
+                    <li style={{ display: 'flex', gap: 10, opacity: 0.55 }}>
+                      <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>1</span>
+                      <span><strong>Pick a source</strong> — the buttons above.</span>
+                    </li>
+                    <li style={{ display: 'flex', gap: 10 }}>
+                      <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: 'var(--surface-2)', color: 'var(--text-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, border: '1px solid var(--border-2)' }}>2</span>
+                      <span><strong>Pick a mode</strong> — Summarize, Notes, MCQ, Quiz… use the chip row at the top of this tab.</span>
+                    </li>
+                    <li style={{ display: 'flex', gap: 10 }}>
+                      <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: 'var(--surface-2)', color: 'var(--text-2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, border: '1px solid var(--border-2)' }}>3</span>
+                      <span><strong>Generate</strong> — click the green button or press <kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace', fontSize: 11 }}>Ctrl+G</kbd>.</span>
+                    </li>
+                  </ol>
+
+                  {/* Discrete shortcut footer — was floating mid-screen before, now lives
+                      where keyboard shortcuts belong: at the bottom in small type. */}
+                  <details style={{ marginTop: 28, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                    <summary style={{ cursor: 'pointer', userSelect: 'none' }}>Keyboard shortcuts</summary>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', textAlign: 'left', maxWidth: 280, margin: '10px auto 0' }}>
+                      {GENERATE_SHORTCUTS.map((shortcut) => (
+                        <span key={shortcut.key}>
+                          <kbd style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>{shortcut.key}</kbd> {shortcut.label}
+                        </span>
+                      ))}
+                    </div>
+                  </details>
                 </div>
               )}
             </div>

@@ -52,10 +52,11 @@ function postReq(body) {
 
 // ── GET /api/folders ──────────────────────────────────────────────────────────
 
-test('GET returns 401 when user is not authenticated', async () => {
+test('GET returns empty fallback when user is not authenticated', async () => {
   mockState.userId = null;
   const res = await GET();
-  assert.equal(res.status, 401);
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), []);
   mockState.userId = 'user-123';
 });
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { broadcastInvalidate, listenForInvalidate, FOLDERS_CHANNEL } from '@/lib/sync/broadcast';
 import { loadLocalFolders } from '@/lib/folders/local-folders';
 import { listLocalFiles } from '@/lib/files/local-files';
+import { idbStore } from '@/lib/idb';
 
 interface Folder {
   id: string;
@@ -101,6 +102,23 @@ export function useFoldersStore() {
       credentials: 'include',
     });
     if (!res.ok) throw new Error('Failed to delete folder');
+
+    // Sweep IndexedDB blobs that the server told us were attached to
+    // files in this folder. The Postgres FK cascades the metadata rows,
+    // but the blobs themselves live only in the browser — without this
+    // step they pile up and consume IndexedDB quota silently.
+    try {
+      const data = await res.clone().json().catch(() => ({})) as { localBlobIds?: string[] };
+      const blobIds = Array.isArray(data.localBlobIds) ? data.localBlobIds : [];
+      if (blobIds.length > 0) {
+        await Promise.all(
+          blobIds.map((blobId) => idbStore.delete(blobId).catch(() => {})),
+        );
+      }
+    } catch {
+      // Worst case the blobs survive — never fail the folder delete on cleanup.
+    }
+
     setFolders(prev => prev.filter(f => f.id !== id));
     broadcastInvalidate(FOLDERS_CHANNEL);
   }, []);

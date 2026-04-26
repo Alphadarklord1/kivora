@@ -72,7 +72,7 @@ export async function requireAppAccess(req: NextRequest): Promise<NextResponse |
 
   // Desktop app internal token — timing-safe comparison to prevent oracle attacks
   const desktopToken = req.headers.get(DESKTOP_TOKEN_HEADER);
-  const envToken = process.env.STUDYPILOT_DESKTOP_AUTH_TOKEN;
+  const envToken = process.env.KIVORA_DESKTOP_AUTH_TOKEN;
   if (desktopToken && envToken) {
     try {
       const a = Buffer.from(desktopToken);

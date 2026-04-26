@@ -1,10 +1,10 @@
 # Kivora Roadmap
 
-This roadmap is for stable-beta execution, not speculative feature sprawl.
+This roadmap is for public 1.0 execution and post-1.0 hardening, not speculative feature sprawl.
 
 ## Now
 
-- stabilize desktop + web beta behavior
+- stabilize desktop + web 1.0 behavior
 - tighten planner, analytics, and workspace flows
 - finish auth reliability and Google sign-in setup
 - keep offline Mini usable by default
@@ -25,7 +25,7 @@ This roadmap is for stable-beta execution, not speculative feature sprawl.
 - stronger analytics recommendations
 - higher-fidelity mobile browser support
 
-## Not planned during beta
+## Not planned during the 1.0 cycle
 
 - broad feature expansion outside the supported surfaces
 - re-enabling unfinished encryption password flows
