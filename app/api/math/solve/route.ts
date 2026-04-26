@@ -117,8 +117,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Problem is too long. Maximum 5000 characters.' }, { status: 400 });
   }
 
+  // The deterministic symbolic solver treats unknown identifiers as variables,
+  // so prose like "integrate 4x dx from 1 to 2" gets parsed into nonsense
+  // expressions ("4 * dx * from * to * x^2 + C") and then incorrectly marked
+  // verified. Detect that the problem reads as natural language and skip
+  // straight to the AI cascade — the symbolic solver only earns the right to
+  // short-circuit when the input is clearly formal notation.
+  const PROSE_WORDS = /\b(?:integrate|differentiate|simplify|expand|factor|find|solve|calculate|evaluate|compute|show|prove|determine|what|how|the|of|with|using|apply|from|respect|to|limits?|bounds?|please)\b/i;
+  const looksLikeProse = PROSE_WORDS.test(problem);
+
   const solved = solveMathProblem(problem, body?.category ?? null);
-  if (solved.verified) {
+  if (solved.verified && !looksLikeProse) {
     return jsonResponse(solved, body ?? { problem });
   }
 
@@ -135,5 +144,8 @@ export async function POST(request: NextRequest) {
     return jsonResponse(aiSolved, body ?? { problem });
   }
 
+  // Final fallback: if the symbolic solver did mark this verified (even though
+  // we suspected prose) and AI was unavailable, return its result rather than
+  // an empty error — better something than nothing.
   return jsonResponse(solved, body ?? { problem });
 }

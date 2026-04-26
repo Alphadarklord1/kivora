@@ -2001,7 +2001,14 @@ function shouldRenderMathPreview(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return false;
 
-  if (/^(integral|derivative|limit)\b/i.test(trimmed)) return true;
+  // If the input mixes math with English prose ("integrate 4x dx from 1 to 2",
+  // "find the derivative of sin(x)"), KaTeX in display mode is the wrong tool —
+  // it ignores spaces and concatenates word characters into italic gibberish.
+  // Defer to MathText + autoWrapMath, which preserves the prose and only wraps
+  // the math-shaped spans in $...$ delimiters.
+  const PROSE_WORDS = /\b(?:find|solve|calculate|evaluate|compute|show|prove|given|determine|what|how|when|where|the|of|with|that|this|let|using|use|apply|write|from|to|integrate|differentiate|simplify|expand|factor|minimize|maximize|please|step|steps|limit|limits|bound|bounds|respect|equal|equation)\b/i;
+  if (PROSE_WORDS.test(trimmed)) return false;
+
   if (/^(sqrt|sin|cos|tan|ln|log|exp|abs|det|inv|transpose|dot|cross|norm)\s*\(/i.test(trimmed)) return true;
   if (/[=^√πθαβλ∞≤≥≠∫Σ]/.test(trimmed)) return true;
   if (/\b(?:alpha|beta|theta|lambda|pi|inf)\b/i.test(trimmed)) return true;
