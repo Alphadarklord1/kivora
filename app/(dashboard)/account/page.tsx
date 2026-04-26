@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
@@ -36,6 +36,7 @@ function AvatarCircle({ src, name, email, size = 72 }: { src?: string | null; na
 
   if (src && !imgFailed) {
     return (
+      // eslint-disable-next-line @next/next/no-img-element -- src is an arbitrary user-supplied avatar URL; next/image needs a configured remotePatterns list which we don't want to constrain here
       <img
         src={src}
         alt={text}

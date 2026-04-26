@@ -77,7 +77,7 @@ export function OnboardingModal() {
   useEffect(() => {
     try {
       if (!localStorage.getItem('kivora-onboarded')) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+         
         setVisible(true);
       }
     } catch { /* noop */ }

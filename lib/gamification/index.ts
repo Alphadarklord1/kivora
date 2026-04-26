@@ -166,7 +166,7 @@ export function addXp(amount: number, source: string): AddXpResult {
 
   // Log source (no-op in production, useful during dev)
   if (process.env.NODE_ENV === 'development') {
-    // eslint-disable-next-line no-console
+     
     console.debug(`[gamification] +${amount} XP (${source}) → total ${newXp} | level ${newLevel.level}`);
   }
 

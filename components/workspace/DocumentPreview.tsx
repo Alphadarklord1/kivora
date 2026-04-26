@@ -226,7 +226,7 @@ function DocxPreview({ html, fileName }: { html: string; fileName: string }) {
       <div className="dp-docx-page">
         <div
           className="dp-docx-body"
-          // eslint-disable-next-line react/no-danger
+           
           dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>

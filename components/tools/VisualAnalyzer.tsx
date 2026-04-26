@@ -327,7 +327,7 @@ export function VisualAnalyzer({ mathMode = false, onSendToSolver }: VisualAnaly
     };
 
     loadFile();
-  }, [selectedFileId, allFiles]);
+  }, [selectedFileId, allFiles, t]);
 
   // Handle mouse selection on image
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -735,6 +735,7 @@ export function VisualAnalyzer({ mathMode = false, onSendToSolver }: VisualAnaly
               onMouseUp={handleMouseUp}
               onMouseLeave={() => isSelecting && handleMouseUp()}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element -- data: URL from local PDF page render; next/image needs known dimensions and a remotePatterns entry */}
               <img
                 src={pages[currentPage - 1]?.imageDataUrl}
                 alt={`Page ${currentPage}`}
@@ -789,6 +790,7 @@ export function VisualAnalyzer({ mathMode = false, onSendToSolver }: VisualAnaly
                         flexShrink: 0,
                       }}
                     >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- data: URL extracted from PDF; intrinsic size unknown */}
                       <img
                         src={img.dataUrl}
                         alt={`Image from page ${img.pageNumber}`}
@@ -838,6 +840,7 @@ export function VisualAnalyzer({ mathMode = false, onSendToSolver }: VisualAnaly
                   overflow: 'hidden',
                   background: 'var(--bg-inset)',
                 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- user-uploaded image preview, blob/data URL */}
                   <img
                     src={selectedImageUrl}
                     alt="Selected region"
@@ -1026,6 +1029,7 @@ export function VisualAnalyzer({ mathMode = false, onSendToSolver }: VisualAnaly
               </div>
             </div>
             <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'var(--bg-inset)' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- user-uploaded image, blob URL */}
               <img src={selectedImageUrl} alt="Uploaded" style={{ width: '100%', display: 'block' }} />
             </div>
           </div>

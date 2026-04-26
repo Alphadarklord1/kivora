@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { RateLimitedError } from '@/lib/utils/fetchWithRateLimit';
 export { emitRateLimitEvent } from '@/lib/utils/fetchWithRateLimit';
 
 /**

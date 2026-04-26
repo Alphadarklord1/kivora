@@ -52,10 +52,10 @@ export const isDatabaseConfigured = Boolean(databaseUrl);
 if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
   if (databaseUrl) {
     const summary = getDatabaseSummary(databaseUrl);
-    // eslint-disable-next-line no-console
+     
     console.log(`[db] configured: provider=${summary.provider} host=${summary.hostname ?? 'unknown'}`);
   } else {
-    // eslint-disable-next-line no-console
+     
     console.warn('[db] no DATABASE_URL — running in local-only mode (data will not persist across sessions)');
   }
 }

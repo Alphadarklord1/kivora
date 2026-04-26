@@ -121,7 +121,7 @@ function mdToHtml(md: string): string {
 }
 
 /* ─── Follow-up chip generation ───────────────────────────────────────────── */
-function deriveFollowUps(content: string, question: string): string[] {
+function deriveFollowUps(content: string, _question: string): string[] {
   const lower = content.toLowerCase();
   const pool: string[] = [];
 
@@ -223,7 +223,7 @@ export function ChatPanel({
         if (Array.isArray(parsed) && parsed.length > 0) setMessages(parsed);
       }
     } catch { /* ignore */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [fileId]);
 
   /* ── Persistence: save on messages change ──────────────────────────────── */

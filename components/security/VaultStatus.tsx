@@ -6,7 +6,7 @@ import { ENCRYPTION_DISABLED } from '@/lib/crypto/vault';
 import { useI18n } from '@/lib/i18n/useI18n';
 
 export function VaultStatus() {
-  const { t, isRTL } = useI18n();
+  const { t } = useI18n();
   const { isSetup, isUnlocked, lock, isLoading } = useVault();
   const [showTooltip, setShowTooltip] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);

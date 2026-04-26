@@ -46,7 +46,7 @@ function getInstallErrorMessage(status: string | undefined, fallback: string | u
 type Step = 'welcome' | 'offline-ai' | 'model' | 'done';
 
 export function ModelSetupWizard({ onComplete }: ModelSetupWizardProps) {
-  const { t, isRTL } = useI18n();
+  const { isRTL } = useI18n();
   const [step, setStep] = useState<Step>('welcome');
   const [loading, setLoading] = useState(true);
   const [models, setModels] = useState<WizardModel[]>([]);
@@ -138,7 +138,7 @@ export function ModelSetupWizard({ onComplete }: ModelSetupWizardProps) {
           <div className="step">
             <div className="big-icon">K</div>
             <h2>Welcome to Kivora on your Mac</h2>
-            <p className="lead">Your study workspace is now installed. Here's what makes the desktop app different from the web version:</p>
+            <p className="lead">Your study workspace is now installed. Here&apos;s what makes the desktop app different from the web version:</p>
             <div className="feature-list">
               <div className="feature-row">
                 <span className="feat-icon">🔒</span>
@@ -278,7 +278,7 @@ export function ModelSetupWizard({ onComplete }: ModelSetupWizardProps) {
         {step === 'done' && (
           <div className="step done-step">
             <div className="big-icon">✓</div>
-            <h2>You're all set</h2>
+            <h2>You&apos;re all set</h2>
             <p className="lead">Kivora is ready. Your offline AI model is loaded and running in the background.</p>
             <div className="done-tips">
               <div className="done-tip">

@@ -63,10 +63,6 @@ function hasModel(list: string[], name: string): boolean {
   return list.some((m) => modelMatches(m, name));
 }
 
-function formatModelSize(name: string): string {
-  return MODEL_META[name]?.size ?? 'unknown size';
-}
-
 function formatDisplayName(rawName: string): string {
   // e.g. "qwen2.5:latest" → "qwen2.5"
   return rawName.split(':')[0];

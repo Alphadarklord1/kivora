@@ -2097,6 +2097,13 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
   // Step-by-step reveal animation
   const [revealedSteps, setRevealedSteps] = useState<number>(0);
 
+  // Per-step clarification — when a student is confused about a particular step,
+  // they can ask a follow-up question and the AI will explain just that step.
+  const [stepClarifyOpen, setStepClarifyOpen] = useState<number | null>(null);
+  const [stepClarifyQuestion, setStepClarifyQuestion] = useState('');
+  const [stepClarifyLoading, setStepClarifyLoading] = useState(false);
+  const [stepClarifyAnswer, setStepClarifyAnswer] = useState<{ stepIdx: number; text: string } | null>(null);
+
   // Flashcard save feedback
   const [flashcardToast, setFlashcardToast] = useState<string>('');
 
@@ -2235,6 +2242,68 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
       setLoading(false);
     }
   }, [input, active, replaceGraphWith]);
+
+  // Ask the AI to clarify a single step. Re-uses /api/math/solve with a
+  // targeted prompt that names the original problem, the step in question,
+  // and the student's confusion. We then fold the response (steps + answer
+  // + explanation) into one readable string for display.
+  const askStepClarification = useCallback(async (
+    stepIdx: number,
+    step: MathStep,
+    solveResult: SolveResult | null,
+    originalProblem: string,
+  ) => {
+    const question = stepClarifyQuestion.trim();
+    if (!question) return;
+    setStepClarifyLoading(true);
+    try {
+      const stepLabel = step.step ?? stepIdx + 1;
+      const exprLine = step.expression ? `Expression at this step: ${step.expression}\n` : '';
+      const prompt = `A student is working through this math problem and is confused about a specific step. Explain just that step in detail, addressing their question directly. Do not re-solve the whole problem.
+
+Original problem: ${originalProblem}
+Step ${stepLabel}: ${step.description}
+${exprLine}${step.explanation ? `Existing explanation: ${step.explanation}\n` : ''}
+Student's question: ${question}
+
+Walk through the reasoning behind this step in plain language. If algebraic manipulation is involved, show the intermediate work in LaTeX (wrap inline math in $...$ and display math in $$...$$).`;
+
+      const res = await fetch('/api/math/solve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          problem: prompt,
+          category: solveResult?.category ?? null,
+          contextText: `Original problem: ${originalProblem}`,
+        }),
+      });
+      const data = await res.json() as SolveResult;
+      const parts: string[] = [];
+      if (data.error) {
+        parts.push(`Couldn't reach the AI right now: ${data.error}`);
+      } else {
+        if (data.steps && data.steps.length > 0) {
+          for (const s of data.steps) {
+            const head = s.description ? `${s.description}` : '';
+            const expr = s.expression ? `\n$$${s.expression}$$` : '';
+            const explain = s.explanation ? `\n${s.explanation}` : '';
+            parts.push(`${head}${expr}${explain}`);
+          }
+        }
+        if (data.answer && !data.steps?.some(s => s.explanation?.includes(data.answer))) {
+          parts.push(`\n**Answer:** ${data.answer}`);
+        }
+        if (parts.length === 0) {
+          parts.push('No clarification was returned. Try rewording the question.');
+        }
+      }
+      setStepClarifyAnswer({ stepIdx, text: parts.join('\n\n') });
+    } catch {
+      setStepClarifyAnswer({ stepIdx, text: 'Network error — check that the AI is reachable and try again.' });
+    } finally {
+      setStepClarifyLoading(false);
+    }
+  }, [stepClarifyQuestion]);
 
   // ── Graph rendering ────────────────────────────────────────────────────────
 
@@ -2920,6 +2989,60 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                                   <span>{step.explanation}</span>
                                 </div>
                               )}
+                              {/* Per-step clarification — collapsed by default, expands
+                                  to an input + AI answer when the student is confused
+                                  about this specific step. */}
+                              <div style={{ borderTop: '1px dashed var(--border-subtle)', padding: '8px 14px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {stepClarifyOpen === i ? (
+                                  <>
+                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                      <input
+                                        autoFocus
+                                        value={stepClarifyQuestion}
+                                        onChange={e => setStepClarifyQuestion(e.target.value)}
+                                        onKeyDown={async e => {
+                                          if (e.key === 'Enter' && stepClarifyQuestion.trim() && !stepClarifyLoading) {
+                                            e.preventDefault();
+                                            await askStepClarification(i, step, result, input);
+                                          } else if (e.key === 'Escape') {
+                                            setStepClarifyOpen(null);
+                                            setStepClarifyQuestion('');
+                                          }
+                                        }}
+                                        placeholder="What's confusing about this step?"
+                                        style={{ flex: 1, padding: '7px 11px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 12.5, outline: 'none' }}
+                                      />
+                                      <button
+                                        disabled={!stepClarifyQuestion.trim() || stepClarifyLoading}
+                                        onClick={() => askStepClarification(i, step, result, input)}
+                                        style={{ padding: '7px 13px', borderRadius: 8, border: 'none', background: currentAccent, color: '#fff', fontSize: 12, fontWeight: 700, cursor: (!stepClarifyQuestion.trim() || stepClarifyLoading) ? 'default' : 'pointer', opacity: (!stepClarifyQuestion.trim() || stepClarifyLoading) ? 0.5 : 1 }}
+                                      >
+                                        {stepClarifyLoading ? 'Thinking…' : 'Ask'}
+                                      </button>
+                                      <button
+                                        onClick={() => { setStepClarifyOpen(null); setStepClarifyQuestion(''); }}
+                                        style={{ padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}
+                                        aria-label="Close"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                    {stepClarifyAnswer?.stepIdx === i && (
+                                      <div style={{ padding: '10px 12px', borderRadius: 8, background: `${currentAccent}0d`, border: `1px solid ${currentAccent}33`, fontSize: 12.5, color: 'var(--text-primary)', lineHeight: 1.65, whiteSpace: 'pre-wrap' as const }}>
+                                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: currentAccent, marginBottom: 6 }}>Clarification</div>
+                                        <MathText>{stepClarifyAnswer.text}</MathText>
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <button
+                                    onClick={() => { setStepClarifyOpen(i); setStepClarifyQuestion(''); }}
+                                    style={{ alignSelf: 'flex-start', padding: '4px 10px', borderRadius: 999, border: '1px solid var(--border-subtle)', background: 'var(--bg-2)', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                                  >
+                                    ❓ Confused? Ask about this step
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
@@ -3363,17 +3486,41 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                 />
               </div>
 
-              {/* Live preview */}
+              {/* Live preview — wraps the math/text renderer in a block-level
+                  container with explicit centering so KaTeX display-mode output
+                  stays inside the box (previously a bare span ancestor caused
+                  display-mode KaTeX to escape the visual container). */}
               {typeInput.trim() && (
-                <div style={{ padding: '12px 16px', borderRadius: 12, background: `${topicColor}06`, border: `1px solid ${topicColor}22`, minHeight: 52 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: topicColor, marginBottom: 8, opacity: 0.8 }}>Preview</div>
-                  {shouldRenderMathPreview(typeInput) ? (
-                    <MathRenderer math={typeInput.trim()} display />
-                  ) : (
-                    <MathText>{autoWrapMath(typeInput)}</MathText>
-                  )}
+                <div style={{
+                  padding: '14px 18px',
+                  borderRadius: 14,
+                  background: `${topicColor}10`,
+                  border: `1.5px solid ${topicColor}40`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                  minHeight: 72,
+                }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: topicColor }}>Preview</div>
+                  <div style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'center',
+                    fontSize: 16,
+                    color: 'var(--text-primary)',
+                    lineHeight: 1.55,
+                    padding: '4px 0',
+                    wordBreak: 'break-word',
+                    overflowX: 'auto',
+                  }}>
+                    {shouldRenderMathPreview(typeInput) ? (
+                      <MathRenderer math={typeInput.trim()} display />
+                    ) : (
+                      <MathText>{autoWrapMath(typeInput)}</MathText>
+                    )}
+                  </div>
                   {!writeTopicOverride && (
-                    <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                       Auto-detected topic: <span style={{ color: topicColor, fontWeight: 600 }}>{TOPICS.find(t => t.id === resolvedTopic)?.label ?? resolvedTopic}</span>
                     </div>
                   )}

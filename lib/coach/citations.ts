@@ -138,7 +138,6 @@ function joinAuthors(
 // ── APA 7th ─────────────────────────────────────────────────────────────────
 
 export function formatApa(input: CitationInput): string {
-  const accessed = input.accessedDate ?? isoDate();
   const yearPart = input.year ? `(${input.year})` : '(n.d.)';
   const authorPart = joinAuthors(input.authors, apaName, '&');
   const titleItalic = `*${ensurePeriod(input.title).replace(/\.$/, '')}*`;

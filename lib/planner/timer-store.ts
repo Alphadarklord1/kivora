@@ -94,7 +94,7 @@ export function useStudyTimer() {
   // Load from localStorage on mount (intentional sync from external store)
   useEffect(() => {
     const loaded = loadState();
-    setState(loaded); // eslint-disable-line react-hooks/set-state-in-effect
+    setState(loaded);  
     setSeconds(computeRemaining(loaded));
   }, []);
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { srsDecks } from '@/lib/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 // GET  /api/srs   — return all decks for the current user
 export async function GET(req: NextRequest) {

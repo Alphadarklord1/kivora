@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useToast } from '@/providers/ToastProvider';
 import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
 import { loadClientAiDataMode } from '@/lib/privacy/ai-data';
@@ -48,19 +47,11 @@ export function ResearchTab({
   const docxLinkRef = useRef<HTMLAnchorElement | null>(null);
   const [followUpHistory,    setFollowUpHistory]    = useState<Array<{ question: string; answer: string }>>([]);
 
-  const [readingTopic,       setReadingTopic]       = useState<string | null>(null);
-  const [readingArticles,    setReadingArticles]    = useState<ArticleSuggestion[]>([]);
-  const [readingLoading,     setReadingLoading]     = useState(false);
-
-  const quickTopics = Array.from(new Set(
-    (researchResult?.keyIdeas ?? []).slice(0, 5).filter((v): v is string => Boolean(v?.trim())),
-  )).slice(0, 5);
-
-  const confidenceTone = (label: 'High' | 'Medium' | 'Baseline') => {
-    if (label === 'High') return styles.confidenceHigh;
-    if (label === 'Medium') return styles.confidenceMedium;
-    return styles.confidenceBaseline;
-  };
+  // setters are used in loadRelatedReading; getters are reserved for an
+  // upcoming "related reading" panel — underscored to satisfy lint.
+  const [_readingTopic, setReadingTopic] = useState<string | null>(null);
+  const [_readingArticles, setReadingArticles] = useState<ArticleSuggestion[]>([]);
+  const [_readingLoading, setReadingLoading] = useState(false);
 
   // When a pre-load topic arrives (e.g., from Recovery tab)
   useEffect(() => {
