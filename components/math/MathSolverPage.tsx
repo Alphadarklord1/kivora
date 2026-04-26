@@ -2243,10 +2243,10 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
     }
   }, [input, active, replaceGraphWith]);
 
-  // Ask the AI to clarify a single step. Re-uses /api/math/solve with a
-  // targeted prompt that names the original problem, the step in question,
-  // and the student's confusion. We then fold the response (steps + answer
-  // + explanation) into one readable string for display.
+  // Ask the AI to clarify a single step via the dedicated /api/math/clarify
+  // endpoint. That endpoint skips the deterministic symbolic solver (which
+  // would always fail on a conversational prompt) and returns free-form prose
+  // with $...$ / $$...$$ math that MathText renders.
   const askStepClarification = useCallback(async (
     stepIdx: number,
     step: MathStep,
@@ -2257,47 +2257,24 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
     if (!question) return;
     setStepClarifyLoading(true);
     try {
-      const stepLabel = step.step ?? stepIdx + 1;
-      const exprLine = step.expression ? `Expression at this step: ${step.expression}\n` : '';
-      const prompt = `A student is working through this math problem and is confused about a specific step. Explain just that step in detail, addressing their question directly. Do not re-solve the whole problem.
-
-Original problem: ${originalProblem}
-Step ${stepLabel}: ${step.description}
-${exprLine}${step.explanation ? `Existing explanation: ${step.explanation}\n` : ''}
-Student's question: ${question}
-
-Walk through the reasoning behind this step in plain language. If algebraic manipulation is involved, show the intermediate work in LaTeX (wrap inline math in $...$ and display math in $$...$$).`;
-
-      const res = await fetch('/api/math/solve', {
+      const res = await fetch('/api/math/clarify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          problem: prompt,
+          problem: originalProblem,
+          stepIndex: stepIdx,
+          stepDescription: step.description,
+          stepExpression: step.expression,
+          stepExplanation: step.explanation,
+          question,
           category: solveResult?.category ?? null,
-          contextText: `Original problem: ${originalProblem}`,
         }),
       });
-      const data = await res.json() as SolveResult;
-      const parts: string[] = [];
-      if (data.error) {
-        parts.push(`Couldn't reach the AI right now: ${data.error}`);
-      } else {
-        if (data.steps && data.steps.length > 0) {
-          for (const s of data.steps) {
-            const head = s.description ? `${s.description}` : '';
-            const expr = s.expression ? `\n$$${s.expression}$$` : '';
-            const explain = s.explanation ? `\n${s.explanation}` : '';
-            parts.push(`${head}${expr}${explain}`);
-          }
-        }
-        if (data.answer && !data.steps?.some(s => s.explanation?.includes(data.answer))) {
-          parts.push(`\n**Answer:** ${data.answer}`);
-        }
-        if (parts.length === 0) {
-          parts.push('No clarification was returned. Try rewording the question.');
-        }
-      }
-      setStepClarifyAnswer({ stepIdx, text: parts.join('\n\n') });
+      const data = await res.json() as { text?: string; source?: string; error?: string };
+      const text = data.text?.trim()
+        || data.error
+        || 'No clarification was returned. Try rewording the question.';
+      setStepClarifyAnswer({ stepIdx, text });
     } catch {
       setStepClarifyAnswer({ stepIdx, text: 'Network error — check that the AI is reachable and try again.' });
     } finally {
