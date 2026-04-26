@@ -238,8 +238,8 @@ export async function POST(request: NextRequest) {
       question,
       userAnswer,
       correctAnswer,
-      sourceSentence,
-      keywords,
+      sourceSentence = '',
+      keywords = [],
       useWebSearch = false,
     } = body;
 

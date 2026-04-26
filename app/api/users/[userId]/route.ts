@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { libraryItems, shares, users } from '@/lib/db/schema';
 import { and, count, desc, eq, gt, isNull, or } from 'drizzle-orm';
 import { apiError, createRequestId } from '@/lib/api/error-response';
@@ -17,6 +17,13 @@ export async function GET(
       return apiError(400, {
         errorCode: 'USER_ID_REQUIRED',
         reason: 'User ID required',
+        requestId,
+      });
+    }
+    if (!isDatabaseConfigured) {
+      return apiError(503, {
+        errorCode: 'DATABASE_NOT_CONFIGURED',
+        reason: 'Database not configured',
         requestId,
       });
     }
