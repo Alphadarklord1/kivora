@@ -30,6 +30,7 @@ const NotesPanel     = dynamic(() => import('@/components/workspace/NotesPanel')
 const ExamPlannerPanel = dynamic(() => import('@/components/workspace/ExamPlannerPanel').then(m => ({ default: m.ExamPlannerPanel })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const MCQView        = dynamic(() => import('@/components/workspace/views/MCQView').then(m => ({ default: m.MCQView })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const QuizView       = dynamic(() => import('@/components/workspace/views/QuizView').then(m => ({ default: m.QuizView })), { ssr: false, loading: () => <div className="tool-loading" /> });
+const FlashcardPreview = dynamic(() => import('@/components/workspace/views/FlashcardPreview').then(m => ({ default: m.FlashcardPreview })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const PracticeView   = dynamic(() => import('@/components/workspace/views/PracticeView').then(m => ({ default: m.PracticeView })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const FlashcardView  = dynamic(() => import('@/components/workspace/views/FlashcardView').then(m => ({ default: m.FlashcardView })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const ExamView       = dynamic(() => import('@/components/workspace/views/ExamView').then(m => ({ default: m.ExamView })), { ssr: false, loading: () => <div className="tool-loading" /> });
@@ -89,12 +90,13 @@ const GENERATE_TABS = [
   { id: 'practice',   label: 'Practice',   icon: '🎯', hint: 'Practice problem with progressive hints and solution' },
   { id: 'mcq',        label: 'MCQ',        icon: '🧩', hint: 'Multiple-choice questions with answers' },
   { id: 'quiz',       label: 'Quiz',       icon: '❓', hint: 'Open-ended quiz questions' },
+  { id: 'flashcards', label: 'Flashcards', icon: '🃏', hint: 'Term/definition cards you can flip through and save as a deck' },
   { id: 'exam',       label: 'Exam Prep',  icon: '🏆', hint: 'Timed exam with scoring and weak-area analysis' },
 ] as const;
 
 const GENERATE_TAB_GROUPS = [
   { label: 'Written',  ids: ['summarize', 'notes', 'outline'] },
-  { label: 'Practice', ids: ['practice', 'mcq', 'quiz'] },
+  { label: 'Practice', ids: ['practice', 'mcq', 'quiz', 'flashcards'] },
   { label: 'Exam',     ids: ['exam'] },
 ] as const;
 
@@ -1731,6 +1733,7 @@ export function WorkspacePanel({
                     : genMode === 'mcq'        ? <MCQView content={output} fileId={selFile?.id ?? null} />
                     : genMode === 'quiz'       ? <QuizView content={output} fileId={selFile?.id ?? null} />
                     : genMode === 'exam'       ? <ExamView content={output} fileId={selFile?.id ?? null} />
+                    : genMode === 'flashcards' ? <FlashcardPreview content={output} title={pasteMode ? 'Pasted text' : selFile?.name} />
                     : <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) }} />
                   }
 
