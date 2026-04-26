@@ -13,10 +13,15 @@ export function ExamView({
   fileId?: string | null;
   deckId?: string | null;
 }) {
+  // Tolerate "Q1.", "Q1)", "**Q1.**", "1.", "1)" numbering. A block must
+  // either have ≥2 lettered options (MCQ) or an "Answer:" line (short answer).
   const blocks = content
-    .split(/\n(?=\*?\*?Q\d+[\.\)])/i)
+    .split(/\n(?=\s*\*?\*?(?:Q?\d+)[\.\)]\s)/i)
     .map(b => b.trim())
-    .filter(b => /Q\d+/i.test(b) && b.length > 10);
+    .filter(b =>
+      /^\s*\*?\*?(?:Q?\d+)[\.\)]/i.test(b) &&
+      ((b.match(/^\s*[A-D][\.\)]/gmi) ?? []).length >= 2 || /Answer\s*:/i.test(b)),
+    );
 
   const [phase,    setPhase]    = useState<'setup' | 'exam' | 'results'>('setup');
   const [minutes,  setMinutes]  = useState(Math.max(5, Math.ceil(blocks.length * 1.5)));
@@ -52,8 +57,14 @@ export function ExamView({
     const weak: string[] = [];
     const detailedAnswers: QuizAnswerSummary[] = [];
     blocks.forEach((block, qi) => {
-      const ans  = block.match(/✓\s*([A-D])\)?/)?.[1] ?? block.match(/Answer:\s*([A-D])\b/i)?.[1];
-      const stemFull = block.split('\n')[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '');
+      const ans  = block.match(/(?:Answer|Correct(?:\s*answer)?)\s*[:=]\s*\*?\*?([A-D])\b/i)?.[1]
+                ?? block.match(/[✓✔]\s*\*?\*?([A-D])\b/i)?.[1]
+                ?? block.match(/^\s*\*\*([A-D])[\.\)]/m)?.[1]
+                ?? block.match(/^\s*([A-D])[\.\)][^\n]*\(correct\)/im)?.[1];
+      const blockLines = block.split('\n').map(l => l.trim()).filter(Boolean);
+      const optI = blockLines.findIndex(l => /^\*?\*?[A-D]\*?\*?[\.\)]/i.test(l));
+      const stemFull = (optI > 0 ? blockLines.slice(0, optI).join(' ') : blockLines[0])
+        .replace(/^\s*\*?\*?(?:Q?\d+)[\.\)]\*?\*?\s*/i, '').trim();
       const userAnswer = answers[qi] ?? '';
       const isCorrect = Boolean(ans && userAnswer === ans);
       if (isCorrect) correct++;
@@ -155,16 +166,18 @@ export function ExamView({
       <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {blocks.map((block, qi) => {
           const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-          const stem  = lines[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '');
-          const opts  = lines.filter(l => /^[A-D]\)/.test(l));
+          const optStart = lines.findIndex(l => /^\*?\*?[A-D]\*?\*?[\.\)]/i.test(l));
+          const stemLines = (optStart > 0 ? lines.slice(0, optStart) : [lines[0]]).join(' ');
+          const stem  = stemLines.replace(/^\s*\*?\*?(?:Q?\d+)[\.\)]\*?\*?\s*/i, '').trim();
+          const opts  = lines.filter(l => /^\*?\*?[A-D]\*?\*?[\.\)]/i.test(l));
           return (
             <div key={qi} className="quiz-card">
               <div className="quiz-q-num">Q{qi + 1}</div>
               <div className="quiz-q-text">{stem}</div>
               <div className="quiz-options">
                 {opts.map((opt, oi) => {
-                  const letter = opt.match(/^([A-D])\)/)?.[1] ?? '';
-                  const text   = opt.replace(/^[A-D]\)\s*/, '');
+                  const letter = opt.match(/^\*?\*?([A-D])\*?\*?[\.\)]/i)?.[1]?.toUpperCase() ?? '';
+                  const text   = opt.replace(/^\*?\*?[A-D]\*?\*?[\.\)]\s*/i, '').replace(/\s*[✓✔]\s*$/u, '').replace(/\s*\(correct\)\s*$/i, '');
                   const isSel  = answers[qi] === letter;
                   return (
                     <div key={oi} className={`quiz-option${isSel ? ' selected' : ''}`}

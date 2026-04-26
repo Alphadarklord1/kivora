@@ -383,12 +383,41 @@ function buildUserPrompt(mode: AllModes, text: string, options?: Record<string, 
     explain:    `Explain the following concept or text clearly for a student, with a plain-language explanation and one practical example:\n\n${text}`,
     rephrase:   `Rephrase the following text in simpler, clearer language for a student:\n\n${text}`,
     notes:      `Extract key study notes as bullet points from:\n\n${text}`,
-    quiz:       `Create ${count} short-answer quiz questions (with answers) from:\n\n${text}`,
-    mcq:        `Create ${count} multiple-choice questions (4 options each, mark the correct one with ✓) from:\n\n${text}`,
+    quiz:       `Create ${count} short-answer quiz questions from the material below. Use this exact format for each question:
+
+Q1. <question text>
+Answer: <expected answer in 1-2 sentences>
+
+Q2. <question text>
+Answer: <expected answer>
+
+Repeat for ${count} questions. Material:\n\n${text}`,
+    mcq:        `Create ${count} multiple-choice questions from the material below. Use this exact format — the "Q" prefix and the "Answer:" line are required:
+
+Q1. <question text>
+A) <option>
+B) <option>
+C) <option>
+D) <option>
+Answer: <single letter A/B/C/D>
+
+Q2. <question text>
+...
+
+Mark the correct option with the letter on the Answer line. Do not add commentary. Material:\n\n${text}`,
     flashcards: `Create ${count} flashcard pairs formatted as "Front: <concept> | Back: <explanation>" from:\n\n${text}`,
     assignment: `Generate a structured assignment with ${count} questions based on:\n\n${text}`,
     outline:    `Create a detailed hierarchical outline with main topics and subtopics from:\n\n${text}`,
-    exam:       `Create a realistic exam paper with ${count} mixed questions (MCQ, short answer, essay) worth 100 marks total. Include a marking scheme. Based on:\n\n${text}`,
+    exam:       `Create a realistic exam paper with ${count} mixed questions worth 100 marks total. Use this exact format — the "Q" prefix, "[N marks]" tag, and "Answer:" line are required:
+
+Q1. [10 marks] <question text>
+A) <option>
+B) <option>
+C) <option>
+D) <option>
+Answer: <letter for MCQ, or expected response for short-answer/essay>
+
+Mix MCQ (with A/B/C/D options), short-answer, and essay questions. Material:\n\n${text}`,
     practice:   `Create a practice problem based on this content. Use EXACTLY this format:\n\n## Problem\n[Write a clear, challenging practice question here]\n\n## Hint 1\n[A gentle nudge in the right direction, no direct answer]\n\n## Hint 2\n[More specific guidance, pointing to the key concept]\n\n## Hint 3\n[Almost there — tell them what approach to use]\n\n## Solution\n[Complete step-by-step worked solution with explanation]\n\nContent:\n\n${text}`,
   };
   return instructions[mode];

@@ -29,6 +29,7 @@ const KnowledgeMap   = dynamic(() => import('@/components/tools/KnowledgeMap').t
 const NotesPanel     = dynamic(() => import('@/components/workspace/NotesPanel').then(m => ({ default: m.NotesPanel })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const ExamPlannerPanel = dynamic(() => import('@/components/workspace/ExamPlannerPanel').then(m => ({ default: m.ExamPlannerPanel })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const MCQView        = dynamic(() => import('@/components/workspace/views/MCQView').then(m => ({ default: m.MCQView })), { ssr: false, loading: () => <div className="tool-loading" /> });
+const QuizView       = dynamic(() => import('@/components/workspace/views/QuizView').then(m => ({ default: m.QuizView })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const PracticeView   = dynamic(() => import('@/components/workspace/views/PracticeView').then(m => ({ default: m.PracticeView })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const FlashcardView  = dynamic(() => import('@/components/workspace/views/FlashcardView').then(m => ({ default: m.FlashcardView })), { ssr: false, loading: () => <div className="tool-loading" /> });
 const ExamView       = dynamic(() => import('@/components/workspace/views/ExamView').then(m => ({ default: m.ExamView })), { ssr: false, loading: () => <div className="tool-loading" /> });
@@ -1728,6 +1729,7 @@ export function WorkspacePanel({
                     ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) + '<span class="stream-cursor">▍</span>' }} />
                     : genMode === 'practice'   ? <PracticeView content={output} />
                     : genMode === 'mcq'        ? <MCQView content={output} fileId={selFile?.id ?? null} />
+                    : genMode === 'quiz'       ? <QuizView content={output} fileId={selFile?.id ?? null} />
                     : genMode === 'exam'       ? <ExamView content={output} fileId={selFile?.id ?? null} />
                     : <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) }} />
                   }

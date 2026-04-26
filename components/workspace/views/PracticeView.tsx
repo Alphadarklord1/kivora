@@ -8,20 +8,49 @@ export function PracticeView({ content }: { content: string }) {
   const [answer,       setAnswer]       = useState('');
   const [submitted,    setSubmitted]    = useState(false);
 
-  // Parse sections: ## Problem / ## Hint N / ## Solution
+  // Parse sections. The AI is flaky about heading style, so accept several:
+  //   ## Problem / # Problem / **Problem** / Problem (on its own line)
+  // followed by Hint 1..N, Solution. "---" rules between sections are stripped.
+  // Extra "Hint 4+" past the structured set get folded into Solution so they
+  // don't clutter the Problem block.
   const sections: Record<string, string> = {};
   let current = '';
-  for (const line of content.split('\n')) {
-    const m = line.match(/^##\s+(.+)$/);
-    if (m) { current = m[1].trim(); sections[current] = ''; }
-    else if (current) sections[current] = (sections[current] + '\n' + line).trimStart();
+  const headingMatchers: Array<(line: string) => string | null> = [
+    (line) => line.match(/^#{1,4}\s+(.+?)\s*$/)?.[1] ?? null,
+    (line) => line.match(/^\*\*(.+?)\*\*\s*:?\s*$/)?.[1] ?? null,
+    (line) => /^(?:Problem|Hint\s*\d+|Solution)\s*:?\s*$/i.test(line.trim()) ? line.trim().replace(/:$/, '') : null,
+  ];
+
+  function canonicalize(name: string): string {
+    const t = name.trim();
+    const hint = t.match(/^Hint\s*(\d+)/i);
+    if (hint) return `Hint ${hint[1]}`;
+    if (/^problem/i.test(t)) return 'Problem';
+    if (/^solution/i.test(t)) return 'Solution';
+    return t;
   }
 
-  const problem  = sections['Problem'] ?? content;
-  const hints    = [1, 2, 3].map(n => sections[`Hint ${n}`]).filter(Boolean);
-  const solution = sections['Solution'] ?? '';
+  for (const raw of content.split('\n')) {
+    const line = raw.replace(/^\s*[-=─━]{3,}\s*$/, '').replace(/^\s*📋\s*/, '');
+    if (!line.trim() && !current) continue;
+    let heading: string | null = null;
+    for (const m of headingMatchers) { heading = m(line); if (heading) break; }
+    if (heading) {
+      current = canonicalize(heading);
+      sections[current] = sections[current] ?? '';
+    } else if (current) {
+      sections[current] = (sections[current] + '\n' + raw).trimStart();
+    }
+  }
 
-  if (!problem.trim())
+  const problem  = (sections['Problem'] ?? content).trim();
+  const hints    = [1, 2, 3].map(n => sections[`Hint ${n}`]?.trim()).filter(Boolean) as string[];
+  // Anything past Hint 3 gets appended to Solution so the Problem stays clean.
+  const extraHintKeys = Object.keys(sections).filter(k => /^Hint\s*[4-9]\d*$/i.test(k));
+  const solutionExtras = extraHintKeys.map(k => `\n\n**${k}.** ${sections[k].trim()}`).join('');
+  const solution = ((sections['Solution'] ?? '') + solutionExtras).trim();
+
+  if (!problem.trim() || (hints.length === 0 && !solution))
     return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
 
   return (

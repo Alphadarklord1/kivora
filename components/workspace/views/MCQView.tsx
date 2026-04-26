@@ -8,10 +8,15 @@ export function MCQView({ content, fileId, deckId }: { content: string; fileId?:
   const [revealed, setRevealed] = useState<Record<number, boolean>>({});
   const [score,    setScore]    = useState<number | null>(null);
 
+  // Accept any common question numbering the AI emits: "Q1.", "Q1)", "**Q1.**",
+  // "1.", "1)", "**1.**". Block must have at least two A/B/C/D options to count.
   const blocks = content
-    .split(/\n(?=\*?\*?Q\d+[\.\)])/i)
+    .split(/\n(?=\s*\*?\*?(?:Q?\d+)[\.\)]\s)/i)
     .map(b => b.trim())
-    .filter(b => /Q\d+/i.test(b) && b.length > 10);
+    .filter(b =>
+      /^\s*\*?\*?(?:Q?\d+)[\.\)]/i.test(b) &&
+      (b.match(/^\s*[A-D][\.\)]/gmi) ?? []).length >= 2,
+    );
 
   if (blocks.length === 0)
     return <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(content) }} />;
@@ -29,7 +34,10 @@ export function MCQView({ content, fileId, deckId }: { content: string; fileId?:
       const isCorrect = Boolean(ans && userAnswer === ans);
       if (isCorrect) correct++;
       // Capture per-question detail so analytics can spot weak areas later.
-      const stem = block.split('\n')[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '').slice(0, 200);
+      const blockLines = block.split('\n').map(l => l.trim()).filter(Boolean);
+      const optI = blockLines.findIndex(l => /^\*?\*?[A-D]\*?\*?[\.\)]/i.test(l));
+      const stem = (optI > 0 ? blockLines.slice(0, optI).join(' ') : blockLines[0])
+        .replace(/^\s*\*?\*?(?:Q?\d+)[\.\)]\*?\*?\s*/i, '').trim().slice(0, 200);
       answers.push({
         questionId: `q${qi + 1}`,
         question: stem,
@@ -55,9 +63,19 @@ export function MCQView({ content, fileId, deckId }: { content: string; fileId?:
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {blocks.map((block, qi) => {
           const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-          const stem  = lines[0].replace(/^\*?\*?Q\d+[\.\)]\*?\*?\s*/i, '');
-          const opts  = lines.filter(l => /^[A-D]\)/.test(l));
-          const ans   = block.match(/✓\s*([A-D])\)?/)?.[1] ?? block.match(/Answer:\s*([A-D])\b/i)?.[1];
+          // The AI sometimes puts the question text on the same line as "Q1." and
+          // sometimes on the line after. Concatenate everything from the prefix
+          // up to the first option line so the stem is always the actual prompt.
+          const optStart = lines.findIndex(l => /^\*?\*?[A-D]\*?\*?[\.\)]/i.test(l));
+          const stemLines = (optStart > 0 ? lines.slice(0, optStart) : [lines[0]]).join(' ');
+          const stem  = stemLines.replace(/^\s*\*?\*?(?:Q?\d+)[\.\)]\*?\*?\s*/i, '').trim();
+          // Options may be "A)" or "A." style.
+          const opts  = lines.filter(l => /^\*?\*?[A-D]\*?\*?[\.\)]/i.test(l));
+          // Accept "Answer: B", "**Answer:** B", "Correct: B", or option line marked with ✓ / ✔ / (correct) / **bold**.
+          const ans   = block.match(/(?:Answer|Correct(?:\s*answer)?)\s*[:=]\s*\*?\*?([A-D])\b/i)?.[1]
+                     ?? block.match(/[✓✔]\s*\*?\*?([A-D])\b/i)?.[1]
+                     ?? block.match(/^\s*\*\*([A-D])[\.\)]/m)?.[1]
+                     ?? block.match(/^\s*([A-D])[\.\)][^\n]*\(correct\)/im)?.[1];
           const isRev = revealed[qi];
           return (
             <div key={qi} className="quiz-card">
@@ -65,8 +83,8 @@ export function MCQView({ content, fileId, deckId }: { content: string; fileId?:
               <div className="quiz-q-text">{stem}</div>
               <div className="quiz-options">
                 {opts.map((opt, oi) => {
-                  const letter = opt.match(/^([A-D])\)/)?.[1] ?? '';
-                  const text   = opt.replace(/^[A-D]\)\s*/, '');
+                  const letter = opt.match(/^\*?\*?([A-D])\*?\*?[\.\)]/i)?.[1]?.toUpperCase() ?? '';
+                  const text   = opt.replace(/^\*?\*?[A-D]\*?\*?[\.\)]\s*/i, '').replace(/\s*[✓✔]\s*$/u, '').replace(/\s*\(correct\)\s*$/i, '');
                   const isSel  = selected[qi] === letter;
                   let cls = 'quiz-option';
                   if (isRev) { if (letter === ans) cls += ' correct'; else if (isSel) cls += ' wrong'; }
