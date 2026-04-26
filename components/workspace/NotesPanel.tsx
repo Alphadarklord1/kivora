@@ -68,6 +68,8 @@ export function NotesPanel({
   onOpenFiles,
 }: Props) {
   const [content, setContent]     = useState('');
+  const [savingLib, setSavingLib] = useState(false);
+  const [savedLibId, setSavedLibId] = useState<string | null>(null);
   const [viewMode, setViewMode]   = useState<ViewMode>('edit');
   const [noteMode, setNoteMode]   = useState<NoteMode>('plain');
   const [saved, setSaved]         = useState(true);
@@ -158,6 +160,42 @@ export function NotesPanel({
     a.download = `notes-${folderId ?? 'global'}-${new Date().toISOString().slice(0, 10)}.md`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function saveToLibrary() {
+    if (savingLib || !content.trim()) return;
+    setSavingLib(true);
+    try {
+      // Title heuristic: first markdown heading or the first non-empty line
+      // (clamped), so the library entry is recognisable.
+      const firstLine = content.split('\n').find((l) => l.trim()) ?? 'Notes';
+      const title = firstLine.replace(/^#+\s*/, '').slice(0, 80) || 'Notes';
+      const res = await fetch('/api/library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'notes',
+          title,
+          content,
+          metadata: {
+            title,
+            wordCount,
+            sourceLabel: sourceLabel ?? null,
+            savedFrom: '/workspace/notes',
+          },
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json().catch(() => null);
+      setSavedLibId(data?.id ?? 'saved');
+      setTimeout(() => setSavedLibId(null), 2400);
+    } catch {
+      // Surface a transient indicator without blocking the editor.
+      setSavedLibId('error');
+      setTimeout(() => setSavedLibId(null), 2400);
+    } finally {
+      setSavingLib(false);
+    }
   }
 
   function clearNotes() {
@@ -267,6 +305,15 @@ export function NotesPanel({
           <span style={{ fontSize: 10, color: 'var(--text-3)' }}>
             {saved ? 'Saved' : 'Saving…'} · {wordCount} words
           </span>
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ fontSize: 11, color: savedLibId === 'error' ? 'var(--danger)' : savedLibId ? 'var(--accent)' : undefined }}
+            disabled={!content.trim() || savingLib}
+            onClick={saveToLibrary}
+            title="Save to Library"
+          >
+            {savingLib ? 'Saving…' : savedLibId === 'error' ? '✗ Failed' : savedLibId ? '✓ Saved' : '🗂 Save'}
+          </button>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={downloadNotes} title="Export as .md">⬇</button>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, color: 'var(--danger)' }} onClick={clearNotes} title="Clear notes">✕</button>
         </div>

@@ -83,9 +83,10 @@ interface LibraryItemRecord {
 
 // ── Tab config ─────────────────────────────────────────────────────────────
 
+// "notes" generation lives on the dedicated 📓 Notes tab (which has its own
+// "Generate notes" button + style picker), so it is not duplicated here.
 const GENERATE_TABS = [
   { id: 'summarize',  label: 'Summarize',  icon: '📝', hint: 'Key-point summary of your content' },
-  { id: 'notes',      label: 'Notes',      icon: '📋', hint: 'Structured study notes' },
   { id: 'outline',    label: 'Outline',    icon: '📑', hint: 'Chapter outline with learning objectives' },
   { id: 'practice',   label: 'Practice',   icon: '🎯', hint: 'Practice problem with progressive hints and solution' },
   { id: 'mcq',        label: 'MCQ',        icon: '🧩', hint: 'Multiple-choice questions with answers' },
@@ -95,7 +96,7 @@ const GENERATE_TABS = [
 ] as const;
 
 const GENERATE_TAB_GROUPS = [
-  { label: 'Written',  ids: ['summarize', 'notes', 'outline'] },
+  { label: 'Written',  ids: ['summarize', 'outline'] },
   { label: 'Practice', ids: ['practice', 'mcq', 'quiz', 'flashcards'] },
   { label: 'Exam',     ids: ['exam'] },
 ] as const;
@@ -1705,7 +1706,7 @@ export function WorkspacePanel({
                     {!generating && streamSource === 'local' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(74,222,128,0.15)', color: '#4ade80', borderColor: 'rgba(74,222,128,0.3)' }}>● Local AI</span>}
                     {!generating && streamSource === 'openai' && <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(79,134,247,0.15)', color: '#4f86f7', borderColor: 'rgba(79,134,247,0.3)' }}>● Cloud AI</span>}
                     {/* Edit toggle — only for text modes, not while streaming */}
-                    {!generating && (genMode === 'summarize' || genMode === 'notes' || genMode === 'outline' || genMode === 'quiz') && (
+                    {!generating && (genMode === 'summarize' || genMode === 'outline' || genMode === 'quiz') && (
                       <button
                         className={`btn btn-sm ${editMode ? 'btn-accent' : 'btn-ghost'}`}
                         style={{ marginLeft: 'auto', fontSize: 12 }}
@@ -1718,7 +1719,7 @@ export function WorkspacePanel({
                   </div>
 
                   {/* Output rendering */}
-                  {editMode && !generating && (genMode === 'summarize' || genMode === 'notes' || genMode === 'outline' || genMode === 'quiz')
+                  {editMode && !generating && (genMode === 'summarize' || genMode === 'outline' || genMode === 'quiz')
                     ? (
                       <textarea
                         value={output}
