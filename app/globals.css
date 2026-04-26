@@ -167,6 +167,23 @@
   --sp-8: 56px;
 }
 
+/* Dark theme — neutral charcoal (the conventional "dark mode" people expect:
+   warm-grey rather than the navy "blue" theme or the OLED "black" theme). */
+[data-theme="dark"] {
+  --bg:        #15171b;       /* near-black, slight warmth */
+  --bg-2:      #1b1d22;
+  --bg-3:      #21242a;
+  --surface:   #1e2127;       /* cards / panels */
+  --surface-2: #262a31;       /* elevated */
+  --surface-3: #2e333b;       /* hover */
+  --border:    rgba(255,255,255,0.06);
+  --border-2:  rgba(255,255,255,0.10);
+  --border-3:  rgba(255,255,255,0.16);
+  --text:      #ececf0;
+  --text-2:    #a8acb5;
+  --text-3:    #6e7380;
+}
+
 /* Black theme */
 [data-theme="black"] {
   --bg:        #000000;

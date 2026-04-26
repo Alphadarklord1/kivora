@@ -149,8 +149,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // Quick toggle in the sidebar flips between light and the conventional
+  // dark mode (charcoal). The Appearance settings tab is where the user
+  // picks Navy/Black/System if they want those instead.
   function toggleTheme() {
-    updateSetting('theme', settings.theme === 'light' ? 'blue' : 'light');
+    updateSetting('theme', settings.theme === 'light' ? 'dark' : 'light');
   }
 
   const themeIcon = !mounted ? '◐' : settings.theme === 'light' ? '🌙' : '☀️';

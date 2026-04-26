@@ -1,7 +1,6 @@
-export type AppTheme = 'light' | 'blue' | 'black' | 'system';
+export type AppTheme = 'light' | 'dark' | 'blue' | 'black' | 'system';
 
 export function normalizeTheme(value: unknown): AppTheme {
-  if (value === 'dark') return 'blue'; // Backward compatibility
-  if (value === 'blue' || value === 'black' || value === 'light' || value === 'system') return value;
+  if (value === 'dark' || value === 'blue' || value === 'black' || value === 'light' || value === 'system') return value;
   return 'light';
 }

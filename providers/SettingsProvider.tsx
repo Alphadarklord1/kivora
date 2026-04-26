@@ -40,7 +40,7 @@ function normalizeDensity(value: unknown): Density {
 function resolveTheme(theme: Theme) {
   if (theme !== 'system') return theme;
   if (typeof window === 'undefined') return 'light';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'blue' : 'light';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 function sanitizeLineHeight(value: string | null): string {

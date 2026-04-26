@@ -19,19 +19,18 @@ export function SettingsInitializer() {
     document.documentElement.setAttribute('lang', language);
     document.documentElement.setAttribute('dir', isRtlLocale(language) ? 'rtl' : 'ltr');
 
-    // Apply theme
+    // Apply theme. 'system' resolves to the conventional 'dark' (charcoal)
+    // when the OS prefers dark — matches what most apps mean by "dark mode".
     if (theme) {
-      const normalizedTheme = theme === 'dark' ? 'blue' : theme;
       if (theme === 'system') {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        document.documentElement.setAttribute('data-theme', prefersDark ? 'blue' : 'light');
+        document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
       } else {
-        document.documentElement.setAttribute('data-theme', normalizedTheme);
+        document.documentElement.setAttribute('data-theme', theme);
       }
     } else {
-      // Default to system preference
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.setAttribute('data-theme', prefersDark ? 'blue' : 'light');
+      document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
     }
 
     // Apply font scale
@@ -70,7 +69,7 @@ export function SettingsInitializer() {
     const handleChange = (e: MediaQueryListEvent) => {
       const savedTheme = readCompatStorage(localStorage, storageKeys.theme);
       if (savedTheme === 'system' || !savedTheme) {
-        document.documentElement.setAttribute('data-theme', e.matches ? 'blue' : 'light');
+        document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
       }
     };
 

@@ -22,10 +22,11 @@ import { LOCALE_OPTIONS } from '@/lib/i18n/locales';
 import { useI18n } from '@/lib/i18n/useI18n';
 
 const THEME_OPTIONS: { id: Theme; label: string; hint: string; color: string }[] = [
-  { id: 'system',  label: 'System', hint: 'Follow device', color: 'linear-gradient(135deg, #1a1f2e 50%, #f8f9fa 50%)' },
-  { id: 'blue',   label: 'Dark',   hint: 'Navy dark',     color: '#1a1f2e' },
-  { id: 'light',  label: 'Light',  hint: 'Bright',        color: '#f0f2f5' },
-  { id: 'black',  label: 'Black',  hint: 'Contrast',      color: '#000000' },
+  { id: 'system', label: 'System', hint: 'Follow device',  color: 'linear-gradient(135deg, #1a1f2e 50%, #f8f9fa 50%)' },
+  { id: 'light',  label: 'Light',  hint: 'Bright',         color: '#f0f2f5' },
+  { id: 'dark',   label: 'Dark',   hint: 'Charcoal',       color: '#1e2127' },
+  { id: 'blue',   label: 'Navy',   hint: 'Deep blue',      color: '#1a1f2e' },
+  { id: 'black',  label: 'Black',  hint: 'OLED contrast',  color: '#000000' },
 ];
 
 const FONT_OPTIONS = [

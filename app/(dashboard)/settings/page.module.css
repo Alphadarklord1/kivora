@@ -364,3 +364,770 @@
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Slim rail (used by SettingsRail) — sticky vertical nav with icon + label
+   ─────────────────────────────────────────────────────────────────────── */
+.railSlim {
+  position: sticky;
+  top: 1rem;
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.6rem;
+  border-radius: 1.2rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 86%, transparent);
+}
+
+.railItem {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 0.85rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.railItem:hover {
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  color: var(--text-primary);
+}
+
+.railItemActive {
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+  color: var(--text-primary);
+}
+
+.railItemIcon {
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--primary) 14%, var(--bg-surface));
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 980px) {
+  .railSlim {
+    position: static;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Section header (inside stage)
+   ─────────────────────────────────────────────────────────────────────── */
+.sectionHeader {
+  display: flex;
+  gap: 0.9rem;
+  align-items: flex-start;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+}
+
+.sectionHeaderIcon {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--primary) 14%, var(--bg-surface));
+  display: grid;
+  place-items: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.sectionHeaderTitle {
+  margin: 0 0 0.2rem;
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.sectionHeaderSub {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Generic feature card + setting row
+   ─────────────────────────────────────────────────────────────────────── */
+.settingsFeatureCard {
+  padding: 1rem 1.1rem;
+  border-radius: 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
+}
+
+.settingsFeatureHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.settingRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 50%, transparent);
+}
+
+.settingRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.settingRow:first-child {
+  padding-top: 0;
+}
+
+.settingRowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.settingRowLabel {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.settingRowHint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.settingRowControl {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (max-width: 600px) {
+  .settingRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settingRowControl {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+}
+
+.accountActionStack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: stretch;
+}
+
+.runtimeChipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.inlineNote {
+  margin: 0.5rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Segmented control
+   ─────────────────────────────────────────────────────────────────────── */
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  gap: 2px;
+}
+
+.segmentBtn {
+  padding: 0.4rem 0.85rem;
+  border: none;
+  background: transparent;
+  border-radius: 0.55rem;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.segmentBtn:hover {
+  color: var(--text-primary);
+}
+
+.segmentBtnActive {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Toggle switch
+   ─────────────────────────────────────────────────────────────────────── */
+.toggleSwitch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.toggleSwitch[aria-checked="true"] {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.toggleSwitch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggleThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  transition: transform 180ms ease;
+}
+
+.toggleThumb[data-on="true"] {
+  transform: translateX(16px);
+}
+
+.toggleGrid {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.toggleRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+}
+
+.toggleRowActive {
+  border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-surface));
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Theme swatches (Appearance)
+   ─────────────────────────────────────────────────────────────────────── */
+.themeSwatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.7rem;
+}
+
+.themeSwatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.85rem 0.5rem;
+  border-radius: 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 140ms ease, background-color 140ms ease;
+}
+
+.themeSwatch:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.themeSwatchActive {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-surface));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.themeSwatchCircle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  flex-shrink: 0;
+}
+
+.themeSwatchLabel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.themeSwatchLabel small {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Preview surface (Appearance preview)
+   ─────────────────────────────────────────────────────────────────────── */
+.previewGrid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.previewSurface {
+  padding: 1.1rem 1.15rem;
+  border-radius: 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--bg-surface) 96%, transparent),
+      color-mix(in srgb, var(--bg-surface) 80%, transparent));
+}
+
+.previewEyebrow {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+
+.previewTitle {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.previewCopy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.previewText {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.previewSwatch {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.7rem;
+}
+
+.previewSwatchBlock {
+  height: 36px;
+  border-radius: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+}
+
+.previewSwatchLabel {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Language picker
+   ─────────────────────────────────────────────────────────────────────── */
+.languageGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.7rem;
+}
+
+.languageCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.9rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+}
+
+.languageCard:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.languageCardActive {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-surface));
+}
+
+.languageCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.languageLabel {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.languageBadge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.languageRtlBadge {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent, #7c53e8) 16%, transparent);
+  color: var(--text-primary);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.languageSample {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+  font-style: italic;
+}
+
+.languageNote,
+.languageHint {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Runtime readiness panels
+   ─────────────────────────────────────────────────────────────────────── */
+.runtimeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.85rem;
+}
+
+.runtimeCard {
+  padding: 1rem 1.05rem;
+  border-radius: 1.05rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.runtimeCardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.runtimeSummaryCard {
+  padding: 1rem 1.1rem;
+  border-radius: 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 10%, transparent), transparent 32%),
+    color-mix(in srgb, var(--bg-surface) 88%, transparent);
+}
+
+.runtimeSummaryHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.65rem;
+}
+
+.runtimeWiringCard {
+  padding: 0.95rem 1.05rem;
+  border-radius: 1rem;
+  border: 1px dashed color-mix(in srgb, var(--border-subtle) 90%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 80%, transparent);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   AI hero (AI & Downloads section)
+   ─────────────────────────────────────────────────────────────────────── */
+.aiHero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  padding: 1.15rem 1.2rem;
+  border-radius: 1.2rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--primary) 12%, transparent), transparent 32%),
+    color-mix(in srgb, var(--bg-surface) 86%, transparent);
+}
+
+.aiHeroCopy {
+  max-width: 56ch;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.aiHeroCopy h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.aiHeroCopy p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.aiHeroBadges {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Privacy section — modes, compare, data map
+   ─────────────────────────────────────────────────────────────────────── */
+.privacyModeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.7rem;
+}
+
+.privacyModeCard {
+  padding: 0.95rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+}
+
+.privacyModeCard:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.privacyModeCardActive {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-surface));
+}
+
+.privacyModeTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.privacyActiveDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.privacyCompareGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.privacyCompareTitle {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-primary);
+}
+
+.privacyGoodCard,
+.privacyWarnCard {
+  padding: 0.95rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+}
+
+.privacyGoodCard {
+  border-color: color-mix(in srgb, #22c55e 30%, transparent);
+  background: color-mix(in srgb, #22c55e 6%, var(--bg-surface));
+}
+
+.privacyWarnCard {
+  border-color: color-mix(in srgb, var(--warning, #f59e0b) 32%, transparent);
+  background: color-mix(in srgb, var(--warning, #f59e0b) 6%, var(--bg-surface));
+}
+
+.privacyList {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.privacyDataMap {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+
+.privacyDataRow {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.6fr) minmax(0, 1fr);
+  gap: 0.7rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 50%, transparent);
+  font-size: 0.85rem;
+  align-items: center;
+}
+
+.privacyDataRow strong {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.privacyDataRow span {
+  color: var(--text-secondary);
+}
+
+@media (max-width: 600px) {
+  .privacyDataRow {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Delete account
+   ─────────────────────────────────────────────────────────────────────── */
+.deleteCard {
+  padding: 1.05rem 1.15rem;
+  border-radius: 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--danger, #dc2626) 30%, transparent);
+  background: color-mix(in srgb, var(--danger, #dc2626) 5%, var(--bg-surface));
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.deleteRow {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.deleteInput {
+  flex: 1;
+  min-width: 220px;
+  padding: 0.55rem 0.8rem;
+  border-radius: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--danger, #dc2626) 30%, transparent);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.deleteInput:focus {
+  outline: none;
+  border-color: var(--danger, #dc2626);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger, #dc2626) 18%, transparent);
+}

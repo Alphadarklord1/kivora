@@ -304,6 +304,8 @@
 .valueProps {
   background: #fff;
   padding: 4rem 2rem;
+  /* offset for sticky topbar so anchor links land below the floating nav */
+  scroll-margin-top: 5.5rem;
 }
 
 .valuePropsInner {
@@ -349,6 +351,7 @@
   background: #f5efe7;
   padding: 5rem 2rem;
   text-align: center;
+  scroll-margin-top: 5.5rem;
 }
 
 .sectionEyebrow {
@@ -432,6 +435,7 @@
 .gccSection {
   background: #c8e6e1;
   padding: 5rem 2rem;
+  scroll-margin-top: 5.5rem;
 }
 
 .gccInner {

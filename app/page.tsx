@@ -58,12 +58,26 @@ export default function SahlCalStylePage() {
           <span className={styles.brandText}>Kivora</span>
         </Link>
 
+        {/*
+          Landing nav links — all anchors to sections on this page so anonymous
+          visitors learn what's inside before being asked to sign in. Clicking
+          a nav item never bounces anyone into the auth flow; the only routes
+          out of the marketing page are the explicit "Sign in" and "Open app"
+          CTAs on the right.
+        */}
         <nav className={styles.topbarNav} aria-label="Primary">
-          <Link href="/workspace" className={styles.navLink}>Workspace</Link>
-          <Link href="/coach" className={styles.navLink}>Scholar Hub</Link>
-          <Link href="/math" className={styles.navLink}>Math</Link>
-          <Link href="/planner" className={styles.navLink}>Planner</Link>
-          <Link href="/downloads" className={styles.navLink}>Download</Link>
+          <a href="#pillars" className={styles.navLink} title="Three connected workspaces — files & AI tools, source-driven research, and a step-by-step math solver.">
+            What&apos;s inside
+          </a>
+          <a href="#features" className={styles.navLink} title="Generate from files, FSRS spaced repetition, outline → draft → check, math step-by-step, study planner.">
+            Features
+          </a>
+          <a href="#how-it-works" className={styles.navLink} title="Four AI tiers with automatic fallback: cloud, local, bundled offline, deterministic.">
+            How AI works
+          </a>
+          <Link href="/downloads" className={styles.navLink} title="Get the desktop app for Mac or Windows — no account required.">
+            Download
+          </Link>
         </nav>
 
         <div className={styles.topbarActions}>
@@ -115,7 +129,7 @@ export default function SahlCalStylePage() {
         </div>
 
         {/* ── Value Props (Three Columns) — the three pillars ──────────── */}
-        <section className={styles.valueProps}>
+        <section id="pillars" className={styles.valueProps}>
           <div className={styles.valuePropsInner}>
             <article>
               <span className={styles.valuePropEyebrow}>Workspace</span>
@@ -147,7 +161,7 @@ export default function SahlCalStylePage() {
         </section>
 
         {/* ── Features (Colored Cards Grid) ─────────────────────────────── */}
-        <section className={styles.featuresSection}>
+        <section id="features" className={styles.featuresSection}>
           <span className={styles.sectionEyebrow}>Features</span>
           <h2 className={styles.sectionTitle}>
             Built for real study sessions.
@@ -216,7 +230,7 @@ export default function SahlCalStylePage() {
         </section>
 
         {/* ── How AI works in Kivora — the cascade story ─────────────────── */}
-        <section className={styles.gccSection}>
+        <section id="how-it-works" className={styles.gccSection}>
           <div className={styles.gccInner}>
             <span className={styles.gccEyebrow}>How AI works in Kivora</span>
             <h2 className={styles.gccTitle}>
