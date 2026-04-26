@@ -2087,7 +2087,6 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
   const [scanError, setScanError] = useState('');
   const [typeInput,  setTypeInput]  = useState('');
   const [writeContext, setWriteContext] = useState('');
-  const [writeTopicOverride, setWriteTopicOverride] = useState<TopicId | ''>('');
   const [writeSavedToast, setWriteSavedToast] = useState('');
 
 
@@ -3379,33 +3378,9 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
         {/* ── WRITE A QUESTION ── */}
         {active === 'write' && (() => {
           const accent = SPECIAL_VIEW_META.write.accent;
-          const resolvedTopic = writeTopicOverride || solverTopicForQuestion(typeInput);
-          const topicColor = TOPICS.find(t => t.id === resolvedTopic)?.color ?? accent;
           return (
             <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 860, overflowY: 'auto' }}>
               <WorkflowCard accent={accent} title={SPECIAL_VIEW_META.write.workflowTitle} steps={SPECIAL_VIEW_META.write.workflow} />
-
-              {/* Topic override */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>Topic (optional — auto-detected if blank)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  <button
-                    onClick={() => setWriteTopicOverride('')}
-                    style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: `1.5px solid ${writeTopicOverride === '' ? accent : 'var(--border-subtle)'}`, background: writeTopicOverride === '' ? `${accent}18` : 'var(--bg-2)', color: writeTopicOverride === '' ? accent : 'var(--text-secondary)', cursor: 'pointer' }}
-                  >
-                    Auto
-                  </button>
-                  {PRIMARY_TOPICS.map(t => (
-                    <button
-                      key={t.id}
-                      onClick={() => setWriteTopicOverride(t.id)}
-                      style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: `1.5px solid ${writeTopicOverride === t.id ? t.color : 'var(--border-subtle)'}`, background: writeTopicOverride === t.id ? `${t.color}18` : 'var(--bg-2)', color: writeTopicOverride === t.id ? t.color : 'var(--text-secondary)', cursor: 'pointer' }}
-                    >
-                      {t.icon} {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
               {/* Symbol keyboard */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -3430,7 +3405,7 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                   onChange={e => setTypeInput(e.target.value)}
                   placeholder={`e.g.  solve x^2 - 5x + 6 = 0\n     find the derivative of sin(x^2)\n     integrate 1/(1 + x^2) dx`}
                   rows={5}
-                  style={{ padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${typeInput.trim() ? `${topicColor}40` : 'var(--border-subtle)'}`, background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 14, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.65, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' as const, transition: 'border-color 0.15s' }}
+                  style={{ padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${typeInput.trim() ? `${accent}40` : 'var(--border-subtle)'}`, background: 'var(--bg-2)', color: 'var(--text-primary)', fontSize: 14, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.65, outline: 'none', resize: 'vertical', width: '100%', boxSizing: 'border-box' as const, transition: 'border-color 0.15s' }}
                 />
 
                 {/* ── Inline scan option ── */}
@@ -3478,14 +3453,14 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                 <div style={{
                   padding: '14px 18px',
                   borderRadius: 14,
-                  background: `${topicColor}10`,
-                  border: `1.5px solid ${topicColor}40`,
+                  background: `${accent}10`,
+                  border: `1.5px solid ${accent}40`,
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 10,
                   minHeight: 72,
                 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: topicColor }}>Preview</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: accent }}>Preview</div>
                   <div style={{
                     display: 'block',
                     width: '100%',
@@ -3503,11 +3478,6 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                       <MathText>{autoWrapMath(typeInput)}</MathText>
                     )}
                   </div>
-                  {!writeTopicOverride && (
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      Auto-detected topic: <span style={{ color: topicColor, fontWeight: 600 }}>{TOPICS.find(t => t.id === resolvedTopic)?.label ?? resolvedTopic}</span>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -3517,7 +3487,7 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                   disabled={!typeInput.trim()}
                   onClick={() => {
                     const q = typeInput.trim();
-                    const topic = (writeTopicOverride || solverTopicForQuestion(q)) as TopicId;
+                    const topic = solverTopicForQuestion(q) as TopicId;
                     const full = writeContext.trim() ? `${q}\n\nContext: ${writeContext.trim()}` : q;
                     setInput(full);
                     setActive(topic);
@@ -3531,7 +3501,7 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                   disabled={!typeInput.trim()}
                   onClick={() => {
                     const q = typeInput.trim();
-                    const topic = (writeTopicOverride || solverTopicForQuestion(q)) as TopicId;
+                    const topic = solverTopicForQuestion(q) as TopicId;
                     const full = writeContext.trim() ? `${q}\n\nContext: ${writeContext.trim()}` : q;
                     setInput(full);
                     setActive(topic);
@@ -3570,7 +3540,7 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                 </button>
                 <button
                   disabled={!typeInput.trim() && !writeContext.trim()}
-                  onClick={() => { setTypeInput(''); setWriteContext(''); setWriteTopicOverride(''); }}
+                  onClick={() => { setTypeInput(''); setWriteContext(''); }}
                   style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: (typeInput.trim() || writeContext.trim()) ? 'pointer' : 'default', opacity: (typeInput.trim() || writeContext.trim()) ? 1 : 0.4 }}
                 >
                   Clear
