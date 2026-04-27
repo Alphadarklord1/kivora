@@ -959,11 +959,32 @@ export function FlashcardView({
           <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('learn')}>🎓 {t('Learn')}</button>
           <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('stats')}>📊 {t('Stats')}</button>
           <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('import')}>📥 {t('Import')}</button>
-          {showBrowseButton ? (
-            <button className="btn btn-ghost btn-sm" onClick={() => router.push('/coach')}>🧭 {t('Scholar Hub')}</button>
-          ) : (
-            <span />
-          )}
+          <span />
+        </div>
+
+        {/* Card grid — surfaced right under the action grid so generated cards
+            are visible immediately, instead of being buried below the deck
+            description and the 7-day forecast. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(185px, 1fr))', gap: 8, marginBottom: 14 }}>
+          {deck.cards.map((c, i) => {
+            const mat = c.repetitions === 0 ? 'new' : c.interval >= 21 ? 'mature' : 'learning';
+            const col = { new:'#4f86f7', learning:'#f59e0b', mature:'#52b788' }[mat];
+            return (
+              <div key={c.id} style={{ background:'var(--surface)', border:`1px solid var(--border-2)`, borderRadius:8, padding:'8px 10px', fontSize:'var(--text-xs)', borderLeft:`3px solid ${col}`, position:'relative', cursor:'pointer' }}
+                onClick={() => {
+                  const q = deck.cards.map(c => c.id);
+                  setSessionQueue(q); setSessionBase(q.length);
+                  setSessionIdx(i); setFlip(false); setPhase('review');
+                }}>
+                <button className="btn-icon" style={{ position:'absolute', top:4, right:4, fontSize:10, opacity:0.5, color:'var(--text-3)' }}
+                  onClick={e => { e.stopPropagation(); setEditCardId(c.id); setEditFront(c.front); setEditBack(c.back); setEditFrontImg(c.frontImageKey ?? null); setEditBackImg(c.backImageKey ?? null); setFrontImgUrl(null); setBackImgUrl(null); setPhase('edit-card'); }}>✏️</button>
+                <div style={{ fontWeight:600, marginBottom:3, paddingRight:16 }}>{c.front}</div>
+                <div style={{ color:'var(--text-3)', marginBottom:4 }}>{c.back}</div>
+                {(c.frontImageKey || c.backImageKey) && <div style={{ fontSize:10, color:'var(--text-3)' }}>🖼 {t('Image cards')}</div>}
+                {c.repetitions > 0 && <div style={{ color:'var(--text-3)', fontSize:10 }}>{t('Next: {date} · {accuracy}% acc', { date: formatDate(c.nextReview), accuracy: formatNumber(Math.round((c.correctReviews / Math.max(1, c.totalReviews)) * 100)) })}</div>}
+              </div>
+            );
+          })}
         </div>
 
         {/* ── Compact tools / share row ─── */}
@@ -1067,29 +1088,6 @@ export function FlashcardView({
           {forecastPreview.every((count) => count === 0) && (
             <div style={{ marginTop:10, fontSize:'var(--text-xs)', color:'var(--text-3)' }}>{t('No cards due in the next week')}</div>
           )}
-        </div>
-
-        {/* Card grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(185px, 1fr))', gap: 8 }}>
-          {deck.cards.map((c, i) => {
-            const mat = c.repetitions === 0 ? 'new' : c.interval >= 21 ? 'mature' : 'learning';
-            const col = { new:'#4f86f7', learning:'#f59e0b', mature:'#52b788' }[mat];
-            return (
-              <div key={c.id} style={{ background:'var(--surface)', border:`1px solid var(--border-2)`, borderRadius:8, padding:'8px 10px', fontSize:'var(--text-xs)', borderLeft:`3px solid ${col}`, position:'relative', cursor:'pointer' }}
-                onClick={() => {
-                  const q = deck.cards.map(c => c.id);
-                  setSessionQueue(q); setSessionBase(q.length);
-                  setSessionIdx(i); setFlip(false); setPhase('review');
-                }}>
-                <button className="btn-icon" style={{ position:'absolute', top:4, right:4, fontSize:10, opacity:0.5, color:'var(--text-3)' }}
-                  onClick={e => { e.stopPropagation(); setEditCardId(c.id); setEditFront(c.front); setEditBack(c.back); setEditFrontImg(c.frontImageKey ?? null); setEditBackImg(c.backImageKey ?? null); setFrontImgUrl(null); setBackImgUrl(null); setPhase('edit-card'); }}>✏️</button>
-                <div style={{ fontWeight:600, marginBottom:3, paddingRight:16 }}>{c.front}</div>
-                <div style={{ color:'var(--text-3)', marginBottom:4 }}>{c.back}</div>
-                {(c.frontImageKey || c.backImageKey) && <div style={{ fontSize:10, color:'var(--text-3)' }}>🖼 {t('Image cards')}</div>}
-                {c.repetitions > 0 && <div style={{ color:'var(--text-3)', fontSize:10 }}>{t('Next: {date} · {accuracy}% acc', { date: formatDate(c.nextReview), accuracy: formatNumber(Math.round((c.correctReviews / Math.max(1, c.totalReviews)) * 100)) })}</div>}
-              </div>
-            );
-          })}
         </div>
 
         {/* ── Add card ─── */}
@@ -1644,41 +1642,34 @@ export function FlashcardView({
         <button className="btn-icon" style={{ fontSize:11, color:'var(--text-3)' }} onClick={() => setPhase('preview')}>✕</button>
       </div>
 
-      {/* Swipe hints */}
-      {flip && <div style={{ display:'flex', justifyContent:'center', gap:16, fontSize:10, color:'var(--text-3)' }}>
-        <span>← / 1 {t('Again')}</span><span>2 {t('Hard')}</span><span>3 {t('Good')}</span><span>4 / ↑ {t('Easy')}</span>
-      </div>}
-
-      <div className="flashcard-wrap" style={{ minHeight:200, userSelect:'none' }}
-        onClick={() => { if (!flip) { setFlip(true); if (ttsEnabled) speak(card.back); } }}
-        onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        <div className={`flashcard${flip ? ' flipped' : ''}`} style={{ minHeight:200 }}>
-          <div className="flashcard-face">
-            <div className="flashcard-label">{t('Front')}</div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            {reviewFrontUrl && <img src={reviewFrontUrl} alt="" style={{ maxWidth:'100%', maxHeight:120, objectFit:'contain', borderRadius:8, marginBottom:8 }} />}
-            <div className="flashcard-text">{card.front}</div>
-            {!flip && <small style={{ marginTop:'auto', color:'var(--text-3)', paddingTop:12 }}>{t('Tap to reveal · swipe to grade')}</small>}
-          </div>
-          <div className="flashcard-face flashcard-back">
-            <div className="flashcard-label">{t('Back')}</div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            {reviewBackUrl && <img src={reviewBackUrl} alt="" style={{ maxWidth:'100%', maxHeight:120, objectFit:'contain', borderRadius:8, marginBottom:8 }} />}
-            <div className="flashcard-text">{card.back}</div>
-            {ttsEnabled && <button style={{ marginTop:'auto', background:'none', border:'none', color:'var(--text-3)', cursor:'pointer', fontSize:12 }} onClick={e => { e.stopPropagation(); speak(card.back); }}>🔊</button>}
-          </div>
+      {/* Plain card — no 3D flip, no gradients. Front shown always; Back
+          appears below after "Show answer". Same grading data flow. */}
+      <div style={{ userSelect: 'none' }} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10, padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 140 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1 }}>{t('Front')}</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {reviewFrontUrl && <img src={reviewFrontUrl} alt="" style={{ maxWidth:'100%', maxHeight:120, objectFit:'contain', borderRadius:8 }} />}
+          <div style={{ fontSize: 'var(--text-base)', color: 'var(--text)', lineHeight: 1.5 }}>{card.front}</div>
         </div>
+        {flip && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10, padding: '18px 20px', marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 140 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: 1 }}>{t('Back')}</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {reviewBackUrl && <img src={reviewBackUrl} alt="" style={{ maxWidth:'100%', maxHeight:120, objectFit:'contain', borderRadius:8 }} />}
+            <div style={{ fontSize: 'var(--text-base)', color: 'var(--text)', lineHeight: 1.5 }}>{card.back}</div>
+            {ttsEnabled && (
+              <button style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', fontSize: 12 }} onClick={() => speak(card.back)}>🔊</button>
+            )}
+          </div>
+        )}
       </div>
 
       {flip ? (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
           {GRADES.map((g, gi) => (
             <button key={g.grade} onClick={() => doGrade(g.grade)} title={t(g.hint)}
-              style={{ border:`1.5px solid ${g.color}40`, borderRadius:10, padding:'10px 4px 8px', cursor:'pointer', background:`${g.color}14`, color:g.color, fontWeight:700, fontSize:'var(--text-sm)', transition:'all 0.12s', lineHeight:1.2 }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${g.color}28`; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = `${g.color}14`; (e.currentTarget as HTMLButtonElement).style.transform = ''; }}
-            >
-              <div style={{ fontSize:11, fontWeight:700, opacity:0.65, marginBottom:2 }}>{gradeIntervals[gi]}</div>
+              style={{ border:`1px solid ${g.color}40`, borderRadius:8, padding:'10px 4px 8px', cursor:'pointer', background:`${g.color}10`, color:g.color, fontWeight:600, fontSize:'var(--text-sm)', lineHeight:1.2 }}>
+              <div style={{ fontSize:11, fontWeight:600, opacity:0.65, marginBottom:2 }}>{gradeIntervals[gi]}</div>
               {t(g.label)}
             </button>
           ))}

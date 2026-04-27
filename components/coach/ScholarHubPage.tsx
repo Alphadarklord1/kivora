@@ -391,6 +391,7 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
             dueReviewSets={dueReviewSets}
             allReviewSets={sortedReviewSets}
             topWeakAreas={topWeakAreas}
+            hasQuizHistory={(analytics?.quizStats?.totalAttempts ?? 0) > 0}
             loadingSets={loadingSets}
             analyticsLoading={analyticsLoading}
             getSetDue={getSetDue}
@@ -401,6 +402,7 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
             onOpenPanel={openPanel}
             onLaunchWeakTopic={launchWeakTopic}
             onLoadRelatedReading={topic => { setResearchPreload(topic); setActiveSection('research'); }}
+            onTakeFirstQuiz={() => router.push('/workspace')}
           />
         )}
 

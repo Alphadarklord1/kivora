@@ -15,6 +15,11 @@ const securityHeaders = [
       "connect-src 'self' https: ws: wss: http://127.0.0.1:* http://localhost:*",
       "media-src 'self' blob: data:",
       "worker-src 'self' blob:",
+      // PDF previews and other in-app file viewers render as <iframe src="blob:…">.
+      // Without frame-src/object-src, the directive falls back to default-src
+      // ('self') and the browser blocks the blob: URL with an empty placeholder.
+      "frame-src 'self' blob: data:",
+      "object-src 'self' blob: data:",
     ].join('; '),
   },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },

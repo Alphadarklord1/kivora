@@ -173,13 +173,14 @@ function describeNoteStyle(style: NoteStyle): string {
 // ── Inline file viewer ─────────────────────────────────────────────────────
 
 function FileViewer({
-  file, onClose, onUseForTools, onUseForChat, onUseForNotes, onUseInMath,
+  file, onClose, onUseForTools, onUseForChat, onUseForNotes, onUseForFlashcards, onUseInMath,
 }: {
   file: FileRecord;
   onClose: () => void;
   onUseForTools: (file: FileRecord, text: string) => void;
   onUseForChat: (file: FileRecord, text: string) => void;
   onUseForNotes: (file: FileRecord, text: string) => void;
+  onUseForFlashcards: (file: FileRecord, text: string) => void;
   onUseInMath: (file: FileRecord, text: string) => void;
 }) {
   const { toast } = useToast();
@@ -254,6 +255,11 @@ function FileViewer({
     if (text) onUseForNotes(file, text);
   }
 
+  async function useForFlashcards() {
+    const text = await resolveFileText('Flashcards');
+    if (text) onUseForFlashcards(file, text);
+  }
+
   async function useInMath() {
     if (textContent) {
       onUseInMath(file, textContent);
@@ -297,6 +303,9 @@ function FileViewer({
           </button>
           <button className="btn btn-secondary btn-sm" onClick={useForChat} title="Load into Chat tab">
             💬 Chat
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={useForFlashcards} title="Generate flashcards from this file">
+            🃏 Flashcards
           </button>
           <button className="btn btn-secondary btn-sm" onClick={useInMath} title="Send this file into Math">
             ∑ Math
@@ -1069,6 +1078,11 @@ export function WorkspacePanel({
     applyFileContext(file, text, 'notes', 'File loaded — generate notes from the selected document');
   }
 
+  function handleUseForFlashcards(file: FileRecord, text: string) {
+    applyFileContext(file, text, 'flashcards', `Generating flashcards from "${file.name}"…`);
+    setTimeout(() => { void runGenerate('flashcards', text); }, 0);
+  }
+
   async function loadSelectedFileIntoChat() {
     if (!selFile) {
       toast('Choose a file first.', 'warning');
@@ -1363,75 +1377,87 @@ export function WorkspacePanel({
                               <div className="file-thumb" style={{ opacity: isMissing ? 0.45 : 1 }}>{fileIcon(file)}</div>
                               <div className="file-info" style={{ flex: 1, minWidth: 0 }}>
                                 <div className="file-name" title={file.name}>{file.name}</div>
-                                <div className="file-meta">{fmt(file.fileSize)}{file.fileSize ? ' · ' : ''}{fmtDate(file.createdAt)}</div>
+                                <div className="file-meta" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmt(file.fileSize)}{file.fileSize ? ' · ' : ''}{fmtDate(file.createdAt)}</div>
                               </div>
-                              <div className="workspace-file-actions" style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                                {!isMissing && (
-                                  <>
-                                    <button
-                                      className="btn btn-primary btn-sm"
-                                      style={{ fontSize: 11, padding: '2px 8px' }}
-                                      title="Extract text and open in Generate"
-                                      onClick={async () => {
-                                        const text = await extractFromFile(file);
-                                        if (text) {
-                                          setSelFile(file);
-                                          setMainTab('generate');
-                                        }
-                                      }}>
-                                      ⚡ Use
-                                    </button>
-                                    <button
-                                      className="btn btn-secondary btn-sm"
-                                      style={{ fontSize: 11, padding: '2px 8px' }}
-                                      title="Extract text and open in Chat"
-                                      onClick={async () => {
-                                        const text = await extractFromFile(file);
-                                        if (text) {
-                                          setSelFile(file);
-                                          setMainTab('chat');
-                                        }
-                                      }}>
-                                      💬 Chat
-                                    </button>
-                                    <button
-                                      className="btn btn-secondary btn-sm"
-                                      style={{ fontSize: 11, padding: '2px 8px' }}
-                                      title="Extract text and open PDF to Notes"
-                                      onClick={async () => {
-                                        const text = await extractFromFile(file);
-                                        if (text) {
-                                          handleUseForNotes(file, text);
-                                        }
-                                      }}>
-                                      📓 Notes
-                                    </button>
-                                    <button
-                                      className="btn btn-secondary btn-sm"
-                                      style={{ fontSize: 11, padding: '2px 8px' }}
-                                      title="Send this file into Math"
-                                      onClick={async () => {
-                                        const text = await extractFromFile(file);
-                                        if (text) {
-                                          await sendFileToMath(file, text);
-                                        }
-                                      }}>
-                                      ∑ Math
-                                    </button>
-                                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }}
-                                      onClick={() => {
-                                        void markRecentFile(file.id);
-                                        setViewFile(v => v?.id === file.id ? null : file);
-                                      }}>
-                                      {viewFile?.id === file.id ? 'Close' : 'View'}
-                                    </button>
-                                  </>
-                                )}
-                                <button className="btn-icon" style={{ color: 'var(--danger)', width: 26, height: 26 }}
-                                  title={`Delete "${file.name}"`}
-                                  onClick={e => deleteFile(e, file)}>✕</button>
-                              </div>
+                              <button className="btn-icon" style={{ color: 'var(--danger)', width: 26, height: 26, flexShrink: 0 }}
+                                title={`Delete "${file.name}"`}
+                                onClick={e => deleteFile(e, file)}>✕</button>
                             </div>
+                            {!isMissing && (
+                              <div className="workspace-file-actions"
+                                style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}
+                                onClick={e => e.stopPropagation()}>
+                                <button
+                                  className="btn btn-primary btn-sm"
+                                  style={{ fontSize: 11, padding: '2px 8px' }}
+                                  title="Extract text and open in Generate"
+                                  onClick={async () => {
+                                    const text = await extractFromFile(file);
+                                    if (text) {
+                                      setSelFile(file);
+                                      setMainTab('generate');
+                                    }
+                                  }}>
+                                  ⚡ Use
+                                </button>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ fontSize: 11, padding: '2px 8px' }}
+                                  title="Extract text and open in Chat"
+                                  onClick={async () => {
+                                    const text = await extractFromFile(file);
+                                    if (text) {
+                                      setSelFile(file);
+                                      setMainTab('chat');
+                                    }
+                                  }}>
+                                  💬 Chat
+                                </button>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ fontSize: 11, padding: '2px 8px' }}
+                                  title="Extract text and open PDF to Notes"
+                                  onClick={async () => {
+                                    const text = await extractFromFile(file);
+                                    if (text) {
+                                      handleUseForNotes(file, text);
+                                    }
+                                  }}>
+                                  📓 Notes
+                                </button>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ fontSize: 11, padding: '2px 8px' }}
+                                  title="Generate flashcards from this file"
+                                  onClick={async () => {
+                                    const text = await extractFromFile(file);
+                                    if (text) {
+                                      handleUseForFlashcards(file, text);
+                                    }
+                                  }}>
+                                  🃏 Flashcards
+                                </button>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ fontSize: 11, padding: '2px 8px' }}
+                                  title="Send this file into Math"
+                                  onClick={async () => {
+                                    const text = await extractFromFile(file);
+                                    if (text) {
+                                      await sendFileToMath(file, text);
+                                    }
+                                  }}>
+                                  ∑ Math
+                                </button>
+                                <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px', marginLeft: 'auto' }}
+                                  onClick={() => {
+                                    void markRecentFile(file.id);
+                                    setViewFile(v => v?.id === file.id ? null : file);
+                                  }}>
+                                  {viewFile?.id === file.id ? 'Close' : 'View'}
+                                </button>
+                              </div>
+                            )}
                             {isMissing && (
                               <div style={{
                                 marginTop: 6, padding: '6px 10px', borderRadius: 8,
@@ -1482,6 +1508,7 @@ export function WorkspacePanel({
                   onUseForTools={handleUseForTools}
                   onUseForChat={handleUseForChat}
                   onUseForNotes={handleUseForNotes}
+                  onUseForFlashcards={handleUseForFlashcards}
                   onUseInMath={sendFileToMath}
                 />
               </div>
@@ -1889,13 +1916,29 @@ export function WorkspacePanel({
               </div>
               <div className="workspace-focus-card workspace-focus-card--actions">
                 {extractedText && !generating && (
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={() => { setOutput(''); void runGenerate('flashcards'); }}
-                    title={selFile ? `Generate flashcards from ${selFile.name}` : 'Generate flashcards from pasted text'}
-                  >
-                    ✨ Generate from {pasteMode ? 'pasted text' : (selFile?.name ?? 'source')}
-                  </button>
+                  <>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                      Cards
+                      <input
+                        type="number"
+                        min={1}
+                        max={50}
+                        value={count}
+                        onChange={e => {
+                          const n = Number.parseInt(e.target.value, 10);
+                          if (Number.isFinite(n) && n > 0) setCount(Math.min(50, n));
+                        }}
+                        style={{ width: 56, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border-2)', background: 'var(--surface)', color: 'var(--text)', fontSize: 'var(--text-xs)' }}
+                      />
+                    </label>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => { setOutput(''); void runGenerate('flashcards'); }}
+                      title={selFile ? `Generate ${count} flashcards from ${selFile.name}` : `Generate ${count} flashcards from pasted text`}
+                    >
+                      ✨ Generate {count} from {pasteMode ? 'pasted text' : (selFile?.name ?? 'source')}
+                    </button>
+                  </>
                 )}
                 {generating && (
                   <span className="badge" style={{ fontSize: 'var(--text-xs)' }}>Generating cards…</span>
@@ -1905,18 +1948,82 @@ export function WorkspacePanel({
                 <button className="btn btn-ghost btn-sm" onClick={() => router.push('/library')}>Open Library</button>
               </div>
             </div>
-            <div style={{ flex: 1, minHeight: 0 }}>
-              <FlashcardView
-                content={output}
-                title={selFile?.name}
-                initialDeck={activeReviewSet}
-                requestedPhase={requestedReviewPhase}
-                initialImportUrl={pendingReviewImportUrl}
-                onRequestedPhaseHandled={() => setRequestedReviewPhase(null)}
-                onDeckChange={(deck) => {
-                  setSrsDecks(current => current.map(d => d.id === deck.id ? deck : d));
-                }}
-              />
+            <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+              {activeReviewSet || output ? (
+                <FlashcardView
+                  content={output}
+                  title={selFile?.name}
+                  initialDeck={activeReviewSet}
+                  requestedPhase={requestedReviewPhase}
+                  initialImportUrl={pendingReviewImportUrl}
+                  onRequestedPhaseHandled={() => setRequestedReviewPhase(null)}
+                  onDeckChange={(deck) => {
+                    setSrsDecks(current => current.map(d => d.id === deck.id ? deck : d));
+                  }}
+                />
+              ) : srsDecks.length > 0 ? (
+                <div style={{ padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+                    <strong style={{ fontSize: 'var(--text-sm)' }}>Your review sets</strong>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{srsDecks.length} total · click a set to study</span>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ marginLeft: 'auto', fontSize: 11, padding: '2px 10px', color: 'var(--danger)' }}
+                      onClick={() => {
+                        if (!window.confirm(`Delete all ${srsDecks.length} review sets? This wipes the local store and cloud-synced copies.`)) return;
+                        const ids = srsDecks.map(d => d.id);
+                        try { localStorage.removeItem('kivora-srs-decks'); } catch { /* noop */ }
+                        setSrsDecks([]);
+                        setActiveReviewSetId(null);
+                        ids.forEach(id => {
+                          void fetch(`/api/srs?deckId=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+                        });
+                      }}
+                    >
+                      ✕ Clear all
+                    </button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+                    {srsDecks.map((d) => {
+                      const due = d.cards.filter(c => c.repetitions > 0 && c.nextReview <= new Date().toISOString().split('T')[0]).length
+                        + d.cards.filter(c => c.repetitions === 0).length;
+                      return (
+                        <div key={d.id}
+                          style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 6 }}
+                          onClick={() => setActiveReviewSetId(d.id)}>
+                          <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📇 {d.name}</div>
+                          <div style={{ display: 'flex', gap: 8, fontSize: 11, color: 'var(--text-3)', alignItems: 'center' }}>
+                            <span>{d.cards.length} cards</span>
+                            {due > 0 && <span style={{ color: 'var(--accent)', fontWeight: 600 }}>· {due} due</span>}
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+                            <button className="btn btn-primary btn-sm" style={{ fontSize: 11, padding: '2px 10px' }}
+                              onClick={(e) => { e.stopPropagation(); setActiveReviewSetId(d.id); setRequestedReviewPhase('review'); }}>
+                              ▶ Study
+                            </button>
+                            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 10px', color: 'var(--danger)', marginLeft: 'auto' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!window.confirm(`Delete review set "${d.name}"? This can't be undone.`)) return;
+                                try {
+                                  const remaining = loadDecks().filter(x => x.id !== d.id);
+                                  localStorage.setItem('kivora-srs-decks', JSON.stringify(remaining));
+                                } catch { /* noop */ }
+                                setSrsDecks(current => current.filter(x => x.id !== d.id));
+                                if (activeReviewSetId === d.id) setActiveReviewSetId(null);
+                                void fetch(`/api/srs?deckId=${encodeURIComponent(d.id)}`, { method: 'DELETE' }).catch(() => {});
+                              }}>✕ Delete</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>
+                  No review sets yet. Open a folder, upload a file, and click <strong>🃏 Flashcards</strong> to generate your first set — or use <strong>Import set</strong> above.
+                </div>
+              )}
             </div>
           </div>
         )}

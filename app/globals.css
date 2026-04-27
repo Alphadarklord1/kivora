@@ -1073,7 +1073,17 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 
 /* ── Flashcard ── */
-.flashcard-wrap { perspective: 1600px; user-select: none; padding: 8px; }
+/* The shadow/isolation lives on the wrap so it doesn't force the 3D
+   transform-style to flatten on the inner .flashcard. With filter or
+   isolation set on the same element as transform-style: preserve-3d the
+   browser silently downgrades to flat — which broke backface-visibility
+   and showed the FRONT face mirrored after a flip. */
+.flashcard-wrap {
+  perspective: 1600px;
+  user-select: none;
+  padding: 8px;
+  filter: drop-shadow(0 24px 48px rgba(15, 23, 42, 0.18));
+}
 .flashcard {
   position: relative;
   transform-style: preserve-3d;
@@ -1081,8 +1091,6 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   cursor: pointer;
   border-radius: 22px;
   min-height: 260px;
-  isolation: isolate;
-  filter: drop-shadow(0 24px 48px rgba(15, 23, 42, 0.18));
 }
 .flashcard:hover { transform: translateY(-2px); }
 .flashcard.flipped { transform: rotateY(180deg) translateY(-2px); }

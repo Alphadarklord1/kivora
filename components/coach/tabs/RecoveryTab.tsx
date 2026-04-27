@@ -19,6 +19,9 @@ interface Props {
   dueReviewSets:    SRSDeck[];
   allReviewSets:    SRSDeck[];
   topWeakAreas:     WeakArea[];
+  /** True once analytics has loaded AND the user has at least one quiz attempt
+   * in the period. Lets us distinguish "all topics solid" from "no data yet". */
+  hasQuizHistory:   boolean;
   loadingSets:      boolean;
   analyticsLoading: boolean;
   getSetDue:        (s: SRSDeck) => number;
@@ -29,6 +32,8 @@ interface Props {
   onOpenPanel:      (setId: string, panel: 'review' | 'manage') => void;
   onLaunchWeakTopic: (area: WeakArea, tool: 'quiz' | 'explain') => void;
   onLoadRelatedReading: (topic: string) => void;
+  /** Take the user to a place where they can take a quiz to seed analytics. */
+  onTakeFirstQuiz:  () => void;
 }
 
 function AccuracyBar({ pct }: { pct: number }) {
@@ -47,16 +52,15 @@ export function RecoveryTab({
   dueReviewSets,
   allReviewSets,
   topWeakAreas,
-  loadingSets,
+  hasQuizHistory,
   analyticsLoading,
-  getSetDue,
   getSetAccuracy,
   mission,
   onStartMission,
   onMissionSecondary,
-  onOpenPanel,
   onLaunchWeakTopic,
   onLoadRelatedReading,
+  onTakeFirstQuiz,
 }: Props) {
   return (
     <div className={styles.recoveryLayout}>
@@ -94,68 +98,42 @@ export function RecoveryTab({
         </div>
       )}
 
-      <div className={styles.recoveryColumns}>
-
-        {/* Due Review column */}
-        <div className={styles.recoveryCol}>
-          <h4>Due Review</h4>
-          {loadingSets ? (
-            <div className={styles.emptyBrief}><strong>Loading…</strong></div>
-          ) : dueReviewSets.length === 0 ? (
-            <div className={styles.emptyBrief}><strong>Nothing due right now ✔</strong></div>
-          ) : (
-            <div className={styles.setList}>
-              {dueReviewSets.slice(0, 5).map(set => {
-                const accuracy = getSetAccuracy(set);
-                const due      = getSetDue(set);
-                return (
-                  <div key={set.id} className={styles.setRow}>
-                    <div className={styles.setRowInfo}>
-                      <strong>{set.name}</strong>
-                      <span>{set.cards.length} cards · {due} due</span>
-                      {accuracy >= 0 && <AccuracyBar pct={accuracy} />}
-                    </div>
-                    <div className={styles.setRowActions}>
-                      <button className={styles.btnPrimary} onClick={() => onOpenPanel(set.id, 'review')}>Review</button>
-                      <button className={styles.btnSecondary} onClick={() => onOpenPanel(set.id, 'manage')}>Manage</button>
-                    </div>
+      {/* Weak Topics — now full-width since the Due Review column moved to
+          the Workspace deck library (single source). */}
+      <div>
+        <h4>Weak Topics</h4>
+        {analyticsLoading ? (
+          <div className={styles.emptyBrief}><strong>Loading…</strong></div>
+        ) : !hasQuizHistory ? (
+          <div className={styles.emptyBrief} style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+            <strong>No quiz history yet</strong>
+            <span>Weak topics show up here once you&apos;ve taken at least one quiz, so we have data to compare against.</span>
+            <button className={styles.btnPrimary} onClick={onTakeFirstQuiz}>Take your first quiz →</button>
+          </div>
+        ) : topWeakAreas.length === 0 ? (
+          <div className={styles.emptyBrief}><strong>All topics solid ✔</strong> — your accuracy is high across the board, nothing flagged for review.</div>
+        ) : (
+          <div className={styles.setList}>
+            {topWeakAreas.map(area => {
+              const pct = Math.round(area.accuracy);
+              return (
+                <div key={area.topic} className={styles.setRow}>
+                  <div className={styles.setRowInfo}>
+                    <strong>{area.topic}</strong>
+                    <AccuracyBar pct={pct} />
+                    <span>{area.attempts} attempts · ~{area.estimatedMinutes} min to recover</span>
+                    <small>{area.suggestion}</small>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Weak Topics column */}
-        <div className={styles.recoveryCol}>
-          <h4>Weak Topics</h4>
-          {analyticsLoading ? (
-            <div className={styles.emptyBrief}><strong>Loading…</strong></div>
-          ) : topWeakAreas.length === 0 ? (
-            <div className={styles.emptyBrief}><strong>No weak topics detected ✔</strong></div>
-          ) : (
-            <div className={styles.setList}>
-              {topWeakAreas.map(area => {
-                const pct = Math.round(area.accuracy);
-                return (
-                  <div key={area.topic} className={styles.setRow}>
-                    <div className={styles.setRowInfo}>
-                      <strong>{area.topic}</strong>
-                      <AccuracyBar pct={pct} />
-                      <span>{area.attempts} attempts · ~{area.estimatedMinutes} min to recover</span>
-                      <small>{area.suggestion}</small>
-                    </div>
-                    <div className={styles.setRowActions}>
-                      <button className={styles.btnPrimary} onClick={() => onLaunchWeakTopic(area, 'quiz')}>Practice</button>
-                      <button className={styles.btnSecondary} onClick={() => onLaunchWeakTopic(area, 'explain')}>Explain</button>
-                      <button className={styles.btnSecondary} onClick={() => onLoadRelatedReading(area.topic)}>Reading</button>
-                    </div>
+                  <div className={styles.setRowActions}>
+                    <button className={styles.btnPrimary} onClick={() => onLaunchWeakTopic(area, 'quiz')}>Practice</button>
+                    <button className={styles.btnSecondary} onClick={() => onLaunchWeakTopic(area, 'explain')}>Explain</button>
+                    <button className={styles.btnSecondary} onClick={() => onLoadRelatedReading(area.topic)}>Reading</button>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
