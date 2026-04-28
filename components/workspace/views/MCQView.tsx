@@ -112,6 +112,20 @@ export function MCQView({ content, fileId, deckId }: { content: string; fileId?:
                     {selected[qi] === ans ? '🎉 Correct!' : `✗ Correct: ${ans}`}
                   </div>
                 )}
+                {isRev && !ans && (
+                  /* Reveal pressed but the AI never marked which option
+                     was correct. Tell the user instead of showing nothing. */
+                  <div style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--text-2)',
+                    background: 'color-mix(in srgb, #f59e0b 10%, transparent)',
+                    border: '1px dashed color-mix(in srgb, #f59e0b 40%, transparent)',
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                  }}>
+                    ⚠ The AI didn&apos;t flag a correct answer for this one. Regenerate the MCQ set if this keeps happening.
+                  </div>
+                )}
               </div>
             </div>
           );

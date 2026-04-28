@@ -135,7 +135,7 @@ export function QuizView({ content, fileId, deckId }: { content: string; fileId?
                   </div>
                 )}
               </div>
-              {isRev && expected && (
+              {isRev && expected ? (
                 <div style={{
                   marginTop: 10,
                   padding: '10px 12px',
@@ -149,7 +149,22 @@ export function QuizView({ content, fileId, deckId }: { content: string; fileId?
                   <strong style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)' }}>EXPECTED</strong>
                   <div style={{ marginTop: 4 }}>{expected}</div>
                 </div>
-              )}
+              ) : isRev ? (
+                /* Reveal pressed but the AI didn't include an Answer line.
+                   Without this fallback the "Expected answer:" hint above
+                   pointed at empty space. */
+                <div style={{
+                  marginTop: 10,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  background: 'color-mix(in srgb, #f59e0b 10%, transparent)',
+                  border: '1px dashed color-mix(in srgb, #f59e0b 40%, transparent)',
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--text-2)',
+                }}>
+                  ⚠ This question came back without an expected answer. Regenerating the quiz usually fixes it.
+                </div>
+              ) : null}
             </div>
           );
         })}

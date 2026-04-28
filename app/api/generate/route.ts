@@ -272,7 +272,7 @@ Answer: <expected response, multi-paragraph or numbered steps as appropriate>
 Mix question types throughout the paper — do not group them. Mark totals across all questions should sum to roughly 100. Stay strictly within the source material.
 
 Material:\n\n${text}`,
-    practice:   `Create one strong practice problem based on the material below. Use this exact markdown format with EXACTLY 3 hints — do not add Hint 4 or higher, do not add commentary outside these sections, do not repeat hints inside the Solution:
+    practice:   `Create one strong practice problem based on the material below. ALL FIVE sections (Problem, Hint 1, Hint 2, Hint 3, Solution) are MANDATORY — do not skip any, do not stop early, do not write "[solution omitted]" or similar placeholders. Use this exact markdown format with EXACTLY 3 hints, do not add Hint 4 or higher, do not add commentary outside these sections, do not repeat hints inside the Solution:
 
 ## Problem
 <one clear problem statement>
@@ -287,7 +287,7 @@ Material:\n\n${text}`,
 <almost-there hint naming the approach>
 
 ## Solution
-<complete step-by-step worked solution>
+<complete step-by-step worked solution — required, never empty>
 
 Material:\n\n${text}`,
   };

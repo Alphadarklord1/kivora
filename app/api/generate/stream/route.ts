@@ -445,7 +445,7 @@ D) <option>
 Answer: <letter for MCQ, or expected response for short-answer/essay>
 
 Mix MCQ (with A/B/C/D options), short-answer, and essay questions. Material:\n\n${text}`,
-    practice:   `Create a practice problem based on this content. Use EXACTLY this format:\n\n## Problem\n[Write a clear, challenging practice question here]\n\n## Hint 1\n[A gentle nudge in the right direction, no direct answer]\n\n## Hint 2\n[More specific guidance, pointing to the key concept]\n\n## Hint 3\n[Almost there — tell them what approach to use]\n\n## Solution\n[Complete step-by-step worked solution with explanation]\n\nContent:\n\n${text}`,
+    practice:   `Create a practice problem based on this content. ALL FIVE sections below are MANDATORY — do not skip any, do not stop early, the Solution section must contain a real worked solution (never empty, never "[omitted]"). Use EXACTLY this format:\n\n## Problem\n[Write a clear, challenging practice question here]\n\n## Hint 1\n[A gentle nudge in the right direction, no direct answer]\n\n## Hint 2\n[More specific guidance, pointing to the key concept]\n\n## Hint 3\n[Almost there — tell them what approach to use]\n\n## Solution\n[Complete step-by-step worked solution with explanation — required, never empty]\n\nContent:\n\n${text}`,
   };
   return instructions[mode];
 }

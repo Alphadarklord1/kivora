@@ -35,9 +35,21 @@ export async function POST(request: NextRequest) {
     return new Response(JSON.stringify({ error: 'deckName and cards are required' }), { status: 400 });
   }
 
-  const SQL = await initSqlJs({
-    locateFile: (file) => path.join(process.cwd(), 'node_modules/sql.js/dist', file),
-  });
+  // sql.js needs its wasm file at runtime. node_modules path works in
+  // local dev and traditional deploys but Vercel serverless can't always
+  // see node_modules at runtime — the bundler may not include it. Fall
+  // back to the public CDN if the local path fails so .apkg export keeps
+  // working in production.
+  let SQL;
+  try {
+    SQL = await initSqlJs({
+      locateFile: (file) => path.join(process.cwd(), 'node_modules/sql.js/dist', file),
+    });
+  } catch {
+    SQL = await initSqlJs({
+      locateFile: (file) => `https://sql.js.org/dist/${file}`,
+    });
+  }
 
   const db = new SQL.Database();
   db.run(`
@@ -204,18 +216,28 @@ export async function POST(request: NextRequest) {
   noteStmt.free();
   cardStmt.free();
 
-  const zip = new JSZip();
-  zip.file('collection.anki2', Buffer.from(db.export()));
-  zip.file('media', JSON.stringify({}));
-  const apkg = await zip.generateAsync({ type: 'uint8array' });
-  const filename = sanitizeFilename(body.deckName, 'apkg');
-  const bodyBuffer = Buffer.from(apkg);
+  try {
+    const zip = new JSZip();
+    zip.file('collection.anki2', Buffer.from(db.export()));
+    zip.file('media', JSON.stringify({}));
+    const apkg = await zip.generateAsync({ type: 'uint8array' });
+    const filename = sanitizeFilename(body.deckName, 'apkg');
+    const bodyBuffer = Buffer.from(apkg);
 
-  return new Response(bodyBuffer, {
-    headers: {
-      'Content-Type': 'application/apkg',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      'Cache-Control': 'no-store',
-    },
-  });
+    return new Response(bodyBuffer, {
+      headers: {
+        'Content-Type': 'application/apkg',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  } catch (err) {
+    // Last-mile zip failure — return JSON so the client's catch path
+    // shows a helpful toast instead of a generic 500 with empty body.
+    console.error('[srs/export] zip build failed', err);
+    return new Response(
+      JSON.stringify({ error: 'Failed to package the .apkg file. Try CSV export instead.' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
 }
