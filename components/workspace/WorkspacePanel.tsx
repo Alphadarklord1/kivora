@@ -2190,6 +2190,12 @@ export function WorkspacePanel({
                   onDeckChange={(deck) => {
                     setSrsDecks(current => current.map(d => d.id === deck.id ? deck : d));
                   }}
+                  onExit={() => {
+                    // Drop the active deck + clear streamed output so the
+                    // Flashcards tab returns to the deck library view.
+                    setActiveReviewSetId(null);
+                    setOutput('');
+                  }}
                 />
               ) : srsDecks.length > 0 ? (
                 <div style={{ padding: '14px 16px' }}>

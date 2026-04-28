@@ -206,6 +206,7 @@ export function FlashcardView({
   initialImportUrl = null,
   onRequestedPhaseHandled,
   onDeckChange,
+  onExit,
   showBrowseButton = true,
   showPublicActions = true,
 }: {
@@ -216,6 +217,10 @@ export function FlashcardView({
   initialImportUrl?: string | null;
   onRequestedPhaseHandled?: () => void;
   onDeckChange?: (deck: SRSDeck) => void;
+  /** Optional — when provided, shows a "← Decks" button on the deck
+   *  preview header and on the Done screen so the user can leave the
+   *  current deck and return to the deck library. */
+  onExit?: () => void;
   showBrowseButton?: boolean;
   showPublicActions?: boolean;
 }) {
@@ -583,32 +588,52 @@ export function FlashcardView({
   async function handleSaveToLibrary() {
     if (!deck || librarySaveStatus === 'loading') return;
     setLibrarySaveStatus('loading');
+    const serializedDeck = deckToContent(deck);
+    const metadata = {
+      title: title ?? deck.name,
+      description: deck.description ?? '',
+      cardCount: deck.cards.length,
+      sourceDeckId: deck.id,
+      sourceDeckName: deck.name,
+      savedFrom: '/workspace',
+    };
+    // Mirror WorkspacePanel.saveToLibrary: write offline FIRST so the
+    // user's deck snapshot lands in IndexedDB no matter what the server
+    // says, then try the cloud. Guest mode returns 503; without offline
+    // first, the click silently failed.
+    let savedOffline = false;
     try {
-      const serializedDeck = deckToContent(deck);
+      const { saveOfflineItem } = await import('@/lib/library/offline-store');
+      saveOfflineItem({ mode: 'flashcards', content: serializedDeck, metadata });
+      savedOffline = true;
+    } catch { /* IndexedDB unavailable — try network anyway */ }
+    try {
       const res = await fetch('/api/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'flashcards',
-          content: serializedDeck,
-          metadata: {
-            title: title ?? deck.name,
-            description: deck.description ?? '',
-            cardCount: deck.cards.length,
-            sourceDeckId: deck.id,
-            sourceDeckName: deck.name,
-            savedFrom: '/workspace',
-          },
-        }),
+        body: JSON.stringify({ mode: 'flashcards', content: serializedDeck, metadata }),
       });
-      if (!res.ok) throw new Error();
-      broadcastInvalidate(LIBRARY_CHANNEL);
-      setLibrarySaveStatus('done');
-      window.setTimeout(() => setLibrarySaveStatus('idle'), 2200);
+      if (res.ok) {
+        broadcastInvalidate(LIBRARY_CHANNEL);
+        setLibrarySaveStatus('done');
+      } else if (savedOffline) {
+        broadcastInvalidate(LIBRARY_CHANNEL);
+        // Stays on 'done' — the deck is saved locally and the Library
+        // page merges offline + remote so the user sees it either way.
+        setLibrarySaveStatus('done');
+      } else {
+        setLibrarySaveStatus('error');
+      }
     } catch {
-      setLibrarySaveStatus('error');
-      window.setTimeout(() => setLibrarySaveStatus('idle'), 2200);
+      // Network fail — at least show success if offline saved.
+      if (savedOffline) {
+        broadcastInvalidate(LIBRARY_CHANNEL);
+        setLibrarySaveStatus('done');
+      } else {
+        setLibrarySaveStatus('error');
+      }
     }
+    window.setTimeout(() => setLibrarySaveStatus('idle'), 2200);
   }
 
   // Share handler
@@ -978,9 +1003,16 @@ export function FlashcardView({
             <div style={{ width: `${goalPct}%`, height: '100%', background: goalPct >= 100 ? '#52b788' : '#4f86f7', transition: 'width 0.4s' }} />
           </div>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => { setSessionIdx(0); setFlip(false); setGraded([]); setPhase(ns.due > 0 ? 'review' : 'preview'); }}>
-          {ns.due > 0 ? t('Review {count} remaining', { count: formatNumber(ns.due) }) : t('Browse all cards')}
-        </button>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button className="btn btn-primary btn-sm" onClick={() => { setSessionIdx(0); setFlip(false); setGraded([]); setPhase(ns.due > 0 ? 'review' : 'preview'); }}>
+            {ns.due > 0 ? t('Review {count} remaining', { count: formatNumber(ns.due) }) : t('Browse all cards')}
+          </button>
+          {onExit && (
+            <button className="btn btn-ghost btn-sm" onClick={onExit}>
+              {t('← Back to decks')}
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -989,6 +1021,23 @@ export function FlashcardView({
   if (phase === 'preview') {
     return (
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
+        {onExit && (
+          <button
+            onClick={onExit}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: '4px 8px',
+              marginBottom: 6,
+              fontSize: 12,
+              color: 'var(--text-3)',
+              cursor: 'pointer',
+              alignSelf: 'flex-start',
+            }}
+          >
+            {t('← Back to decks')}
+          </button>
+        )}
         {/* Deck header with rename */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
           {renaming ? (
@@ -1115,7 +1164,26 @@ export function FlashcardView({
               : `📚 ${t('Save to Library')}`}
           </button>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => exportDeckCsv(deck)}>⬇ {t('Export CSV')}</button>
-          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { void exportDeckApkg(deck); }}>📦 {t('Export Anki')}</button>
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ fontSize: 11, padding: '4px 10px' }}
+            onClick={async () => {
+              // Anki export goes through /api/srs/export which uses sql.js
+              // server-side. On Vercel that path can fail (wasm path issues
+              // or cold-start sqlite init), and the previous click handler
+              // used `void exportDeckApkg(deck)` so failures were silent.
+              // Surface the error AND offer a graceful CSV fallback.
+              try {
+                await exportDeckApkg(deck);
+              } catch {
+                if (window.confirm('Anki .apkg export failed (the server-side bundler couldn\'t build the file). Download as CSV instead?')) {
+                  exportDeckCsv(deck);
+                }
+              }
+            }}
+          >
+            📦 {t('Export Anki')}
+          </button>
           {showPublicActions && (
             <>
               <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px', color: shareStatus==='done'?'#52b788':shareStatus==='error'?'#ef4444':undefined }} disabled={shareStatus==='loading'} onClick={handleShare}>
