@@ -427,6 +427,10 @@ export function WorkspacePanel({
   const [extractedText, setExtractedText] = useState('');
   const [pasteMode,     setPasteMode]     = useState(false);
   const [extracting,    setExtracting]    = useState(false);
+  // When the user generates from a whole folder instead of a single
+  // file, this holds the source-strip metadata so the UI can show
+  // "📁 Folder · N files · M words" instead of a single filename.
+  const [folderSourceMeta, setFolderSourceMeta] = useState<{ folderName: string; fileCount: number; wordCount: number } | null>(null);
   const [output,        setOutput]        = useState('');
   // Snapshot the most recent output per tool tab so switching between
   // Summarize / MCQ / Quiz / etc. doesn't wipe a result the user wants
@@ -562,7 +566,7 @@ export function WorkspacePanel({
   }, [selectedFolder, selectedTopic]);
 
   useEffect(() => { loadFiles(); }, [loadFiles, filesRefreshKey]);
-  useEffect(() => { setViewFile(null); setMissingBlobs(new Set()); }, [selectedFolder, selectedTopic]);
+  useEffect(() => { setViewFile(null); setMissingBlobs(new Set()); setFolderSourceMeta(null); }, [selectedFolder, selectedTopic]);
 
   // Mirror non-empty output into the per-mode snapshot so switching tabs
   // doesn't lose work. Using a derived effect (rather than threading an
@@ -608,6 +612,67 @@ export function WorkspacePanel({
   }, [selFile?.id]);
 
   // ── File operations ───────────────────────────────────────────────────
+
+  async function useFolderAsSource() {
+    if (!selectedFolder) { toast('Pick a folder first.', 'warning'); return; }
+    if (files.length === 0) { toast('This folder has no files yet.', 'warning'); return; }
+    setExtracting(true);
+    setSelFile(null);
+    setPasteMode(false);
+    setOutput('');
+    setOutputsByMode({});
+    setFolderSourceMeta(null);
+    try {
+      const sections: string[] = [];
+      let extracted = 0;
+      let failed = 0;
+      let totalWords = 0;
+      for (const file of files) {
+        // Reuse cached content when present, otherwise resolve + extract.
+        let text: string | null = file.content ?? null;
+        if (!text) {
+          try {
+            const blob = await resolveStoredFileBlob(file);
+            if (!blob) { failed++; continue; }
+            const res = await extractTextFromBlob(blob, file.name);
+            if (res.error || !res.text) { failed++; continue; }
+            text = res.text;
+          } catch {
+            failed++;
+            continue;
+          }
+        }
+        sections.push(`=== File: ${file.name} ===\n\n${text}`);
+        totalWords += wordCount(text);
+        extracted++;
+      }
+      if (extracted === 0) {
+        toast('Could not extract any files from this folder.', 'error');
+        return;
+      }
+      // Combined text is the new source. Most cloud LLMs cap at 8K–32K
+      // tokens (~6K–25K words); warn when the user is comfortably past
+      // that so they aren't surprised when generation fails or summarises
+      // instead of using everything.
+      const combined = sections.join('\n\n---\n\n');
+      setExtractedText(combined);
+      setFolderSourceMeta({
+        folderName: selectedFolderName || 'Folder',
+        fileCount: extracted,
+        wordCount: totalWords,
+      });
+      setMainTab('generate');
+      const oversize = totalWords > 30_000;
+      const failTail = failed > 0 ? ` ${failed} couldn't be read.` : '';
+      const sizeTail = oversize ? ' Note: long combined text may exceed AI context — consider regenerating with fewer files.' : '';
+      toast(
+        `Loaded ${extracted} files (${totalWords.toLocaleString()} words) from "${selectedFolderName || 'folder'}".${failTail}${sizeTail}`,
+        oversize || failed > 0 ? 'warning' : 'success',
+      );
+    } finally {
+      setExtracting(false);
+    }
+  }
 
   async function extractFromFile(file: FileRecord): Promise<string | null> {
     if (file.content) {
@@ -1099,6 +1164,7 @@ export function WorkspacePanel({
     // from a different document), so drop them. Otherwise the user could
     // tab between Summarize/MCQ and see content from the previous file.
     setOutputsByMode({});
+    setFolderSourceMeta(null);
     setMainTab(nextTab);
     toast(successMessage, 'success');
   }
@@ -1144,7 +1210,7 @@ export function WorkspacePanel({
     toast('Chat file cleared', 'info');
   }
 
-  function clearGen() { abortRef.current?.abort(); setSelFile(null); setExtractedText(''); setOutput(''); setPasteMode(false); setGenerating(false); }
+  function clearGen() { abortRef.current?.abort(); setSelFile(null); setExtractedText(''); setOutput(''); setPasteMode(false); setGenerating(false); setFolderSourceMeta(null); }
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────
   useEffect(() => {
@@ -1389,9 +1455,18 @@ export function WorkspacePanel({
                       <span>{viewFile ? `Previewing ${viewFile.name}` : selFile ? `Current source: ${selFile.name}` : 'Upload once, then send a file into Tools, Notes, Chat, or Math.'}</span>
                     </div>
                     <div className="workspace-focus-card">
-                      <span className="workspace-focus-eyebrow">Best next step</span>
-                      <strong>{selFile ? 'Turn this file into notes or questions' : 'Open a file and route it anywhere'}</strong>
-                      <span>{selFile ? 'Use the quick actions on the file card or preview to move faster.' : 'Every file card now has one-click actions for Generate, Chat, Notes, and Math.'}</span>
+                      <span className="workspace-focus-eyebrow">Whole folder</span>
+                      <strong>{files.length > 1 ? `Use all ${files.length} files as the source` : 'Use the whole folder'}</strong>
+                      <span>Combines every file in this folder into a single source. Great for "Lecture 1–10" style folders before generating notes, MCQs, or an exam.</span>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{ marginTop: 8, alignSelf: 'flex-start' }}
+                        disabled={files.length === 0 || extracting}
+                        onClick={() => { void useFolderAsSource(); }}
+                        title={files.length === 0 ? 'Upload at least one file first' : `Combine ${files.length} files into one source`}
+                      >
+                        {extracting && folderSourceMeta === null ? '⏳ Loading…' : `📁 Use whole folder${files.length > 0 ? ` (${files.length})` : ''}`}
+                      </button>
                     </div>
                   </div>
 
@@ -1620,11 +1695,13 @@ export function WorkspacePanel({
               </span>
               <span style={{ color: 'var(--text-3)' }}>·</span>
               <span style={{ color: 'var(--text-3)' }}>
-                {selFile
+                {folderSourceMeta
+                  ? <>Source: <strong style={{ color: 'var(--text-2)' }}>📁 {folderSourceMeta.folderName}</strong> · {folderSourceMeta.fileCount} file{folderSourceMeta.fileCount === 1 ? '' : 's'} · {folderSourceMeta.wordCount.toLocaleString()} words</>
+                  : selFile
                   ? <>Source: <strong style={{ color: 'var(--text-2)' }}>{selFile.name}</strong>{extractedText ? ` · ${wordCount(extractedText).toLocaleString()} words` : ' · waiting for extract'}</>
                   : pasteMode
                     ? extractedText ? <>Source: <strong style={{ color: 'var(--text-2)' }}>pasted text</strong> · {wordCount(extractedText).toLocaleString()} words</> : 'Source: paste text below'
-                    : 'No source yet — pick a file or paste text below'}
+                    : 'No source yet — pick a file, paste text, or use the whole folder below'}
               </span>
               <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
                 Step 1 source · Step 2 mode · Step 3 generate
