@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useToast } from '@/providers/ToastProvider';
+import { getGoalPreferences } from '@/lib/srs/sm2';
 
 // ── Focus / Pomodoro panel ─────────────────────────────────────────────────
 
@@ -13,6 +14,30 @@ const POMODORO_PRESETS: Record<PomPhase, number> = {
   'long-break': 15,
 };
 
+const POMODORO_KEY = 'kivora-pomodoro-day';
+
+interface PomodoroDayState { date: string; sessions: number; totalMins: number }
+
+function loadPomodoroDay(): PomodoroDayState {
+  if (typeof window === 'undefined') return { date: '', sessions: 0, totalMins: 0 };
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    const raw = localStorage.getItem(POMODORO_KEY);
+    if (!raw) return { date: today, sessions: 0, totalMins: 0 };
+    const parsed = JSON.parse(raw) as PomodoroDayState;
+    // Reset counters on a new calendar day so today's stats are actually today's.
+    if (parsed.date !== today) return { date: today, sessions: 0, totalMins: 0 };
+    return parsed;
+  } catch {
+    return { date: today, sessions: 0, totalMins: 0 };
+  }
+}
+
+function savePomodoroDay(state: PomodoroDayState): void {
+  if (typeof window === 'undefined') return;
+  try { localStorage.setItem(POMODORO_KEY, JSON.stringify(state)); } catch { /* noop */ }
+}
+
 export function FocusPanel() {
   const { toast } = useToast();
   const [phase,         setPhase]         = useState<PomPhase>('work');
@@ -23,7 +48,24 @@ export function FocusPanel() {
   const [todayTotal,    setTodayTotal]     = useState(0);    // total minutes studied today
   const [task,          setTask]           = useState('');   // what are you studying?
   const [showSettings,  setShowSettings]   = useState(false);
+  const [pomodoroGoal,  setPomodoroGoal]   = useState(4);    // sessions goal — reasonable default
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Hydrate persisted day state on mount so refreshing or switching tabs
+  // doesn't blow away today's pomodoro count. Without this the stats card
+  // was decorative — every render claimed "0 pomodoros today".
+  useEffect(() => {
+    const day = loadPomodoroDay();
+    setSessions(day.sessions);
+    setTodayTotal(day.totalMins);
+    try {
+      const goal = getGoalPreferences();
+      // Use card goal as a rough proxy until we add a separate pomodoro goal pref.
+      // 100 cards ≈ 4 sessions feels right for the default audience.
+      const inferred = Math.max(1, Math.round(goal.dailyGoal / 25));
+      setPomodoroGoal(inferred);
+    } catch { /* noop */ }
+  }, []);
 
   const totalSecs    = customMins[phase] * 60;
   const progress     = Math.max(0, Math.min(100, ((totalSecs - secsLeft) / totalSecs) * 100));
@@ -54,8 +96,15 @@ export function FocusPanel() {
   function handlePhaseEnd() {
     if (phase === 'work') {
       const newSessions = sessions + 1;
+      const newTotal = todayTotal + customMins.work;
       setSessions(newSessions);
-      setTodayTotal(t => t + customMins.work);
+      setTodayTotal(newTotal);
+      // Persist so the count survives reloads + tab switches.
+      savePomodoroDay({
+        date: new Date().toISOString().split('T')[0],
+        sessions: newSessions,
+        totalMins: newTotal,
+      });
       toast(`🎉 Pomodoro #${newSessions} complete! Take a break.`, 'success');
       const next: PomPhase = newSessions % 4 === 0 ? 'long-break' : 'short-break';
       switchPhase(next);
@@ -189,7 +238,7 @@ export function FocusPanel() {
           {[
             { label: 'Pomodoros', value: sessions, icon: '🍅' },
             { label: 'Min studied', value: todayTotal, icon: '⏱' },
-            { label: 'Goal today', value: '4 sessions', icon: '🎯' },
+            { label: 'Goal today', value: `${sessions}/${pomodoroGoal}`, icon: '🎯' },
           ].map(stat => (
             <div key={stat.label} style={{
               background: 'var(--surface)', border: '1px solid var(--border)',

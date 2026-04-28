@@ -262,12 +262,33 @@ export function recordSession(cardsReviewed: number): void {
     const today    = new Date().toISOString().split('T')[0];
     const sessions = loadSessions();
     const existing = sessions.find(s => s.date === today);
+    const isNewDay = !existing;
     if (existing) { existing.cards += cardsReviewed; }
     else { sessions.push({ date: today, cards: cardsReviewed }); }
     // Keep last 365 days
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 365);
     const cutoffStr = cutoff.toISOString().split('T')[0];
     localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions.filter(s => s.date >= cutoffStr)));
+    // First study activity of a new calendar day → reward the streak
+    // bonus and bump the streak counter so streak_3 / streak_7 / streak_30
+    // achievements can finally trigger. Guarded so it fires once per day.
+    if (isNewDay) {
+      try {
+        // Async-import to keep sm2 free of a hard dependency on the
+        // gamification module (and avoid any circular-import surprises).
+        void import('@/lib/gamification').then(g => {
+          g.addXp(g.XP_VALUES.streakDay, 'srs:newDay');
+          // The 'streak' counter mirrors the day-level streak length so
+          // achievements can trigger on consecutive-day milestones.
+          const streakLen = getStreak();
+          const counters = g.getCounters();
+          counters.streak = streakLen;
+          // Persist updated counter then check for unlocks.
+          localStorage.setItem('kivora-gamification-counters', JSON.stringify(counters));
+          g.checkAndUnlockAchievements(counters);
+        }).catch(() => {});
+      } catch { /* noop */ }
+    }
   } catch { /* noop */ }
 }
 

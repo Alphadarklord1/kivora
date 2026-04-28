@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { generateSmartContent } from '@/lib/offline/generate';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
+import { saveOfflineItem } from '@/lib/library/offline-store';
+import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
 
 export function AutoOutline() {
   const [text, setText] = useState('');
@@ -10,6 +12,7 @@ export function AutoOutline() {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [outlineSource, setOutlineSource] = useState<'ai' | 'offline' | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'offline' | 'error'>('idle');
 
   const buildOfflineOutline = (inputText: string): string => {
     const content = generateSmartContent('summarize', inputText);
@@ -117,16 +120,46 @@ export function AutoOutline() {
   const handleSave = async () => {
     if (!outline) return;
     setSaving(true);
+    setSaveStatus('idle');
+    const firstLine = outline.split('\n').find((l) => l.trim().replace(/^#+\s*/, '')) ?? 'Outline';
+    const title = firstLine.replace(/^#+\s*/, '').slice(0, 80) || 'Outline';
+    const metadata = { title, savedFrom: '/tools/auto-outline' };
     try {
-      await fetch('/api/library', {
+      const res = await fetch('/api/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ mode: 'outline', content: outline }),
+        body: JSON.stringify({ mode: 'outline', title, content: outline, metadata }),
       });
-      broadcastInvalidate(LIBRARY_CHANNEL);
+      if (res.ok) {
+        broadcastInvalidate(LIBRARY_CHANNEL);
+        setSaveStatus('saved');
+        addXp(XP_VALUES.savedToLibrary, 'autoOutline:save');
+        incrementCounter('librarySaved');
+        checkAndUnlockAchievements(getCounters());
+      } else if (res.status === 503) {
+        // Guest / no DB — fall back to local library so the button isn't a dead end.
+        saveOfflineItem({ mode: 'outline', content: outline, metadata });
+        broadcastInvalidate(LIBRARY_CHANNEL);
+        setSaveStatus('offline');
+        addXp(XP_VALUES.savedToLibrary, 'autoOutline:save:offline');
+        incrementCounter('librarySaved');
+        checkAndUnlockAchievements(getCounters());
+      } else {
+        throw new Error(`HTTP ${res.status}`);
+      }
+    } catch {
+      try {
+        saveOfflineItem({ mode: 'outline', content: outline, metadata });
+        broadcastInvalidate(LIBRARY_CHANNEL);
+        setSaveStatus('offline');
+      } catch {
+        setSaveStatus('error');
+      }
     } finally {
       setSaving(false);
+      // Clear the status after a moment so the next save starts fresh.
+      setTimeout(() => setSaveStatus('idle'), 2400);
     }
   };
 
@@ -154,7 +187,12 @@ export function AutoOutline() {
           )}
         </button>
         <button className="btn secondary" onClick={handleSave} disabled={!outline || saving}>
-          {saving ? 'Saving...' : 'Save to Library'}
+          {saving
+            ? 'Saving…'
+            : saveStatus === 'saved'   ? '✓ Saved'
+            : saveStatus === 'offline' ? '✓ Saved locally'
+            : saveStatus === 'error'   ? '✗ Save failed'
+            : 'Save to Library'}
         </button>
       </div>
       {outlineSource && (
