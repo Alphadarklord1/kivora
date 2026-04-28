@@ -154,7 +154,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <link
           rel="stylesheet"
-          href="https://fonts.bunny.net/css?family=dm-sans:400,500,700|instrument-serif:400,600|jetbrains-mono:400,500"
+          href="https://fonts.bunny.net/css?family=dm-sans:400,500,700|instrument-serif:400,600|jetbrains-mono:400,500|tajawal:400,500,700|noto-naskh-arabic:400,500,700"
         />
 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />

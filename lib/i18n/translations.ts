@@ -1352,6 +1352,83 @@ export const GLOBAL_TRANSLATIONS: Record<string, Partial<Record<SupportedLocale,
     ar: 'لا توجد مجموعات عامة بعد. انشر مجموعة من شاشة المعاينة لبدء المكتبة.',
     fr: "Aucun deck public trouvé. Publiez-en un depuis l'écran d'aperçu pour amorcer la bibliothèque.",
   },
+
+  // ── Newer-feature translations (this session) ───────────────────
+  // Many shorter keys already live above as unquoted shorthand
+  // (e.g., Save, Delete, Tools, Library) — only adding strings that
+  // weren't covered yet.
+  'Generating cards…': { ar: 'جارٍ إنشاء البطاقات…', fr: 'Création des cartes…' },
+  '↓ Extract text':    { ar: '↓ استخراج النص',    fr: '↓ Extraire le texte' },
+
+  // Folder source
+  'Use whole folder':  { ar: 'استخدام المجلد كاملًا', fr: 'Utiliser tout le dossier' },
+  'Whole folder':      { ar: 'المجلد كاملًا',        fr: 'Dossier complet' },
+  'No source yet — pick a file, paste text, or use the whole folder below': {
+    ar: 'لا يوجد مصدر بعد — اختر ملفًا أو الصق نصًا أو استخدم المجلد كاملًا أدناه',
+    fr: 'Pas encore de source — choisissez un fichier, collez du texte ou utilisez le dossier entier ci-dessous',
+  },
+  'Generating questions… answers will be hidden until you submit.': {
+    ar: 'جارٍ إنشاء الأسئلة… ستُخفى الإجابات حتى تنتهي.',
+    fr: 'Génération des questions… les réponses sont masquées jusqu\'à la soumission.',
+  },
+
+  // Sharing — additions
+  'Workspace file':    { ar: 'ملف من مساحة العمل', fr: 'Fichier d\'espace' },
+  'Library item':      { ar: 'عنصر مكتبة',        fr: 'Élément de bibliothèque' },
+  'Sent':              { ar: 'المرسلة',          fr: 'Envoyé' },
+  'Received':          { ar: 'الواردة',          fr: 'Reçu' },
+  'Local only — sign in to upload before sharing': {
+    ar: 'محلي فقط — سجّل الدخول للرفع قبل المشاركة',
+    fr: 'Local uniquement — connectez-vous pour téléverser avant de partager',
+  },
+  'This file only exists on this device. Sign in (or create an account) so it can be uploaded to the cloud — then share links will work for it.': {
+    ar: 'هذا الملف موجود على هذا الجهاز فقط. سجّل الدخول (أو أنشئ حسابًا) ليتم رفعه إلى السحابة — عندها ستعمل روابط المشاركة عليه.',
+    fr: 'Ce fichier n\'existe que sur cet appareil. Connectez-vous (ou créez un compte) pour qu\'il soit téléversé — les liens de partage fonctionneront ensuite.',
+  },
+  'This library item is saved locally only. Sign in to sync it to the cloud, then come back to share.': {
+    ar: 'تم حفظ هذا العنصر محليًا فقط. سجّل الدخول لمزامنته مع السحابة ثم عُد للمشاركة.',
+    fr: 'Cet élément est enregistré localement seulement. Connectez-vous pour le synchroniser, puis revenez pour le partager.',
+  },
+
+  // Mistake Bank (Recovery)
+  'Mistake Bank':      { ar: 'بنك الأخطاء',       fr: 'Banque d\'erreurs' },
+  'Total mistakes':    { ar: 'إجمالي الأخطاء',     fr: 'Total des erreurs' },
+  'Past 7 days':       { ar: 'آخر 7 أيام',        fr: '7 derniers jours' },
+  'Most-missed mode':  { ar: 'الأكثر فشلًا',       fr: 'Mode le plus raté' },
+  'Attempts logged':   { ar: 'المحاولات المسجلة',  fr: 'Tentatives enregistrées' },
+  'This week':         { ar: 'هذا الأسبوع',       fr: 'Cette semaine' },
+  '✓ Got it now':      { ar: '✓ فهمتها الآن',     fr: '✓ Compris' },
+
+  // Today's goal — "Today's goal" itself already covered above.
+  'Click to change daily goal': { ar: 'انقر لتغيير الهدف اليومي', fr: 'Cliquer pour changer l\'objectif' },
+  'Save daily goal':   { ar: 'حفظ الهدف',         fr: 'Enregistrer l\'objectif' },
+
+  // Sign-out confirm
+  'Sign out?':         { ar: 'تسجيل الخروج؟',     fr: 'Se déconnecter ?' },
+  'Sign out of Kivora?': { ar: 'تسجيل الخروج من كيفورا؟', fr: 'Se déconnecter de Kivora ?' },
+  'Confirm sign out':  { ar: 'تأكيد تسجيل الخروج', fr: 'Confirmer la déconnexion' },
+
+  // Math
+  'Solver Topics':     { ar: 'مواضيع الحل',       fr: 'Sujets du résolveur' },
+  'Solve here':        { ar: 'حلّ هنا',          fr: 'Résoudre ici' },
+
+  // Planner
+  'Import Schedule':   { ar: 'استيراد الجدول',    fr: 'Importer le programme' },
+  'Clear calendar':    { ar: 'مسح التقويم',       fr: 'Vider le calendrier' },
+
+  // Library save toasts
+  'Saved locally (sign in to sync to cloud)': {
+    ar: 'تم الحفظ محليًا (سجّل الدخول للمزامنة مع السحابة)',
+    fr: 'Enregistré localement (connectez-vous pour synchroniser)',
+  },
+  'Saved locally — network was unreachable': {
+    ar: 'تم الحفظ محليًا — الشبكة غير متاحة',
+    fr: 'Enregistré localement — réseau indisponible',
+  },
+  'Could not save — try again': {
+    ar: 'تعذّر الحفظ — حاول مرة أخرى',
+    fr: 'Impossible d\'enregistrer — réessayez',
+  },
 };
 
 /**

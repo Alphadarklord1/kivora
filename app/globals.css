@@ -259,6 +259,32 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Arabic typography — Tajawal for sans-serif body, Noto Naskh Arabic
+   as a fallback. Applied via :lang() so any element marked Arabic
+   inherits the right font without us having to override per-component.
+   The system fallback to "Helvetica Neue" still kicks in for any
+   non-Arabic glyphs that creep into Arabic text (English brand names,
+   numbers, etc.). */
+html:lang(ar),
+[lang="ar"],
+[dir="rtl"] {
+  font-family: 'Tajawal', 'Noto Naskh Arabic', 'Helvetica Neue', system-ui, sans-serif;
+  /* Arabic glyphs sit a touch lower on the baseline than Latin; nudge
+     line-height a hair so descenders breathe. */
+  line-height: calc(1.6 * var(--line-scale));
+}
+
+/* Right-to-left layout helpers — Kivora uses lots of inline styles
+   with explicit margin/padding-left, so a small set of overrides
+   keeps icons + labels flowing the right way without auditing every
+   component. Logical-property aware components ignore these. */
+[dir="rtl"] .nav-item,
+[dir="rtl"] .quiz-card,
+[dir="rtl"] .file-card {
+  text-align: right;
+}
+[dir="rtl"] .nav-icon { margin-left: 0; margin-right: 0; }
+
 body {
   min-height: 100dvh;
   background: var(--bg);
