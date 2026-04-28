@@ -106,7 +106,25 @@ export function PracticeView({ content }: { content: string }) {
           <div className="tool-output" style={{ margin: 0, padding: 0, background: 'none', border: 'none' }}
             dangerouslySetInnerHTML={{ __html: mdToHtml(solution) }} />
         </div>
-      ) : !showSolution && (
+      ) : showSolution ? (
+        /* The AI didn't emit a Solution section (or it was cut off
+           mid-generation). Without this branch the click made the
+           Reveal button disappear and showed absolutely nothing —
+           that was the user-reported bug. Now we tell them what
+           happened and how to recover. */
+        <div style={{ background: 'color-mix(in srgb, #f59e0b 10%, var(--surface))', border: '1px dashed color-mix(in srgb, #f59e0b 40%, transparent)', borderRadius: 12, padding: '14px 18px' }}>
+          <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: '#f59e0b', marginBottom: 6 }}>⚠ Solution missing</div>
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)', lineHeight: 1.55, marginBottom: 8 }}>
+            The AI didn&apos;t include a worked Solution in this practice problem (or the output was cut short). Try generating a new practice problem from the same source — most rerolls land cleanly.
+          </div>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => { setHintsShown(0); setShowSolution(false); setAnswer(''); setSubmitted(false); }}
+          >
+            ↺ Reset and try the hints again
+          </button>
+        </div>
+      ) : (
         <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }}
           onClick={() => { setHintsShown(hints.length); setShowSolution(true); }}>
           ✅ Reveal solution

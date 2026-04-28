@@ -2179,9 +2179,13 @@ export function WorkspacePanel({
                   </div>
                   <div style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', animation: 'pulse 1.2s ease-in-out infinite' }} />
                 </div>
-              ) : activeReviewSet || output ? (
+              ) : activeReviewSet || (output && /^\s*\*?\*?Front\s*:/im.test(output)) ? (
+                /* Only feed `output` to FlashcardView when its shape
+                   looks like flashcards (has at least one Front: line).
+                   Otherwise leftover Practice / MCQ / Summary output
+                   leaks into this tab and renders as raw markdown. */
                 <FlashcardView
-                  content={output}
+                  content={output && /^\s*\*?\*?Front\s*:/im.test(output) ? output : ''}
                   title={selFile?.name}
                   initialDeck={activeReviewSet}
                   requestedPhase={requestedReviewPhase}

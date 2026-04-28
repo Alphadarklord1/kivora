@@ -430,6 +430,13 @@ export function FlashcardView({
   const [writeRevealed, setWriteRevealed] = useState(false);
   const [writeScores,   setWriteScores]   = useState<Array<{ cardId: string; got: boolean }>>([]);
   const writeRef = useRef<HTMLTextAreaElement>(null);
+  // Stable streaming deck-id. Earlier we hashed `content.slice(0, 240)`
+  // every render — but during streaming the first 240 chars change with
+  // each chunk (until content >240 chars), so each chunk produced a NEW
+  // deck-id and we saved a brand-new deck. One generation could leave
+  // 50+ junk decks behind. Using a ref pinned at first render keeps the
+  // id constant across the stream.
+  const streamingDeckIdRef = useRef<string | null>(null);
   // Test
   const [testQuestions, setTestQuestions] = useState<TestQuestion[]>([]);
   const [testAnswers,   setTestAnswers]   = useState<Record<number, string>>({});
@@ -482,7 +489,23 @@ export function FlashcardView({
     const explicitDeck = initialDeck ? { ...initialDeck, cards: [...initialDeck.cards] } : null;
     if (!explicitDeck && rawCards.length === 0) return;
 
-    const deckId   = explicitDeck?.id ?? stableDeckId(content.slice(0, 240));
+    // First, settle on a deck id. Use the explicit deck if any; otherwise
+    // pin a stable id for the lifetime of this generation. Once content
+    // is long enough to be content-stable (>= 240 chars), prefer the
+    // hashed id so refreshes / re-mounts find the same deck.
+    let deckId: string;
+    if (explicitDeck?.id) {
+      deckId = explicitDeck.id;
+    } else if (content.length >= 240) {
+      deckId = stableDeckId(content.slice(0, 240));
+      streamingDeckIdRef.current = deckId;
+    } else {
+      // Mid-stream and content is still short. Reuse the ref or seed it.
+      if (!streamingDeckIdRef.current) {
+        streamingDeckIdRef.current = `gen-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      }
+      deckId = streamingDeckIdRef.current;
+    }
     const existing = explicitDeck ? loadDecks().find(d => d.id === explicitDeck.id) : loadDecks().find(d => d.id === deckId);
 
     // If the cached deck has fewer cards than parseFlashcards just yielded
