@@ -175,9 +175,11 @@ export default function SharedWithMePage() {
 
   // Fetch workspace files so the user can share a file directly from this
   // page — they used to have to dig back into Workspace to do that.
+  // /api/files specifically wants ?all=true (string), not ?all=1; using
+  // the wrong value made this dropdown silently always-empty.
   useEffect(() => {
     setFileLoading(true);
-    fetch('/api/files?all=1', { credentials: 'include' })
+    fetch('/api/files?all=true', { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then((data: Array<{ id: string; name: string; folderId: string | null }>) => setFileItems(Array.isArray(data) ? data : []))
       .catch(() => setFileItems([]))

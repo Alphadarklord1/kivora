@@ -3479,10 +3479,12 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                 />
               </div>
 
-              {/* Live preview — wraps the math/text renderer in a block-level
-                  container with explicit centering so KaTeX display-mode output
-                  stays inside the box (previously a bare span ancestor caused
-                  display-mode KaTeX to escape the visual container). */}
+              {/* Live preview — grows with content. Previously the inner
+                  pane had overflowX:auto + a fixed minHeight which clipped
+                  longer rendered output (multi-line systems, big fractions,
+                  prose-with-math). Now: minHeight floors at 72px, content
+                  area expands naturally, scrolls vertically only if the
+                  output gets very tall (safety cap at 60vh). */}
               {typeInput.trim() && (
                 <div style={{
                   padding: '14px 18px',
@@ -3504,7 +3506,11 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                     lineHeight: 1.55,
                     padding: '4px 0',
                     wordBreak: 'break-word',
+                    overflowWrap: 'anywhere',
+                    whiteSpace: 'pre-wrap',
                     overflowX: 'auto',
+                    overflowY: 'auto',
+                    maxHeight: '60vh',
                   }}>
                     {shouldRenderMathPreview(typeInput) ? (
                       // Multi-line input (a system of equations like
