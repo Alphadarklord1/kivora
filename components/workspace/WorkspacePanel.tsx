@@ -1199,7 +1199,25 @@ export function WorkspacePanel({
     applyFileContext(file, text, 'notes', 'File loaded — generate notes from the selected document');
   }
 
+  /** Soft cap on stored decks. Past this number we ask the user to clean
+   *  up before a new generation can land — prevents the same accidental-
+   *  accumulation that gave a user 56 review sets. Tuned at 25 because a
+   *  typical course has ≤5 chapters and a typical student studies a few
+   *  courses; >25 is almost always abandoned generations. */
+  const DECK_LIMIT = 25;
+
+  function ensureUnderDeckLimit(): boolean {
+    if (srsDecks.length < DECK_LIMIT) return true;
+    const junkCount = srsDecks.filter(d => d.cards.length <= 1).length;
+    const msg = junkCount > 0
+      ? `You already have ${srsDecks.length} review sets — that's getting cluttered. Open the Flashcards tab and use "🧹 Clean up ${junkCount} junk" to remove the empty ones first, then try again.`
+      : `You already have ${srsDecks.length} review sets, which is the cap. Delete the ones you don't need from the Flashcards tab before generating more.`;
+    toast(msg, 'warning');
+    return false;
+  }
+
   function handleUseForFlashcards(file: FileRecord, text: string) {
+    if (!ensureUnderDeckLimit()) return;
     applyFileContext(file, text, 'flashcards', `Generating flashcards from "${file.name}"…`);
     setTimeout(() => { void runGenerate('flashcards', text); }, 0);
   }
@@ -2137,6 +2155,7 @@ export function WorkspacePanel({
                     <button
                       className="btn btn-primary btn-sm"
                       onClick={() => {
+                        if (!ensureUnderDeckLimit()) return;
                         // Confirm large generations so accidental clicks
                         // (or runaway "57 cards" surprises) need an explicit
                         // tap to proceed.
@@ -2206,6 +2225,37 @@ export function WorkspacePanel({
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
                     <strong style={{ fontSize: 'var(--text-sm)' }}>Your review sets</strong>
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>{srsDecks.length} total · click a set to study</span>
+                    {/* Junk-deck cleanup. A buggy stable-id pattern (now
+                        fixed) used to leave 50+ empty / 1-card decks in
+                        localStorage per generation. This button scans for
+                        decks with ≤1 card and offers to remove them in one
+                        click. Real decks have several cards so the heuristic
+                        is safe. */}
+                    {(() => {
+                      const junkCount = srsDecks.filter(d => d.cards.length <= 1).length;
+                      if (junkCount === 0) return null;
+                      return (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          style={{ marginLeft: 'auto', fontSize: 11, padding: '2px 10px', color: '#f59e0b', border: '1px solid #f59e0b40' }}
+                          onClick={() => {
+                            if (!window.confirm(`Found ${junkCount} review set${junkCount === 1 ? '' : 's'} with 1 or 0 cards (likely abandoned generations). Delete them?`)) return;
+                            const junkIds = srsDecks.filter(d => d.cards.length <= 1).map(d => d.id);
+                            try {
+                              const kept = loadDecks().filter(d => d.cards.length > 1);
+                              localStorage.setItem('kivora-srs-decks', JSON.stringify(kept));
+                            } catch { /* noop */ }
+                            setSrsDecks(current => current.filter(d => d.cards.length > 1));
+                            if (activeReviewSetId && junkIds.includes(activeReviewSetId)) setActiveReviewSetId(null);
+                            junkIds.forEach(id => {
+                              void fetch(`/api/srs?deckId=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+                            });
+                          }}
+                        >
+                          🧹 Clean up {junkCount} junk
+                        </button>
+                      );
+                    })()}
                     <button
                       className="btn btn-ghost btn-sm"
                       style={{ marginLeft: 'auto', fontSize: 11, padding: '2px 10px', color: 'var(--danger)' }}
