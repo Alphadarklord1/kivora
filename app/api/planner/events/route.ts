@@ -10,9 +10,10 @@ function isEphemeralGuest(userId: string) {
 }
 
 // GET /api/planner/events — return all user-created events
-export async function GET() {
+export async function GET(req: NextRequest) {
   if (!isDatabaseConfigured) return NextResponse.json([], { status: 200 });
-  const userId = await getUserId();
+  // JWT-based getUserId — see /api/library for context.
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   // Guests use localStorage — nothing to fetch from DB
   if (isGuestModeEnabled() && isEphemeralGuest(userId)) return NextResponse.json([]);
@@ -34,7 +35,7 @@ export async function GET() {
 // POST /api/planner/events — create a new event
 export async function POST(req: NextRequest) {
   if (!isDatabaseConfigured) return NextResponse.json({ ok: false, local: true });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   if (isGuestModeEnabled() && isEphemeralGuest(userId)) return NextResponse.json({ ok: false, local: true });
 
@@ -69,9 +70,9 @@ export async function POST(req: NextRequest) {
 // DELETE /api/planner/events — wipe ALL events for the current user.
 // Used by the planner's "Clear calendar" action; the client also clears
 // localStorage so guests get the same effect.
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
   if (!isDatabaseConfigured) return NextResponse.json({ ok: false, local: true });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   if (isGuestModeEnabled() && isEphemeralGuest(userId)) return NextResponse.json({ ok: false, local: true });
 

@@ -12,7 +12,7 @@ function isEphemeralGuest(userId: string) {
 // PATCH /api/planner/events/[id] — update an event
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isDatabaseConfigured) return NextResponse.json({ ok: false, local: true });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   if (isGuestModeEnabled() && isEphemeralGuest(userId)) return NextResponse.json({ ok: false, local: true });
 
@@ -44,9 +44,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 // DELETE /api/planner/events/[id] — delete an event
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isDatabaseConfigured) return NextResponse.json({ ok: true });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   if (isGuestModeEnabled() && isEphemeralGuest(userId)) return NextResponse.json({ ok: true });
 

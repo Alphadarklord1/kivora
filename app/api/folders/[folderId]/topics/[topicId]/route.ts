@@ -6,11 +6,11 @@ import { getUserId } from '@/lib/auth/session';
 
 // DELETE /api/folders/[folderId]/topics/[topicId]
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ folderId: string; topicId: string }> },
 ) {
   if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { folderId, topicId } = await params;
@@ -34,7 +34,7 @@ export async function PATCH(
   { params }: { params: Promise<{ folderId: string; topicId: string }> },
 ) {
   if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { folderId, topicId } = await params;

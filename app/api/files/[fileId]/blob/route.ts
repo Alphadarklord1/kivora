@@ -5,12 +5,12 @@ import { files } from '@/lib/db/schema';
 import { getUserId } from '@/lib/auth/session';
 import { downloadFileFromSupabaseStorage } from '@/lib/supabase/storage';
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
   if (!isDatabaseConfigured) {
     return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
   }
 
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   }

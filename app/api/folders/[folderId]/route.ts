@@ -8,7 +8,7 @@ import { deleteFileFromSupabaseStorage } from '@/lib/supabase/storage';
 // PATCH /api/folders/[folderId] — rename or update a folder
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ folderId: string }> }) {
   if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { folderId } = await params;
@@ -43,9 +43,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ fo
 // Returning the list (rather than trying to clean IndexedDB ourselves —
 // we can't, it lives in the browser) is the only way to keep the two
 // stores in sync without leaking blobs.
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ folderId: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ folderId: string }> }) {
   if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { folderId } = await params;

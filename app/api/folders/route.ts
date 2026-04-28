@@ -18,9 +18,9 @@ function isEphemeralGuest(userId: string | null | undefined) {
 }
 
 // GET /api/folders — list all folders (with topics) for the current user
-export async function GET() {
+export async function GET(req: NextRequest) {
   if (!isDatabaseConfigured) return betaReadFallback([]);
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return betaReadFallback([]);
   if (isEphemeralGuest(userId)) return betaReadFallback([]);
 
@@ -45,7 +45,7 @@ export async function GET() {
 // POST /api/folders — create a new folder
 export async function POST(req: NextRequest) {
   if (!isDatabaseConfigured) return notReady();
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return unauthorized();
 
   const { name } = await req.json().catch(() => ({}));

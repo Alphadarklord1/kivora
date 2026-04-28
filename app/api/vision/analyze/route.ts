@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { getUserId } from '@/lib/auth/get-user-id';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 import { apiError, createRequestId } from '@/lib/api/error-response';
 import { resolveAiDataMode } from '@/lib/privacy/ai-data';
@@ -90,8 +90,10 @@ async function callVisionAI(imageDataUrl: string, mode: AnalysisMode): Promise<s
 export async function POST(request: NextRequest) {
   const requestId = createRequestId(request);
   try {
-    const session = await auth();
-    if (!session?.user?.id && !isGuestModeEnabled()) {
+    // JWT-based extraction — auth() cookie path was returning null on
+    // valid Google sessions, blocking image analysis with 401.
+    const userId = await getUserId(request);
+    if (!userId && !isGuestModeEnabled()) {
       return apiError(401, {
         errorCode: 'UNAUTHORIZED',
         reason: 'Authentication required',

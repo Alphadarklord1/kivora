@@ -7,7 +7,7 @@
  * File blobs in browser IndexedDB must be cleared client-side (handled by the UI).
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import {
   folders,
@@ -22,8 +22,8 @@ import { getUserId } from '@/lib/auth/session';
 import { deleteSupabaseAuthUser } from '@/lib/supabase/auth-admin';
 import { deleteFileFromSupabaseStorage } from '@/lib/supabase/storage';
 
-export async function DELETE() {
-  const userId = await getUserId();
+export async function DELETE(req: NextRequest) {
+  const userId = await getUserId(req);
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

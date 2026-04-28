@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(emptyAnalytics(period));
   }
 
-  const userId = await getUserId();
+  const userId = await getUserId(req);
 
   // Guest / unauthenticated → return empty fallback (not an error)
   if (!userId || isEphemeralGuest(userId)) {

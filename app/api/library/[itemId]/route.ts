@@ -5,9 +5,9 @@ import { eq, and } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/session';
 
 // GET /api/library/[itemId]
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
   if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { itemId } = await params;
@@ -25,7 +25,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ ite
 // PATCH /api/library/[itemId]
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
   if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { itemId } = await params;
@@ -59,9 +59,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ it
 }
 
 // DELETE /api/library/[itemId]
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
   if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { itemId } = await params;

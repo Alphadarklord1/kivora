@@ -36,9 +36,9 @@ async function parsePatchBody(req: NextRequest) {
   };
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
   if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { fileId } = await params;
@@ -51,7 +51,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ fil
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
   if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { fileId } = await params;
@@ -103,9 +103,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ fi
   return NextResponse.json(updated);
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
   if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { fileId } = await params;

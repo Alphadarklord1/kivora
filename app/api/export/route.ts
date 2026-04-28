@@ -4,14 +4,14 @@
  * File blobs live in browser IndexedDB and are intentionally excluded.
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseConfigured } from '@/lib/db';
 import { folders, files, libraryItems, quizAttempts, studyPlans } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/session';
 
-export async function GET() {
-  const userId = await getUserId();
+export async function GET(req: NextRequest) {
+  const userId = await getUserId(req);
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

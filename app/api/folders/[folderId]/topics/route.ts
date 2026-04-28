@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 // POST /api/folders/[folderId]/topics — create a topic (subfolder)
 export async function POST(req: NextRequest, { params }: { params: Promise<{ folderId: string }> }) {
   if (!isDatabaseConfigured) return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
   const { folderId } = await params;
