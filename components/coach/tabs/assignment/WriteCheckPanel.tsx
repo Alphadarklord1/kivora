@@ -203,6 +203,25 @@ export function WriteCheckPanel({
           <button className={styles.ribbonBtn} disabled={!checkText} onClick={onCopy}>
             <span className={styles.ribbonIcon}>📋</span>Copy
           </button>
+          <button
+            className={styles.ribbonBtn}
+            disabled={!checkText}
+            onClick={() => {
+              // Strip Markdown leftovers — useful when content was pasted
+              // from an AI that emitted "#### 5. Section" style headings.
+              const cleaned = checkText
+                .replace(/^[ \t]*#{1,6}\s+/gm, '')               // # / ## / ### headings
+                .replace(/\*\*([^*]+)\*\*/g, '$1')              // bold **text**
+                .replace(/(^|\s)\*([^*\n]+)\*(?=\s|$)/g, '$1$2') // italics *text*
+                .replace(/(^|\s)_([^_\n]+)_(?=\s|$)/g, '$1$2')   // italics _text_
+                .replace(/^[ \t]*[-*+]\s+/gm, '• ')              // bullet markers → middle dot
+                .replace(/`([^`]+)`/g, '$1');                    // inline code
+              onCheckTextChange(cleaned);
+            }}
+            title="Remove ####, **bold**, *italic*, and other Markdown markers from the document"
+          >
+            <span className={styles.ribbonIcon}>🧹</span>Clean Markdown
+          </button>
           <button className={styles.ribbonBtn} disabled={!checkText} onClick={onClearWriter}>
             <span className={styles.ribbonIcon}>🗑️</span>Clear
           </button>

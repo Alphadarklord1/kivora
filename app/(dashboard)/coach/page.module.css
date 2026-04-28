@@ -1424,16 +1424,21 @@ details[open] .detailsSummary::before {
   box-shadow: 0 2px 16px rgba(0,0,0,.07);
 }
 
-/* ─── Ribbon ─── */
+/* ─── Ribbon ───
+ * flex-wrap: wrap lets the toolbar break onto a second row on narrow
+ * viewports instead of scrolling off-screen. The viewer was getting
+ * trapped: macOS hides the scrollbar by default, so users couldn't
+ * reach Continue Writing / Review / Document buttons. */
 .wordRibbon {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 0.35rem;
   gap: 0;
-  padding: 0 0.75rem;
-  height: 3.2rem;
+  padding: 0.4rem 0.75rem;
+  min-height: 3.2rem;
   background: var(--bg-surface, #fff);
   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
-  overflow-x: auto;
 }
 
 .ribbonGroup {

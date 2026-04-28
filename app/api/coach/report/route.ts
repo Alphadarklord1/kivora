@@ -32,7 +32,11 @@ const TYPE_LABELS: Record<string, string> = {
   literature_review: 'literature review',
 };
 
-const DRAFT_SYSTEM = `You are an expert academic writing assistant. Write well-structured, formal academic content for students. Use clear headings, topic sentences, and smooth transitions between paragraphs. Do not include placeholder brackets — write real, substantive content throughout.`;
+const DRAFT_SYSTEM = `You are an expert academic writing assistant. Write well-structured, formal academic content for students with clear headings, topic sentences, and smooth transitions between paragraphs.
+
+Output PLAIN TEXT only. Do NOT use Markdown syntax — no leading hash marks (#, ##, ###, ####), no asterisks for bold, no underscores for italics, no bullet markers. Section headings should be written as a normal line of Title Case text on its own line, followed by a blank line and the body paragraphs. The student's editor renders raw text, so any markdown shows up literally and breaks the document.
+
+Do not include placeholder brackets — write real, substantive content throughout.`;
 
 const OUTLINE_SYSTEM = `You are an academic writing assistant. Return ONLY a valid JSON array with no surrounding text. Each element must be { "heading": string, "summary": string }. Do not include markdown fences or any explanation.`;
 
