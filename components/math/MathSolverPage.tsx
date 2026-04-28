@@ -3494,17 +3494,24 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 10,
-                  minHeight: 72,
+                  minHeight: 96,
                 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: accent }}>Preview</div>
                   <div style={{
+                    /* Bumped from 16 → 18 so prose-with-math input
+                       ("integral from 0 to 1 of dx", "lim from 0 to 1")
+                       reads at body-text size instead of being squashed.
+                       Removed textAlign: center because centered text
+                       hides the fact that long content is wrapping over
+                       multiple lines — left-aligned makes the wrap
+                       obvious so the user sees the full content. */
                     display: 'block',
                     width: '100%',
-                    textAlign: 'center',
-                    fontSize: 16,
+                    textAlign: 'left',
+                    fontSize: 18,
                     color: 'var(--text-primary)',
-                    lineHeight: 1.55,
-                    padding: '4px 0',
+                    lineHeight: 1.7,
+                    padding: '6px 4px',
                     wordBreak: 'break-word',
                     overflowWrap: 'anywhere',
                     whiteSpace: 'pre-wrap',

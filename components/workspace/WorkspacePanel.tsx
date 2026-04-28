@@ -1115,22 +1115,37 @@ export function WorkspacePanel({
 
   async function saveToLibrary() {
     if (!output) return;
-    // Always save to IndexedDB first so the user's work is never lost,
-    // regardless of what the server says. Then attempt the cloud save —
-    // success swaps the toast message, failure leaves the local copy in
-    // place and the Library page (which merges offline + remote) still
-    // shows the item.
+    // Build a descriptive title — Library used to render every saved
+    // item as just "Summarize" / "MCQ" / "Quiz" because no metadata.title
+    // was being sent. Now we derive one from the source so the user
+    // sees "Summary: Cell Biology Ch.5" instead of a generic mode name.
+    const label = GENERATE_TABS.find(t => t.id === genMode)?.label ?? 'Output';
+    const titleFromSource = (() => {
+      if (selFile) return `${label}: ${selFile.name.replace(/\.[^.]+$/, '')}`;
+      if (folderSourceMeta) return `${label}: 📁 ${folderSourceMeta.folderName}`;
+      const firstLine = output.split('\n').map(l => l.trim()).find(Boolean) ?? '';
+      if (firstLine) return `${label}: ${firstLine.slice(0, 60)}`;
+      return label;
+    })();
+    const metadata = {
+      title: titleFromSource,
+      sourceFileName: selFile?.name ?? null,
+      sourceFolderName: folderSourceMeta?.folderName ?? null,
+      sourceFileCount: folderSourceMeta?.fileCount ?? null,
+      savedFrom: '/workspace',
+    };
+
     let savedOffline = false;
     try {
       const { saveOfflineItem } = await import('@/lib/library/offline-store');
-      saveOfflineItem({ mode: genMode, content: output });
+      saveOfflineItem({ mode: genMode, content: output, metadata });
       savedOffline = true;
     } catch { /* IndexedDB may be unavailable; fall through to network */ }
 
     try {
       const res = await fetch('/api/library', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: genMode, content: output }),
+        body: JSON.stringify({ mode: genMode, content: output, metadata }),
       });
       if (res.ok) {
         toast('Saved to Library ✓', 'success');
@@ -1743,7 +1758,18 @@ export function WorkspacePanel({
 
               {!pasteMode && (
                 <>
-                  {selFile ? (
+                  {folderSourceMeta ? (
+                    /* Active folder source — show what's loaded with the
+                       same dismiss-style as a single file. */
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 8, padding: '5px 10px' }}>
+                      <span>📁</span>
+                      <span style={{ fontSize: 'var(--text-sm)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        Folder: {folderSourceMeta.folderName} · {folderSourceMeta.fileCount} files
+                      </span>
+                      <span className="badge badge-accent">{folderSourceMeta.wordCount.toLocaleString()} words</span>
+                      <button className="btn-icon" style={{ width: 22, height: 22, fontSize: 11 }} onClick={clearGen}>✕</button>
+                    </div>
+                  ) : selFile ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 8, padding: '5px 10px' }}>
                       <span>{fileIcon(selFile)}</span>
                       <span style={{ fontSize: 'var(--text-sm)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selFile.name}</span>
@@ -1751,10 +1777,27 @@ export function WorkspacePanel({
                       <button className="btn-icon" style={{ width: 22, height: 22, fontSize: 11 }} onClick={clearGen}>✕</button>
                     </div>
                   ) : files.length > 0 ? (
-                    <select defaultValue="" onChange={e => { const f = files.find(x => x.id === e.target.value); if (f) { setSelFile(f); setExtractedText(''); setOutput(''); } }} style={{ flex: 1, minWidth: 180 }}>
-                      <option value="" disabled>Choose a file…</option>
-                      {files.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                    </select>
+                    <>
+                      <select
+                        defaultValue=""
+                        onChange={e => {
+                          if (e.target.value === '__folder__') {
+                            void useFolderAsSource();
+                            return;
+                          }
+                          const f = files.find(x => x.id === e.target.value);
+                          if (f) { setSelFile(f); setExtractedText(''); setOutput(''); }
+                        }}
+                        style={{ flex: 1, minWidth: 180 }}
+                      >
+                        <option value="" disabled>Choose a file…</option>
+                        {/* Whole-folder option lives at the top of the same dropdown so
+                            the user doesn't have to switch tabs to set up a folder source. */}
+                        <option value="__folder__">📁 Use whole folder ({files.length} files)</option>
+                        <option value="" disabled>──────────</option>
+                        {files.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                      </select>
+                    </>
                   ) : (
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)' }}>No files yet —</span>
