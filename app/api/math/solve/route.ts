@@ -83,12 +83,36 @@ async function tryAiSolve(
   }
   if (!parsed.answer || !Array.isArray(parsed.steps) || parsed.steps.length === 0) return null;
 
+  // The AI prompt asks for "plain text answer" but a misbehaving model
+  // sometimes stuffs the entire worked solution back into the answer
+  // field. The user reported seeing whole sentences and step-like
+  // content as the headline answer. Trim aggressively: take the first
+  // line only, drop any "Step N:" prefix, and cap at 240 chars. The
+  // detailed work belongs in `steps[]` / `explanation`.
+  const sanitizeAnswer = (raw: unknown): string => {
+    const s = String(raw ?? '').trim();
+    if (!s) return '';
+    const firstLine = s.split(/\r?\n/).find(line => line.trim()) ?? s;
+    return firstLine
+      .replace(/^\s*step\s*\d+\s*[:.\-)]\s*/i, '')
+      .replace(/^\s*answer\s*[:=]\s*/i, '')
+      .trim()
+      .slice(0, 240);
+  };
+
+  const cleanAnswer = sanitizeAnswer(parsed.answer);
+  const cleanAnswerLatex = String(parsed.answerLatex ?? parsed.answer)
+    .split(/\r?\n/)
+    .find(line => line.trim())
+    ?.slice(0, 400) ?? cleanAnswer;
+  if (!cleanAnswer) return null;
+
   return {
     category: (parsed.category as SolverResult['category']) ?? (category as SolverResult['category']) ?? 'algebra',
     normalizedInput: problem,
     previewLatex: problem,
-    answer: String(parsed.answer),
-    answerLatex: String(parsed.answerLatex ?? parsed.answer),
+    answer: cleanAnswer,
+    answerLatex: cleanAnswerLatex,
     steps: parsed.steps.map((step, index) => ({
       step: Number(step.step ?? index + 1),
       description: String(step.description ?? ''),

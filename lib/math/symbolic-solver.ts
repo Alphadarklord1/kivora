@@ -89,6 +89,12 @@ function matrixToAnswerString(matrixValue: number[][]) {
 }
 
 function formatNumber(value: number) {
+  // NaN must be handled BEFORE the Infinity check, otherwise it falls
+  // through to `value > 0 ? '∞' : '-∞'` (NaN > 0 is false) and the user
+  // sees "-∞" for an undefined result like 0/0. That was the long-
+  // standing reason 0/0 problems looked solved with a confident-looking
+  // negative-infinity answer.
+  if (Number.isNaN(value)) return 'undefined';
   if (!Number.isFinite(value)) return value > 0 ? '∞' : '-∞';
   if (Number.isInteger(value)) return String(value);
   return Number(value.toFixed(6)).toString();
@@ -798,9 +804,22 @@ function solveGeometryProblem(normalizedInput: string): SolverResult {
     return result;
   }
 
-  const areaCircle = lower.match(/^area circle radius\s+(.+)$/);
+  // Accept "area circle radius 5", "area of a circle with radius 5",
+  // "find area of circle radius=5", "circle area radius 5", etc.
+  const areaCircle = lower.match(
+    /(?:area|find\s+(?:the\s+)?area)(?:\s+of)?\s+(?:a\s+|the\s+)?circle(?:\s+(?:with|having))?\s+(?:radius|r)\s*=?\s*(.+?)\s*$/,
+  ) ?? lower.match(/circle\s+area(?:\s+(?:with|having))?\s+(?:radius|r)\s*=?\s*(.+?)\s*$/);
   if (areaCircle) {
     const r = Number(math.evaluate(areaCircle[1]));
+    if (!Number.isFinite(r) || r <= 0) {
+      return {
+        ...result,
+        verified: false,
+        answer: 'Invalid radius',
+        answerLatex: '\\text{Invalid radius}',
+        explanation: 'Radius must be a positive number. Example: area of circle radius 5.',
+      };
+    }
     const answer = Math.PI * r * r;
     result.steps.push({
       step: 1,
@@ -820,9 +839,20 @@ function solveGeometryProblem(normalizedInput: string): SolverResult {
     return result;
   }
 
-  const circumference = lower.match(/^circumference circle radius\s+(.+)$/);
+  const circumference = lower.match(
+    /(?:circumference|perimeter|find\s+(?:the\s+)?(?:circumference|perimeter))(?:\s+of)?\s+(?:a\s+|the\s+)?circle(?:\s+(?:with|having))?\s+(?:radius|r)\s*=?\s*(.+?)\s*$/,
+  ) ?? lower.match(/circle\s+circumference(?:\s+(?:with|having))?\s+(?:radius|r)\s*=?\s*(.+?)\s*$/);
   if (circumference) {
     const r = Number(math.evaluate(circumference[1]));
+    if (!Number.isFinite(r) || r <= 0) {
+      return {
+        ...result,
+        verified: false,
+        answer: 'Invalid radius',
+        answerLatex: '\\text{Invalid radius}',
+        explanation: 'Radius must be a positive number. Example: circumference of circle radius 5.',
+      };
+    }
     const answer = 2 * Math.PI * r;
     result.steps.push({
       step: 1,
@@ -842,10 +872,29 @@ function solveGeometryProblem(normalizedInput: string): SolverResult {
     return result;
   }
 
-  const triangleArea = lower.match(/^area triangle base\s+(.+?)\s+height\s+(.+)$/);
+  // Match a much wider range of natural phrasings the user might type:
+  //   "area triangle base 5 height 6", "area of triangle base 5 height 6",
+  //   "area of a triangle with base 5 and height 6",
+  //   "find the area of a triangle whose base is 5 and height is 6"
+  // The previous strict regex only caught the first form. Any other
+  // phrasing fell through to the general expression solver, which
+  // returned the entire sentence as the "answer" — exactly the bug the
+  // user reported.
+  const triangleArea = lower.match(
+    /(?:area|find\s+(?:the\s+)?area)(?:\s+of)?\s+(?:a\s+|the\s+)?triangle(?:\s+(?:with|whose|having|where))?\s+(?:base\s+(?:is\s+|=\s*)?|b\s*=\s*)(.+?)\s+(?:and\s+)?(?:height\s+(?:is\s+|=\s*)?|h\s*=\s*)(.+?)\s*$/,
+  );
   if (triangleArea) {
     const base = Number(math.evaluate(triangleArea[1]));
     const height = Number(math.evaluate(triangleArea[2]));
+    if (!Number.isFinite(base) || !Number.isFinite(height) || base <= 0 || height <= 0) {
+      return {
+        ...result,
+        verified: false,
+        answer: 'Invalid base or height',
+        answerLatex: '\\text{Invalid base or height}',
+        explanation: 'Both the base and the height must be positive numbers. Example: area of triangle base 5 height 6.',
+      };
+    }
     const answer = 0.5 * base * height;
     result.steps.push({
       step: 1,
@@ -865,11 +914,37 @@ function solveGeometryProblem(normalizedInput: string): SolverResult {
     return result;
   }
 
-  const triangleSides = lower.match(/^area of triangle with sides\s+(.+?)\s*,\s*(.+?)\s*,\s*(.+)$/);
+  // Same widening for Heron's formula — accept "area of triangle with
+  // sides 3, 4, 5", "triangle area sides 3 4 5", "find area of triangle
+  // sides 3, 4, 5", commas optional.
+  const triangleSides = lower.match(
+    /(?:area|find\s+(?:the\s+)?area)(?:\s+of)?\s+(?:a\s+|the\s+)?triangle(?:\s+(?:with|having))?\s+sides?\s+(.+?)\s*[,\s]\s*(.+?)\s*[,\s]\s*(.+?)\s*$/,
+  );
   if (triangleSides) {
     const a = Number(math.evaluate(triangleSides[1]));
     const b = Number(math.evaluate(triangleSides[2]));
     const c = Number(math.evaluate(triangleSides[3]));
+    if (![a, b, c].every((v) => Number.isFinite(v) && v > 0)) {
+      return {
+        ...result,
+        verified: false,
+        answer: 'Invalid triangle sides',
+        answerLatex: '\\text{Invalid triangle sides}',
+        explanation: 'All three sides must be positive numbers. Example: area of triangle with sides 3, 4, 5.',
+      };
+    }
+    // Triangle inequality: each side must be less than the sum of the
+    // other two. Without this check, Heron's formula returns 0 (or NaN
+    // pre-clamp) for degenerate "triangles" like 1, 2, 5.
+    if (a + b <= c || a + c <= b || b + c <= a) {
+      return {
+        ...result,
+        verified: false,
+        answer: 'Sides do not form a valid triangle',
+        answerLatex: '\\text{Sides do not form a valid triangle}',
+        explanation: 'The triangle inequality requires that any two sides sum to more than the third. Re-check the side lengths.',
+      };
+    }
     const s = (a + b + c) / 2;
     const answer = Math.sqrt(Math.max(s * (s - a) * (s - b) * (s - c), 0));
 
@@ -3043,6 +3118,37 @@ function solveGeneralExpression(normalizedInput: string, category: MathCategoryI
       numeric = null;
     }
 
+    // Catch numeric anomalies explicitly so the user sees a real
+    // explanation instead of the symbolic fallback. Previously 0/0
+    // fell through to nerdamer's literal "0/0" string, and 2/0
+    // surfaced as a confident "∞" with no context.
+    if (numeric !== null && Number.isNaN(numeric)) {
+      result.verified = false;
+      result.answer = 'undefined';
+      result.answerLatex = '\\text{undefined}';
+      result.explanation = 'The expression evaluates to an indeterminate form (e.g. 0/0). Check the inputs — there may be a removable singularity or a typo.';
+      result.steps.push({
+        step: 3,
+        description: 'Result is undefined',
+        expression: '\\text{undefined}',
+        explanation: 'Numeric evaluation produced NaN, which means the expression has no defined value.',
+      });
+      return result;
+    }
+    if (numeric !== null && !Number.isFinite(numeric)) {
+      result.verified = false;
+      result.answer = numeric > 0 ? '∞ (undefined)' : '-∞ (undefined)';
+      result.answerLatex = numeric > 0 ? '\\infty' : '-\\infty';
+      result.explanation = 'The expression diverges — e.g. division by zero. Check whether you meant a limit, or revisit the denominator.';
+      result.steps.push({
+        step: 3,
+        description: 'Result diverges',
+        expression: result.answerLatex,
+        explanation: 'Numeric evaluation produced infinity, typically from division by zero or unbounded growth.',
+      });
+      return result;
+    }
+
     result.answer = numeric !== null && Number.isFinite(numeric) ? formatNumber(numeric) : simplified;
     result.answerLatex = resultToLatex(result.answer);
     result.explanation = numeric !== null && Number.isFinite(numeric)
@@ -3084,6 +3190,18 @@ function solveCompleteSquare(normalizedInput: string): SolverResult {
   }
 
   const { a, b, c } = coeffs;
+  // Without this guard a === 0 produces h = -b/0 = ±Infinity and
+  // k = NaN, which propagated into the rendered steps as "-∞" or
+  // "undefined" — confusing because the input looked harmless to the user.
+  if (a === 0) {
+    return {
+      ...result,
+      verified: false,
+      answer: 'Not a quadratic — leading coefficient is 0',
+      answerLatex: '\\text{Not a quadratic — leading coefficient is 0}',
+      explanation: 'Completing the square requires the x² term to be present. With a = 0 this is a linear expression; solve it with the equation solver instead.',
+    };
+  }
   const h = -b / (2 * a);
   const k = c - (b * b) / (4 * a);
 
