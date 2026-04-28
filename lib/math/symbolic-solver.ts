@@ -61,6 +61,11 @@ function nerdamerLatex(expr: string) {
 }
 
 function expressionToLatex(expr: string) {
+  // Plain decimals must NOT round-trip through nerdamer — it converts
+  // them to ugly rational fractions ("1.530734" → "765367/500000",
+  // "67.5" → "135/2"). Numeric answers are already formatted by
+  // formatNumber upstream; just emit them as-is.
+  if (/^-?\d+(?:\.\d+)?$/.test(expr.trim())) return expr.trim();
   const nerd = nerdamerLatex(expr);
   if (nerd) return nerd;
 
