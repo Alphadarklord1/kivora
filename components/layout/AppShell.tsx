@@ -95,7 +95,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [searchContent, setSearchContent] = useState<QuickSearchItem[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const searchContentLoaded = useRef(false);
-  const { toastJsx } = useAchievementToast();
+  const { toastJsx, show: showAchievement } = useAchievementToast();
   const { toastJsx: rateLimitToastJsx } = useRateLimitToast();
   const hasSessionUser = Boolean(session?.user);
 
@@ -117,9 +117,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const handleXpChange = () => {
       try { setXp(getGamificationState().xp); } catch { /* noop */ }
     };
+    // Achievement unlocks dispatch a separate event with the unlocked
+    // achievements; surface them through the toast queue so the user
+    // actually sees the celebration instead of the unlock just being
+    // recorded silently.
+    type AchievementEvent = CustomEvent<{ achievements: Array<Parameters<typeof showAchievement>[0]> }>;
+    const handleAchievement = (event: Event) => {
+      const detail = (event as AchievementEvent).detail;
+      if (!detail?.achievements?.length) return;
+      for (const a of detail.achievements) showAchievement(a);
+    };
     window.addEventListener('kivora:xp-changed', handleXpChange);
-    return () => window.removeEventListener('kivora:xp-changed', handleXpChange);
-  }, []);
+    window.addEventListener('kivora:achievement-unlocked', handleAchievement);
+    return () => {
+      window.removeEventListener('kivora:xp-changed', handleXpChange);
+      window.removeEventListener('kivora:achievement-unlocked', handleAchievement);
+    };
+  }, [showAchievement]);
 
   useEffect(() => {
     if (!pathname) return;

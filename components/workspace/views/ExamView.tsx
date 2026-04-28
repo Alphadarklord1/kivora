@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { recordQuizAttempt, type QuizAnswerSummary } from '@/lib/workspace/quiz-persistence';
-import { addXp, XP_VALUES } from '@/lib/gamification';
+import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
 
 export function ExamView({
   content,
@@ -124,6 +124,8 @@ export function ExamView({
     });
     // Exam Prep is the heaviest assessment — give a bigger XP bump.
     addXp(XP_VALUES.quizCompleted * 2, 'exam:submit');
+    incrementCounter('quizzesCompleted');
+    checkAndUnlockAchievements(getCounters());
   }
 
   const mm  = String(Math.floor(secsLeft / 60)).padStart(2, '0');

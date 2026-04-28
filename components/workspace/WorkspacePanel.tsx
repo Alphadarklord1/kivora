@@ -14,7 +14,7 @@ import { deleteRagIndex, ensureRagIndex } from '@/lib/rag/index-store';
 import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteLocalFile, listLocalFiles, upsertLocalFile } from '@/lib/files/local-files';
-import { addXp, XP_VALUES } from '@/lib/gamification';
+import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
 import { createFileReplaceRequest, createFileUploadRequest, resolveStoredFileBlob } from '@/lib/files/client-storage';
 import { loadDecks, saveDeck, type SRSDeck } from '@/lib/srs/sm2';
 import { mdToHtml } from '@/lib/utils/md';
@@ -726,7 +726,14 @@ export function WorkspacePanel({
 
   async function uploadFiles(list: FileList | File[]) {
     setUploading(true);
-    try { for (const f of Array.from(list)) await uploadFile(f); }
+    try {
+      for (const f of Array.from(list)) await uploadFile(f);
+      // Award XP per upload session (one batch click counts once for
+      // multiple files dropped together — saner than spamming +25 XP).
+      addXp(XP_VALUES.fileUploaded, 'fileUploaded');
+      incrementCounter('filesUploaded');
+      checkAndUnlockAchievements(getCounters());
+    }
     finally { setUploading(false); }
   }
 
@@ -927,10 +934,11 @@ export function WorkspacePanel({
       }
       if (!accumulated) setOutput('No output received.');
       else {
-        // Award XP only when streaming actually produced content. The
-        // gamification system was wired but never called from anywhere
-        // — XP stayed 0, the LevelBadge never appeared. Now visible.
+        // Award XP, bump the counter, and check for achievement
+        // unlocks (e.g. 'AI User' at 10 generations).
         addXp(XP_VALUES.contentGenerated, `generated:${mode}`);
+        incrementCounter('contentGenerated');
+        checkAndUnlockAchievements(getCounters());
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return; // cancelled
@@ -1150,6 +1158,12 @@ export function WorkspacePanel({
       const { saveOfflineItem } = await import('@/lib/library/offline-store');
       saveOfflineItem({ mode: genMode, content: output, metadata });
       savedOffline = true;
+      // Reward the save action regardless of whether cloud or local —
+      // the user's intent was to keep the output and the local copy
+      // is just as valid for them.
+      addXp(XP_VALUES.savedToLibrary, 'savedToLibrary');
+      incrementCounter('librarySaved');
+      checkAndUnlockAchievements(getCounters());
     } catch { /* IndexedDB may be unavailable; fall through to network */ }
 
     try {

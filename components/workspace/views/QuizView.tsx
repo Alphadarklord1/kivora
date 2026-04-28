@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { mdToHtml } from '@/lib/utils/md';
 import { recordQuizAttempt, type QuizAnswerSummary } from '@/lib/workspace/quiz-persistence';
-import { addXp, XP_VALUES } from '@/lib/gamification';
+import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
 
 // Open-ended quiz view. Parses "Q1. ... Answer: ..." blocks emitted by the
 // workspace generator and renders each question with a textarea so the
@@ -75,6 +75,8 @@ export function QuizView({ content, fileId, deckId }: { content: string; fileId?
       answers: detail,
     });
     addXp(XP_VALUES.quizCompleted, 'quiz:gradeAll');
+    incrementCounter('quizzesCompleted');
+    checkAndUnlockAchievements(getCounters());
   }
 
   return (

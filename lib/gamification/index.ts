@@ -168,6 +168,24 @@ export function addXp(amount: number, source: string): AddXpResult {
     }
   }
 
+  // Surface newly-unlocked achievements via a window event so the
+  // AppShell-mounted AchievementToast can pick them up. Without this
+  // the achievements ARE recorded but never visible to the user.
+  if (newAchievements.length > 0) {
+    try {
+      window.dispatchEvent(new CustomEvent('kivora:achievement-unlocked', {
+        detail: { achievements: newAchievements },
+      }));
+    } catch { /* noop */ }
+  }
+  if (leveledUp) {
+    try {
+      window.dispatchEvent(new CustomEvent('kivora:level-up', {
+        detail: { level: newLevel.level, title: newLevel.title },
+      }));
+    } catch { /* noop */ }
+  }
+
   // Log source (no-op in production, useful during dev)
   if (process.env.NODE_ENV === 'development') {
      
@@ -197,6 +215,16 @@ export function unlockAchievement(id: string): Achievement | null {
   // to avoid infinite loops — we write XP directly)
   const currentXp = safeGet<number>(KEY_XP, 0);
   safeSet(KEY_XP, currentXp + def.xp);
+  // Notify the toast queue so the unlock is celebrated visibly. Also
+  // re-fire xp-changed since we wrote XP directly.
+  try {
+    window.dispatchEvent(new CustomEvent('kivora:achievement-unlocked', {
+      detail: { achievements: [def] },
+    }));
+    window.dispatchEvent(new CustomEvent('kivora:xp-changed', {
+      detail: { xp: currentXp + def.xp },
+    }));
+  } catch { /* noop */ }
 
   return def;
 }
