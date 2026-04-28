@@ -406,6 +406,9 @@ export function FlashcardView({
   const [publicStatus, setPublicStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [publicUrl, setPublicUrl] = useState('');
   const [publicDescription, setPublicDescription] = useState('');
+  // Save to library (separate from share — share also saves to library, but
+  // this lets the user keep a deck snapshot without minting a share token).
+  const [librarySaveStatus, setLibrarySaveStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   // Stats
   const [sessions,    setSessions]    = useState<StudySession[]>([]);
   const [streak,      setStreak]      = useState(0);
@@ -525,6 +528,40 @@ export function FlashcardView({
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deck?.id, sessionIdx, phase]);
+
+  // Save the deck to the user's Library as a flashcards item without
+  // minting a share token. POSTs the same payload shape that handleShare()
+  // uses so the Library renders it identically.
+  async function handleSaveToLibrary() {
+    if (!deck || librarySaveStatus === 'loading') return;
+    setLibrarySaveStatus('loading');
+    try {
+      const serializedDeck = deckToContent(deck);
+      const res = await fetch('/api/library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'flashcards',
+          content: serializedDeck,
+          metadata: {
+            title: title ?? deck.name,
+            description: deck.description ?? '',
+            cardCount: deck.cards.length,
+            sourceDeckId: deck.id,
+            sourceDeckName: deck.name,
+            savedFrom: '/workspace',
+          },
+        }),
+      });
+      if (!res.ok) throw new Error();
+      broadcastInvalidate(LIBRARY_CHANNEL);
+      setLibrarySaveStatus('done');
+      window.setTimeout(() => setLibrarySaveStatus('idle'), 2200);
+    } catch {
+      setLibrarySaveStatus('error');
+      window.setTimeout(() => setLibrarySaveStatus('idle'), 2200);
+    }
+  }
 
   // Share handler
   async function handleShare() {
@@ -1011,6 +1048,24 @@ export function FlashcardView({
 
         {/* ── Compact tools / share row ─── */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{
+              fontSize: 11,
+              padding: '4px 10px',
+              color: librarySaveStatus === 'done' ? '#52b788' : librarySaveStatus === 'error' ? '#ef4444' : undefined,
+            }}
+            disabled={librarySaveStatus === 'loading'}
+            onClick={handleSaveToLibrary}
+          >
+            {librarySaveStatus === 'loading'
+              ? '⏳'
+              : librarySaveStatus === 'done'
+              ? `✓ ${t('Saved')}`
+              : librarySaveStatus === 'error'
+              ? `✗ ${t('Error')}`
+              : `📚 ${t('Save to Library')}`}
+          </button>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => exportDeckCsv(deck)}>⬇ {t('Export CSV')}</button>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { void exportDeckApkg(deck); }}>📦 {t('Export Anki')}</button>
           {showPublicActions && (

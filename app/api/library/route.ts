@@ -48,8 +48,28 @@ export async function POST(req: NextRequest) {
   if (!isDatabaseConfigured) {
     return NextResponse.json({ error: 'Database not configured. Item not saved.' }, { status: 503 });
   }
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+  // Pass `req` so getUserId uses JWT-based extraction (matches the pattern
+  // every other working API route uses; the no-arg `auth()` path was
+  // intermittently returning null for valid Google sessions).
+  const userId = await getUserId(req);
+  if (!userId) {
+    // No session — fall through to offline save on the client. Returning 503
+    // (not 401) so the existing offline-save fallback in saveToLibrary triggers.
+    return NextResponse.json(
+      { error: 'No session — saving locally instead.' },
+      { status: 503 },
+    );
+  }
+
+  // Guests can technically POST, but GETs return [] for them (privacy
+  // fallback). To avoid the "saved but invisible" trap, route guest items
+  // to offline storage instead.
+  if (isGuestModeEnabled() && isEphemeralGuest(userId)) {
+    return NextResponse.json(
+      { error: 'Guest mode — saving locally. Sign in to sync.' },
+      { status: 503 },
+    );
+  }
 
   const { mode, content, metadata } = await req.json().catch(() => ({}));
   if (!mode || !content) {
@@ -67,6 +87,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(item, { status: 201 });
   } catch (err) {
     console.error('[library] POST failed', err);
-    return NextResponse.json({ error: 'Failed to save item.' }, { status: 500 });
+    // Common cause: the user row doesn't exist (FK violation on userId).
+    // Return 503 so the client persists offline — better than losing the
+    // user's work to a 500.
+    return NextResponse.json(
+      { error: 'Could not save to cloud. Stored locally instead.' },
+      { status: 503 },
+    );
   }
 }

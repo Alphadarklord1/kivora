@@ -456,14 +456,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="sidebar-footer">
-        <button
-          className="nav-item"
-          onClick={() => setSearchOpen(true)}
-          title="Search (⌘K)"
-        >
-          <span className="nav-icon">🔍</span>
-          {!collapsed && <span className="nav-label">{t('Search')}</span>}
-        </button>
+        {/* Sidebar Search button removed — the Library page has its own
+            search box (better suited for content-level filtering), and
+            global cross-app Quick Search remains available via ⌘K. */}
 
         <Link
           href="/settings"
@@ -484,12 +479,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </button>
 
         {session?.user ? (
-          <>
-            {/* Account link */}
+          /* Combined account + sign-out row.
+             The Account link takes the full width when expanded; the
+             sign-out icon sits on the right as its own button so it
+             doesn't trigger /account navigation. When the sidebar is
+             collapsed there's no room for a second button — sign-out
+             remains accessible from the /account page. */
+          <div style={{ display: 'flex', alignItems: 'stretch', gap: 4, minWidth: 0 }}>
             <Link
               href="/account"
               className={`nav-item${pathname?.startsWith('/account') ? ' active' : ''}`}
               title={t('Account')}
+              style={{ flex: 1, minWidth: 0 }}
             >
               <span className="nav-icon">
                 <SidebarAvatar src={session.user.image} name={session.user.name} email={session.user.email} />
@@ -500,12 +501,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </span>
               )}
             </Link>
-            {/* Sign out */}
-            <button className="nav-item" onClick={handleSignOut} title={t('Sign out')} style={{ color: 'var(--text-3)' }}>
-              <span className="nav-icon">🚪</span>
-              {!collapsed && <span className="nav-label">{t('Sign out')}</span>}
-            </button>
-          </>
+            {!collapsed && (
+              <button
+                className="nav-item"
+                onClick={handleSignOut}
+                title={t('Sign out')}
+                aria-label={t('Sign out')}
+                style={{ flex: '0 0 auto', padding: '0 12px', color: 'var(--text-3)' }}
+              >
+                <span className="nav-icon" style={{ marginRight: 0 }}>🚪</span>
+              </button>
+            )}
+          </div>
         ) : (
           <Link href="/login" className="nav-item" title={t('Sign in')}>
             <span className="nav-icon">👤</span>
