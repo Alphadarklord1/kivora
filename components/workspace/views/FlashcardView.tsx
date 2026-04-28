@@ -479,13 +479,25 @@ export function FlashcardView({
 
     const deckId   = explicitDeck?.id ?? stableDeckId(content.slice(0, 240));
     const existing = explicitDeck ? loadDecks().find(d => d.id === explicitDeck.id) : loadDecks().find(d => d.id === deckId);
-    const d = existing ?? explicitDeck ?? {
+
+    // If the cached deck has fewer cards than parseFlashcards just yielded
+    // (typical during streaming — early renders parse only a few pairs,
+    // later renders catch up to the full set), rebuild it so the user's
+    // deck reflects EVERY card the AI emitted instead of locking in
+    // whatever was parsed on the first render. Bug surfaced as
+    // "I asked for 5 cards but only got 1".
+    const shouldRebuild = !explicitDeck && existing && rawCards.length > existing.cards.length;
+    const d = (existing && !shouldRebuild) ? existing : explicitDeck ?? {
       id: deckId,
       name: title?.trim() || t('Flashcards ({count} cards)', { count: formatNumber(rawCards.length) }),
       cards: rawCards.map((c, i) => createCard(`${deckId}-${i}`, c.front, c.back)),
       createdAt: new Date().toISOString(),
     };
-    if (!existing) saveDeck(d);
+    // Replace cached cards when rebuilding from a longer parse.
+    if (shouldRebuild) {
+      d.cards = rawCards.map((c, i) => createCard(`${deckId}-${i}`, c.front, c.back));
+    }
+    if (!existing || shouldRebuild) saveDeck(d);
     setDeck(d);
     onDeckChange?.(d);
     setDescInput(d.description ?? '');

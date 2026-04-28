@@ -93,18 +93,15 @@ const GENERATE_TABS = [
   { id: 'mcq',        label: 'MCQ',        icon: '🧩', hint: 'Multiple-choice questions with answers' },
   { id: 'quiz',       label: 'Quiz',       icon: '❓', hint: 'Open-ended quiz questions' },
   { id: 'exam',       label: 'Exam Prep',  icon: '🏆', hint: 'Timed exam with scoring and weak-area analysis' },
-  // Flashcards as a first-class tool: same generation flow as the other
-  // chips, with the resulting deck routed to the Flashcards tab for
-  // study. Removes the need for users to hunt for a separate
-  // "generate flashcards" entry point.
-  { id: 'flashcards', label: 'Flashcards', icon: '🃏', hint: 'Generate a flashcard deck (FSRS-scheduled) from your content' },
+  // Flashcards generation lives in the dedicated Flashcards tab next
+  // to its deck library + study modes — adding a duplicate chip here
+  // confused users, so it's not in this list.
 ] as const;
 
 const GENERATE_TAB_GROUPS = [
   { label: 'Written',  ids: ['summarize', 'outline'] },
   { label: 'Practice', ids: ['practice', 'mcq', 'quiz'] },
   { label: 'Exam',     ids: ['exam'] },
-  { label: 'Cards',    ids: ['flashcards'] },
 ] as const;
 
 const WORKSPACE_TABS: Array<{ id: MainTab; icon: string; label: string; getMeta?: (ctx: { filesCount: number; libraryCount: number; decksCount: number }) => string }> = [
@@ -1973,25 +1970,6 @@ export function WorkspacePanel({
                             Generating practice problem… solution stays hidden until you click to reveal.
                           </div>
                           <PracticeView content={output} />
-                        </div>
-                      )
-                    : generating && genMode === 'flashcards'
-                    ? (
-                        /* Flashcards stream "Front: X | Back: Y" pairs. Don't
-                           reveal the back during streaming. Show only a
-                           parsed-card-count placeholder. */
-                        <div style={{ padding: '60px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-                          <div style={{ fontSize: 36 }}>🃏</div>
-                          <div style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>Generating flashcards…</div>
-                          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', textAlign: 'center', maxWidth: 360 }}>
-                            {(() => {
-                              const cardCount = (output.match(/^\s*Front\s*:/gmi) || []).length;
-                              return cardCount > 0
-                                ? `${cardCount} card${cardCount === 1 ? '' : 's'} created so far. Backs stay hidden until you flip them yourself.`
-                                : 'Your deck will appear once ready. Backs stay hidden until you flip them.';
-                            })()}
-                          </div>
-                          <div style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', animation: 'pulse 1.2s ease-in-out infinite' }} />
                         </div>
                       )
                     : generating
