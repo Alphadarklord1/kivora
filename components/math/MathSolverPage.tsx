@@ -13,6 +13,7 @@ import { detectMathCategory } from '@/lib/math/symbolic-solver';
 import type { MathCategoryId } from '@/lib/math/types';
 import { isCustomFuncDefinition, normalizeGraphExpression, buildSharedScope } from '@/lib/math/graph-utils';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
+import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
 
 const VisualAnalyzer = dynamic(
   () => import('@/components/tools/VisualAnalyzer').then((mod) => mod.VisualAnalyzer),
@@ -2247,6 +2248,9 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
       if (data.answer && !data.error) {
         const item: HistoryItem = { id: crypto.randomUUID(), problem: p, answer: data.answer, category: data.category ?? String(active), ts: Date.now() };
         setHistory(prev => { const next = [item, ...prev.filter(h => h.problem !== p)]; saveHistory(next); return next; });
+        addXp(XP_VALUES.mathSolved, 'math:solve');
+        incrementCounter('mathSolved');
+        checkAndUnlockAchievements(getCounters());
       }
       // Auto-populate graph if solver provides expression
       if (data.graphExpr && shouldOfferGraphFromSolver(p, data.category, data.graphExpr)) {
@@ -3575,6 +3579,11 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                       });
                       const data = await res.json() as SolveResult;
                       setWriteResult(data);
+                      if (data.answer && !data.error) {
+                        addXp(XP_VALUES.mathSolved, 'math:write-solve');
+                        incrementCounter('mathSolved');
+                        checkAndUnlockAchievements(getCounters());
+                      }
                     } catch {
                       setWriteResult({ answer: '', answerLatex: '', steps: [], graphExpr: null, category: topic, engine: 'error', error: 'Network error — try again.' });
                     } finally {

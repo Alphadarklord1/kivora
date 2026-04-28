@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { validatePasswordPolicy } from '@/lib/auth/password-policy';
 import styles from '../auth.module.css';
 
 export default function ResetPasswordPage() {
@@ -37,8 +38,9 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setError('');
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
+    const policyError = validatePasswordPolicy(password);
+    if (policyError) {
+      setError(policyError);
       return;
     }
     if (password !== confirm) {
@@ -93,11 +95,11 @@ export default function ResetPasswordPage() {
                   <input
                     id="password"
                     type={showPwd ? 'text' : 'password'}
-                    placeholder="At least 8 characters"
+                    placeholder="At least 10 chars, with a letter and a digit"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     required
-                    minLength={8}
+                    minLength={10}
                     autoComplete="new-password"
                     style={{ paddingRight: 44 }}
                   />

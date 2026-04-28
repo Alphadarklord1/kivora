@@ -4,6 +4,7 @@ import { db, isDatabaseConfigured } from '@/lib/db';
 import { users, accounts, sessions as dbSessions, userSettings, folders, libraryItems, shares, quizAttempts, recentFiles } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
+import { validatePasswordPolicy } from '@/lib/auth/password-policy';
 
 function err(status: number, message: string) {
   return NextResponse.json({ error: message }, { status });
@@ -88,8 +89,8 @@ export async function PATCH(req: NextRequest) {
 
   // Password change
   if (newPassword !== undefined) {
-    if (newPassword.length < 8) return err(400, 'New password must be at least 8 characters');
-    if (newPassword.length > 128) return err(400, 'Password too long');
+    const policyError = validatePasswordPolicy(newPassword);
+    if (policyError) return err(400, policyError);
 
     // If the account has a password, current password is required
     if (user.passwordHash) {

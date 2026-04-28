@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
 import { LevelBadge } from '@/components/gamification/LevelBadge';
 import { getGamificationState, ACHIEVEMENTS, type GamificationState } from '@/lib/gamification/index';
+import { validatePasswordPolicy } from '@/lib/auth/password-policy';
 
 interface UserProfile {
   id: string;
@@ -139,7 +140,8 @@ export default function AccountPage() {
   async function changePassword(e: React.FormEvent) {
     e.preventDefault();
     if (newPwd !== confirmPwd) { toast('Passwords do not match', 'error'); return; }
-    if (newPwd.length < 8) { toast('Password must be at least 8 characters', 'error'); return; }
+    const policyError = validatePasswordPolicy(newPwd);
+    if (policyError) { toast(policyError, 'error'); return; }
     setSavingPwd(true);
     try {
       const res = await fetch('/api/users/me', {
@@ -206,10 +208,13 @@ export default function AccountPage() {
 
   const pwdStrength = (pwd: string): { label: string; color: string; width: string } => {
     if (pwd.length === 0) return { label: '', color: 'transparent', width: '0%' };
-    const score = [pwd.length >= 8, /[A-Z]/.test(pwd), /[0-9]/.test(pwd), /[^A-Za-z0-9]/.test(pwd), pwd.length >= 14].filter(Boolean).length;
-    if (score <= 1) return { label: 'Weak', color: '#e05252', width: '20%' };
-    if (score === 2) return { label: 'Fair', color: '#f59e0b', width: '45%' };
-    if (score === 3) return { label: 'Good', color: '#4f86f7', width: '70%' };
+    // Policy floor is 10 chars + letter + digit. Anything shorter is "Weak"
+    // regardless of complexity so the meter never lies about acceptability.
+    const meetsPolicy = pwd.length >= 10 && /[A-Za-z]/.test(pwd) && /[0-9]/.test(pwd);
+    if (!meetsPolicy) return { label: 'Too short', color: '#e05252', width: '20%' };
+    const score = [pwd.length >= 12, /[A-Z]/.test(pwd), /[^A-Za-z0-9]/.test(pwd), pwd.length >= 16].filter(Boolean).length;
+    if (score === 0) return { label: 'Fair', color: '#f59e0b', width: '45%' };
+    if (score <= 2) return { label: 'Good', color: '#4f86f7', width: '70%' };
     return { label: 'Strong', color: '#52b788', width: '100%' };
   };
   const strength = pwdStrength(newPwd);

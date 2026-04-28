@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { saveOfflineItem } from '@/lib/library/offline-store';
+import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
 
 export type NoteStyle = 'study' | 'summary' | 'revision' | 'cornell';
 
@@ -193,12 +194,18 @@ export function NotesPanel({
       } else {
         throw new Error(`HTTP ${res.status}`);
       }
+      addXp(XP_VALUES.noteCreated, 'notes:saveToLibrary');
+      incrementCounter('notesCreated');
+      checkAndUnlockAchievements(getCounters());
       setTimeout(() => setSavedLibId(null), 2400);
     } catch {
       // Last-resort offline save covers network errors too.
       try {
         const item = saveOfflineItem({ mode: 'notes', content, metadata });
         setSavedLibId(item.id);
+        addXp(XP_VALUES.noteCreated, 'notes:saveToLibrary:offline');
+        incrementCounter('notesCreated');
+        checkAndUnlockAchievements(getCounters());
       } catch {
         setSavedLibId('error');
       }
