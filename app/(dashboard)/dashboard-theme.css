@@ -10,10 +10,14 @@
    styles for layout).
    ============================================================ */
 
-/* Light theme overrides — apply only when no explicit data-theme
-   is set (default) or when light is selected. Dark theme keeps the
-   existing globals.css palette. */
-:root:not([data-theme='dark']) {
+/* Light-theme cream overrides.
+   Tightened selector — was :root:not([data-theme='dark']) which also
+   caught blue/black and forced them back to cream, defeating those
+   themes entirely. Now applies only to light mode and the no-attribute
+   default (which IS light). Blue / Black get their own palettes from
+   globals.css without interference. */
+:root:not([data-theme]),
+[data-theme='light'] {
   --bg:        var(--kv-cream);
   --bg-2:      var(--kv-cream-2);
   --bg-3:      #ffffff;

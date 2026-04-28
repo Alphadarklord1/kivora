@@ -25,8 +25,10 @@ const THEME_OPTIONS: { id: Theme; label: string; hint: string; color: string }[]
   { id: 'system', label: 'System', hint: 'Follow device',  color: 'linear-gradient(135deg, #1a1f2e 50%, #f8f9fa 50%)' },
   { id: 'light',  label: 'Light',  hint: 'Bright',         color: '#f0f2f5' },
   { id: 'dark',   label: 'Dark',   hint: 'Charcoal',       color: '#1e2127' },
-  { id: 'blue',   label: 'Navy',   hint: 'Deep blue',      color: '#1a1f2e' },
-  { id: 'black',  label: 'Black',  hint: 'OLED contrast',  color: '#000000' },
+  { id: 'blue',   label: 'Navy',   hint: 'Deep blue',      color: '#0a0e1a' },
+  // 'Black' theme removed — was visually too similar to Dark and
+  // confused users. Existing 'black' selections are migrated to
+  // 'dark' by normalizeTheme().
 ];
 
 const FONT_OPTIONS = [

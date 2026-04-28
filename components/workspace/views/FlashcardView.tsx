@@ -1785,7 +1785,7 @@ export function FlashcardView({
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1 }}>{t('Front')}</div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             {reviewFrontUrl && <img src={reviewFrontUrl} alt="" style={{ maxWidth:'100%', maxHeight:140, objectFit:'contain', borderRadius:8 }} />}
-            <div style={{ fontSize: 'var(--text-base)', color: 'var(--text)', lineHeight: 1.5, flex: 1 }}>{card.front}</div>
+            <div style={{ fontSize: 'var(--text-base)', color: 'var(--text)', lineHeight: 1.5, flex: 1, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{card.front}</div>
           </div>
           {/* Back face — pre-rotated so it sits hidden behind the front
               until the parent rotates 180°. */}
@@ -1806,7 +1806,7 @@ export function FlashcardView({
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: 1 }}>{t('Back')}</div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             {reviewBackUrl && <img src={reviewBackUrl} alt="" style={{ maxWidth:'100%', maxHeight:140, objectFit:'contain', borderRadius:8 }} />}
-            <div style={{ fontSize: 'var(--text-base)', color: 'var(--text)', lineHeight: 1.5, flex: 1 }}>{card.back}</div>
+            <div style={{ fontSize: 'var(--text-base)', color: 'var(--text)', lineHeight: 1.5, flex: 1, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{card.back}</div>
             {ttsEnabled && (
               <button
                 style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', fontSize: 12 }}
