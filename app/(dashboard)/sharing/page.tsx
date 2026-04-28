@@ -106,6 +106,12 @@ export default function SharedWithMePage() {
   // ── Quick-share inline form state ──
   const [libItems, setLibItems]         = useState<LibraryItem[]>([]);
   const [libLoading, setLibLoading]     = useState(false);
+  // Workspace files are sharable too — the API already supports fileId
+  // shares; this page just wasn't wired up for them. A toggle lets the
+  // user switch the dropdown source between Library and Files.
+  const [qsSource, setQsSource]         = useState<'library' | 'file'>('library');
+  const [fileItems, setFileItems]       = useState<Array<{ id: string; name: string; folderId: string | null }>>([]);
+  const [fileLoading, setFileLoading]   = useState(false);
   const [qsItemId, setQsItemId]         = useState('');
   const [qsPermission, setQsPermission] = useState<'view' | 'edit'>('view');
   const [qsSubmitting, setQsSubmitting] = useState('');   // '' | 'loading' | 'done'
@@ -167,6 +173,21 @@ export default function SharedWithMePage() {
       .finally(() => setLibLoading(false));
   }, []);
 
+  // Fetch workspace files so the user can share a file directly from this
+  // page — they used to have to dig back into Workspace to do that.
+  useEffect(() => {
+    setFileLoading(true);
+    fetch('/api/files?all=1', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then((data: Array<{ id: string; name: string; folderId: string | null }>) => setFileItems(Array.isArray(data) ? data : []))
+      .catch(() => setFileItems([]))
+      .finally(() => setFileLoading(false));
+  }, []);
+
+  // Reset selection when user toggles between sources so a stale id from
+  // the other list can't be POSTed.
+  useEffect(() => { setQsItemId(''); }, [qsSource]);
+
   async function handleRevoke(id: string) {
     if (!confirm(t('Revoke this share?'))) return;
     try {
@@ -205,11 +226,16 @@ export default function SharedWithMePage() {
     if (!qsItemId) return;
     setQsSubmitting('loading');
     try {
+      // The /api/share endpoint accepts libraryItemId, fileId, folderId,
+      // or topicId — pick the right field based on the active source.
+      const body = qsSource === 'file'
+        ? { fileId: qsItemId, shareType: 'link', permission: qsPermission }
+        : { libraryItemId: qsItemId, shareType: 'link', permission: qsPermission };
       const res = await fetch('/api/share', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ libraryItemId: qsItemId, shareType: 'link', permission: qsPermission }),
+        body: JSON.stringify(body),
       });
       const data = (await res.json()) as ApiErrorLike;
       if (!res.ok) throw new Error(data.reason || data.error || t('Failed to create share'));
@@ -374,23 +400,68 @@ export default function SharedWithMePage() {
             </button>
           </div>
         ) : (
-          <div className="sp-qs-form">
+          <div className="sp-qs-form" style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'stretch' }}>
+            {/* Source toggle: share a Library item or a Workspace file */}
+            <div role="tablist" aria-label="Share source" style={{ display: 'flex', gap: 6 }}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={qsSource === 'library'}
+                onClick={() => setQsSource('library')}
+                style={{
+                  padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                  border: `1px solid ${qsSource === 'library' ? 'var(--accent, #1db88e)' : 'var(--border-2)'}`,
+                  background: qsSource === 'library' ? 'var(--accent, #1db88e)' : 'transparent',
+                  color: qsSource === 'library' ? '#fff' : 'var(--text-2)',
+                  cursor: 'pointer',
+                }}
+              >
+                \ud83d\udcda Library
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={qsSource === 'file'}
+                onClick={() => setQsSource('file')}
+                style={{
+                  padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                  border: `1px solid ${qsSource === 'file' ? 'var(--accent, #1db88e)' : 'var(--border-2)'}`,
+                  background: qsSource === 'file' ? 'var(--accent, #1db88e)' : 'transparent',
+                  color: qsSource === 'file' ? '#fff' : 'var(--text-2)',
+                  cursor: 'pointer',
+                }}
+              >
+                \ud83d\udcc4 Workspace file
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <select
               id="qs-item-select"
               className="sp-qs-select"
               value={qsItemId}
               onChange={e => setQsItemId(e.target.value)}
-              disabled={libLoading}
+              disabled={qsSource === 'library' ? libLoading : fileLoading}
             >
-              <option value="">{libLoading ? t('Loading\u2026') : t('Select a library item\u2026')}</option>
-              {libItems.map(item => {
-                const title = item.metadata?.title || item.metadata?.problem || item.mode;
-                return (
-                  <option key={item.id} value={item.id}>
-                    {title}
-                  </option>
-                );
-              })}
+              {qsSource === 'library' ? (
+                <>
+                  <option value="">{libLoading ? t('Loading\u2026') : t('Select a library item\u2026')}</option>
+                  {libItems.map(item => {
+                    const title = item.metadata?.title || item.metadata?.problem || item.mode;
+                    return (
+                      <option key={item.id} value={item.id}>
+                        {title}
+                      </option>
+                    );
+                  })}
+                </>
+              ) : (
+                <>
+                  <option value="">{fileLoading ? t('Loading\u2026') : 'Select a workspace file\u2026'}</option>
+                  {fileItems.map(item => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </>
+              )}
             </select>
             {selectedItem && (
               <span className="sp-qs-mode">{selectedItem.mode}</span>
@@ -419,6 +490,7 @@ export default function SharedWithMePage() {
             >
               {qsSubmitting === 'loading' ? t('Creating\u2026') : t('Create link')}
             </button>
+            </div>
           </div>
         )}
       </div>

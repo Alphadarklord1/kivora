@@ -48,10 +48,29 @@ const EVENT_COLORS: Record<EventType, string> = {
 };
 
 /** Per-event color resolver. Honors an explicit `event.color` (set by the
- *  Course Schedule Importer so each course renders in its own color),
- *  falling back to the type-default. */
-function colorFor(evt: { type: EventType; color?: string }): string {
-  return evt.color || EVENT_COLORS[evt.type];
+ *  Course Schedule Importer so each course renders in its own color).
+ *  Falls back to a deterministic per-title color for class events that
+ *  were imported before the color field existed — same course title →
+ *  same color, no DB migration required. Type-default is the final
+ *  fallback. */
+const COURSE_FALLBACK_PALETTE = [
+  '#4f86f7', '#e07a52', '#a78bfa', '#22c55e', '#f59e0b',
+  '#ec4899', '#06b6d4', '#ef4444', '#84cc16', '#8b5cf6',
+];
+
+function hashColor(title: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < title.length; i++) {
+    h ^= title.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return COURSE_FALLBACK_PALETTE[(h >>> 0) % COURSE_FALLBACK_PALETTE.length];
+}
+
+function colorFor(evt: { type: EventType; color?: string; title?: string }): string {
+  if (evt.color) return evt.color;
+  if (evt.type === 'class' && evt.title) return hashColor(evt.title);
+  return EVENT_COLORS[evt.type];
 }
 
 const EVENT_ICONS: Record<EventType, string> = {

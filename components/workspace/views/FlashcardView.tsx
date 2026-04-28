@@ -56,21 +56,51 @@ function parseImportText(text: string): Array<{ front: string; back: string }> |
 interface TestQuestion { type: 'mcq' | 'tf' | 'written'; cardId: string; question: string; correctAnswer: string; options?: string[]; }
 
 function buildTestQuestions(deck: SRSDeck): TestQuestion[] {
-  const cards = [...deck.cards].sort(() => Math.random() - 0.5);
+  // Test now mirrors a course final exam: three sections in fixed order
+  // (Section A: MCQ, Section B: True/False, Section C: Written), each
+  // shuffled internally. Allocates roughly 50% MCQ, 25% T/F, 25% Written
+  // and guarantees coverage of every card so it really tests the deck.
   const allBacks = deck.cards.map(c => c.back);
-  return cards.map(card => {
-    const r = Math.random();
-    if (r < 0.55 && deck.cards.length >= 4) {
-      const options = [card.back, ...allBacks.filter(b => b !== card.back).sort(() => Math.random() - 0.5).slice(0, 3)].sort(() => Math.random() - 0.5);
-      return { type: 'mcq' as const, cardId: card.id, question: card.front, correctAnswer: card.back, options };
-    } else if (r < 0.75 && deck.cards.length >= 2) {
-      const isTrue   = Math.random() > 0.5;
-      const falseB   = allBacks.filter(b => b !== card.back).sort(() => Math.random() - 0.5)[0] ?? card.back;
-      return { type: 'tf' as const, cardId: card.id, question: `${card.front} → "${isTrue ? card.back : falseB}"`, correctAnswer: isTrue ? 'True' : 'False', options: ['True', 'False'] };
-    } else {
-      return { type: 'written' as const, cardId: card.id, question: card.front, correctAnswer: card.back };
-    }
-  });
+  const shuffled = [...deck.cards].sort(() => Math.random() - 0.5);
+  const total = shuffled.length;
+  if (total === 0) return [];
+
+  // Allocate counts; clamp to viable minimums (MCQ needs 4 cards, T/F needs 2).
+  let mcqCount = total >= 4 ? Math.max(1, Math.round(total * 0.5)) : 0;
+  let tfCount  = total >= 2 ? Math.max(1, Math.round(total * 0.25)) : 0;
+  let writtenCount = total - mcqCount - tfCount;
+  if (writtenCount < 1) {
+    writtenCount = 1;
+    if (mcqCount > 1) mcqCount--; else if (tfCount > 0) tfCount--;
+  }
+
+  const mcqCards = shuffled.slice(0, mcqCount);
+  const tfCards  = shuffled.slice(mcqCount, mcqCount + tfCount);
+  const wrtCards = shuffled.slice(mcqCount + tfCount);
+
+  const out: TestQuestion[] = [];
+  // Section A — MCQ
+  for (const card of mcqCards) {
+    const distractors = allBacks.filter(b => b !== card.back).sort(() => Math.random() - 0.5).slice(0, 3);
+    const options = [card.back, ...distractors].sort(() => Math.random() - 0.5);
+    out.push({ type: 'mcq', cardId: card.id, question: card.front, correctAnswer: card.back, options });
+  }
+  // Section B — True/False
+  for (const card of tfCards) {
+    const isTrue = Math.random() > 0.5;
+    const falseB = allBacks.filter(b => b !== card.back).sort(() => Math.random() - 0.5)[0] ?? card.back;
+    out.push({
+      type: 'tf', cardId: card.id,
+      question: `${card.front} → "${isTrue ? card.back : falseB}"`,
+      correctAnswer: isTrue ? 'True' : 'False',
+      options: ['True', 'False'],
+    });
+  }
+  // Section C — Written
+  for (const card of wrtCards) {
+    out.push({ type: 'written', cardId: card.id, question: card.front, correctAnswer: card.back });
+  }
+  return out;
 }
 
 // ── TTS ───────────────────────────────────────────────────────────────────────

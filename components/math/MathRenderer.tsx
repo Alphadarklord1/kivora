@@ -52,21 +52,22 @@ export function MathRenderer({ math, display = false, className = '' }: MathRend
   const latex = useMemo(() => formatMathExpression(math), [math]);
 
   useEffect(() => {
-    if (containerRef.current) {
-      try {
-        katex.render(latex, containerRef.current, {
-          displayMode: display,
-          throwOnError: false,
-          errorColor: '#cc0000',
-          trust: true,
-          strict: false,
-        });
-      } catch {
-        // If KaTeX fails, just show the original text
-        if (containerRef.current) {
-          containerRef.current.textContent = math;
-        }
-      }
+    if (!containerRef.current) return;
+    try {
+      katex.render(latex, containerRef.current, {
+        displayMode: display,
+        throwOnError: false,
+        errorColor: '#cc0000',
+        trust: true,
+        strict: false,
+      });
+      // Defensive: if KaTeX silently produced nothing visible (rare but
+      // happens with malformed input + throwOnError:false), fall back to
+      // the raw text so the user always sees something.
+      const html = containerRef.current.innerHTML.trim();
+      if (!html) containerRef.current.textContent = math;
+    } catch {
+      if (containerRef.current) containerRef.current.textContent = math;
     }
   }, [latex, display, math]);
 

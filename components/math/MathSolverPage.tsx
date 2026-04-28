@@ -1954,6 +1954,13 @@ const QUESTION_INPUT_SYMBOLS: QuestionInputSymbol[] = [
   { label: '∞', insert: 'inf' },
   { label: '∂', insert: 'derivative of ' },
   { label: '∫', insert: 'integral of  dx', cursorOffset: -3 },
+  // Definite-integral / sum / limit / derivative templates with explicit
+  // upper and lower bounds. Inserts a ready-to-edit string and parks the
+  // caret on the first placeholder so the student can fill in values.
+  { label: '∫_a^b', insert: 'integral from 0 to 1 of  dx', cursorOffset: -3 },
+  { label: 'Σ_a^b', insert: 'sum from k=1 to n of ', cursorOffset: 0 },
+  { label: 'lim',   insert: 'limit as x->0 of ', cursorOffset: 0 },
+  { label: 'd/dx',  insert: 'derivative of  with respect to x', cursorOffset: -22 },
   { label: 'sin', insert: 'sin()', cursorOffset: -1 },
   { label: 'cos', insert: 'cos()', cursorOffset: -1 },
   { label: 'tan', insert: 'tan()', cursorOffset: -1 },
@@ -2086,6 +2093,10 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
   const [scanError, setScanError] = useState('');
   const [typeInput,  setTypeInput]  = useState('');
   const [writeContext, setWriteContext] = useState('');
+  // Write a Question owns its own result so solving stays on this page —
+  // the user is no longer auto-routed to a solver topic view.
+  const [writeResult, setWriteResult] = useState<SolveResult | null>(null);
+  const [writeSolving, setWriteSolving] = useState(false);
   const [writeSavedToast, setWriteSavedToast] = useState('');
 
 
@@ -3533,18 +3544,33 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                   Open in solver
                 </button>
                 <button
-                  disabled={!typeInput.trim()}
-                  onClick={() => {
+                  disabled={!typeInput.trim() || writeSolving}
+                  onClick={async () => {
+                    // Solve in-place. Write a Question is now a fully
+                    // standalone composer — no auto-route to a solver
+                    // topic. Result renders below the action row.
                     const q = typeInput.trim();
-                    const topic = solverTopicForQuestion(q) as TopicId;
                     const full = writeContext.trim() ? `${q}\n\nContext: ${writeContext.trim()}` : q;
-                    setInput(full);
-                    setActive(topic);
-                    setTimeout(() => { void solve(full, topic); }, 0);
+                    const topic = solverTopicForQuestion(q) as TopicId;
+                    setWriteSolving(true);
+                    setWriteResult(null);
+                    try {
+                      const res = await fetch('/api/math/solve', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ problem: full, category: topic }),
+                      });
+                      const data = await res.json() as SolveResult;
+                      setWriteResult(data);
+                    } catch {
+                      setWriteResult({ answer: '', answerLatex: '', steps: [], graphExpr: null, category: topic, engine: 'error', error: 'Network error — try again.' });
+                    } finally {
+                      setWriteSolving(false);
+                    }
                   }}
                   style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: typeInput.trim() ? 'pointer' : 'default', opacity: typeInput.trim() ? 1 : 0.4 }}
                 >
-                  Solve now
+                  {writeSolving ? 'Solving…' : 'Solve here'}
                 </button>
                 <button
                   disabled={!typeInput.trim()}
@@ -3584,6 +3610,47 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                   <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>{writeSavedToast}</span>
                 )}
               </div>
+
+              {/* Inline solve result — Write a Question is fully self-
+                  contained: the answer renders here instead of routing to
+                  a solver topic view. Click "Open in solver" if you want
+                  the full step-by-step UI for this category. */}
+              {writeResult && (
+                <div style={{ marginTop: 14 }}>
+                  {writeResult.error ? (
+                    <div style={{ borderRadius: 12, background: '#ef444408', border: '1.5px solid #ef444430', padding: '14px 18px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: '#ef444415', border: '1px solid #ef444430', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>⚠</div>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: '#ef4444', marginBottom: 4 }}>Could not solve this problem</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{writeResult.error}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ borderRadius: 12, background: `${accent}0a`, border: `1.5px solid ${accent}28`, overflow: 'hidden' }}>
+                        <div style={{ height: 3, background: `linear-gradient(90deg, ${accent}, ${accent}50)` }} />
+                        <div style={{ padding: '12px 18px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: accent }}>Answer</div>
+                          <div style={{ height: 1, flex: 1, background: `${accent}20` }} />
+                          <div style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, background: `${accent}12`, color: accent, fontWeight: 600 }}>
+                            {writeResult.engine === 'ai' ? '✨ AI' : '🔢 symbolic'}
+                          </div>
+                        </div>
+                        <div style={{ padding: '8px 18px 14px', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', overflowX: 'auto' }}>
+                          {writeResult.answerLatex
+                            ? <Latex latex={writeResult.answerLatex} display />
+                            : <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{writeResult.answer || '—'}</span>}
+                        </div>
+                      </div>
+                      {writeResult.steps && writeResult.steps.length > 0 && (
+                        <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+                          {writeResult.steps.length} solution step{writeResult.steps.length === 1 ? '' : 's'} available — click <strong>Open in solver</strong> to see the full breakdown.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
 
             </div>
           );
