@@ -199,7 +199,17 @@ function buildUserPrompt(mode: AllModes, text: string, options?: Record<string, 
     explain:    `Explain the following concept or text clearly for a student, with a plain-language explanation and one practical example:\n\n${text}`,
     rephrase:   `Rephrase the following text in simpler, clearer language for a student:\n\n${text}`,
     notes:      `${noteInstruction}\n\nUse this study material:\n\n${text}`,
-    quiz:       `Create ${count} short-answer quiz questions from the material below. Use this exact format for each question:
+    quiz:       `You are a teacher writing a short-answer quiz from the source material below. Goal: test whether the student understands the topic, not whether they can copy lines from the slides.
+
+Write ${count} questions. Mix all three types across the set:
+
+1. RECALL — facts, definitions, and steps explicitly stated in the source.
+2. APPLICATION — apply the source's concepts to a new scenario, calculation, example, or short worked problem that is not literally in the text.
+3. CONNECTION — closely related ideas a student studying this exact topic is expected to know (a prerequisite definition, a typical consequence, a standard textbook variant). Only include these when they sit unambiguously inside the topic — never drift to adjacent subjects, never invent facts, never contradict the source.
+
+If you're not sure whether something is in scope, leave it out. Expected answers must be specific enough to grade — give the actual answer, not a hint.
+
+Use this exact format for each question — the "Q" prefix and the "Answer:" line are required:
 
 Q1. <question text>
 Answer: <expected answer in 1-2 sentences>

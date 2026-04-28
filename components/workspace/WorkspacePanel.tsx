@@ -428,6 +428,11 @@ export function WorkspacePanel({
   const [pasteMode,     setPasteMode]     = useState(false);
   const [extracting,    setExtracting]    = useState(false);
   const [output,        setOutput]        = useState('');
+  // Snapshot the most recent output per tool tab so switching between
+  // Summarize / MCQ / Quiz / etc. doesn't wipe a result the user wants
+  // to come back to. Cleared explicitly via the ✕ Clear button or when
+  // a new file is loaded.
+  const [outputsByMode, setOutputsByMode] = useState<Record<string, string>>({});
   const [generating,    setGenerating]    = useState(false);
   const [count,         setCount]         = useState(5);
   const [libItems,      setLibItems]      = useState<LibraryItemRecord[]>([]);
@@ -558,6 +563,14 @@ export function WorkspacePanel({
 
   useEffect(() => { loadFiles(); }, [loadFiles, filesRefreshKey]);
   useEffect(() => { setViewFile(null); setMissingBlobs(new Set()); }, [selectedFolder, selectedTopic]);
+
+  // Mirror non-empty output into the per-mode snapshot so switching tabs
+  // doesn't lose work. Using a derived effect (rather than threading an
+  // updater through every setOutput call site) keeps the change tiny.
+  useEffect(() => {
+    if (!output) return;
+    setOutputsByMode(prev => prev[genMode] === output ? prev : { ...prev, [genMode]: output });
+  }, [output, genMode]);
   useEffect(() => {
     if (!selFile) return;
     const stillExists = files.some((file) => file.id === selFile.id);
@@ -1037,6 +1050,18 @@ export function WorkspacePanel({
 
   async function saveToLibrary() {
     if (!output) return;
+    // Always save to IndexedDB first so the user's work is never lost,
+    // regardless of what the server says. Then attempt the cloud save —
+    // success swaps the toast message, failure leaves the local copy in
+    // place and the Library page (which merges offline + remote) still
+    // shows the item.
+    let savedOffline = false;
+    try {
+      const { saveOfflineItem } = await import('@/lib/library/offline-store');
+      saveOfflineItem({ mode: genMode, content: output });
+      savedOffline = true;
+    } catch { /* IndexedDB may be unavailable; fall through to network */ }
+
     try {
       const res = await fetch('/api/library', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1047,21 +1072,19 @@ export function WorkspacePanel({
         broadcastInvalidate(LIBRARY_CHANNEL);
         return;
       }
-      if (res.status === 503) {
-        const { saveOfflineItem } = await import('@/lib/library/offline-store');
-        saveOfflineItem({ mode: genMode, content: output });
+      // Any non-2xx (401/503/500/etc.) — the offline copy already covers
+      // the user; just tell them where it landed.
+      if (savedOffline) {
         toast('Saved locally (sign in to sync to cloud)', 'success');
         broadcastInvalidate(LIBRARY_CHANNEL);
-        return;
+      } else {
+        toast('Could not save — try again', 'warning');
       }
-      toast('Could not save — try again', 'warning');
     } catch {
-      try {
-        const { saveOfflineItem } = await import('@/lib/library/offline-store');
-        saveOfflineItem({ mode: genMode, content: output });
+      if (savedOffline) {
         toast('Saved locally — network was unreachable', 'success');
         broadcastInvalidate(LIBRARY_CHANNEL);
-      } catch {
+      } else {
         toast('Could not save — try again', 'warning');
       }
     }
@@ -1072,6 +1095,10 @@ export function WorkspacePanel({
     setSelFile(file);
     setPasteMode(false);
     setOutput('');
+    // New file = the old per-mode snapshots are stale (they were generated
+    // from a different document), so drop them. Otherwise the user could
+    // tab between Summarize/MCQ and see content from the previous file.
+    setOutputsByMode({});
     setMainTab(nextTab);
     toast(successMessage, 'success');
   }
@@ -1614,7 +1641,7 @@ export function WorkspacePanel({
                   <span style={{ width: 1, height: 14, background: 'var(--border-2)', flexShrink: 0, marginRight: 3 }} />
                   {GENERATE_TABS.filter(t => (group.ids as readonly string[]).includes(t.id)).map(t => (
                     <button key={t.id} title={t.hint}
-                      onClick={() => { setGenMode(t.id); setOutput(''); }}
+                      onClick={() => { setGenMode(t.id); setOutput(outputsByMode[t.id] ?? ''); }}
                       style={{
                         padding: '4px 11px', borderRadius: 20, fontSize: 'var(--text-xs)',
                         fontWeight: 500, border: `1.5px solid ${genMode === t.id ? 'var(--accent)' : 'var(--border-2)'}`,
@@ -1808,7 +1835,7 @@ export function WorkspacePanel({
                       <button className="btn btn-ghost btn-sm" onClick={() => downloadOutput('txt')} title="Download as plain text">⬇ .txt</button>
                       <button className="btn btn-ghost btn-sm" onClick={saveToLibrary} title="Save to Library (Ctrl+S)">🗂 Save</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => { setNotesInject(output); setMainTab('notes'); toast('Opened in Notes ✓', 'success'); }} title="Send to Notes editor">📓 Notes</button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => { setOutput(''); setEditMode(false); }}>✕ Clear</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setOutput(''); setEditMode(false); setOutputsByMode(prev => { const next = { ...prev }; delete next[genMode]; return next; }); }}>✕ Clear</button>
                     </div>
                   )}
                 </>

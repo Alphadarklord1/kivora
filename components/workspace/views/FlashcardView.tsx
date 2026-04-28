@@ -1719,26 +1719,74 @@ export function FlashcardView({
         <button className="btn-icon" style={{ fontSize:11, color:'var(--text-3)' }} onClick={() => setPhase('preview')}>✕</button>
       </div>
 
-      {/* Plain card — no 3D flip, no gradients. Front shown always; Back
-          appears below after "Show answer". Same grading data flow. */}
-      <div style={{ userSelect: 'none' }} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10, padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 140 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1 }}>{t('Front')}</div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {reviewFrontUrl && <img src={reviewFrontUrl} alt="" style={{ maxWidth:'100%', maxHeight:120, objectFit:'contain', borderRadius:8 }} />}
-          <div style={{ fontSize: 'var(--text-base)', color: 'var(--text)', lineHeight: 1.5 }}>{card.front}</div>
-        </div>
-        {flip && (
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10, padding: '18px 20px', marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 140 }}>
+      {/* 3D flip card — front and back are two faces on the same surface.
+          Click anywhere on the card OR press the Show-answer button to flip.
+          Front-then-stacked-back was the previous layout; users asked for
+          a real flip animation. */}
+      <div
+        style={{ userSelect: 'none', perspective: 1400, cursor: flip ? 'default' : 'pointer' }}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onClick={() => { if (!flip) { setFlip(true); if (ttsEnabled) speak(card.back); } }}
+      >
+        <div
+          style={{
+            position: 'relative',
+            minHeight: 220,
+            transformStyle: 'preserve-3d',
+            transform: flip ? 'rotateY(180deg)' : 'rotateY(0deg)',
+            transition: 'transform 0.55s cubic-bezier(0.4, 0.2, 0.2, 1)',
+          }}
+        >
+          {/* Front face */}
+          <div
+            style={{
+              position: 'absolute', inset: 0,
+              background: 'var(--surface)',
+              border: '1px solid var(--border-2)',
+              borderRadius: 12,
+              padding: '20px 22px',
+              display: 'flex', flexDirection: 'column', gap: 10,
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 1 }}>{t('Front')}</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {reviewFrontUrl && <img src={reviewFrontUrl} alt="" style={{ maxWidth:'100%', maxHeight:140, objectFit:'contain', borderRadius:8 }} />}
+            <div style={{ fontSize: 'var(--text-base)', color: 'var(--text)', lineHeight: 1.5, flex: 1 }}>{card.front}</div>
+          </div>
+          {/* Back face — pre-rotated so it sits hidden behind the front
+              until the parent rotates 180°. */}
+          <div
+            style={{
+              position: 'absolute', inset: 0,
+              background: 'var(--surface)',
+              border: '1.5px solid var(--accent)',
+              borderRadius: 12,
+              padding: '20px 22px',
+              display: 'flex', flexDirection: 'column', gap: 10,
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+              transform: 'rotateY(180deg)',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            }}
+          >
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: 1 }}>{t('Back')}</div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            {reviewBackUrl && <img src={reviewBackUrl} alt="" style={{ maxWidth:'100%', maxHeight:120, objectFit:'contain', borderRadius:8 }} />}
-            <div style={{ fontSize: 'var(--text-base)', color: 'var(--text)', lineHeight: 1.5 }}>{card.back}</div>
+            {reviewBackUrl && <img src={reviewBackUrl} alt="" style={{ maxWidth:'100%', maxHeight:140, objectFit:'contain', borderRadius:8 }} />}
+            <div style={{ fontSize: 'var(--text-base)', color: 'var(--text)', lineHeight: 1.5, flex: 1 }}>{card.back}</div>
             {ttsEnabled && (
-              <button style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', fontSize: 12 }} onClick={() => speak(card.back)}>🔊</button>
+              <button
+                style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', fontSize: 12 }}
+                onClick={(e) => { e.stopPropagation(); speak(card.back); }}
+              >
+                🔊
+              </button>
             )}
           </div>
-        )}
+        </div>
       </div>
 
       {flip ? (
