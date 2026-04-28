@@ -3613,9 +3613,16 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                   📚 Save to Library
                 </button>
                 <button
-                  disabled={!typeInput.trim() && !writeContext.trim()}
-                  onClick={() => { setTypeInput(''); setWriteContext(''); }}
-                  style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: (typeInput.trim() || writeContext.trim()) ? 'pointer' : 'default', opacity: (typeInput.trim() || writeContext.trim()) ? 1 : 0.4 }}
+                  disabled={(!typeInput.trim() && !writeContext.trim() && !writeResult) || writeSolving}
+                  onClick={() => {
+                    // Wipe input AND any inline solve result. Without
+                    // the second reset, an old answer card lingered
+                    // below the freshly-cleared input.
+                    setTypeInput('');
+                    setWriteContext('');
+                    setWriteResult(null);
+                  }}
+                  style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: (typeInput.trim() || writeContext.trim() || writeResult) ? 'pointer' : 'default', opacity: (typeInput.trim() || writeContext.trim() || writeResult) ? 1 : 0.4 }}
                 >
                   Clear
                 </button>
