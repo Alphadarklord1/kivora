@@ -51,7 +51,7 @@ const EVENT_COLORS: Record<EventType, string> = {
  *  Course Schedule Importer so each course renders in its own color),
  *  falling back to the type-default. */
 function colorFor(evt: { type: EventType; color?: string }): string {
-  return evt.color || colorFor(evt);
+  return evt.color || EVENT_COLORS[evt.type];
 }
 
 const EVENT_ICONS: Record<EventType, string> = {
