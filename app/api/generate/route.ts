@@ -244,16 +244,34 @@ Mark the correct option with the letter on the Answer line. Do not add commentar
     flashcards: `Create ${count} flashcard pairs formatted as "Front: <concept> | Back: <explanation>" from:\n\n${text}`,
     assignment: `Generate a structured assignment with ${count} questions based on:\n\n${text}`,
     outline:    `Create a detailed hierarchical outline with main topics and subtopics from:\n\n${text}`,
-    exam:       `Create a realistic exam paper with ${count} mixed questions worth 100 marks total. Use this exact format — the "Q" prefix, "[N marks]" tag, and "Answer:" line are required:
+    exam:       `Create a realistic final-exam paper with ${count} questions worth 100 marks total, structured exactly like a course final.
 
-Q1. [10 marks] <question text>
+Required mix (do NOT ship an all-short-answer paper):
+- About 40% MCQ (single best answer, 2 marks each).
+- About 40% short-answer (3–6 marks each, 1–2 sentence expected response).
+- About 20% extended / essay / worked-problem (8–15 marks, multi-paragraph or step-by-step).
+
+Use this EXACT format. Every question must have a "Q" prefix, a "[N marks]" tag, and an "Answer:" line. Vary the format per question type:
+
+MCQ template:
+Q1. [2 marks] <question text>
 A) <option>
 B) <option>
 C) <option>
 D) <option>
-Answer: <letter for MCQ, or expected response for short-answer/essay>
+Answer: <single letter A/B/C/D>
 
-Mix MCQ (with A/B/C/D options), short-answer, and essay questions. Material:\n\n${text}`,
+Short-answer template:
+Q2. [5 marks] <question text>
+Answer: <expected response in 1–2 sentences>
+
+Essay / extended template:
+Q3. [10 marks] <question text — may be multi-line>
+Answer: <expected response, multi-paragraph or numbered steps as appropriate>
+
+Mix question types throughout the paper — do not group them. Mark totals across all questions should sum to roughly 100. Stay strictly within the source material.
+
+Material:\n\n${text}`,
     practice:   `Create one strong practice problem based on the material below. Use this exact markdown format with EXACTLY 3 hints — do not add Hint 4 or higher, do not add commentary outside these sections, do not repeat hints inside the Solution:
 
 ## Problem

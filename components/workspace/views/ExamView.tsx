@@ -57,16 +57,43 @@ export function ExamView({
     const weak: string[] = [];
     const detailedAnswers: QuizAnswerSummary[] = [];
     blocks.forEach((block, qi) => {
-      const ans  = block.match(/(?:Answer|Correct(?:\s*answer)?)\s*[:=]\s*\*?\*?([A-D])\b/i)?.[1]
+      // MCQ answer letter (A/B/C/D)
+      const mcqLetter = block.match(/(?:Answer|Correct(?:\s*answer)?)\s*[:=]\s*\*?\*?([A-D])\b/i)?.[1]
                 ?? block.match(/[✓✔]\s*\*?\*?([A-D])\b/i)?.[1]
                 ?? block.match(/^\s*\*\*([A-D])[\.\)]/m)?.[1]
                 ?? block.match(/^\s*([A-D])[\.\)][^\n]*\(correct\)/im)?.[1];
+      // Short-answer expected text (everything after the Answer: line for
+      // non-MCQ blocks). Used for fuzzy grading of free-response questions.
+      const shortAnswerMatch = block.match(/Answer\s*:\s*([\s\S]+?)$/im);
+      const expectedText = shortAnswerMatch?.[1]?.trim() ?? '';
+
       const blockLines = block.split('\n').map(l => l.trim()).filter(Boolean);
       const optI = blockLines.findIndex(l => /^\*?\*?[A-D]\*?\*?[\.\)]/i.test(l));
-      const stemFull = (optI > 0 ? blockLines.slice(0, optI).join(' ') : blockLines[0])
+      const ansI = blockLines.findIndex(l => /^Answer\s*:/i.test(l));
+      const stemEnd = optI > 0 ? optI : (ansI > 0 ? ansI : blockLines.length);
+      const stemFull = blockLines.slice(0, stemEnd).join(' ')
         .replace(/^\s*\*?\*?(?:Q?\d+)[\.\)]\*?\*?\s*/i, '').trim();
       const userAnswer = answers[qi] ?? '';
-      const isCorrect = Boolean(ans && userAnswer === ans);
+
+      // Grade: MCQ exact-letter match, short-answer fuzzy word-overlap.
+      let isCorrect = false;
+      let correctAnsRecord = '';
+      if (mcqLetter) {
+        isCorrect = userAnswer === mcqLetter;
+        correctAnsRecord = mcqLetter;
+      } else if (expectedText) {
+        // ≥50% overlap on distinctive words (>3 chars) — same threshold
+        // QuizView uses, so the bar feels consistent across tools.
+        const norm = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter(w => w.length > 3);
+        const userWords = new Set(norm(userAnswer));
+        const expectedWords = norm(expectedText);
+        if (expectedWords.length > 0 && userWords.size > 0) {
+          let hits = 0;
+          for (const w of expectedWords) if (userWords.has(w)) hits++;
+          isCorrect = hits / expectedWords.length >= 0.5;
+        }
+        correctAnsRecord = expectedText.slice(0, 200);
+      }
       if (isCorrect) correct++;
       else weak.push(stemFull.slice(0, 40) + '…');
       // Per-question record for analytics — keeps the same shape the
@@ -75,7 +102,7 @@ export function ExamView({
         questionId: `q${qi + 1}`,
         question: stemFull.slice(0, 200),
         userAnswer,
-        correctAnswer: ans ?? '',
+        correctAnswer: correctAnsRecord,
         isCorrect,
       });
     });
@@ -167,27 +194,60 @@ export function ExamView({
         {blocks.map((block, qi) => {
           const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
           const optStart = lines.findIndex(l => /^\*?\*?[A-D]\*?\*?[\.\)]/i.test(l));
-          const stemLines = (optStart > 0 ? lines.slice(0, optStart) : [lines[0]]).join(' ');
+          const ansIdx = lines.findIndex(l => /^Answer\s*:/i.test(l));
+          // Build stem from everything BEFORE the first option (or the
+          // Answer: line for short-answer questions). Joining preserves
+          // multi-line questions like "[5 marks] Describe X. Show your steps."
+          const stemEnd = optStart > 0 ? optStart : (ansIdx > 0 ? ansIdx : lines.length);
+          const stemLines = lines.slice(0, stemEnd).join(' ');
           const stem  = stemLines.replace(/^\s*\*?\*?(?:Q?\d+)[\.\)]\*?\*?\s*/i, '').trim();
           const opts  = lines.filter(l => /^\*?\*?[A-D]\*?\*?[\.\)]/i.test(l));
+          const isMcq = opts.length >= 2;
           return (
             <div key={qi} className="quiz-card">
               <div className="quiz-q-num">Q{qi + 1}</div>
               <div className="quiz-q-text">{stem}</div>
-              <div className="quiz-options">
-                {opts.map((opt, oi) => {
-                  const letter = opt.match(/^\*?\*?([A-D])\*?\*?[\.\)]/i)?.[1]?.toUpperCase() ?? '';
-                  const text   = opt.replace(/^\*?\*?[A-D]\*?\*?[\.\)]\s*/i, '').replace(/\s*[✓✔]\s*$/u, '').replace(/\s*\(correct\)\s*$/i, '');
-                  const isSel  = answers[qi] === letter;
-                  return (
-                    <div key={oi} className={`quiz-option${isSel ? ' selected' : ''}`}
-                      onClick={() => setAnswers(p => ({ ...p, [qi]: letter }))}>
-                      <span className="quiz-opt-letter">{letter}</span>
-                      <span>{text}</span>
-                    </div>
-                  );
-                })}
-              </div>
+              {isMcq ? (
+                <div className="quiz-options">
+                  {opts.map((opt, oi) => {
+                    const letter = opt.match(/^\*?\*?([A-D])\*?\*?[\.\)]/i)?.[1]?.toUpperCase() ?? '';
+                    const text   = opt.replace(/^\*?\*?[A-D]\*?\*?[\.\)]\s*/i, '').replace(/\s*[✓✔]\s*$/u, '').replace(/\s*\(correct\)\s*$/i, '');
+                    const isSel  = answers[qi] === letter;
+                    return (
+                      <div key={oi} className={`quiz-option${isSel ? ' selected' : ''}`}
+                        onClick={() => setAnswers(p => ({ ...p, [qi]: letter }))}>
+                        <span className="quiz-opt-letter">{letter}</span>
+                        <span>{text}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Short-answer / essay — give the student an actual place
+                   to type their answer. Without this the question shows
+                   but there's no input, leaving the user stuck. */
+                <textarea
+                  value={answers[qi] ?? ''}
+                  onChange={(e) => setAnswers(p => ({ ...p, [qi]: e.target.value }))}
+                  placeholder="Type your answer here…"
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    marginTop: 10,
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border-2)',
+                    background: 'var(--surface)',
+                    color: 'var(--text)',
+                    fontSize: 'var(--text-sm)',
+                    lineHeight: 1.6,
+                    fontFamily: 'inherit',
+                    resize: 'vertical',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              )}
             </div>
           );
         })}

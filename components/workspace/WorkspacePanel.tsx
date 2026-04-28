@@ -1816,6 +1816,27 @@ export function WorkspacePanel({
                         style={{ width: '100%', minHeight: 320, padding: '14px 16px', background: 'var(--surface-2)', border: '1.5px solid var(--accent)', borderRadius: 10, color: 'var(--text)', fontSize: 'var(--text-sm)', lineHeight: 1.7, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
                       />
                     )
+                    : generating && (genMode === 'mcq' || genMode === 'quiz' || genMode === 'exam')
+                    ? (
+                        /* These tools embed `Answer:` lines and (correct)
+                           markers in the raw output. Showing the streaming
+                           markdown directly would leak the answers to the
+                           student before they get a chance to take the
+                           assessment. The parsed views (MCQ/Quiz/Exam)
+                           already strip those, so we use them during
+                           streaming too — and add a small streaming hint
+                           on top. Partial blocks without the required
+                           Answer: line are filtered out by those views. */
+                        <div>
+                          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', animation: 'pulse 1.2s ease-in-out infinite' }} />
+                            Generating questions… answers will be hidden until you submit.
+                          </div>
+                          {genMode === 'mcq'  && <MCQView  content={output} fileId={selFile?.id ?? null} />}
+                          {genMode === 'quiz' && <QuizView content={output} fileId={selFile?.id ?? null} />}
+                          {genMode === 'exam' && <ExamView content={output} fileId={selFile?.id ?? null} />}
+                        </div>
+                      )
                     : generating
                     ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) + '<span class="stream-cursor">▍</span>' }} />
                     : genMode === 'practice'   ? <PracticeView content={output} />

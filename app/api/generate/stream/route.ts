@@ -428,7 +428,14 @@ Mark the correct option with the letter on the Answer line. Do not add commentar
     flashcards: `Create ${count} flashcard pairs formatted as "Front: <concept> | Back: <explanation>" from:\n\n${text}`,
     assignment: `Generate a structured assignment with ${count} questions based on:\n\n${text}`,
     outline:    `Create a detailed hierarchical outline with main topics and subtopics from:\n\n${text}`,
-    exam:       `Create a realistic exam paper with ${count} mixed questions worth 100 marks total. Use this exact format — the "Q" prefix, "[N marks]" tag, and "Answer:" line are required:
+    exam:       `Create a realistic final-exam paper with ${count} questions worth 100 marks total, structured exactly like a course final.
+
+Required mix (do NOT ship an all-short-answer paper):
+- About 40% MCQ (single best answer, 2 marks each).
+- About 40% short-answer (3–6 marks each, 1–2 sentence expected response).
+- About 20% extended / essay / worked-problem (8–15 marks, multi-paragraph or step-by-step).
+
+Use this EXACT format. Every question must have a "Q" prefix, a "[N marks]" tag, and an "Answer:" line:
 
 Q1. [10 marks] <question text>
 A) <option>
