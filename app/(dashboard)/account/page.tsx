@@ -7,6 +7,7 @@ import { useToast } from '@/providers/ToastProvider';
 import { LevelBadge } from '@/components/gamification/LevelBadge';
 import { getGamificationState, ACHIEVEMENTS, type GamificationState } from '@/lib/gamification/index';
 import { validatePasswordPolicy } from '@/lib/auth/password-policy';
+import { useSingleFlight } from '@/hooks/useSingleFlight';
 
 interface UserProfile {
   id: string;
@@ -117,7 +118,7 @@ export default function AccountPage() {
 
   // ── Save profile ─────────────────────────────────────────────────────
 
-  async function saveProfile(e: React.FormEvent) {
+  const saveProfile = useSingleFlight(async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingPro(true);
     try {
@@ -133,11 +134,11 @@ export default function AccountPage() {
       toast('Profile updated ✓', 'success');
     } catch { toast('Failed to save. Try again.', 'error'); }
     finally { setSavingPro(false); }
-  }
+  });
 
   // ── Change password ──────────────────────────────────────────────────
 
-  async function changePassword(e: React.FormEvent) {
+  const changePassword = useSingleFlight(async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPwd !== confirmPwd) { toast('Passwords do not match', 'error'); return; }
     const policyError = validatePasswordPolicy(newPwd);
@@ -159,11 +160,11 @@ export default function AccountPage() {
       toast('Password updated ✓', 'success');
     } catch { toast('Failed to update password', 'error'); }
     finally { setSavingPwd(false); }
-  }
+  });
 
   // ── Delete account ───────────────────────────────────────────────────
 
-  async function deleteAccount() {
+  const deleteAccount = useSingleFlight(async () => {
     if (deleteConfirm !== profile?.email) { toast('Email does not match', 'error'); return; }
     setDeleting(true);
     try {
@@ -177,7 +178,7 @@ export default function AccountPage() {
       }
     } catch { toast('Delete failed', 'error'); }
     finally { setDeleting(false); }
-  }
+  });
 
   // ── Render ───────────────────────────────────────────────────────────
 

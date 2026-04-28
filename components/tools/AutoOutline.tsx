@@ -5,6 +5,7 @@ import { generateSmartContent } from '@/lib/offline/generate';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
 import { saveOfflineItem } from '@/lib/library/offline-store';
 import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
+import { useSingleFlight } from '@/hooks/useSingleFlight';
 
 export function AutoOutline() {
   const [text, setText] = useState('');
@@ -80,7 +81,7 @@ export function AutoOutline() {
     return lines.join('\n');
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = useSingleFlight(async () => {
     if (!text.trim()) return;
     setGenerating(true);
     setOutlineSource(null);
@@ -115,9 +116,9 @@ export function AutoOutline() {
     } finally {
       setGenerating(false);
     }
-  };
+  });
 
-  const handleSave = async () => {
+  const handleSave = useSingleFlight(async () => {
     if (!outline) return;
     setSaving(true);
     setSaveStatus('idle');
@@ -161,7 +162,7 @@ export function AutoOutline() {
       // Clear the status after a moment so the next save starts fresh.
       setTimeout(() => setSaveStatus('idle'), 2400);
     }
-  };
+  });
 
   return (
     <div className="outline-tool">

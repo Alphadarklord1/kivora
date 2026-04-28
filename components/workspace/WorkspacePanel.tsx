@@ -529,6 +529,14 @@ export function WorkspacePanel({
   const abortRef    = useRef<AbortController | null>(null);
   const pasteRef    = useRef<HTMLTextAreaElement>(null);
   const handledReviewImportRef = useRef<string | null>(null);
+  // Synchronous guard against impatience-clicks. The Generate button is
+  // already disabled={generating}, but React doesn't flush the disabled
+  // state before the next click event fires — a fast double-click could
+  // launch two parallel generations. This ref flips synchronously on the
+  // first call so the second one bails out immediately.
+  const generateInFlightRef = useRef(false);
+  // Same idea for the Save-to-Library button.
+  const saveInFlightRef = useRef(false);
 
   function requestCreateFolder() {
     if (typeof window !== 'undefined') {
@@ -879,9 +887,14 @@ export function WorkspacePanel({
   // ── AI generation (streaming) ──────────────────────────────────────────
 
   async function runGenerate(mode: ToolMode, sourceOverride?: string) {
+    // Bail early if a previous generation is still in flight. The
+    // generateInFlightRef flag flips synchronously here, then resets in
+    // the finally branch of the actual call site below.
+    if (generateInFlightRef.current) return;
     let src = sourceOverride?.trim() ?? extractedText.trim();
     if (!src && selFile) src = (await extractFromFile(selFile))?.trim() ?? '';
     if (!src) { toast('Select a file or paste content first.', 'warning'); return; }
+    generateInFlightRef.current = true;
 
     // Read privacy preference — what can we send to AI?
     const aiDataMode = (typeof window !== 'undefined'
@@ -898,7 +911,7 @@ export function WorkspacePanel({
         setStreamSource('offline');
         toast('Generated offline (Offline-only mode is active)', 'info');
       } catch { toast('Offline generation failed.', 'error'); }
-      finally { setGenerating(false); }
+      finally { setGenerating(false); generateInFlightRef.current = false; }
       return;
     }
 
@@ -944,6 +957,7 @@ export function WorkspacePanel({
         return;
       } finally {
         setGenerating(false);
+        generateInFlightRef.current = false;
       }
     }
 
@@ -1042,6 +1056,7 @@ export function WorkspacePanel({
       toast('Generation failed. Please try again.', 'error');
     } finally {
       setGenerating(false);
+      generateInFlightRef.current = false;
     }
   }
 
@@ -1229,6 +1244,9 @@ export function WorkspacePanel({
 
   async function saveToLibrary() {
     if (!output) return;
+    // Synchronous double-click guard — see comment at saveInFlightRef.
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     // Build a descriptive title — Library used to render every saved
     // item as just "Summarize" / "MCQ" / "Quiz" because no metadata.title
     // was being sent. Now we derive one from the source so the user
@@ -1287,6 +1305,8 @@ export function WorkspacePanel({
       } else {
         toast('Could not save — try again', 'warning');
       }
+    } finally {
+      saveInFlightRef.current = false;
     }
   }
 
@@ -1363,7 +1383,7 @@ export function WorkspacePanel({
     toast('Chat file cleared', 'info');
   }
 
-  function clearGen() { abortRef.current?.abort(); setSelFile(null); setExtractedText(''); setOutput(''); setPasteMode(false); setGenerating(false); setFolderSourceMeta(null); }
+  function clearGen() { abortRef.current?.abort(); setSelFile(null); setExtractedText(''); setOutput(''); setPasteMode(false); setGenerating(false); generateInFlightRef.current = false; setFolderSourceMeta(null); }
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────
   useEffect(() => {
@@ -1984,7 +2004,7 @@ export function WorkspacePanel({
                   )}
                   {generating ? (
                     <button className="btn btn-sm btn-ghost" style={{ color: 'var(--text-3)' }}
-                      onClick={() => { abortRef.current?.abort(); setGenerating(false); }}>
+                      onClick={() => { abortRef.current?.abort(); setGenerating(false); generateInFlightRef.current = false; }}>
                       ✕ Cancel
                     </button>
                   ) : (

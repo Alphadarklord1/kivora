@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { saveOfflineItem } from '@/lib/library/offline-store';
 import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
+import { useSingleFlight } from '@/hooks/useSingleFlight';
 
 export type NoteStyle = 'study' | 'summary' | 'revision' | 'cornell';
 
@@ -164,7 +165,7 @@ export function NotesPanel({
     URL.revokeObjectURL(url);
   }
 
-  async function saveToLibrary() {
+  const saveToLibrary = useSingleFlight(async () => {
     if (savingLib || !content.trim()) return;
     setSavingLib(true);
     // Title heuristic: first markdown heading or the first non-empty line
@@ -213,7 +214,7 @@ export function NotesPanel({
     } finally {
       setSavingLib(false);
     }
-  }
+  });
 
   function clearNotes() {
     if (!confirm('Clear all notes for this folder? This cannot be undone.')) return;

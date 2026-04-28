@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import styles from '../auth.module.css';
 import { useSettings } from '@/providers/SettingsProvider';
+import { useSingleFlight } from '@/hooks/useSingleFlight';
 
 interface AuthCapabilities {
   googleConfigured: boolean;
@@ -39,7 +40,9 @@ export default function LoginPage() {
       .catch(() => {});
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Wrapped in useSingleFlight so a double-click / Enter-spam during the
+  // sign-in round-trip can't fire two parallel signIn() calls.
+  const handleSubmit = useSingleFlight(async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -49,18 +52,21 @@ export default function LoginPage() {
     }
 
     setLoading(true);
-    const res = await signIn('credentials', {
-      email: email.trim().toLowerCase(),
-      password,
-      redirect: false,
-    });
-    setLoading(false);
-    if (res?.error) {
-      setError('Invalid email or password. Check your credentials or create an account.');
-    } else {
-      router.replace('/workspace');
+    try {
+      const res = await signIn('credentials', {
+        email: email.trim().toLowerCase(),
+        password,
+        redirect: false,
+      });
+      if (res?.error) {
+        setError('Invalid email or password. Check your credentials or create an account.');
+      } else {
+        router.replace('/workspace');
+      }
+    } finally {
+      setLoading(false);
     }
-  }
+  });
 
   async function handleOAuth(provider: string) {
     setOauthLoading(provider);

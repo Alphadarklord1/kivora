@@ -49,3 +49,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .gstack/
+
+# Local IDE / agent state — never commit
+.claude/
+.mcp.json

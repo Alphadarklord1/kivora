@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import styles from '../auth.module.css';
 import { useSettings } from '@/providers/SettingsProvider';
+import { useSingleFlight } from '@/hooks/useSingleFlight';
 
 interface AuthCapabilities {
   googleConfigured: boolean;
@@ -45,7 +46,10 @@ export default function RegisterPage() {
   const hasOAuth = !caps?.oauthDisabled && (caps?.googleConfigured || caps?.microsoftConfigured || caps?.githubConfigured);
   const dbReady  = caps?.dbConfigured !== false;
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Single-flight so Enter-spam during the round-trip can't fire two
+  // /api/auth/register POSTs (which would surface a confusing "email
+  // already registered" error on the second attempt).
+  const handleSubmit = useSingleFlight(async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -91,7 +95,7 @@ export default function RegisterPage() {
     }
 
     router.replace('/workspace');
-  }
+  });
 
   return (
     <div className={styles.shell} dir={settings.language === 'ar' ? 'rtl' : 'ltr'}>

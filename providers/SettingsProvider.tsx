@@ -66,6 +66,17 @@ function loadFromStorage(): Settings {
   };
 }
 
+/** True if the user has a stored theme preference locally — i.e. they've
+ *  customised at some point. Used to keep the remote-settings fetch from
+ *  silently overwriting a fresh local change that hasn't synced yet. */
+function hasLocalThemePreference(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = readCompatStorage(localStorage, storageKeys.theme);
+    return typeof raw === 'string' && raw.length > 0;
+  } catch { return false; }
+}
+
 function persistToStorage(settings: Settings) {
   if (typeof window === 'undefined') return;
   writeCompatStorage(localStorage, storageKeys.theme, settings.theme);
@@ -109,6 +120,18 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if (hasLoadedRemote.current) return;
     hasLoadedRemote.current = true;
 
+    // Don't clobber a customised local theme with a stale remote response.
+    // The previous behaviour was: every page mount → GET /api/settings →
+    // setSettings(remote). If the user had just toggled the theme but the
+    // PUT hadn't completed (or had failed silently), the user's choice
+    // would flip back to whatever was last saved on the server. From the
+    // user's perspective that looks like the theme changing "randomly".
+    //
+    // New rule: local always wins for *appearance* settings. We still
+    // pull `language` because that's a cross-device preference users
+    // typically expect to be authoritative server-side.
+    const userHasLocalPrefs = hasLocalThemePreference();
+
     fetch('/api/settings')
       .then(async response => {
         if (!response.ok) return null;
@@ -116,6 +139,22 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       })
       .then(remote => {
         if (!remote) return;
+        if (userHasLocalPrefs) {
+          // Already customised locally — only pick up the language so
+          // a remote locale switch still propagates. Theme/density/font
+          // stay exactly as the user left them.
+          const next: Settings = {
+            ...settings,
+            language: sanitizeSupportedLocale(typeof remote.language === 'string' ? remote.language : settings.language),
+          };
+          if (next.language === settings.language) return;
+          setSettings(next);
+          persistToStorage(next);
+          applySettings(next);
+          return;
+        }
+        // Fresh local state (signed-in for the first time on this device,
+        // or localStorage was just cleared): adopt the full server snapshot.
         const next: Settings = {
           theme: normalizeTheme(remote.theme),
           density: normalizeDensity(remote.density),
