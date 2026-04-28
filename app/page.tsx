@@ -72,6 +72,9 @@ export default function SahlCalStylePage() {
           <a href="#features" className={styles.navLink} title="Generate from files, FSRS spaced repetition, outline → draft → check, math step-by-step, study planner.">
             Features
           </a>
+          <a href="#pricing" className={styles.navLink} title="Free forever for offline AI, $8/mo for cloud sync, school licences available.">
+            Pricing
+          </a>
           <a href="#how-it-works" className={styles.navLink} title="Four AI tiers with automatic fallback: cloud, local, bundled offline, deterministic.">
             How AI works
           </a>
@@ -278,6 +281,85 @@ export default function SahlCalStylePage() {
           </div>
         </section>
 
+        {/* ── Pricing ─────────────────────────────────────────────────── */}
+        <section id="pricing" style={{ padding: '5rem 1.5rem', maxWidth: 1200, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
+            <span style={{ display: 'inline-block', padding: '4px 14px', borderRadius: 999, background: 'rgba(29,184,142,0.12)', color: '#1db88e', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14 }}>
+              Pricing
+            </span>
+            <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.5rem)', fontWeight: 800, margin: '0 0 0.6rem', color: 'var(--text-primary, #14161c)' }}>
+              Start free. Pay only if you want cloud sync.
+            </h2>
+            <p style={{ color: 'var(--text-2, #55595f)', fontSize: '1.05rem', maxWidth: 620, margin: '0 auto', lineHeight: 1.55 }}>
+              Offline AI is permanently free. Premium adds cloud sync and the latest online models. Schools and tutoring centres get bulk seats.
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.25rem', alignItems: 'stretch' }}>
+            {/* Free */}
+            <div style={pricingCard()}>
+              <div style={pricingTopStripe('#1db88e')} />
+              <div style={pricingBody}>
+                <div style={pricingTier('#1db88e')}>FREE</div>
+                <div style={pricingPrice}>$0<span style={pricingCadence}>/forever</span></div>
+                <div style={pricingDesc}>Everything you need to study from your own files.</div>
+                <ul style={pricingList}>
+                  <li>Guest mode — no account required</li>
+                  <li>Local files, decks, and notes</li>
+                  <li>Offline AI (desktop) — Qwen via llama.cpp</li>
+                  <li>FSRS-4.5 spaced repetition</li>
+                  <li>Math solver + MATLAB lab + graph plotter</li>
+                </ul>
+                <Link href="/workspace" style={pricingCta('#1db88e', false)}>Start free →</Link>
+              </div>
+            </div>
+
+            {/* Premium — featured */}
+            <div style={pricingCard(true)}>
+              <div style={pricingTopStripe('#4f86f7')} />
+              <div style={pricingBody}>
+                <div style={{ ...pricingTier('#4f86f7'), display: 'flex', alignItems: 'center', gap: 8 }}>
+                  PREMIUM
+                  <span style={{ padding: '2px 8px', borderRadius: 999, background: '#4f86f7', color: '#fff', fontSize: 10, fontWeight: 700 }}>POPULAR</span>
+                </div>
+                <div style={pricingPrice}>$8<span style={pricingCadence}>/month</span></div>
+                <div style={pricingDesc}>For students who want cloud sync and the latest online models.</div>
+                <ul style={pricingList}>
+                  <li><strong>Everything in Free, plus:</strong></li>
+                  <li>Cloud sync across devices</li>
+                  <li>Advanced online AI (GPT-4o tier)</li>
+                  <li>Exam Prep mode + analytics</li>
+                  <li>Public deck publishing</li>
+                  <li>Priority support</li>
+                </ul>
+                <Link href="/login" style={pricingCta('#4f86f7', true)}>Start Premium →</Link>
+              </div>
+            </div>
+
+            {/* School */}
+            <div style={pricingCard()}>
+              <div style={pricingTopStripe('#f59e0b')} />
+              <div style={pricingBody}>
+                <div style={pricingTier('#f59e0b')}>SCHOOLS</div>
+                <div style={pricingPrice}>$3<span style={pricingCadence}>/student/year</span></div>
+                <div style={pricingDesc}>Bulk seats for universities, tutoring centres, and study groups.</div>
+                <ul style={pricingList}>
+                  <li>Everything in Premium, per student</li>
+                  <li>Admin console + class management</li>
+                  <li>Shared deck libraries</li>
+                  <li>Compliance + privacy reporting</li>
+                  <li>SSO + bulk roster import</li>
+                </ul>
+                <a href="mailto:hello@kivora.app?subject=School%20licence" style={pricingCta('#f59e0b', false)}>Contact us →</a>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '2rem', textAlign: 'center', fontSize: 13, color: 'var(--text-muted, #94a3b8)' }}>
+            All plans include offline AI · Privacy-first vault on every tier · Cancel anytime
+          </div>
+        </section>
+
         {/* ── Final CTA (Peachy Background) ─────────────────────────────── */}
         <section className={styles.ctaSection}>
           <div className={styles.ctaContent}>
@@ -334,4 +416,91 @@ export default function SahlCalStylePage() {
       </footer>
     </div>
   );
+}
+
+// ── Pricing card style helpers (kept below the component to avoid
+//    cluttering the JSX). Inline styles keep the change isolated to
+//    this file rather than bleeding into the global page CSS module.
+function pricingCard(featured = false): React.CSSProperties {
+  return {
+    display: 'flex',
+    flexDirection: 'column',
+    background: '#fff',
+    borderRadius: 18,
+    border: featured ? '1.5px solid #4f86f7' : '1px solid #e6e2dc',
+    overflow: 'hidden',
+    boxShadow: featured ? '0 12px 28px rgba(79,134,247,0.18)' : '0 2px 6px rgba(20,22,28,0.04)',
+    transform: featured ? 'translateY(-6px)' : 'none',
+  };
+}
+
+function pricingTopStripe(color: string): React.CSSProperties {
+  return { height: 5, background: `linear-gradient(90deg, ${color}, ${color}80)` };
+}
+
+const pricingBody: React.CSSProperties = {
+  padding: '1.5rem 1.4rem 1.6rem',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  flex: 1,
+};
+
+function pricingTier(color: string): React.CSSProperties {
+  return {
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: '0.12em',
+    color,
+  };
+}
+
+const pricingPrice: React.CSSProperties = {
+  fontSize: 36,
+  fontWeight: 800,
+  color: '#14161c',
+  letterSpacing: '-0.01em',
+  lineHeight: 1,
+};
+
+const pricingCadence: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 500,
+  color: '#94a3b8',
+  marginLeft: 4,
+};
+
+const pricingDesc: React.CSSProperties = {
+  fontSize: 13.5,
+  color: '#55595f',
+  lineHeight: 1.55,
+  margin: '0 0 0.5rem',
+};
+
+const pricingList: React.CSSProperties = {
+  margin: 0,
+  padding: '0 0 0 1.1rem',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  flex: 1,
+  fontSize: 13.5,
+  color: '#14161c',
+  lineHeight: 1.5,
+};
+
+function pricingCta(color: string, filled: boolean): React.CSSProperties {
+  return {
+    marginTop: 14,
+    padding: '10px 16px',
+    borderRadius: 10,
+    background: filled ? color : 'transparent',
+    color: filled ? '#fff' : color,
+    border: `1.5px solid ${color}`,
+    fontWeight: 700,
+    fontSize: 14,
+    textAlign: 'center',
+    textDecoration: 'none',
+    cursor: 'pointer',
+  };
 }
