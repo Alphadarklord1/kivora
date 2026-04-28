@@ -715,7 +715,12 @@ function solveGeometryProblem(normalizedInput: string): SolverResult {
     return result;
   }
 
-  const distance = lower.match(/^distance\s*\((.+?),(.+?)\)\s*\((.+?),(.+?)\)$/);
+  // Accept all the phrasings the panel + a typing user might produce:
+  //   "distance (3,2) (2,4)", "distance between (3,2) and (2,4)",
+  //   "distance from (3,2) to (2,4)", "distance (3,2) to (2,4)".
+  const distance = lower.match(
+    /^distance(?:\s+(?:between|from))?\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*(?:and|to|,)?\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*$/,
+  );
   if (distance) {
     const x1 = Number(math.evaluate(distance[1]));
     const y1 = Number(math.evaluate(distance[2]));
@@ -743,7 +748,11 @@ function solveGeometryProblem(normalizedInput: string): SolverResult {
     return result;
   }
 
-  const midpoint = lower.match(/^midpoint of\s*\((.+?),(.+?)\)\s*and\s*\((.+?),(.+?)\)$/);
+  // Tolerate spacing inside parens and accept "between"/"to" as
+  // alternatives to "and", same as the distance regex.
+  const midpoint = lower.match(
+    /^midpoint(?:\s+of)?\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*(?:and|to|,|between)?\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*$/,
+  );
   if (midpoint) {
     const x1 = Number(math.evaluate(midpoint[1]));
     const y1 = Number(math.evaluate(midpoint[2]));
@@ -771,7 +780,9 @@ function solveGeometryProblem(normalizedInput: string): SolverResult {
     return result;
   }
 
-  const line = lower.match(/^line through\s*\((.+?),(.+?)\)\s*and\s*\((.+?),(.+?)\)$/);
+  const line = lower.match(
+    /^line\s+(?:through|from)\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*(?:and|to|,)?\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)\s*$/,
+  );
   if (line) {
     const x1 = Number(math.evaluate(line[1]));
     const y1 = Number(math.evaluate(line[2]));
@@ -1021,12 +1032,111 @@ function solveGeometryProblem(normalizedInput: string): SolverResult {
     return result;
   }
 
+  // Rectangle area + perimeter — the panel button generates
+  // "Area and perimeter of rectangle 5 3" but no handler existed for
+  // it, so the user got "Unsupported geometry problem". Also accepts
+  // "area of rectangle length 5 width 3" and "area rectangle 5 by 3".
+  const rectangle = lower.match(
+    /(?:area(?:\s+and\s+perimeter)?|find\s+(?:the\s+)?area)(?:\s+of)?\s+(?:a\s+|the\s+)?rectangle(?:\s+(?:with|having))?\s+(?:length\s+(?:is\s+|=\s*)?|l\s*=\s*)?(.+?)(?:\s+(?:by|x|×)\s+|\s+(?:and\s+)?(?:width\s+(?:is\s+|=\s*)?|w\s*=\s*)?|\s+)(.+?)\s*$/,
+  );
+  if (rectangle) {
+    const length = Number(math.evaluate(rectangle[1]));
+    const width = Number(math.evaluate(rectangle[2]));
+    if (![length, width].every((v) => Number.isFinite(v) && v > 0)) {
+      return {
+        ...result,
+        verified: false,
+        answer: 'Invalid rectangle dimensions',
+        answerLatex: '\\text{Invalid rectangle dimensions}',
+        explanation: 'Length and width must be positive numbers. Example: area of rectangle 5 by 3.',
+      };
+    }
+    const area = length * width;
+    const perimeter = 2 * (length + width);
+    result.steps.push({
+      step: 1,
+      description: 'Use the rectangle area and perimeter formulas',
+      expression: 'A = lw,\\quad P = 2(l + w)',
+      explanation: 'Area is length times width; perimeter is twice the sum.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Substitute length and width',
+      expression: `A = (${expressionToLatex(formatNumber(length))})(${expressionToLatex(formatNumber(width))}) = ${expressionToLatex(formatNumber(area))}`,
+      explanation: 'Multiply the two sides to get the area.',
+    });
+    result.steps.push({
+      step: 3,
+      description: 'Compute the perimeter',
+      expression: `P = 2(${expressionToLatex(formatNumber(length))} + ${expressionToLatex(formatNumber(width))}) = ${expressionToLatex(formatNumber(perimeter))}`,
+      explanation: 'Add the two sides and double for the full perimeter.',
+    });
+    result.answer = `A = ${formatNumber(area)}, P = ${formatNumber(perimeter)}`;
+    result.answerLatex = `A = ${expressionToLatex(formatNumber(area))},\\quad P = ${expressionToLatex(formatNumber(perimeter))}`;
+    result.explanation = 'Computed the rectangle area and perimeter from length and width.';
+    return result;
+  }
+
+  // SAS triangle — "Solve triangle: a=5, b=7, C=60°" — the panel button
+  // sends this exact form. Uses the law of cosines for the third side
+  // and the law of sines for the remaining angles.
+  const sasTriangle = lower.match(
+    /^solve\s+triangle\s*:\s*a\s*=\s*([\-\d.]+)\s*,\s*b\s*=\s*([\-\d.]+)\s*,\s*c\s*=\s*([\-\d.]+)\s*°?\s*$/,
+  );
+  if (sasTriangle) {
+    const a = Number(sasTriangle[1]);
+    const b = Number(sasTriangle[2]);
+    const angleCdeg = Number(sasTriangle[3]);
+    if (![a, b, angleCdeg].every(Number.isFinite) || a <= 0 || b <= 0 || angleCdeg <= 0 || angleCdeg >= 180) {
+      return {
+        ...result,
+        verified: false,
+        answer: 'Invalid triangle inputs',
+        answerLatex: '\\text{Invalid triangle inputs}',
+        explanation: 'Sides must be positive and the included angle must be between 0° and 180°.',
+      };
+    }
+    const angleC = (angleCdeg * Math.PI) / 180;
+    const c = Math.sqrt(a * a + b * b - 2 * a * b * Math.cos(angleC));
+    const angleA = Math.asin((a * Math.sin(angleC)) / c) * 180 / Math.PI;
+    const angleB = 180 - angleCdeg - angleA;
+    const area = 0.5 * a * b * Math.sin(angleC);
+    result.steps.push({
+      step: 1,
+      description: 'Apply the law of cosines for the third side',
+      expression: `c^2 = a^2 + b^2 - 2ab\\cos(C)`,
+      explanation: 'When two sides and the included angle are known, the third side comes from the law of cosines.',
+    });
+    result.steps.push({
+      step: 2,
+      description: 'Substitute and simplify',
+      expression: `c = \\sqrt{${formatNumber(a)}^2 + ${formatNumber(b)}^2 - 2(${formatNumber(a)})(${formatNumber(b)})\\cos(${formatNumber(angleCdeg)}°)} = ${expressionToLatex(formatNumber(c))}`,
+      explanation: 'Plug the two sides and the included angle into the formula and evaluate.',
+    });
+    result.steps.push({
+      step: 3,
+      description: 'Use the law of sines for the remaining angles',
+      expression: `A = ${expressionToLatex(formatNumber(angleA))}°,\\quad B = ${expressionToLatex(formatNumber(angleB))}°`,
+      explanation: 'Once one side / angle pair is known, the other angles follow from sin(A)/a = sin(C)/c.',
+    });
+    result.steps.push({
+      step: 4,
+      description: 'Triangle area',
+      expression: `\\text{Area} = \\tfrac{1}{2}ab\\sin(C) = ${expressionToLatex(formatNumber(area))}`,
+      explanation: 'Half the product of two sides times the sine of the included angle.',
+    });
+    result.answer = `c = ${formatNumber(c)}, A = ${formatNumber(angleA)}°, B = ${formatNumber(angleB)}°, Area = ${formatNumber(area)}`;
+    result.answerLatex = `c = ${expressionToLatex(formatNumber(c))},\\; A = ${expressionToLatex(formatNumber(angleA))}°,\\; B = ${expressionToLatex(formatNumber(angleB))}°`;
+    result.explanation = 'Solved the SAS triangle with the law of cosines and the law of sines.';
+    return result;
+  }
+
   return {
     ...result,
     verified: false,
     answer: 'Unsupported geometry problem',
     answerLatex: '\\text{Unsupported geometry problem}',
-    explanation: 'Try line through (1,2) and (4,6), equation of circle: center (2,-3), radius 5, midpoint of (1,2) and (4,6), or area of triangle with sides 3, 4, 5.',
+    explanation: 'Try line through (1,2) and (4,6), equation of circle: center (2,-3), radius 5, midpoint of (1,2) and (4,6), area of triangle with sides 3, 4, 5, area of rectangle 5 by 3, or solve triangle: a=5, b=7, C=60°.',
   };
 }
 
@@ -3261,7 +3371,17 @@ export function solveMathProblem(problem: string, requestedCategory?: string | n
       /^int\s+/.test(lower)
     ) return solveIntegral(normalizedInput);
     if (lower.startsWith('limit ') || lower.startsWith('lim ')) return solveLimit(normalizedInput.replace(/^lim\s+/i, 'limit '));
-    if (/hypotenuse|distance\s*\(|distance between|midpoint of|line through|equation of circle|area circle|circumference circle|area triangle|area rectangle|volume of sphere|pythagorean/.test(lower)) return solveGeometryProblem(normalizedInput);
+    // Geometry dispatch — accept the phrasings the panel preset buttons
+    // generate (e.g. "Area of triangle with sides 2, 2, 1") as well as
+    // anything a user might type. The previous pattern required `area
+    // triangle` to be adjacent, so the panel-generated "Area of triangle
+    // ..." fell through to the general expression solver and the user
+    // saw "(2 · Area · of · sides · triangle · with, 2, 1)" because
+    // mathjs treated the words as variable names.
+    if (
+      /hypotenuse|distance\s*(?:between|from|\()|midpoint(?:\s+of)?|line\s+(?:through|from)|equation of (?:a\s+|the\s+)?circle|circumference|pythagorean|volume of (?:a\s+|the\s+)?sphere|area(?:\s+and\s+perimeter)?\s+(?:of\s+)?(?:a\s+|the\s+)?(?:triangle|rectangle|circle|square|parallelogram|trapezoid|trapezium)|(?:triangle|rectangle|circle|square|parallelogram|trapezoid|trapezium)\s+area|^solve\s+triangle\s*:/i
+        .test(lower)
+    ) return solveGeometryProblem(normalizedInput);
     if (/arithmetic (?:nth|sum)|geometric (?:nth|sum)|sequence|series/.test(lower)) return solveSequenceSeries(normalizedInput);
     if (lower.startsWith('system ') || lower.startsWith('solve system ') || (normalizedInput.includes(';') && normalizedInput.includes('='))) return solveSystem(normalizedInput);
     if (
