@@ -421,7 +421,7 @@ function Card({ children, style }: { children: ReactNode; style?: CSSProperties 
 
 function SettingsPageContent() {
   const { settings, updateSetting } = useSettings();
-  const { data: session, update: updateSession } = useSession();
+  const { data: session, update: updateSession, status: sessionStatus } = useSession();
   const router = useRouter();
   const { toast } = useToast();
   const { t } = useI18n();
@@ -694,7 +694,11 @@ function SettingsPageContent() {
         </div>
         <div className={styles.heroBadges}>
           {account && !account.isGuest ? <span className="badge badge-success">{account.email}</span> : null}
-          {!session?.user || account?.isGuest ? <span className="badge">Guest mode</span> : null}
+          {/* Wait for the session to finish loading before deciding to
+              show Guest mode — useSession returns `loading` for a beat
+              after page load, which used to flash "Guest mode" even on
+              fully-authenticated Google accounts. */}
+          {sessionStatus !== 'loading' && (!session?.user || account?.isGuest) ? <span className="badge">Guest mode</span> : null}
           {saved ? <span className="badge badge-success">Saved ✓</span> : null}
         </div>
       </div>
@@ -1628,16 +1632,18 @@ function NotificationsSection() {
         <NotifToggleRow
           checked={examNotifEnabled}
           label="Exam reminders"
-          hint="Sends a reminder the evening before and morning of any exam in your Planner."
+          hint={browserPermission === 'granted'
+            ? 'Sends a reminder the evening before and morning of any exam in your Planner.'
+            : 'Sends a reminder the evening before and morning of any exam in your Planner. (Grant browser notifications above for OS alerts; otherwise only in-app.)'}
           onToggle={() => { const n = !examNotifEnabled; setExamNotifEnabled(n); localStorage.setItem('kivora-notif-exams', n ? 'true' : 'false'); toast('Exam reminder preference saved', 'success'); }}
-          disabled={browserPermission !== 'granted'}
         />
         <NotifToggleRow
           checked={streakNotifEnabled}
           label="Daily streak alerts"
-          hint="Notifies you at 8 pm if you have not studied any flashcards yet today."
+          hint={browserPermission === 'granted'
+            ? 'Notifies you at 8 pm if you have not studied any flashcards yet today.'
+            : 'Notifies you at 8 pm if you have not studied any flashcards yet today. (Grant browser notifications above for OS alerts; otherwise only in-app.)'}
           onToggle={() => { const n = !streakNotifEnabled; setStreakNotifEnabled(n); localStorage.setItem('kivora-notif-streak', n ? 'true' : 'false'); toast('Streak alert preference saved', 'success'); }}
-          disabled={browserPermission !== 'granted'}
         />
       </div>
 

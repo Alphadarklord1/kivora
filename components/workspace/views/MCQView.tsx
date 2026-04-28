@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { mdToHtml } from '@/lib/utils/md';
 import { recordQuizAttempt, type QuizAnswerSummary } from '@/lib/workspace/quiz-persistence';
+import { addXp, XP_VALUES } from '@/lib/gamification';
 
 export function MCQView({ content, fileId, deckId }: { content: string; fileId?: string | null; deckId?: string | null }) {
   const [selected, setSelected] = useState<Record<number, string>>({});
@@ -56,6 +57,7 @@ export function MCQView({ content, fileId, deckId }: { content: string; fileId?:
       deckId,
       answers,
     });
+    addXp(XP_VALUES.quizCompleted, 'mcq:revealAll');
   }
 
   return (

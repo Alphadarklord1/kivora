@@ -14,6 +14,7 @@ import { deleteRagIndex, ensureRagIndex } from '@/lib/rag/index-store';
 import { buildGenerationContext } from '@/lib/rag/generation-context';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteLocalFile, listLocalFiles, upsertLocalFile } from '@/lib/files/local-files';
+import { addXp, XP_VALUES } from '@/lib/gamification';
 import { createFileReplaceRequest, createFileUploadRequest, resolveStoredFileBlob } from '@/lib/files/client-storage';
 import { loadDecks, saveDeck, type SRSDeck } from '@/lib/srs/sm2';
 import { mdToHtml } from '@/lib/utils/md';
@@ -925,6 +926,12 @@ export function WorkspacePanel({
         }
       }
       if (!accumulated) setOutput('No output received.');
+      else {
+        // Award XP only when streaming actually produced content. The
+        // gamification system was wired but never called from anywhere
+        // — XP stayed 0, the LevelBadge never appeared. Now visible.
+        addXp(XP_VALUES.contentGenerated, `generated:${mode}`);
+      }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return; // cancelled
       if (err instanceof RateLimitedError) { emitRateLimitEvent(err); return; }

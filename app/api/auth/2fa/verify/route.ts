@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { apiError } from '@/lib/api/error-response';
 import { applyTwoFactorCookie, issueTwoFactorSession, normalizeTwoFactorCode, verifyTwoFactorCode } from '@/lib/auth/two-factor';
+import { getUserId } from '@/lib/auth/get-user-id';
 import { isLocalAuthUserId } from '@/lib/auth/local-auth-store';
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  const userId = session?.user?.id;
+  // JWT-based getUserId — see /api/auth/2fa/setup for context.
+  const userId = await getUserId(request);
 
   if (!userId) {
     return apiError(401, {

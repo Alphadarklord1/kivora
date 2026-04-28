@@ -111,6 +111,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setDailyGoal(getGoalPreferences().dailyGoal);
     } catch { /* noop */ }
     setMounted(true);
+    // Listen for XP changes from anywhere in the app — addXp dispatches
+    // 'kivora:xp-changed' after every write, so the sidebar badge updates
+    // in real time instead of staying pinned to mount-time value.
+    const handleXpChange = () => {
+      try { setXp(getGamificationState().xp); } catch { /* noop */ }
+    };
+    window.addEventListener('kivora:xp-changed', handleXpChange);
+    return () => window.removeEventListener('kivora:xp-changed', handleXpChange);
   }, []);
 
   useEffect(() => {

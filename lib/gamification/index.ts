@@ -146,6 +146,10 @@ export function addXp(amount: number, source: string): AddXpResult {
   const prevXp    = safeGet<number>(KEY_XP, 0);
   const newXp     = prevXp + amount;
   safeSet(KEY_XP, newXp);
+  // Notify any listening surface (notably the sidebar LevelBadge) so it
+  // can refetch and re-render. Without this the sidebar stayed pinned to
+  // whatever XP was loaded on AppShell mount.
+  try { window.dispatchEvent(new CustomEvent('kivora:xp-changed', { detail: { xp: newXp } })); } catch { /* noop */ }
 
   const prevLevel = getLevelForXp(prevXp);
   const newLevel  = getLevelForXp(newXp);

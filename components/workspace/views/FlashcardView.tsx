@@ -10,6 +10,7 @@ import {
 } from '@/lib/srs/sm2';
 import { parseFlashcards } from '@/lib/srs/parse';
 import { deckToContent, exportDeckApkg, exportDeckCsv, syncDeckToCloud } from '@/lib/srs/deck-utils';
+import { addXp, XP_VALUES } from '@/lib/gamification';
 import { useI18n } from '@/lib/i18n/useI18n';
 import { mdToHtml } from '@/lib/utils/md';
 import { idbStore } from '@/lib/idb';
@@ -843,6 +844,10 @@ export function FlashcardView({
     const activeDeck = deck!;
     const card    = allCards[sessionIdx];
     const updated = gradeCard(card, grade);
+    // Award a small chunk of XP per card reviewed. Surfaces the
+    // LevelBadge in the sidebar after the first review and gives
+    // visible progression instead of "Lev 1 Learner forever".
+    addXp(XP_VALUES.flashcardReviewed, 'flashcardReviewed');
     const reviewedAt = new Date().toISOString();
     const elapsedDays = card.lastReview
       ? Math.max(0, Math.round((Date.parse(reviewedAt) - Date.parse(card.lastReview)) / 86_400_000))

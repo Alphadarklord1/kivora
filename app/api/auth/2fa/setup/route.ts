@@ -1,16 +1,17 @@
-import { NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { apiError } from '@/lib/api/error-response';
 import { buildOtpAuthUri, formatTwoFactorSecret, generateTwoFactorSecret } from '@/lib/auth/two-factor';
-import { isDemoGuestEmail } from '@/lib/auth/get-user-id';
+import { getUserId, isDemoGuestEmail } from '@/lib/auth/get-user-id';
 import { isLocalAuthUserId } from '@/lib/auth/local-auth-store';
 
-export async function POST() {
-  const session = await auth();
-  const userId = session?.user?.id;
+export async function POST(request: NextRequest) {
+  // JWT-based extraction. The previous auth() cookie path intermittently
+  // returned null for valid Google sessions, so the user got
+  // "Authentication required" even when properly signed in.
+  const userId = await getUserId(request);
 
   if (!userId) {
     return apiError(401, {
