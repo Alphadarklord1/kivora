@@ -1938,15 +1938,12 @@ export function WorkspacePanel({
                     )
                     : generating && (genMode === 'mcq' || genMode === 'quiz' || genMode === 'exam')
                     ? (
-                        /* These tools embed `Answer:` lines and (correct)
-                           markers in the raw output. Showing the streaming
-                           markdown directly would leak the answers to the
-                           student before they get a chance to take the
-                           assessment. The parsed views (MCQ/Quiz/Exam)
-                           already strip those, so we use them during
-                           streaming too — and add a small streaming hint
-                           on top. Partial blocks without the required
-                           Answer: line are filtered out by those views. */
+                        /* MCQ / Quiz / Exam streaming — Answer: lines and
+                           (correct) markers are embedded in the raw output.
+                           Use the parsed view (which strips those) during
+                           streaming so the student doesn't see answers
+                           ahead of time. Partial blocks without the
+                           required Answer: line are filtered out anyway. */
                         <div>
                           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', animation: 'pulse 1.2s ease-in-out infinite' }} />
@@ -1955,6 +1952,21 @@ export function WorkspacePanel({
                           {genMode === 'mcq'  && <MCQView  content={output} fileId={selFile?.id ?? null} />}
                           {genMode === 'quiz' && <QuizView content={output} fileId={selFile?.id ?? null} />}
                           {genMode === 'exam' && <ExamView content={output} fileId={selFile?.id ?? null} />}
+                        </div>
+                      )
+                    : generating && genMode === 'practice'
+                    ? (
+                        /* Practice streams Problem → Hint 1/2/3 → Solution.
+                           PracticeView keeps the Solution hidden behind
+                           "Show solution" once revealed, but the raw stream
+                           shows everything. Use PracticeView while streaming
+                           so the user has to opt in to see the answer. */
+                        <div>
+                          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', animation: 'pulse 1.2s ease-in-out infinite' }} />
+                            Generating practice problem… solution stays hidden until you click to reveal.
+                          </div>
+                          <PracticeView content={output} />
                         </div>
                       )
                     : generating
@@ -2134,7 +2146,28 @@ export function WorkspacePanel({
               </div>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-              {activeReviewSet || output ? (
+              {generating && !activeReviewSet ? (
+                /* Don't show the deck preview while cards are still
+                   streaming in — the backs are visible immediately and
+                   that defeats the point of self-testing. Once
+                   generation finishes, FlashcardView replaces this and
+                   the user can study with backs hidden by default. */
+                <div style={{ padding: '60px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                  <div style={{ fontSize: 36 }}>🃏</div>
+                  <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text)' }}>
+                    Generating flashcards…
+                  </div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', textAlign: 'center', maxWidth: 360 }}>
+                    {(() => {
+                      const cardCount = (output.match(/^\s*Front\s*:/gmi) || []).length;
+                      return cardCount > 0
+                        ? `${cardCount} card${cardCount === 1 ? '' : 's'} created so far. Backs stay hidden until you flip them yourself.`
+                        : 'Your deck will appear here once ready. Backs stay hidden until you flip them.';
+                    })()}
+                  </div>
+                  <div style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', animation: 'pulse 1.2s ease-in-out infinite' }} />
+                </div>
+              ) : activeReviewSet || output ? (
                 <FlashcardView
                   content={output}
                   title={selFile?.name}
