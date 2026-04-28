@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing text or mode' }, { status: 400 });
     }
 
-    if (!['cloud', 'openai', 'grok'].includes(provider)) {
+    if (!['cloud', 'openai', 'grok', 'groq'].includes(provider)) {
       return NextResponse.json({ error: 'Unsupported provider' }, { status: 400 });
     }
 

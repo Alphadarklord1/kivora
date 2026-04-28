@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserId } from '@/lib/auth/get-user-id';
+import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 
 // Answer verification API
 // Checks user answers against source text and optionally web search
+
+const MAX_TEXT_FIELD = 6000;
+const MAX_KEYWORDS = 50;
 
 interface VerifyRequest {
   questionId: string;
@@ -231,7 +236,32 @@ async function verifyWithWebSearch(
 
 export async function POST(request: NextRequest) {
   try {
-    const body: VerifyRequest = await request.json();
+    // Locked behind auth + rate limit so the DuckDuckGo branch can't be
+    // weaponised as an open relay against an external service.
+    const userId = await getUserId(request);
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const rateLimited = enforceAiRateLimit(request);
+    if (rateLimited) return rateLimited;
+
+    const rawBody: VerifyRequest = await request.json();
+
+    // Hard cap user-controlled fields before destructuring. The verify
+    // endpoint feeds these into string operations (and into a DuckDuckGo
+    // query) — unbounded inputs let an attacker push arbitrary CPU work
+    // or external request size.
+    const trimField = (s: unknown) => typeof s === 'string' ? s.slice(0, MAX_TEXT_FIELD) : '';
+    const body: VerifyRequest = {
+      ...rawBody,
+      question: trimField(rawBody.question),
+      userAnswer: trimField(rawBody.userAnswer),
+      correctAnswer: trimField(rawBody.correctAnswer),
+      sourceSentence: trimField(rawBody.sourceSentence),
+      sourceText: trimField(rawBody.sourceText),
+      keywords: Array.isArray(rawBody.keywords)
+        ? rawBody.keywords.filter(k => typeof k === 'string').slice(0, MAX_KEYWORDS)
+        : [],
+    };
 
     const {
       questionType,

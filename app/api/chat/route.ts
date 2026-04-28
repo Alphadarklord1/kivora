@@ -39,6 +39,22 @@ export async function POST(req: NextRequest) {
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return new Response('messages array required', { status: 400 });
   }
+  // Bound the conversation history so a malicious client can't burn tokens
+  // by sending 10k messages of 1MB each. Anything past the cap is dropped.
+  if (messages.length > 50) {
+    return new Response('Too many messages (max 50)', { status: 400 });
+  }
+  for (const m of messages) {
+    if (typeof m?.content !== 'string') {
+      return new Response('Each message must have string content', { status: 400 });
+    }
+    if (m.content.length > 16_000) {
+      return new Response('Message too long (max 16,000 chars per turn)', { status: 400 });
+    }
+  }
+  if (typeof context === 'string' && context.length > 60_000) {
+    return new Response('Context too long (max 60,000 chars)', { status: 400 });
+  }
 
   const { mode, localModel, cloudModel } = resolveAiRuntimeRequest(body);
   const privacyMode = resolveAiDataMode(body);

@@ -4,6 +4,12 @@ import { libraryItems, shares } from '@/lib/db/schema';
 import { cardsToDeckContent, inferDeckTitle, parseAnkiApkg, parseCsvFlashcards, parsePastedFlashcards, type ImportedCard } from '@/lib/srs/importers';
 import { buildQuizletCandidateUrls, extractQuizletCards, extractQuizletTitle, looksLikeQuizletBlocked } from '@/lib/srs/quizlet-import';
 import { eq } from 'drizzle-orm';
+import { getUserId } from '@/lib/auth/get-user-id';
+import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
+
+// Hard cap on attacker-controlled payloads to prevent memory exhaustion via
+// fetch / parseAnkiApkg. 6MB ≈ a generous .apkg base64 + slack for CSVs.
+const MAX_BODY_BYTES = 6 * 1024 * 1024;
 
 async function importKivoraShare(url: URL) {
   if (!isDatabaseConfigured) throw new Error('Database not configured');
@@ -46,6 +52,23 @@ function importedResponse(
 }
 
 export async function POST(request: NextRequest) {
+  // Auth: the previous version had no check, so any unauthenticated caller
+  // could trigger outbound fetch() to Quizlet and feed attacker-controlled
+  // base64 to parseAnkiApkg. Both are abuse vectors.
+  const userId = await getUserId(request);
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Rate-limit the per-user pull. The Quizlet branch fetches an external
+  // origin and the .apkg branch unzips a SQLite blob — neither is cheap.
+  const rateLimited = enforceAiRateLimit(request);
+  if (rateLimited) return rateLimited;
+
+  // Bound the request body so a 100MB base64 blob can't OOM the route.
+  const contentLength = Number(request.headers.get('content-length') ?? 0);
+  if (contentLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: 'Import payload is too large.' }, { status: 413 });
+  }
+
   const body = await request.json().catch(() => null) as {
     kind?: 'url' | 'csv' | 'paste' | 'anki';
     url?: string;

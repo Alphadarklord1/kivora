@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserId } from '@/lib/auth/get-user-id';
 import { callAi } from '@/lib/ai/call';
+import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
+
+// A single semester rarely has more than 12 courses; the cap stops a runaway
+// AI response from persisting hundreds of bogus calendar events later.
+const MAX_COURSES = 30;
 
 export interface ParsedCourse {
   name: string;
@@ -18,6 +23,9 @@ export interface ParsedCourse {
 export async function POST(req: NextRequest) {
   const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const rateLimited = enforceAiRateLimit(req);
+  if (rateLimited) return rateLimited;
 
   const body = await req.json().catch(() => null);
   if (!body?.text || typeof body.text !== 'string' || body.text.trim().length < 10) {
@@ -43,15 +51,21 @@ Each course object must have:
 If a field is missing from the text, use a reasonable default or null.
 Return only the JSON array, nothing else.`;
 
-  const { result } = await callAi({
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: `Parse this course schedule:\n\n${text}` },
-    ],
-    maxTokens: 2000,
-    temperature: 0.1,
-    offlineFallback: () => '[]',
-  });
+  let result: string;
+  try {
+    ({ result } = await callAi({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Parse this course schedule:\n\n${text}` },
+      ],
+      maxTokens: 2000,
+      temperature: 0.1,
+      offlineFallback: () => '[]',
+    }));
+  } catch (err) {
+    console.error('[planner/import-schedule] AI call failed', err);
+    return NextResponse.json({ error: 'AI parsing failed. Try again.' }, { status: 502 });
+  }
 
   let courses: ParsedCourse[] = [];
   try {
@@ -66,7 +80,7 @@ Return only the JSON array, nothing else.`;
           c.days.length > 0 &&
           typeof c.startTime === 'string' &&
           typeof c.endTime === 'string'
-      );
+      ).slice(0, MAX_COURSES);
     }
   } catch {
     return NextResponse.json({ error: 'Could not parse the schedule. Try rephrasing or adding more detail.' }, { status: 422 });

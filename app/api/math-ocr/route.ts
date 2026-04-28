@@ -1,14 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserId } from '@/lib/auth/get-user-id';
+import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 
 const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://127.0.0.1:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'llama3.2-vision';
 
+// 5 MB base64 ≈ 3.7 MB image. Plenty for handwritten math, while keeping
+// outbound requests to the Ollama vision model bounded.
+const MAX_IMAGE_BASE64_BYTES = 5 * 1024 * 1024;
+
 export async function POST(req: NextRequest) {
   try {
+    // Previous version had no auth and no rate limit, so any caller could
+    // tunnel arbitrary base64 data through Ollama. Lock both down.
+    const userId = await getUserId(req);
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const rateLimited = enforceAiRateLimit(req);
+    if (rateLimited) return rateLimited;
+
     const body = await req.json();
     const { imageBase64 } = body as { imageBase64?: string };
-    if (!imageBase64) {
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
       return NextResponse.json({ error: 'No image provided' }, { status: 400 });
+    }
+    if (imageBase64.length > MAX_IMAGE_BASE64_BYTES) {
+      return NextResponse.json({ error: 'Image too large (max ~3.7MB)' }, { status: 413 });
     }
 
     // Strip data URL prefix if present
@@ -66,10 +83,11 @@ export async function POST(req: NextRequest) {
       { status: 503 },
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    // Surface a friendly fallback rather than a raw error or silent crash
+    // Log the raw error, but don't leak it to the client. The previous
+    // `detail: message` field could surface stack traces or internal URLs.
+    console.error('[math-ocr] failed', err);
     return NextResponse.json(
-      { error: 'OCR requires a local vision model (Ollama). For now, type your problem manually.', detail: message },
+      { error: 'OCR requires a local vision model (Ollama). For now, type your problem manually.' },
       { status: 500 },
     );
   }

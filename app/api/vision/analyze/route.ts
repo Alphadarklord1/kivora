@@ -3,6 +3,7 @@ import { getUserId } from '@/lib/auth/get-user-id';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 import { apiError, createRequestId } from '@/lib/api/error-response';
 import { resolveAiDataMode } from '@/lib/privacy/ai-data';
+import { enforceAiRateLimit } from '@/lib/api/ai-rate-limit';
 
 type AnalysisMode = 'describe' | 'explain' | 'extract-text' | 'solve-math' | 'scan-questions';
 
@@ -100,6 +101,12 @@ export async function POST(request: NextRequest) {
         requestId,
       });
     }
+
+    // Vision endpoints call OpenAI directly with large payloads — burning
+    // through quota fast if a malicious client retries. Rate-limit them
+    // through the same shared limiter as every other AI route.
+    const rateLimited = enforceAiRateLimit(request);
+    if (rateLimited) return rateLimited;
 
     const body = await request.json();
     const { imageDataUrl, mode } = body;

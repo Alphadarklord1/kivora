@@ -74,7 +74,12 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ explanation: result });
-  } catch {
+  } catch (err) {
+    // Previously this catch was empty, so any AI / network failure
+    // disappeared into a 200 with `explanation: null` — making real
+    // bugs invisible. Log the error and keep the soft response so the
+    // UI can still render its "explanation unavailable" state.
+    console.error('[explain] failed', err);
     return NextResponse.json({ explanation: null });
   }
 }

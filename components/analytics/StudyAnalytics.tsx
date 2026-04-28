@@ -244,10 +244,14 @@ export function StudyAnalytics() {
       </div>
 
       {/* Tab navigation */}
-      <div className="an-tabs">
+      <div className="an-tabs" role="tablist" aria-label="Analytics sections">
         {(['overview', 'scores', 'activity', 'retention', 'goals'] as const).map(tab => (
           <button
             key={tab}
+            role="tab"
+            aria-selected={activeTab === tab}
+            aria-controls={`an-panel-${tab}`}
+            id={`an-tab-${tab}`}
             className={`an-tab${activeTab === tab ? ' active' : ''}`}
             onClick={() => setActiveTab(tab)}
           >
@@ -778,7 +782,14 @@ function ScoresTab({ quizStats, activity: _activity }: {
           <p className="card-empty" style={{ marginTop: 16 }}>No quiz scores yet. Complete some quizzes to see your trend.</p>
         ) : (
           <div className="chart-wrap">
-            <svg viewBox={`0 0 ${chartW} ${chartH}`} className="score-chart" preserveAspectRatio="none">
+            <svg
+              viewBox={`0 0 ${chartW} ${chartH}`}
+              className="score-chart"
+              preserveAspectRatio="none"
+              role="img"
+              aria-label={`Quiz score trend over the last ${chartData.length} attempts`}
+            >
+              <title>Quiz score trend</title>
               {[0,25,50,75,100].map(pct => {
                 const cy = chartH - ((pct/100) * (chartH-40)) - 20;
                 return (
@@ -975,7 +986,7 @@ function ActivityTab({ activity, period: _period, dailyReviews }: {
       {/* Contribution heatmap — GitHub style */}
       <div className="an-card wide">
         <div className="chart-header">
-          <h3 className="card-title" style={{ margin: 0 }}>Activity Heatmap (Last 15 Weeks)</h3>
+          <h3 className="card-title" style={{ margin: 0 }}>Activity Heatmap (Last 14 Weeks)</h3>
           <div className="hmap-legend">
             <span className="hmap-leg-txt">Less</span>
             {[0, 0.25, 0.5, 0.75, 1].map(v => (
@@ -1333,7 +1344,14 @@ function RetentionTab({ retentionByInterval, deckStats, activity }: {
           const masteredOffset = circ - (masteredPct / 100) * circ;
           return (
             <div className="mastery-wrap">
-              <svg width={160} height={160} viewBox="0 0 160 160">
+              <svg
+                width={160}
+                height={160}
+                viewBox="0 0 160 160"
+                role="img"
+                aria-label={`${masteredPct} percent of cards mastered: ${mastered} of ${total}`}
+              >
+                <title>Card mastery progress</title>
                 <circle cx={80} cy={80} r={r} fill="none" stroke="var(--bg-surface)" strokeWidth={18} />
                 <circle
                   cx={80} cy={80} r={r} fill="none"
@@ -1453,7 +1471,14 @@ function GoalsTab({ planStats, weakAreas, deckStats }: {
       <div className="an-card ring-card">
         <h3 className="card-title">Overall Study Progress</h3>
         <div className="ring-wrap">
-          <svg width={180} height={180} viewBox="0 0 180 180">
+          <svg
+            width={180}
+            height={180}
+            viewBox="0 0 180 180"
+            role="img"
+            aria-label={`Overall study progress: ${progress} percent`}
+          >
+            <title>Overall study progress</title>
             <circle cx={90} cy={90} r={r} fill="none" stroke="var(--bg-surface)" strokeWidth={14} />
             <circle
               cx={90} cy={90} r={r} fill="none"

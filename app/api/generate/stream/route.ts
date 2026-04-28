@@ -60,6 +60,12 @@ export async function POST(req: NextRequest) {
     return new Response('Text must be at least 20 characters', { status: 400 });
   }
 
+  // Match the cap on the non-streaming sibling so a 1MB paste doesn't burn
+  // tokens silently. The non-stream route enforces 40k chars at /api/generate.
+  if (text.length > 40_000) {
+    return new Response('Text too long (max 40,000 characters)', { status: 400 });
+  }
+
   const trimmedText = text.trim();
   const baseSourceText = typeof deckContent === 'string' && deckContent.trim().length > 0
     ? `Deck title: ${deckTitle?.trim() || 'Untitled deck'}\n\n${deckContent.trim()}`

@@ -231,8 +231,11 @@ export async function POST(req: NextRequest) {
         summary: summary || brief.summary,
         keyPoints: keyPoints.length ? keyPoints : brief.keyPoints,
       };
-    } catch {
-      // Fallback brief is already populated.
+    } catch (err) {
+      // The deterministic fallback brief is already populated, so the
+      // user still gets a useful response — but we want the failure to
+      // show up in logs instead of being completely silent.
+      console.warn('[coach/source] AI enrichment failed; serving offline brief', err);
     }
   }
 

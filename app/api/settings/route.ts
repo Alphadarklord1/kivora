@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { userSettings } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getUserId } from '@/lib/auth/get-user-id';
@@ -38,6 +38,13 @@ export async function GET(request: NextRequest) {
     }
 
     if (isGuestModeEnabled() && isEphemeralGuest(userId)) {
+      return NextResponse.json(buildDefaultSettings(userId));
+    }
+
+    // Database can be unavailable in guest / no-DB mode for a real signed-in
+    // user too (DB outage, partial deploy). Serve sane defaults rather than
+    // crashing the settings page on the read path.
+    if (!isDatabaseConfigured) {
       return NextResponse.json(buildDefaultSettings(userId));
     }
 
@@ -112,6 +119,16 @@ export async function PUT(request: NextRequest) {
         fontSize: '1',
         lineHeight: '1.5',
         density: 'normal',
+      });
+    }
+
+    // No DB → can't persist. Echo the requested values back so the UI keeps
+    // the optimistic state instead of throwing in the catch block below.
+    if (!isDatabaseConfigured) {
+      const body = await request.json().catch(() => ({}));
+      return NextResponse.json({
+        ...buildDefaultSettings(userId),
+        ...(typeof body === 'object' && body ? body : {}),
       });
     }
 

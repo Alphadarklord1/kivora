@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { shares, files, folders, topics, libraryItems, users } from '@/lib/db/schema';
 import { eq, and, or, desc } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
@@ -27,6 +27,11 @@ export async function GET(request: NextRequest) {
     const userId = await getUserId(request);
     // Guest / unauthenticated — return empty list gracefully (not an error)
     if (!userId) {
+      return NextResponse.json([]);
+    }
+    // Without a DB the share queries below crash with "db is null". In
+    // guest / no-DB mode we have no shares to show anyway.
+    if (!isDatabaseConfigured) {
       return NextResponse.json([]);
     }
     // Note: previously we used betaReadFallback([]) for ephemeral guests
@@ -134,6 +139,15 @@ export async function POST(request: NextRequest) {
       return apiError(401, {
         errorCode: 'UNAUTHORIZED',
         reason: 'Authentication required',
+        requestId,
+      });
+    }
+    // Need a DB to insert a share row. Without one the call to db.insert
+    // crashes; surface a clean 503 so the UI can degrade gracefully.
+    if (!isDatabaseConfigured) {
+      return apiError(503, {
+        errorCode: 'DB_UNAVAILABLE',
+        reason: 'Sharing is not available in this environment.',
         requestId,
       });
     }
@@ -292,6 +306,13 @@ export async function DELETE(request: NextRequest) {
       return apiError(401, {
         errorCode: 'UNAUTHORIZED',
         reason: 'Authentication required',
+        requestId,
+      });
+    }
+    if (!isDatabaseConfigured) {
+      return apiError(503, {
+        errorCode: 'DB_UNAVAILABLE',
+        reason: 'Sharing is not available in this environment.',
         requestId,
       });
     }
