@@ -7,6 +7,8 @@ import { getUserId, isDemoGuestEmail } from '@/lib/auth/get-user-id';
 import { apiError, createRequestId } from '@/lib/api/error-response';
 import { syncSupabaseAuthUser } from '@/lib/supabase/auth-admin';
 import { checkPasswordLimit } from '@/lib/api/auth-rate-limit';
+import { enforceBodyCap } from '@/lib/api/guard';
+import { validatePasswordPolicy } from '@/lib/auth/password-policy';
 import {
   findLocalAuthUserById,
   isLocalAuthUserId,
@@ -15,6 +17,9 @@ import {
 
 // PUT change password
 export async function PUT(request: NextRequest) {
+  const bodyCapRes = enforceBodyCap(request);
+  if (bodyCapRes) return bodyCapRes;
+
   const rateLimitRes = checkPasswordLimit(request);
   if (rateLimitRes) return rateLimitRes;
 
@@ -32,11 +37,11 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { currentPassword, newPassword } = body;
 
-    // Validate new password
-    if (!newPassword || newPassword.length < 8) {
+    const passwordError = validatePasswordPolicy(newPassword);
+    if (passwordError) {
       return apiError(400, {
         errorCode: 'INVALID_PASSWORD',
-        reason: 'New password must be at least 8 characters',
+        reason: passwordError,
         requestId,
       });
     }

@@ -194,7 +194,7 @@ export function ReportIssuePanel({ embedded = false }: { embedded?: boolean }) {
   ];
 
   return (
-    <section className={embedded ? undefined : styles.page} dir={isRTL ? 'rtl' : 'ltr'}>
+    <section className={embedded ? styles.embedded : styles.page} dir={isRTL ? 'rtl' : 'ltr'}>
       {!embedded && (
         <div className={styles.hero}>
           <div>

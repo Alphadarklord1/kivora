@@ -428,6 +428,8 @@ export function FlashcardView({
   const [showAddCard, setShowAddCard] = useState(false);
   const [addFront,    setAddFront]    = useState('');
   const [addBack,     setAddBack]     = useState('');
+  // Alternative study modes are hidden by default — most users just want to Study.
+  const [showMoreModes, setShowMoreModes] = useState(false);
   // Swipe
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -948,19 +950,39 @@ export function FlashcardView({
           </div>
         )}
 
-        {/* ── Action grid: 4×2, perfectly symmetric ─── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
-          <button className="btn btn-primary btn-sm" onClick={() => launchPhase('review')}>
-            {stats.due > 0 ? `▶ ${t('Study {count}', { count: formatNumber(stats.due) })}` : `▶ ${t('Study all')}`}
+        {/* Primary CTA: one big Study button. The smart default — FSRS-driven
+            review of due cards (or all cards if nothing's due). Alternative
+            study modes live behind a disclosure to remove choice paralysis. */}
+        <button
+          className="btn btn-primary"
+          style={{ width: '100%', padding: '12px 20px', fontSize: 'var(--text-base)', fontWeight: 600, marginBottom: 8 }}
+          onClick={() => launchPhase('review')}
+        >
+          {stats.due > 0 ? `▶ ${t('Study {count}', { count: formatNumber(stats.due) })}` : `▶ ${t('Study all')}`}
+        </button>
+
+        {/* Secondary row: More-ways disclosure + Stats + Import (kept visible). */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ flex: '1 1 auto' }}
+            onClick={() => setShowMoreModes(v => !v)}
+            aria-expanded={showMoreModes}
+          >
+            {showMoreModes ? '▴' : '▾'} {t('More ways to study')}
           </button>
-          <button className="btn btn-ghost btn-sm" title={t('Type the answer')} onClick={() => launchPhase('write')}>✍️ {t('Write')}</button>
-          <button className="btn btn-ghost btn-sm" title={t('Mixed test')} onClick={() => launchPhase('test')}>🎯 {t('Test')}</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('match')}>🎮 {t('Match Game')}</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('learn')}>🎓 {t('Learn')}</button>
           <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('stats')}>📊 {t('Stats')}</button>
           <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('import')}>📥 {t('Import')}</button>
-          <span />
         </div>
+
+        {showMoreModes && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 6, marginBottom: 10 }}>
+            <button className="btn btn-ghost btn-sm" title={t('Type the answer')} onClick={() => launchPhase('write')}>✍️ {t('Write')}</button>
+            <button className="btn btn-ghost btn-sm" title={t('Mixed test')} onClick={() => launchPhase('test')}>🎯 {t('Test')}</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('match')}>🎮 {t('Match Game')}</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => launchPhase('learn')}>🎓 {t('Learn')}</button>
+          </div>
+        )}
 
         {/* Card grid — surfaced right under the action grid so generated cards
             are visible immediately, instead of being buried below the deck

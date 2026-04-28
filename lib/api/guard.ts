@@ -24,20 +24,55 @@ const DESKTOP_TOKEN_HEADER = 'x-kivora-desktop-token';
 /** Max request body allowed for AI routes (100 KB). Prevents token-burning via huge payloads. */
 const MAX_BODY_BYTES = 100 * 1024;
 
+/**
+ * Reusable body-size guard for non-AI mutation routes that don't need full
+ * origin/auth gating (e.g., register, password-change — these have their own
+ * rate limiters and run before a session exists). Cap defaults to 32 KB
+ * because the bodies they accept are tiny (email + password + name).
+ *
+ * Returns a 413 response if too large, or null to proceed.
+ */
+export function enforceBodyCap(req: NextRequest, maxBytes = 32 * 1024): NextResponse | null {
+  const contentLength = req.headers.get('content-length');
+  if (!contentLength) return null;
+  if (parseInt(contentLength, 10) > maxBytes) {
+    return NextResponse.json({ error: 'Request body too large.' }, { status: 413 });
+  }
+  return null;
+}
+
 /** Allowed origins. Requests from other origins are rejected. */
-const ALLOWED_ORIGINS: string[] = [
-  process.env.NEXT_PUBLIC_APP_URL ?? '',
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:3002',
-  'app://kivora', // Electron renderer
-].filter(Boolean);
+function buildAllowedOrigins(): string[] {
+  const list: string[] = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:3002',
+    'app://kivora', // Electron renderer
+  ];
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    list.push(process.env.NEXT_PUBLIC_APP_URL);
+  }
+  // Vercel auto-injects these — covers prod + every preview deployment without
+  // a per-env-var. Both are hostnames without protocol; the Origin header
+  // always includes https://, so we prepend it.
+  if (process.env.VERCEL_URL) {
+    list.push(`https://${process.env.VERCEL_URL}`);
+  }
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    list.push(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`);
+  }
+  return list;
+}
+
+const ALLOWED_ORIGINS = buildAllowedOrigins();
 
 function isOriginAllowed(req: NextRequest): boolean {
   const origin = req.headers.get('origin');
   // Non-browser requests (server-to-server, Electron, CLI) have no origin — allow
   if (!origin) return true;
-  return ALLOWED_ORIGINS.some(allowed => origin === allowed || origin.startsWith(allowed));
+  // Exact match only. Earlier `startsWith` allowed e.g. "http://localhost:3000.evil.com"
+  // to match an entry of "http://localhost:3000".
+  return ALLOWED_ORIGINS.includes(origin);
 }
 
 function isBodyTooLarge(req: NextRequest): boolean {

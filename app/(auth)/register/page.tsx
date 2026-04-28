@@ -54,8 +54,12 @@ export default function RegisterPage() {
       return;
     }
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
+    if (password.length < 10) {
+      setError('Password must be at least 10 characters.');
+      return;
+    }
+    if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('Password must include at least one letter and one digit.');
       return;
     }
     setLoading(true);
@@ -204,8 +208,8 @@ export default function RegisterPage() {
               </div>
               <div className={styles.field}>
                 <label htmlFor="password">Password</label>
-                <input id="password" type="password" placeholder="At least 8 characters" value={password}
-                  onChange={e => setPassword(e.target.value)} required minLength={8} autoComplete="new-password" />
+                <input id="password" type="password" placeholder="10+ characters with a letter and a digit" value={password}
+                  onChange={e => setPassword(e.target.value)} required minLength={10} autoComplete="new-password" />
               </div>
               {error && <p style={{ margin: 0, fontSize: '0.875rem', color: '#f87171' }}>{error}</p>}
               <button

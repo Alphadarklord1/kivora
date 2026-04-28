@@ -20,7 +20,17 @@ import {
 } from './encryption';
 import { readCompatStorage, removeCompatStorage, storageKeys, writeCompatStorage } from '@/lib/storage/keys';
 
-export const ENCRYPTION_DISABLED = true;
+// Encryption is OFF by default. To enable in production, set
+// NEXT_PUBLIC_ENCRYPTION_DISABLED=0 in Vercel env vars and redeploy.
+// (NEXT_PUBLIC_ vars are baked into the client bundle at build time, so a
+// redeploy is required for the change to take effect.)
+//
+// Before enabling globally, ship vault-setup onboarding UX and fix the
+// indexKey restore-from-session bug (see restoreVaultFromSession below) —
+// otherwise users hit "Vault is locked or index key not available" on any
+// search after a tab restart.
+const _envFlag = (typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_ENCRYPTION_DISABLED : undefined) ?? '1';
+export const ENCRYPTION_DISABLED = _envFlag !== '0';
 
 interface VaultData {
   // Encrypted Data Encryption Key (encrypted with master key)
@@ -96,8 +106,12 @@ export async function createVault(password: string): Promise<void> {
   // Unlock the vault
   unlockedVault = { dek, indexKey };
 
-  // Store session key in sessionStorage (cleared on browser close)
+  // Store session keys in sessionStorage (cleared on browser close).
+  // The indexKey is persisted too so blind-index search keeps working after
+  // a tab restart — without this, restoreVaultFromSession() ends up with
+  // indexKey='' and createBlindIndex throws.
   writeCompatStorage(sessionStorage, storageKeys.vaultSession, dek);
+  writeCompatStorage(sessionStorage, storageKeys.vaultIndexSession, indexKey);
 }
 
 /**
@@ -128,8 +142,9 @@ export async function unlockVault(password: string): Promise<boolean> {
     // Unlock vault
     unlockedVault = { dek, indexKey };
 
-    // Store session key
+    // Store session keys
     writeCompatStorage(sessionStorage, storageKeys.vaultSession, dek);
+    writeCompatStorage(sessionStorage, storageKeys.vaultIndexSession, indexKey);
 
     return true;
   } catch (error) {
@@ -145,6 +160,7 @@ export function lockVault(): void {
   if (ENCRYPTION_DISABLED) return;
   unlockedVault = null;
   removeCompatStorage(sessionStorage, storageKeys.vaultSession);
+  removeCompatStorage(sessionStorage, storageKeys.vaultIndexSession);
 }
 
 /**
@@ -165,18 +181,24 @@ export async function restoreVaultFromSession(): Promise<boolean> {
     const checksum = await blindIndex('vault_check', sessionDek);
     if (checksum !== vaultData.checksum) {
       removeCompatStorage(sessionStorage, storageKeys.vaultSession);
+      removeCompatStorage(sessionStorage, storageKeys.vaultIndexSession);
       return false;
     }
 
-    // We can't regenerate indexKey without password, but we can still decrypt
+    // Restore indexKey from sessionStorage too (written at unlock/create).
+    // Falls back to '' for sessions created before this fix; in that case
+    // search will require a re-unlock — the vault still decrypts data.
+    const sessionIndexKey = readCompatStorage(sessionStorage, storageKeys.vaultIndexSession) ?? '';
+
     unlockedVault = {
       dek: sessionDek,
-      indexKey: '', // Will need password for searching
+      indexKey: sessionIndexKey,
     };
 
     return true;
   } catch {
     removeCompatStorage(sessionStorage, storageKeys.vaultSession);
+    removeCompatStorage(sessionStorage, storageKeys.vaultIndexSession);
     return false;
   }
 }
@@ -211,8 +233,10 @@ export async function changeVaultPassword(
   vaultData.encryptedDEK = newEncryptedDEK;
   writeCompatStorage(localStorage, storageKeys.vault, JSON.stringify(vaultData));
 
-  // Update unlocked vault
+  // Update unlocked vault and refresh sessionStorage so a tab restart picks
+  // up the new indexKey instead of the stale one written at unlockVault().
   unlockedVault.indexKey = newIndexKey;
+  writeCompatStorage(sessionStorage, storageKeys.vaultIndexSession, newIndexKey);
 
   return true;
 }
@@ -315,6 +339,7 @@ export function deleteVault(): void {
   if (ENCRYPTION_DISABLED) return;
   removeCompatStorage(localStorage, storageKeys.vault);
   removeCompatStorage(sessionStorage, storageKeys.vaultSession);
+  removeCompatStorage(sessionStorage, storageKeys.vaultIndexSession);
   unlockedVault = null;
 }
 

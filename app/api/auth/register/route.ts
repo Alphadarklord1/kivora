@@ -6,6 +6,8 @@ import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { syncSupabaseAuthUser } from '@/lib/supabase/auth-admin';
 import { checkRegisterLimit } from '@/lib/api/auth-rate-limit';
+import { enforceBodyCap } from '@/lib/api/guard';
+import { validatePasswordPolicy } from '@/lib/auth/password-policy';
 import {
   canUseLocalAuthFallback,
   createLocalAuthUser,
@@ -14,6 +16,9 @@ import {
 } from '@/lib/auth/local-auth-store';
 
 export async function POST(req: NextRequest) {
+  const bodyCapRes = enforceBodyCap(req);
+  if (bodyCapRes) return bodyCapRes;
+
   const rateLimitRes = checkRegisterLimit(req);
   if (rateLimitRes) return rateLimitRes;
 
@@ -29,8 +34,9 @@ export async function POST(req: NextRequest) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim().toLowerCase())) {
     return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
   }
-  if (password.length < 8) {
-    return NextResponse.json({ error: 'Password must be at least 8 characters.' }, { status: 400 });
+  const passwordError = validatePasswordPolicy(password);
+  if (passwordError) {
+    return NextResponse.json({ error: passwordError }, { status: 400 });
   }
   if (name && name.trim().length > 80) {
     return NextResponse.json({ error: 'Name is too long.' }, { status: 400 });

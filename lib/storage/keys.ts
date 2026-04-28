@@ -16,6 +16,10 @@ export const storageKeys = {
   aiLegacyOllamaBase: { current: 'kivora_ai_ollama_base', legacy: ['studypilot_ai_ollama_base'] },
   vault: { current: 'kivora_vault', legacy: ['studypilot_vault'] },
   vaultSession: { current: 'kivora_session_key', legacy: ['studypilot_session_key'] },
+  // Persists the blind-index key alongside the DEK in sessionStorage so that
+  // search keeps working after a tab restart without re-prompting for the
+  // password. Cleared by lockVault(), same lifetime as vaultSession.
+  vaultIndexSession: { current: 'kivora_session_index_key' },
   compactMode: { current: 'kivora_compact_mode', legacy: ['studypilot_compact_mode'] },
   ttsVoice: { current: 'kivora_tts_voice', legacy: ['studypilot_tts_voice'] },
   ttsRate: { current: 'kivora_tts_rate', legacy: ['studypilot_tts_rate'] },

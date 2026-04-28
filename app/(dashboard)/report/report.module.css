@@ -264,3 +264,58 @@
     align-items: stretch;
   }
 }
+
+/* ── Embedded variant (used inside Settings → Report Issue) ──
+   The settings page already supplies its own 2-col layout
+   (reportShell + reportChecklist), so the panel must collapse
+   its internal grids to a single column to avoid nested-grid
+   squeeze that wraps text one word per line. */
+.embedded {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.embedded .grid,
+.embedded .twoCol,
+.embedded .metaGrid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.embedded .quickGrid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.embedded .formCard,
+.embedded .sideCard {
+  padding: 16px;
+  gap: 14px;
+}
+
+.embedded .formHeader {
+  padding: 14px 16px;
+  border-radius: 16px;
+}
+
+.embedded .formHeader h2 {
+  font-size: clamp(1.1rem, 1.4vw, 1.35rem);
+  margin: 4px 0 6px;
+}
+
+.embedded .submitRow {
+  padding: 12px 14px;
+  flex-wrap: wrap;
+}
+
+.embedded .typeCard {
+  padding: 14px;
+  border-radius: 16px;
+}
+
+.embedded .diagnostics {
+  font-size: 0.72rem;
+  padding: 12px;
+  max-height: 240px;
+  overflow: auto;
+}
