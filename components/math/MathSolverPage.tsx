@@ -3473,7 +3473,19 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
                     overflowX: 'auto',
                   }}>
                     {shouldRenderMathPreview(typeInput) ? (
-                      <MathRenderer math={typeInput.trim()} display />
+                      // Multi-line input (a system of equations like
+                      // "4x+5y=2\n4x+2y=0") must be split per line — KaTeX
+                      // treats \n as whitespace and renders nothing, leaving
+                      // the preview blank.
+                      typeInput.includes('\n') ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {typeInput.split('\n').map(l => l.trim()).filter(Boolean).map((line, i) => (
+                            <MathRenderer key={i} math={line} display />
+                          ))}
+                        </div>
+                      ) : (
+                        <MathRenderer math={typeInput.trim()} display />
+                      )
                     ) : (
                       <MathText>{autoWrapMath(typeInput)}</MathText>
                     )}
