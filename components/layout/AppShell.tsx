@@ -9,7 +9,7 @@ import { useI18n } from '@/lib/i18n/useI18n';
 import { trackRouteView } from '@/lib/privacy/preferences';
 import { OnboardingModal } from './OnboardingModal';
 import { ModelSetupWizard } from './ModelSetupWizard';
-import { getStreak, loadSessions, getGoalPreferences, loadDecks } from '@/lib/srs/sm2';
+import { getStreak, loadSessions, getGoalPreferences, loadDecks, saveGoalPreferences } from '@/lib/srs/sm2';
 import { LevelBadge } from '@/components/gamification/LevelBadge';
 import { getGamificationState } from '@/lib/gamification/index';
 import { useAchievementToast } from '@/components/gamification/AchievementToast';
@@ -81,6 +81,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [streak, setStreak] = useState(0);
   const [todayCards, setTodayCards] = useState(0);
   const [dailyGoal, setDailyGoal] = useState(20);
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalDraft, setGoalDraft] = useState('20');
   const [mounted, setMounted] = useState(false);
   const [showModelWizard, setShowModelWizard] = useState(false);
   const [xp, setXp] = useState(0);
@@ -410,37 +412,95 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      {/* Daily goal progress */}
-      {mounted && (
-        <div
-          title={`Today: ${todayCards} / ${dailyGoal} cards`}
-          style={{
-            margin: collapsed ? '2px 8px 4px' : '2px 8px 4px',
-            padding: collapsed ? '6px 0' : '6px 10px',
-            borderRadius: 8,
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-          }}
-        >
-          {!collapsed && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 600, marginBottom: 4, color: todayCards >= dailyGoal ? '#22c55e' : 'var(--text-2)' }}>
-              <span>{todayCards >= dailyGoal ? t('✓ Goal done!') : t("Today's goal")}</span>
-              <span>{todayCards}/{dailyGoal}</span>
-            </div>
-          )}
-          <div style={{ height: 5, borderRadius: 3, background: 'var(--border-2)', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%', borderRadius: 3,
-              width: `${Math.min(100, (todayCards / dailyGoal) * 100)}%`,
-              background: todayCards >= dailyGoal
-                ? 'linear-gradient(90deg, #22c55e, #16a34a)'
-                : 'linear-gradient(90deg, var(--primary), var(--accent, #7c53e8))',
-              transition: 'width 0.4s ease',
-              minWidth: todayCards > 0 ? 6 : 0,
-            }} />
+      {/* Daily goal progress — click-to-edit when expanded so users can
+          actually set the goal without digging into a flashcard deck. */}
+      {mounted && (() => {
+        function commitGoal() {
+          const n = parseInt(goalDraft, 10);
+          if (!Number.isFinite(n) || n < 1) { setEditingGoal(false); return; }
+          const clamped = Math.min(500, n);
+          setDailyGoal(clamped);
+          saveGoalPreferences({ dailyGoal: clamped });
+          void fetch('/api/srs/preferences', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dailyGoal: clamped }),
+          }).catch(() => {});
+          setEditingGoal(false);
+        }
+        const interactive = !collapsed && !editingGoal;
+        return (
+          <div
+            role={interactive ? 'button' : undefined}
+            tabIndex={interactive ? 0 : -1}
+            onClick={interactive ? () => { setGoalDraft(String(dailyGoal)); setEditingGoal(true); } : undefined}
+            onKeyDown={interactive ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setGoalDraft(String(dailyGoal)); setEditingGoal(true); } } : undefined}
+            title={collapsed ? `Today: ${todayCards} / ${dailyGoal} cards` : (editingGoal ? undefined : t('Click to change daily goal'))}
+            style={{
+              margin: '2px 8px 4px',
+              padding: collapsed ? '6px 0' : '6px 10px',
+              borderRadius: 8,
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              cursor: interactive ? 'pointer' : 'default',
+            }}
+          >
+            {editingGoal && !collapsed ? (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)' }}>{t("Today's goal")}</span>
+                <input
+                  type="number"
+                  autoFocus
+                  min={1}
+                  max={500}
+                  value={goalDraft}
+                  onChange={(e) => setGoalDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); commitGoal(); }
+                    if (e.key === 'Escape') { e.preventDefault(); setEditingGoal(false); }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ width: 56, padding: '3px 6px', borderRadius: 4, border: '1px solid var(--border-2)', background: 'var(--surface-2)', color: 'var(--text)', fontSize: 11, outline: 'none', marginLeft: 'auto' }}
+                />
+                <button
+                  onClick={(e) => { e.stopPropagation(); commitGoal(); }}
+                  aria-label={t('Save daily goal')}
+                  style={{ padding: '3px 8px', borderRadius: 4, border: '1px solid var(--accent, var(--primary))', background: 'var(--accent, var(--primary))', color: '#fff', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
+                >
+                  ✓
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setEditingGoal(false); }}
+                  aria-label={t('Cancel')}
+                  style={{ padding: '3px 6px', borderRadius: 4, border: '1px solid var(--border-2)', background: 'transparent', color: 'var(--text-3)', fontSize: 11, cursor: 'pointer' }}
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <>
+                {!collapsed && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 600, marginBottom: 4, color: todayCards >= dailyGoal ? '#22c55e' : 'var(--text-2)' }}>
+                    <span>{todayCards >= dailyGoal ? t('✓ Goal done!') : t("Today's goal")}</span>
+                    <span>{todayCards}/{dailyGoal}</span>
+                  </div>
+                )}
+                <div style={{ height: 5, borderRadius: 3, background: 'var(--border-2)', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 3,
+                    width: `${Math.min(100, (todayCards / dailyGoal) * 100)}%`,
+                    background: todayCards >= dailyGoal
+                      ? 'linear-gradient(90deg, #22c55e, #16a34a)'
+                      : 'linear-gradient(90deg, var(--primary), var(--accent, #7c53e8))',
+                    transition: 'width 0.4s ease',
+                    minWidth: todayCards > 0 ? 6 : 0,
+                  }} />
+                </div>
+              </>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Level badge — only shown client-side when user has earned some XP */}
       {mounted && xp > 0 && (

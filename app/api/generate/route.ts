@@ -208,7 +208,17 @@ Q2. <question text>
 Answer: <expected answer>
 
 Repeat for ${count} questions. Material:\n\n${text}`,
-    mcq:        `Create ${count} multiple-choice questions from the material below. Use this exact format for each question — the "Q" prefix and the "Answer:" line are required:
+    mcq:        `You are a teacher writing a multiple-choice quiz from the source material below — exactly the way you would build a quiz from a PowerPoint deck. The goal is to test whether a student actually UNDERSTANDS the topic, not whether they can quote the slides word-for-word.
+
+Write ${count} questions. Mix all three types across the set:
+
+1. RECALL — facts, definitions, and steps explicitly stated in the source.
+2. APPLICATION — apply the source's concepts to a new scenario, calculation, example, or short worked problem that is not literally in the text.
+3. CONNECTION — closely related ideas a student studying this exact topic is expected to know (a prerequisite definition, a typical consequence, a standard textbook variant). Only include these when they sit unambiguously inside the topic — never drift to adjacent subjects, never invent facts, never contradict the source.
+
+If you're not sure whether something is in scope, leave it out. Distractors must be plausible — common student errors, almost-right answers, swapped variables — not obvious nonsense.
+
+Use this exact format for each question — the "Q" prefix and the "Answer:" line are required:
 
 Q1. <question text>
 A) <option>
