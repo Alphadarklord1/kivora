@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { consumePodcastHandoff } from '@/lib/podcast/handoff';
 
 type Style = 'summary' | 'deep-dive' | 'qa';
 type PlayerState = 'idle' | 'playing' | 'paused';
@@ -9,6 +10,19 @@ export default function PodcastPage() {
   useEffect(() => { document.title = 'Audio Podcast — Kivora'; }, []);
   const [notes, setNotes] = useState('');
   const [title, setTitle] = useState('');
+  const [handoffMessage, setHandoffMessage] = useState('');
+
+  // Pick up content sent over from a Workspace file or a Library item.
+  // Consumed once — a refresh starts blank.
+  useEffect(() => {
+    const handoff = consumePodcastHandoff();
+    if (!handoff) return;
+    setNotes(handoff.content);
+    if (handoff.title) setTitle(handoff.title);
+    setHandoffMessage(handoff.title ? `Loaded "${handoff.title}"` : 'Loaded content from Kivora');
+    const t = window.setTimeout(() => setHandoffMessage(''), 4000);
+    return () => window.clearTimeout(t);
+  }, []);
   const [style, setStyle] = useState<Style>('summary');
   const [script, setScript] = useState('');
   const [loading, setLoading] = useState(false);
@@ -117,6 +131,23 @@ export default function PodcastPage() {
     <div className="podcast-page">
       <h1 className="page-title">Audio Podcast</h1>
       <p className="page-sub">Turn your study notes into a spoken podcast episode.</p>
+
+      {handoffMessage && (
+        <div
+          role="status"
+          style={{
+            margin: '8px 0 14px',
+            padding: '10px 14px',
+            borderRadius: 10,
+            background: 'color-mix(in srgb, var(--accent, #4f8eff) 12%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent, #4f8eff) 30%, transparent)',
+            color: 'var(--text)',
+            fontSize: 'var(--text-sm)',
+          }}
+        >
+          ✨ {handoffMessage} — ready to generate.
+        </div>
+      )}
 
       <div className="card">
         <label className="field-label">Notes</label>

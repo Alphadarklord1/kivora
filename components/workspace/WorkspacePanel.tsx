@@ -21,6 +21,7 @@ import { writeMathContext } from '@/lib/math/context';
 import { clearCoachHandoff, readCoachHandoff } from '@/lib/coach/handoff';
 import { clearScholarContext, readScholarContext, writeScholarContext, type ScholarContext } from '@/lib/coach/scholar-context';
 import { broadcastInvalidate, listenForInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
+import { stashPodcastHandoff } from '@/lib/podcast/handoff';
 import type { NoteStyle } from '@/components/workspace/NotesPanel';
 
 // ── Lazy-loaded tool panels (split into separate JS chunks) ────────────────────
@@ -173,7 +174,7 @@ function describeNoteStyle(style: NoteStyle): string {
 // ── Inline file viewer ─────────────────────────────────────────────────────
 
 function FileViewer({
-  file, onClose, onUseForTools, onUseForChat, onUseForNotes, onUseForFlashcards, onUseInMath,
+  file, onClose, onUseForTools, onUseForChat, onUseForNotes, onUseForFlashcards, onUseInMath, onUseForPodcast,
 }: {
   file: FileRecord;
   onClose: () => void;
@@ -182,6 +183,7 @@ function FileViewer({
   onUseForNotes: (file: FileRecord, text: string) => void;
   onUseForFlashcards: (file: FileRecord, text: string) => void;
   onUseInMath: (file: FileRecord, text: string) => void;
+  onUseForPodcast: (file: FileRecord, text: string) => void;
 }) {
   const { toast } = useToast();
   const [blobUrl,     setBlobUrl]     = useState<string | null>(null);
@@ -260,6 +262,11 @@ function FileViewer({
     if (text) onUseForFlashcards(file, text);
   }
 
+  async function useForPodcast() {
+    const text = await resolveFileText('Podcast');
+    if (text) onUseForPodcast(file, text);
+  }
+
   async function useInMath() {
     if (textContent) {
       onUseInMath(file, textContent);
@@ -309,6 +316,9 @@ function FileViewer({
           </button>
           <button className="btn btn-secondary btn-sm" onClick={useInMath} title="Send this file into Math">
             ∑ Math
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={useForPodcast} title="Send this file to Audio Podcast">
+            🎙 Podcast
           </button>
         </div>
       </div>
@@ -1083,6 +1093,12 @@ export function WorkspacePanel({
     setTimeout(() => { void runGenerate('flashcards', text); }, 0);
   }
 
+  function handleUseForPodcast(file: FileRecord, text: string) {
+    stashPodcastHandoff({ title: file.name, content: text });
+    toast(`Sending "${file.name}" to Podcast…`, 'info');
+    router.push('/podcast');
+  }
+
   async function loadSelectedFileIntoChat() {
     if (!selFile) {
       toast('Choose a file first.', 'warning');
@@ -1510,6 +1526,7 @@ export function WorkspacePanel({
                   onUseForNotes={handleUseForNotes}
                   onUseForFlashcards={handleUseForFlashcards}
                   onUseInMath={sendFileToMath}
+                  onUseForPodcast={handleUseForPodcast}
                 />
               </div>
             )}

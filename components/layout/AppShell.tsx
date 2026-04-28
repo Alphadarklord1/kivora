@@ -83,6 +83,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [dailyGoal, setDailyGoal] = useState(20);
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalDraft, setGoalDraft] = useState('20');
+  // Sign-out is destructive — make it a two-tap action so a stray click
+  // can't end a session. First click sets `signOutPending`, the row swaps
+  // to "Sign out? · Yes / Cancel". Auto-cancels after 5s.
+  const [signOutPending, setSignOutPending] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showModelWizard, setShowModelWizard] = useState(false);
   const [xp, setXp] = useState(0);
@@ -539,18 +543,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </button>
 
         {session?.user ? (
-          /* Combined account + sign-out row.
-             The Account link takes the full width when expanded; the
-             sign-out icon sits on the right as its own button so it
-             doesn't trigger /account navigation. When the sidebar is
-             collapsed there's no room for a second button — sign-out
-             remains accessible from the /account page. */
-          <div style={{ display: 'flex', alignItems: 'stretch', gap: 4, minWidth: 0 }}>
+          <>
+            {/* Account link — full-width row so the user's name is clearly
+                visible and the click target is large. Distinct from the
+                Sign out row below so they can't be confused. */}
             <Link
               href="/account"
               className={`nav-item${pathname?.startsWith('/account') ? ' active' : ''}`}
               title={t('Account')}
-              style={{ flex: 1, minWidth: 0 }}
             >
               <span className="nav-icon">
                 <SidebarAvatar src={session.user.image} name={session.user.name} email={session.user.email} />
@@ -561,18 +561,52 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </span>
               )}
             </Link>
-            {!collapsed && (
+
+            {/* Sign out — two-tap with inline confirmation so a stray click
+                can never end a session. First tap arms the action; second
+                tap on Yes actually signs out. Auto-cancels after 5s. */}
+            {signOutPending && !collapsed ? (
+              <div
+                className="nav-item"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-3)', cursor: 'default' }}
+                role="group"
+                aria-label={t('Confirm sign out')}
+              >
+                <span style={{ fontSize: 12, flex: 1 }}>{t('Sign out?')}</span>
+                <button
+                  onClick={() => { setSignOutPending(false); handleSignOut(); }}
+                  style={{ padding: '3px 10px', borderRadius: 4, border: '1px solid #ef4444', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  {t('Yes')}
+                </button>
+                <button
+                  onClick={() => setSignOutPending(false)}
+                  style={{ padding: '3px 8px', borderRadius: 4, border: '1px solid var(--border-2)', background: 'transparent', color: 'var(--text-3)', fontSize: 11, cursor: 'pointer' }}
+                >
+                  {t('Cancel')}
+                </button>
+              </div>
+            ) : (
               <button
                 className="nav-item"
-                onClick={handleSignOut}
+                onClick={() => {
+                  if (collapsed) {
+                    // Collapsed sidebar has no room for the inline confirm —
+                    // fall back to a native confirm dialog.
+                    if (window.confirm(t('Sign out of Kivora?'))) handleSignOut();
+                    return;
+                  }
+                  setSignOutPending(true);
+                  window.setTimeout(() => setSignOutPending(false), 5000);
+                }}
                 title={t('Sign out')}
-                aria-label={t('Sign out')}
-                style={{ flex: '0 0 auto', padding: '0 12px', color: 'var(--text-3)' }}
+                style={{ color: 'var(--text-3)' }}
               >
-                <span className="nav-icon" style={{ marginRight: 0 }}>🚪</span>
+                <span className="nav-icon">🚪</span>
+                {!collapsed && <span className="nav-label">{t('Sign out')}</span>}
               </button>
             )}
-          </div>
+          </>
         ) : (
           <Link href="/login" className="nav-item" title={t('Sign in')}>
             <span className="nav-icon">👤</span>

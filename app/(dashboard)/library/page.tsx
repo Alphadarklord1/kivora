@@ -1,11 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { useToast } from '@/providers/ToastProvider';
 import { useI18n } from '@/lib/i18n/useI18n';
 import { printContent, printMultiple } from '@/lib/utils/print';
 import { ShareDialog, useShareDialog } from '@/components/share';
 import { broadcastInvalidate, listenForInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
+import { stashPodcastHandoff } from '@/lib/podcast/handoff';
 
 interface LibItem {
   id: string;
@@ -120,6 +122,7 @@ const LOCAL_AR: Record<string, string> = {
 
 export default function LibraryPage() {
   useEffect(() => { document.title = 'Library — Kivora'; }, []);
+  const router = useRouter();
   const { toast } = useToast();
   const { t, formatDate, locale } = useI18n(LOCAL_AR);
   const { isOpen: shareOpen, shareTarget, openShare, closeShare } = useShareDialog();
@@ -598,6 +601,25 @@ export default function LibraryPage() {
                   </button>
                   <button className="lib-btn lib-btn-ghost lib-btn-sm" onClick={() => void exportItem(item)}>
                     📄 {t('Word')}
+                  </button>
+                  <button
+                    className="lib-btn lib-btn-ghost lib-btn-sm"
+                    onClick={async () => {
+                      let content: string | null = typeof item.content === 'string' ? item.content : null;
+                      if (!content) {
+                        toast('Loading the full item first…', 'info');
+                        const full = await ensureFullItem(item).catch(() => null);
+                        content = full && typeof full.content === 'string' ? full.content : null;
+                      }
+                      if (!content || !content.trim()) {
+                        toast('Could not load this item for podcast.', 'error');
+                        return;
+                      }
+                      stashPodcastHandoff({ title, content });
+                      router.push('/podcast');
+                    }}
+                  >
+                    🎙 {t('Podcast')}
                   </button>
                   <button
                     className="lib-btn lib-btn-ghost lib-btn-sm lib-btn-share"
