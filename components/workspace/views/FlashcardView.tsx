@@ -382,9 +382,15 @@ export function FlashcardView({
     'Definition or answer…': 'التعريف أو الإجابة…',
     '⌘↵ to save': '⌘↵ للحفظ',
   });
-  const rawCards = initialDeck
+  // Truncate to a hard ceiling — AIs sometimes ignore the requested
+  // count and emit far more cards than asked for (one user reported
+  // 57 from a request for 5). Capping at 30 here matches the input
+  // cap in WorkspacePanel and keeps generated decks manageable.
+  const HARD_CARD_CEILING = 30;
+  const rawCards = (initialDeck
     ? initialDeck.cards.map((card) => ({ front: card.front, back: card.back }))
-    : parseFlashcards(content);
+    : parseFlashcards(content)
+  ).slice(0, HARD_CARD_CEILING);
 
   // Core SRS
   const [deck,         setDeck]         = useState<SRSDeck | null>(null);
@@ -1820,15 +1826,25 @@ export function FlashcardView({
       </div>
 
       {flip ? (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
-          {GRADES.map((g, gi) => (
-            <button key={g.grade} onClick={() => doGrade(g.grade)} title={t(g.hint)}
-              style={{ border:`1px solid ${g.color}40`, borderRadius:8, padding:'10px 4px 8px', cursor:'pointer', background:`${g.color}10`, color:g.color, fontWeight:600, fontSize:'var(--text-sm)', lineHeight:1.2 }}>
-              <div style={{ fontSize:11, fontWeight:600, opacity:0.65, marginBottom:2 }}>{gradeIntervals[gi]}</div>
-              {t(g.label)}
-            </button>
-          ))}
-        </div>
+        <>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', marginBottom: 4 }}>
+            {t('How well did you remember this?')}
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
+            {GRADES.map((g, gi) => (
+              <button key={g.grade} onClick={() => doGrade(g.grade)} title={t(g.hint)}
+                style={{ border:`1px solid ${g.color}40`, borderRadius:8, padding:'9px 4px 8px', cursor:'pointer', background:`${g.color}10`, color:g.color, fontWeight:600, fontSize:'var(--text-sm)', lineHeight:1.2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, opacity: 0.55, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{gradeIntervals[gi]}</div>
+                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700 }}>{t(g.label)}</div>
+                {/* Per-button micro-hint so users don't have to hover-and-wait
+                    to learn what each grade means. */}
+                <div style={{ fontSize: 9.5, fontWeight: 500, opacity: 0.7, lineHeight: 1.2, marginTop: 1 }}>
+                  {t(g.hint)}
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
       ) : (
         <div style={{ display:'flex', justifyContent:'center' }}>
           <button className="btn btn-secondary" style={{ minWidth: 160, padding: '10px 24px', fontSize: 'var(--text-base)', fontWeight: 600 }} onClick={() => { setFlip(true); if (ttsEnabled) speak(card.back); }}>{t('Show answer')}</button>

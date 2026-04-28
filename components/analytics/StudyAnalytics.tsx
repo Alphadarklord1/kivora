@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import { getGoalPreferences, saveGoalPreferences } from '@/lib/srs/sm2';
 import {
   useAnalytics,
   type CoachAction,
@@ -41,6 +42,28 @@ export function StudyAnalytics() {
   const { data, loading, error, refresh, setPeriod, period } = useAnalytics(30);
   const [activeTab, setActiveTab] = useState<'overview' | 'scores' | 'activity' | 'retention' | 'goals'>('overview');
 
+  // Daily-goal config — surfaced here in Analytics because users were
+  // confused by the bare "Today's goal X/N" widget in the sidebar.
+  const [dailyGoal, setDailyGoal] = useState(20);
+  const [goalDraft, setGoalDraft] = useState('20');
+  useEffect(() => {
+    const g = getGoalPreferences().dailyGoal;
+    setDailyGoal(g);
+    setGoalDraft(String(g));
+  }, []);
+  function commitGoal() {
+    const n = parseInt(goalDraft, 10);
+    if (!Number.isFinite(n) || n < 1) { setGoalDraft(String(dailyGoal)); return; }
+    const clamped = Math.min(500, n);
+    setDailyGoal(clamped);
+    setGoalDraft(String(clamped));
+    saveGoalPreferences({ dailyGoal: clamped });
+    void fetch('/api/srs/preferences', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dailyGoal: clamped }),
+    }).catch(() => {});
+  }
+
   if (loading) return <AnalyticsSkeleton />;
   if (error) return (
     <div className="an-error">
@@ -73,6 +96,84 @@ export function StudyAnalytics() {
             ))}
           </select>
           <button className="an-refresh-btn" onClick={refresh}>↻ Refresh</button>
+        </div>
+      </section>
+
+      {/* Daily Goal — config + explanation. Lives here in Analytics
+          because the sidebar widget alone left users wondering what
+          "Today's goal" was and how to change it. */}
+      <section style={{
+        background: 'var(--bg-elevated, #fff)',
+        border: '1px solid var(--border-subtle, #e2e8f0)',
+        borderRadius: 14,
+        padding: '18px 22px',
+        marginBottom: 18,
+        display: 'flex',
+        gap: 22,
+        alignItems: 'center',
+        flexWrap: 'wrap',
+      }}>
+        <div style={{ flex: '2 1 320px', minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1db88e', marginBottom: 4 }}>
+            Daily Goal
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary, #14161c)', marginBottom: 6, letterSpacing: '-0.01em' }}>
+            {(deckStats?.reviewedToday ?? 0)} / {dailyGoal} cards reviewed today
+          </div>
+          <p style={{ fontSize: 13.5, color: 'var(--text-2, #55595f)', lineHeight: 1.55, margin: 0 }}>
+            Counts every flashcard you review across all decks. A practical
+            target is 15–30 cards/day for a sustainable habit; bump higher
+            if you&apos;re in exam-prep mode. The sidebar progress bar tracks
+            this number in real time.
+          </p>
+        </div>
+        <div style={{ flex: '1 1 240px', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start', minWidth: 200 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2, #55595f)' }}>
+            Set your goal
+          </label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              type="number"
+              min={1}
+              max={500}
+              value={goalDraft}
+              onChange={e => setGoalDraft(e.target.value)}
+              onBlur={commitGoal}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+              style={{
+                width: 90,
+                padding: '8px 10px',
+                borderRadius: 8,
+                border: '1px solid var(--border-subtle, #cbd5e1)',
+                background: 'var(--bg-surface, #fff)',
+                color: 'var(--text-primary, #14161c)',
+                fontSize: 16,
+                fontWeight: 700,
+              }}
+            />
+            <span style={{ fontSize: 13, color: 'var(--text-muted, #94a3b8)', alignSelf: 'center' }}>cards / day</span>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[10, 20, 30, 50].map(preset => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => { setGoalDraft(String(preset)); saveGoalPreferences({ dailyGoal: preset }); setDailyGoal(preset); }}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  border: `1px solid ${dailyGoal === preset ? '#1db88e' : 'var(--border-subtle, #cbd5e1)'}`,
+                  background: dailyGoal === preset ? '#1db88e' : 'transparent',
+                  color: dailyGoal === preset ? '#fff' : 'var(--text-2, #55595f)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 

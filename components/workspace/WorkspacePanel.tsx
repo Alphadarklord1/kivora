@@ -93,12 +93,18 @@ const GENERATE_TABS = [
   { id: 'mcq',        label: 'MCQ',        icon: '🧩', hint: 'Multiple-choice questions with answers' },
   { id: 'quiz',       label: 'Quiz',       icon: '❓', hint: 'Open-ended quiz questions' },
   { id: 'exam',       label: 'Exam Prep',  icon: '🏆', hint: 'Timed exam with scoring and weak-area analysis' },
+  // Flashcards as a first-class tool: same generation flow as the other
+  // chips, with the resulting deck routed to the Flashcards tab for
+  // study. Removes the need for users to hunt for a separate
+  // "generate flashcards" entry point.
+  { id: 'flashcards', label: 'Flashcards', icon: '🃏', hint: 'Generate a flashcard deck (FSRS-scheduled) from your content' },
 ] as const;
 
 const GENERATE_TAB_GROUPS = [
   { label: 'Written',  ids: ['summarize', 'outline'] },
   { label: 'Practice', ids: ['practice', 'mcq', 'quiz'] },
   { label: 'Exam',     ids: ['exam'] },
+  { label: 'Cards',    ids: ['flashcards'] },
 ] as const;
 
 const WORKSPACE_TABS: Array<{ id: MainTab; icon: string; label: string; getMeta?: (ctx: { filesCount: number; libraryCount: number; decksCount: number }) => string }> = [
@@ -1969,6 +1975,25 @@ export function WorkspacePanel({
                           <PracticeView content={output} />
                         </div>
                       )
+                    : generating && genMode === 'flashcards'
+                    ? (
+                        /* Flashcards stream "Front: X | Back: Y" pairs. Don't
+                           reveal the back during streaming. Show only a
+                           parsed-card-count placeholder. */
+                        <div style={{ padding: '60px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                          <div style={{ fontSize: 36 }}>🃏</div>
+                          <div style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>Generating flashcards…</div>
+                          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', textAlign: 'center', maxWidth: 360 }}>
+                            {(() => {
+                              const cardCount = (output.match(/^\s*Front\s*:/gmi) || []).length;
+                              return cardCount > 0
+                                ? `${cardCount} card${cardCount === 1 ? '' : 's'} created so far. Backs stay hidden until you flip them yourself.`
+                                : 'Your deck will appear once ready. Backs stay hidden until you flip them.';
+                            })()}
+                          </div>
+                          <div style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', animation: 'pulse 1.2s ease-in-out infinite' }} />
+                        </div>
+                      )
                     : generating
                     ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) + '<span class="stream-cursor">▍</span>' }} />
                     : genMode === 'practice'   ? <PracticeView content={output} />
@@ -2119,18 +2144,27 @@ export function WorkspacePanel({
                       <input
                         type="number"
                         min={1}
-                        max={50}
+                        max={30}
                         value={count}
                         onChange={e => {
                           const n = Number.parseInt(e.target.value, 10);
-                          if (Number.isFinite(n) && n > 0) setCount(Math.min(50, n));
+                          // Hard cap lowered from 50 → 30 after a user
+                          // accidentally generated 57 cards. Anything above
+                          // 30 is rarely useful and easy to overshoot.
+                          if (Number.isFinite(n) && n > 0) setCount(Math.min(30, n));
                         }}
                         style={{ width: 56, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border-2)', background: 'var(--surface)', color: 'var(--text)', fontSize: 'var(--text-xs)' }}
                       />
                     </label>
                     <button
                       className="btn btn-primary btn-sm"
-                      onClick={() => { setOutput(''); void runGenerate('flashcards'); }}
+                      onClick={() => {
+                        // Confirm large generations so accidental clicks
+                        // (or runaway "57 cards" surprises) need an explicit
+                        // tap to proceed.
+                        if (count >= 20 && !window.confirm(`Generate ${count} flashcards? This may take a minute.`)) return;
+                        setOutput(''); void runGenerate('flashcards');
+                      }}
                       title={selFile ? `Generate ${count} flashcards from ${selFile.name}` : `Generate ${count} flashcards from pasted text`}
                     >
                       ✨ Generate {count} from {pasteMode ? 'pasted text' : (selFile?.name ?? 'source')}
