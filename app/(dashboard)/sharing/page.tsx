@@ -125,6 +125,11 @@ export default function SharedWithMePage() {
   const [qsSubmitting, setQsSubmitting] = useState('');   // '' | 'loading' | 'done'
   const [qsShareUrl, setQsShareUrl]     = useState('');
   const [qsCopied, setQsCopied]         = useState(false);
+  // IDs of items that exist ONLY on this device (no cloud counterpart).
+  // Sharing the cloud token won't work for these — we intercept the
+  // submit and tell the user they need to sign in instead of returning
+  // a generic "Failed to create share" from the server.
+  const [localOnlyIds, setLocalOnlyIds] = useState<Set<string>>(new Set());
 
   const fetchShares = useCallback(async () => {
     setLoading(true);
@@ -209,17 +214,28 @@ export default function SharedWithMePage() {
       .then((remote: Array<{ id: string; name: string; folderId: string | null }>) => {
         const local = listLocalFiles().map((f) => ({ id: f.id, name: f.name, folderId: f.folderId }));
         const remoteList = Array.isArray(remote) ? remote : [];
+        const remoteIds = new Set(remoteList.map(r => r.id));
+        const localOnlyFileIds = new Set(local.filter(l => !remoteIds.has(l.id)).map(l => l.id));
         const merged = [
           ...local,
           ...remoteList.filter((r) => !local.some((l) => l.id === r.id)),
         ];
         setFileItems(merged);
+        setLocalOnlyIds(prev => {
+          const next = new Set(prev);
+          // Reset just the file ids — keep library ids intact
+          for (const id of fileItems.map(f => f.id)) next.delete(id);
+          for (const id of localOnlyFileIds) next.add(id);
+          return next;
+        });
       })
       .catch(() => {
         const local = listLocalFiles().map((f) => ({ id: f.id, name: f.name, folderId: f.folderId }));
         setFileItems(local);
+        setLocalOnlyIds(prev => { const n = new Set(prev); for (const f of local) n.add(f.id); return n; });
       })
       .finally(() => setFileLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Reset selection when user toggles between sources so a stale id from
@@ -260,8 +276,26 @@ export default function SharedWithMePage() {
     return !!expiresAt && new Date(expiresAt) < new Date();
   }
 
+  // Identify items that have no cloud counterpart. A library item with
+  // an id starting "offline-" was saved locally only; a file id flagged
+  // in localOnlyIds is in localStorage / IndexedDB but not in the DB.
+  const isLocalOnly = (id: string) => id.startsWith('offline-') || localOnlyIds.has(id);
+  const selectedIsLocalOnly = qsItemId ? isLocalOnly(qsItemId) : false;
+
   async function handleQuickShare() {
     if (!qsItemId) return;
+    if (selectedIsLocalOnly) {
+      // Don't bother hitting the API — it will 400 ("file not found")
+      // because the resource only lives in this browser. Tell the user
+      // why instead of showing a generic "Failed to create share".
+      setErrorMsg(
+        qsSource === 'file'
+          ? 'This file only exists on this device. Sign in (or create an account) so it can be uploaded to the cloud — then share links will work for it.'
+          : 'This library item is saved locally only. Sign in to sync it to the cloud, then come back to share.',
+      );
+      setTimeout(() => setErrorMsg(''), 6000);
+      return;
+    }
     setQsSubmitting('loading');
     try {
       // The /api/share endpoint accepts libraryItemId, fileId, folderId,
@@ -485,9 +519,10 @@ export default function SharedWithMePage() {
                   <option value="">{libLoading ? t('Loading\u2026') : t('Select a library item\u2026')}</option>
                   {libItems.map(item => {
                     const title = item.metadata?.title || item.metadata?.problem || item.mode;
+                    const local = isLocalOnly(item.id);
                     return (
                       <option key={item.id} value={item.id}>
-                        {title}
+                        {local ? '\ud83d\udd12 ' : ''}{title}{local ? '  \u00b7 local only' : ''}
                       </option>
                     );
                   })}
@@ -495,12 +530,22 @@ export default function SharedWithMePage() {
               ) : (
                 <>
                   <option value="">{fileLoading ? t('Loading\u2026') : 'Select a workspace file\u2026'}</option>
-                  {fileItems.map(item => (
-                    <option key={item.id} value={item.id}>{item.name}</option>
-                  ))}
+                  {fileItems.map(item => {
+                    const local = isLocalOnly(item.id);
+                    return (
+                      <option key={item.id} value={item.id}>
+                        {local ? '\ud83d\udd12 ' : ''}{item.name}{local ? '  \u00b7 local only' : ''}
+                      </option>
+                    );
+                  })}
                 </>
               )}
             </select>
+            {selectedIsLocalOnly && (
+              <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600 }}>
+                \ud83d\udd12 Local only \u2014 sign in to upload before sharing
+              </span>
+            )}
             {selectedItem && (
               <span className="sp-qs-mode">{selectedItem.mode}</span>
             )}

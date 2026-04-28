@@ -267,8 +267,13 @@ export function VisualAnalyzer({ mathMode = false, onSendToSolver }: VisualAnaly
   // Load PDF when file is selected
   useEffect(() => {
     if (!selectedFileId) {
-      setPages([]);
-      setExtractedImages([]);
+      // Functional updates with early-return-on-empty so setting an
+      // already-empty array doesn't create a new reference, which
+      // would re-fire this very effect (allFiles is in the dep list)
+      // and infinite-loop. React's Object.is bail-out only works when
+      // we return the same reference.
+      setPages(prev => prev.length === 0 ? prev : []);
+      setExtractedImages(prev => prev.length === 0 ? prev : []);
       return;
     }
 
