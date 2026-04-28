@@ -170,15 +170,14 @@ const SPECIAL_VIEW_META: Record<SpecialView, { title: string; subtitle: string; 
   },
   write: {
     title: 'Write a Question',
-    subtitle: 'Compose any math question with live LaTeX preview — then send straight to the solver or save as a practice question.',
+    subtitle: 'A standalone composer for any math question — not tied to a solver topic. Type freely, see live LaTeX, and send to the solver only when you choose to.',
     icon: '✍️',
     accent: '#f43f5e',
     workflowTitle: 'Question writer workflow',
     workflow: [
-      { label: 'Pick a topic', detail: 'Select the math area so the solver knows which method to apply.' },
-      { label: 'Write your question', detail: 'Use plain text or x^2 notation — LaTeX renders live as you type.' },
-      { label: 'Add context', detail: 'Optionally describe what you have tried, or paste in given values.' },
-      { label: 'Solve or save', detail: 'Send to the solver with one click, or save as a Library practice question.' },
+      { label: 'Write your question', detail: 'Use plain text or x^2 notation — LaTeX renders live as you type. No topic to pick.' },
+      { label: 'Add context (optional)', detail: 'Describe what you have tried, or paste in given values.' },
+      { label: 'Solve or save', detail: 'Send to the solver with one click — the right topic is auto-detected — or save as a Library practice question.' },
     ],
   },
 };
@@ -2419,20 +2418,44 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
         </div>
 
         <div style={{ padding: '0 0 8px' }}>
+          {/* Write a Question — pinned to the top as a standalone primary
+              action. Disconnected from Solver Topics: this is its own
+              composer, not one of the topic categories. The horizontal
+              divider below makes the separation explicit. */}
+          <div style={{ padding: sidebarOpen ? '8px 14px 4px' : '8px 0 4px' }}>
+            <button
+              onClick={() => setActive('write')}
+              title="Write a Question"
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: sidebarOpen ? 10 : 0,
+                justifyContent: sidebarOpen ? 'flex-start' : 'center',
+                padding: sidebarOpen ? '9px 12px' : '9px 0',
+                borderRadius: 10,
+                border: `1.5px solid ${active === 'write' ? '#f43f5e' : '#f43f5e40'}`,
+                background: active === 'write' ? '#f43f5e' : '#f43f5e12',
+                color: active === 'write' ? '#fff' : '#f43f5e',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              <span style={{ fontSize: 16, lineHeight: 1 }}>✍️</span>
+              {sidebarOpen && <span>Write a Question</span>}
+            </button>
+          </div>
+
+          <div style={{ height: 1, background: 'var(--border-subtle)', margin: '6px 14px 10px' }} />
+
           {sidebarOpen && (
-            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '6px 20px 4px', opacity: 0.6 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '0 20px 4px', opacity: 0.6 }}>
               Solver Topics
             </div>
           )}
           {PRIMARY_TOPICS.map(t => <NavItem key={t.id} id={t.id} icon={t.icon} label={t.label} color={t.color} />)}
-
-          <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
-          {sidebarOpen && (
-            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)', padding: '2px 20px 4px', opacity: 0.6 }}>
-              Input
-            </div>
-          )}
-          <NavItem id="write"  icon="✍️" label="Write a Question" color="#f43f5e" />
 
           <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 14px' }} />
           {sidebarOpen && (
