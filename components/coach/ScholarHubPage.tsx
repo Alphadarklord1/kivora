@@ -76,7 +76,21 @@ export function ScholarHubPage({ drawerMode = false, onClose }: ScholarHubPagePr
   const { data: analytics, loading: analyticsLoading, refresh: refreshAnalytics } = useAnalytics(30);
 
   const outputRef = useRef<HTMLDivElement | null>(null);
-  const [activeSection,   setActiveSection]   = useState<CoachSection>('research');
+  // Restore the last-viewed Scholar Hub tab so leaving /coach for /workspace,
+  // /math etc. and coming back doesn't drop the user back on Research every
+  // time. Only the active tab is persisted — research results are intentionally
+  // fetched fresh.
+  const [activeSection,   setActiveSection]   = useState<CoachSection>(() => {
+    if (typeof window === 'undefined') return 'research';
+    try {
+      const saved = localStorage.getItem('kivora-coach-active-section') as CoachSection | null;
+      return saved || 'research';
+    } catch { return 'research'; }
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try { localStorage.setItem('kivora-coach-active-section', activeSection); } catch { /* noop */ }
+  }, [activeSection]);
   const [output,          setOutput]          = useState<CoachOutput | null>(null);
 
   // Shared cross-tab state

@@ -406,6 +406,58 @@ function FileViewer({
   );
 }
 
+// ── Session restore ────────────────────────────────────────────────────────
+// Persist the workspace's working state across navigation so jumping to
+// /math, /coach, /library and back doesn't wipe what the user was doing.
+// React state is gone the moment the page unmounts; localStorage survives.
+
+const WORKSPACE_SESSION_KEY = 'kivora-workspace-session-v1';
+
+interface WorkspaceSession {
+  mainTab?: string;
+  genMode?: string;
+  selFileId?: string | null;
+  viewFileId?: string | null;
+  extractedText?: string;
+  pasteMode?: boolean;
+  output?: string;
+  outputsByMode?: Record<string, string>;
+  count?: number;
+  editMode?: boolean;
+  noteStyle?: string;
+  folderSourceMeta?: { folderName: string; fileCount: number; wordCount: number } | null;
+}
+
+function loadWorkspaceSession(): WorkspaceSession {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(WORKSPACE_SESSION_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as WorkspaceSession;
+  } catch { return {}; }
+}
+
+function saveWorkspaceSession(session: WorkspaceSession): void {
+  if (typeof window === 'undefined') return;
+  try {
+    // Clamp anything that could grow unbounded so a stale session can't
+    // bloat localStorage or trip a quota error on the next save.
+    const safe: WorkspaceSession = {
+      ...session,
+      extractedText: session.extractedText?.slice(0, 200_000),
+      output: session.output?.slice(0, 200_000),
+      outputsByMode: session.outputsByMode
+        ? Object.fromEntries(
+            Object.entries(session.outputsByMode)
+              .slice(0, 12)
+              .map(([k, v]) => [k, v.slice(0, 80_000)])
+          )
+        : undefined,
+    };
+    localStorage.setItem(WORKSPACE_SESSION_KEY, JSON.stringify(safe));
+  } catch { /* quota / SSR — drop silently */ }
+}
+
 // ── Main component ─────────────────────────────────────────────────────────
 
 export function WorkspacePanel({
@@ -422,27 +474,33 @@ export function WorkspacePanel({
     return readScholarContext();
   });
 
-  const [mainTab,       setMainTab]       = useState<MainTab>('files');
-  const [genMode,       setGenMode]       = useState<GenMode>('summarize');
+  // Restore the prior session once on mount so navigating to /math, /coach
+  // etc. and back doesn't wipe the source text, output, active tab, etc.
+  // selFile / viewFile rebind by id after the file list reloads below.
+  const restoredRef = useRef<WorkspaceSession>(loadWorkspaceSession());
+  const restored = restoredRef.current;
+
+  const [mainTab,       setMainTab]       = useState<MainTab>(() => (restored.mainTab as MainTab) ?? 'files');
+  const [genMode,       setGenMode]       = useState<GenMode>(() => (restored.genMode as GenMode) ?? 'summarize');
   const [files,         setFiles]         = useState<FileRecord[]>([]);
   const [filesLoad,     setFilesLoad]     = useState(false);
   const [viewFile,      setViewFile]      = useState<FileRecord | null>(null);
   const [selFile,       setSelFile]       = useState<FileRecord | null>(null);
-  const [extractedText, setExtractedText] = useState('');
-  const [pasteMode,     setPasteMode]     = useState(false);
+  const [extractedText, setExtractedText] = useState(() => restored.extractedText ?? '');
+  const [pasteMode,     setPasteMode]     = useState(() => restored.pasteMode ?? false);
   const [extracting,    setExtracting]    = useState(false);
   // When the user generates from a whole folder instead of a single
   // file, this holds the source-strip metadata so the UI can show
   // "📁 Folder · N files · M words" instead of a single filename.
-  const [folderSourceMeta, setFolderSourceMeta] = useState<{ folderName: string; fileCount: number; wordCount: number } | null>(null);
-  const [output,        setOutput]        = useState('');
+  const [folderSourceMeta, setFolderSourceMeta] = useState<{ folderName: string; fileCount: number; wordCount: number } | null>(() => restored.folderSourceMeta ?? null);
+  const [output,        setOutput]        = useState(() => restored.output ?? '');
   // Snapshot the most recent output per tool tab so switching between
   // Summarize / MCQ / Quiz / etc. doesn't wipe a result the user wants
   // to come back to. Cleared explicitly via the ✕ Clear button or when
   // a new file is loaded.
-  const [outputsByMode, setOutputsByMode] = useState<Record<string, string>>({});
+  const [outputsByMode, setOutputsByMode] = useState<Record<string, string>>(() => restored.outputsByMode ?? {});
   const [generating,    setGenerating]    = useState(false);
-  const [count,         setCount]         = useState(5);
+  const [count,         setCount]         = useState(() => restored.count ?? 5);
   const [libItems,      setLibItems]      = useState<LibraryItemRecord[]>([]);
   const [libLoad,       setLibLoad]       = useState(false);
   const [srsDecks,      setSrsDecks]      = useState<SRSDeck[]>([]);
@@ -455,7 +513,7 @@ export function WorkspacePanel({
   const [reuploadTarget, setReuploadTarget] = useState<FileRecord | null>(null);
   const reuploadRef = useRef<HTMLInputElement>(null);
   const [streamSource,  setStreamSource]  = useState<string>('');
-  const [editMode,      setEditMode]      = useState(false);
+  const [editMode,      setEditMode]      = useState(() => restored.editMode ?? false);
   const [streak,        setStreak]        = useState<number>(0);
   const [weekScore,     setWeekScore]     = useState<number | null>(null);
   const [weekQuizzes,   setWeekQuizzes]   = useState<number>(0);
@@ -467,7 +525,7 @@ export function WorkspacePanel({
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [showKnowledgeMap, setShowKnowledgeMap] = useState(false);
   const [notesInject,   setNotesInject]   = useState<string | undefined>(undefined);
-  const [noteStyle,     setNoteStyle]     = useState<NoteStyle>('study');
+  const [noteStyle,     setNoteStyle]     = useState<NoteStyle>(() => (restored.noteStyle as NoteStyle) ?? 'study');
   const abortRef    = useRef<AbortController | null>(null);
   const pasteRef    = useRef<HTMLTextAreaElement>(null);
   const handledReviewImportRef = useRef<string | null>(null);
@@ -571,6 +629,44 @@ export function WorkspacePanel({
 
   useEffect(() => { loadFiles(); }, [loadFiles, filesRefreshKey]);
   useEffect(() => { setViewFile(null); setMissingBlobs(new Set()); setFolderSourceMeta(null); }, [selectedFolder, selectedTopic]);
+
+  // Re-bind selFile / viewFile by id once the files list has loaded after a
+  // remount. Without this the saved-session restore brings back the source
+  // text + output but the file pointer in the sidebar would stay null.
+  // Tracked with a ref so it only runs the first time files arrive.
+  const fileRebindDoneRef = useRef(false);
+  useEffect(() => {
+    if (fileRebindDoneRef.current || files.length === 0) return;
+    const sel = restored.selFileId ? files.find(f => f.id === restored.selFileId) : null;
+    const view = restored.viewFileId ? files.find(f => f.id === restored.viewFileId) : null;
+    if (sel) setSelFile(sel);
+    if (view) setViewFile(view);
+    fileRebindDoneRef.current = true;
+  }, [files, restored.selFileId, restored.viewFileId]);
+
+  // Persist a snapshot of the working state on every relevant change. The
+  // helper truncates large fields so localStorage stays well under quota.
+  // Debouncing through requestIdleCallback keeps the writes off the hot
+  // path during streaming output.
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      saveWorkspaceSession({
+        mainTab,
+        genMode,
+        selFileId: selFile?.id ?? null,
+        viewFileId: viewFile?.id ?? null,
+        extractedText,
+        pasteMode,
+        output,
+        outputsByMode,
+        count,
+        editMode,
+        noteStyle,
+        folderSourceMeta,
+      });
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [mainTab, genMode, selFile?.id, viewFile?.id, extractedText, pasteMode, output, outputsByMode, count, editMode, noteStyle, folderSourceMeta]);
 
   // Mirror non-empty output into the per-mode snapshot so switching tabs
   // doesn't lose work. Using a derived effect (rather than threading an

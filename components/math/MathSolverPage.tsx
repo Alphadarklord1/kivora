@@ -2062,13 +2062,47 @@ function solverTopicForQuestion(problem: string): TopicId {
   return detected;
 }
 
+// Persist the math page's working state across navigation. Without this,
+// jumping from /math → /workspace → /math wipes the typed problem and
+// any ongoing solve composer.
+const MATH_SESSION_KEY = 'kivora-math-session-v1';
+
+interface MathSession {
+  active?: string;
+  input?: string;
+  typeInput?: string;
+  writeContext?: string;
+}
+
+function loadMathSession(): MathSession {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(MATH_SESSION_KEY);
+    return raw ? JSON.parse(raw) as MathSession : {};
+  } catch { return {}; }
+}
+
+function saveMathSession(session: MathSession): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(MATH_SESSION_KEY, JSON.stringify({
+      ...session,
+      input: session.input?.slice(0, 4000),
+      typeInput: session.typeInput?.slice(0, 4000),
+      writeContext: session.writeContext?.slice(0, 4000),
+    }));
+  } catch { /* noop */ }
+}
+
 export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps = {}) {
-  const [active, setActive] = useState<ActiveView>(defaultPanel);
+  const mathRestoredRef = useRef<MathSession>(loadMathSession());
+  const mathRestored = mathRestoredRef.current;
+  const [active, setActive] = useState<ActiveView>(() => (mathRestored.active as ActiveView) ?? defaultPanel);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
     try { return localStorage.getItem(MATH_SIDEBAR_KEY) !== 'closed'; } catch { return true; }
   });
   const [compactMathLayout, setCompactMathLayout] = useState(false);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => mathRestored.input ?? '');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SolveResult | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -2092,8 +2126,8 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
   const [contextName, setContextName] = useState('');
   const [scanBusy, setScanBusy] = useState(false);
   const [scanError, setScanError] = useState('');
-  const [typeInput,  setTypeInput]  = useState('');
-  const [writeContext, setWriteContext] = useState('');
+  const [typeInput,  setTypeInput]  = useState(() => mathRestored.typeInput ?? '');
+  const [writeContext, setWriteContext] = useState(() => mathRestored.writeContext ?? '');
   // Write a Question owns its own result so solving stays on this page —
   // the user is no longer auto-routed to a solver topic view.
   const [writeResult, setWriteResult] = useState<SolveResult | null>(null);
@@ -2125,6 +2159,16 @@ export function MathSolverPage({ defaultPanel = 'algebra' }: MathSolverPageProps
   const [flashcardToast, setFlashcardToast] = useState<string>('');
 
   useEffect(() => { setHistory(loadHistory()); }, []);
+
+  // Snapshot the active panel + input fields so leaving /math (e.g. to
+  // /workspace) and coming back doesn't wipe what the user was working
+  // on. Debounced 400ms to keep typing snappy.
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      saveMathSession({ active, input, typeInput, writeContext });
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [active, input, typeInput, writeContext]);
 
   useEffect(() => {
     if (active === 'vectors' || active === 'matrices' || active === 'linear-algebra') {
