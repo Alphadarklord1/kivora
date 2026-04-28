@@ -47,6 +47,13 @@ const EVENT_COLORS: Record<EventType, string> = {
   revision: '#f59e0b',
 };
 
+/** Per-event color resolver. Honors an explicit `event.color` (set by the
+ *  Course Schedule Importer so each course renders in its own color),
+ *  falling back to the type-default. */
+function colorFor(evt: { type: EventType; color?: string }): string {
+  return evt.color || colorFor(evt);
+}
+
 const EVENT_ICONS: Record<EventType, string> = {
   study:    '📚',
   exam:     '📝',
@@ -241,6 +248,21 @@ export default function PlannerPage() {
     void Promise.all(newEvents.map((event) => apiCreateEvent(event as Parameters<typeof apiCreateEvent>[0])));
   }, [events, persistEvents]);
 
+  const clearAllEvents = useCallback(async () => {
+    const userCreatedCount = events.filter(e => !e.id.startsWith('plan_') && !e.id.startsWith('exam_')).length;
+    if (userCreatedCount === 0) return;
+    const ok = window.confirm(
+      `Delete all ${userCreatedCount} events from your calendar? This cannot be undone. (Plan-generated events stay; only your manually-added and imported events are removed.)`,
+    );
+    if (!ok) return;
+    // Keep plan-injected events; wipe everything else.
+    const keep = events.filter(e => e.id.startsWith('plan_') || e.id.startsWith('exam_'));
+    persistEvents(keep);
+    try {
+      await fetch('/api/planner/events', { method: 'DELETE' });
+    } catch { /* localStorage already cleared */ }
+  }, [events, persistEvents]);
+
   // Scroll week view to 8am on mount
   useEffect(() => {
     if (view === 'week' || view === 'day') {
@@ -429,7 +451,7 @@ export default function PlannerPage() {
               <div
                 key={evt.id}
                 className="today-item"
-                style={{ borderLeft: `3px solid ${EVENT_COLORS[evt.type]}` }}
+                style={{ borderLeft: `3px solid ${colorFor(evt)}` }}
                 onClick={() => setSelectedEvent(evt)}
               >
                 <span className="today-time">{evt.startTime}</span>
@@ -473,6 +495,22 @@ export default function PlannerPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button className="import-schedule-btn" onClick={() => setShowImportModal(true)} title="Import course schedule from text">
               Import Schedule
+            </button>
+            <button
+              onClick={clearAllEvents}
+              title="Delete every manually-added and imported event from the calendar"
+              style={{
+                padding: '6px 12px',
+                borderRadius: 8,
+                border: '1px solid color-mix(in srgb, var(--danger, #e05252) 35%, var(--border-subtle))',
+                background: 'transparent',
+                color: 'var(--danger, #e05252)',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              🗑 Clear calendar
             </button>
             <div className="view-switcher">
               {(['month','week','day','agenda'] as CalendarView[]).map(v => (
@@ -541,7 +579,7 @@ export default function PlannerPage() {
       {selectedEvent && (
         <div className="detail-overlay" onClick={() => setSelectedEvent(null)}>
           <div className="detail-panel" onClick={e => e.stopPropagation()}>
-            <div className="detail-header" style={{ background: EVENT_COLORS[selectedEvent.type] }}>
+            <div className="detail-header" style={{ background: colorFor(selectedEvent) }}>
               <span className="detail-icon">{EVENT_ICONS[selectedEvent.type]}</span>
               <div>
                 <div className="detail-type">{selectedEvent.type}</div>
@@ -1046,8 +1084,8 @@ function MonthView({ cursor, today, events, onDayClick, onEventClick, onCellDblC
                     e.stopPropagation();
                   }}
                   style={{
-                    background: EVENT_COLORS[evt.type]+'22',
-                    borderLeft: `3px solid ${EVENT_COLORS[evt.type]}`,
+                    background: colorFor(evt)+'22',
+                    borderLeft: `3px solid ${colorFor(evt)}`,
                     textDecoration: evt.completed ? 'line-through' : 'none',
                     cursor: 'grab',
                   }}
@@ -1196,7 +1234,7 @@ function WeekView({ cursor, today, events, scrollRef, onEventClick, onSlotClick,
                     top, height,
                     left: `calc(60px + (100% - 60px) * ${dayIndex} / 7 + 3px)`,
                     width: `calc((100% - 60px) / 7 - 6px)`,
-                    background: EVENT_COLORS[evt.type]+'dd',
+                    background: colorFor(evt)+'dd',
                     textDecoration: evt.completed ? 'line-through' : 'none',
                     cursor: 'grab',
                   }}
@@ -1318,7 +1356,7 @@ function DayView({ date, today, events, scrollRef, onEventClick, onSlotClick, dr
                   e.dataTransfer.setData('eventId', evt.id);
                   e.dataTransfer.effectAllowed = 'move';
                 }}
-                style={{ top, height, background: EVENT_COLORS[evt.type]+'dd', textDecoration: evt.completed?'line-through':'none', cursor: 'grab' }}
+                style={{ top, height, background: colorFor(evt)+'dd', textDecoration: evt.completed?'line-through':'none', cursor: 'grab' }}
                 onClick={() => onEventClick(evt)}
               >
                 <span className="day-evt-icon">{EVENT_ICONS[evt.type]}</span>
@@ -1419,7 +1457,7 @@ function AgendaView({ cursor, events, onEventClick }: {
                 <div
                   key={evt.id}
                   className="agenda-evt"
-                  style={{ borderLeft: `4px solid ${EVENT_COLORS[evt.type]}` }}
+                  style={{ borderLeft: `4px solid ${colorFor(evt)}` }}
                   onClick={() => onEventClick(evt)}
                 >
                   <span className="agd-icon">{EVENT_ICONS[evt.type]}</span>
@@ -1427,7 +1465,7 @@ function AgendaView({ cursor, events, onEventClick }: {
                     <span className="agd-title" style={{ textDecoration: evt.completed?'line-through':'none' }}>{evt.title}</span>
                     <span className="agd-time">{evt.startTime} – {evt.endTime}</span>
                   </div>
-                  <span className="agd-type-badge" style={{ background: EVENT_COLORS[evt.type]+'22', color: EVENT_COLORS[evt.type] }}>
+                  <span className="agd-type-badge" style={{ background: colorFor(evt)+'22', color: colorFor(evt) }}>
                     {evt.type}
                   </span>
                 </div>

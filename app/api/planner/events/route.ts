@@ -65,3 +65,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, local: true });
   }
 }
+
+// DELETE /api/planner/events — wipe ALL events for the current user.
+// Used by the planner's "Clear calendar" action; the client also clears
+// localStorage so guests get the same effect.
+export async function DELETE() {
+  if (!isDatabaseConfigured) return NextResponse.json({ ok: false, local: true });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+  if (isGuestModeEnabled() && isEphemeralGuest(userId)) return NextResponse.json({ ok: false, local: true });
+
+  try {
+    await db.delete(calendarEvents).where(eq(calendarEvents.userId, userId));
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error('[planner/events] DELETE failed', err);
+    return NextResponse.json({ ok: false, local: true });
+  }
+}

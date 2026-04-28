@@ -20,7 +20,25 @@ export interface ImportedCalendarEvent {
   startTime: string;  // HH:MM
   endTime: string;    // HH:MM
   description?: string;
+  /** Per-course color so a calendar with several classes is visually
+   *  distinguishable. Same course → same color across every recurrence. */
+  color?: string;
 }
+
+/** Distinct colors cycled by course index. Avoids the type-default green
+ *  ('#52b788') to keep a real visual signal between concurrent courses. */
+const COURSE_COLORS = [
+  '#4f86f7', // blue
+  '#e07a52', // coral
+  '#a78bfa', // violet
+  '#22c55e', // green
+  '#f59e0b', // amber
+  '#ec4899', // pink
+  '#06b6d4', // cyan
+  '#ef4444', // red
+  '#84cc16', // lime
+  '#8b5cf6', // purple
+];
 
 interface Props {
   onImport: (events: ImportedCalendarEvent[]) => void;
@@ -55,19 +73,32 @@ function defaultStart(): string {
   return toDateStr(new Date());
 }
 
-function generateEvents(courses: ParsedCourse[], selected: Set<number>, semStart: string, semEnd: string): ImportedCalendarEvent[] {
+function generateEvents(
+  courses: ParsedCourse[],
+  selected: Set<number>,
+  semStart: string,
+  semEnd: string,
+  includeInstructor: boolean,
+): ImportedCalendarEvent[] {
   const start = new Date(semStart + 'T00:00:00');
   const end = new Date(semEnd + 'T00:00:00');
   const events: ImportedCalendarEvent[] = [];
+
+  // Stable per-course color: assign by index among the SELECTED courses
+  // so dropping/re-toggling a course doesn't shuffle every other color.
+  const selectedOrder: number[] = [];
+  for (let i = 0; i < courses.length; i++) if (selected.has(i)) selectedOrder.push(i);
+  const colorFor = (i: number) => COURSE_COLORS[selectedOrder.indexOf(i) % COURSE_COLORS.length];
 
   for (let i = 0; i < courses.length; i++) {
     if (!selected.has(i)) continue;
     const course = courses[i];
     const title = course.courseCode ? `${course.courseCode} — ${course.name}` : course.name;
     const description = [
-      course.instructor !== 'Unknown' ? `Instructor: ${course.instructor}` : '',
+      includeInstructor && course.instructor !== 'Unknown' ? `Instructor: ${course.instructor}` : '',
       course.location ? `Room: ${course.location}` : '',
     ].filter(Boolean).join(' · ');
+    const courseColor = colorFor(i);
 
     for (const dayName of course.days) {
       const targetDow = DAY_MAP[dayName];
@@ -88,6 +119,7 @@ function generateEvents(courses: ParsedCourse[], selected: Set<number>, semStart
           startTime: course.startTime,
           endTime: course.endTime,
           description: description || undefined,
+          color: courseColor,
         });
         cur.setDate(cur.getDate() + 7);
       }
@@ -110,6 +142,10 @@ export function CourseScheduleImporter({ onImport, onClose }: Props) {
   const [semStart, setSemStart] = useState(defaultStart);
   const [semEnd, setSemEnd] = useState(defaultEnd);
   const [importedCount, setImportedCount] = useState(0);
+  // Off by default would surprise users; default ON, let them opt out
+  // (e.g. when the parsed instructor name is wrong or they don't want it
+  // cluttering each event description).
+  const [includeInstructor, setIncludeInstructor] = useState(true);
 
   async function parse() {
     if (text.trim().length < 10) {
@@ -149,7 +185,7 @@ export function CourseScheduleImporter({ onImport, onClose }: Props) {
   }
 
   function doImport() {
-    const events = generateEvents(courses, selected, semStart, semEnd);
+    const events = generateEvents(courses, selected, semStart, semEnd, includeInstructor);
     setImportedCount(events.length);
     onImport(events);
     setStep('done');
@@ -259,9 +295,35 @@ Prof. Jones · TR 2:00–3:15 PM · Hall B`}</pre>
               </div>
             </div>
 
+            {/* Instructor toggle — students may want a clean calendar
+                without the parsed instructor name (sometimes wrong, or
+                just visual noise once they know who's teaching). */}
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                marginTop: 12,
+                padding: '8px 12px',
+                borderRadius: 8,
+                background: 'var(--bg-2)',
+                border: '1px solid var(--border-subtle)',
+                fontSize: 13,
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={includeInstructor}
+                onChange={e => setIncludeInstructor(e.target.checked)}
+              />
+              <span>Include instructor name in event description</span>
+            </label>
+
             <div className="import-preview-note">
               {selected.size > 0
-                ? `Will add ${generateEvents(courses, selected, semStart, semEnd).length} class sessions to your calendar`
+                ? `Will add ${generateEvents(courses, selected, semStart, semEnd, includeInstructor).length} class sessions to your calendar`
                 : 'Select at least one course to continue'}
             </div>
 
