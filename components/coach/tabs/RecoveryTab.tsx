@@ -66,7 +66,7 @@ export function RecoveryTab({
     <div className={styles.recoveryLayout}>
       <div className={styles.panelHead}>
         <h2>Recovery</h2>
-        <p>Due review and weak-area guidance in one place.</p>
+        <p>Once you start taking quizzes and using flashcard decks, this tab tells you what to study next based on where your accuracy is lowest. Today&apos;s Mission below picks the single most useful thing to do right now; the Weak Topics list ranks subjects by how shaky your recall is.</p>
       </div>
 
       {/* Today's Mission card */}

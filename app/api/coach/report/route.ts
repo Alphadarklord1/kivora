@@ -32,6 +32,29 @@ const TYPE_LABELS: Record<string, string> = {
   literature_review: 'literature review',
 };
 
+/** Per-type structural guidance — gets injected into both outline and
+ *  draft prompts so picking Essay vs Report vs Lit Review actually
+ *  produces a meaningfully different document, not just a different
+ *  noun in the heading. */
+const TYPE_GUIDANCE: Record<string, string> = {
+  essay:
+    'STRUCTURE: argumentative essay. Open with a clear thesis statement. ' +
+    'Body paragraphs each defend ONE supporting claim with evidence and ' +
+    'reasoning. Address at least one counter-argument and rebut it. ' +
+    'Close by reaffirming the thesis with a synthesis, not a summary.',
+  report:
+    'STRUCTURE: formal report. Use distinct labelled sections — ' +
+    'Background / Methodology (or Approach) / Findings / Discussion / ' +
+    'Recommendations / Conclusion. Lead with facts and observations. ' +
+    'Avoid first-person rhetoric; the tone is impersonal and analytical.',
+  literature_review:
+    'STRUCTURE: literature review. Group sources by THEME or method, ' +
+    'never one-source-per-paragraph. Identify points of agreement, ' +
+    'disagreement, and gaps in the literature. End with a section that ' +
+    'states what is still unknown and where future research should go. ' +
+    'Cite by author name (e.g. "Smith argues...") rather than numbered notes.',
+};
+
 const DRAFT_SYSTEM = `You are an expert academic writing assistant. Write well-structured, formal academic content for students with clear headings, topic sentences, and smooth transitions between paragraphs.
 
 Output PLAIN TEXT only. Do NOT use Markdown syntax — no leading hash marks (#, ##, ###, ####), no asterisks for bold, no underscores for italics, no bullet markers. Section headings should be written as a normal line of Title Case text on its own line, followed by a blank line and the body paragraphs. The student's editor renders raw text, so any markdown shows up literally and breaks the document.
@@ -49,6 +72,7 @@ function buildDraftPrompt(
   outline: OutlineSection[] | null,
 ): string {
   const typeLabel   = TYPE_LABELS[type] ?? 'academic essay';
+  const guidance    = TYPE_GUIDANCE[type] ?? TYPE_GUIDANCE.essay;
   const pointsBlock = keyPoints ? `\n\nKey points to cover:\n${keyPoints}` : '';
   const contextBlock = context ? `\n\nReference source context:\n${context}` : '';
 
@@ -58,6 +82,7 @@ function buildDraftPrompt(
       .join('\n');
     return (
       `Write a ${wordCount}-word ${typeLabel} on: "${topic}"${pointsBlock}${contextBlock}\n\n` +
+      `${guidance}\n\n` +
       `Use this approved outline — follow the section order and purpose exactly:\n${outlineBlock}\n\n` +
       `Write each section in full. Formal academic tone. Aim for ${wordCount} words total.`
     );
@@ -66,19 +91,29 @@ function buildDraftPrompt(
   return (
     `Write a ${wordCount}-word ${typeLabel} on the following topic:\n\n` +
     `"${topic}"${pointsBlock}${contextBlock}\n\n` +
-    `Structure it with a clear introduction, well-developed body sections with headings, and a conclusion. ` +
+    `${guidance}\n\n` +
     `Write in a formal academic tone. Aim for approximately ${wordCount} words.`
   );
 }
 
 function buildOutlinePrompt(topic: string, type: string, wordCount: number, keyPoints: string): string {
-  const typeLabel = TYPE_LABELS[type] ?? 'academic essay';
+  const typeLabel    = TYPE_LABELS[type] ?? 'academic essay';
+  const guidance     = TYPE_GUIDANCE[type] ?? TYPE_GUIDANCE.essay;
   const sectionCount = wordCount <= 750 ? 4 : wordCount <= 1500 ? 5 : 6;
-  const points = keyPoints ? `\n\nKey points the outline must cover: ${keyPoints}` : '';
+  const points       = keyPoints ? `\n\nKey points the outline must cover: ${keyPoints}` : '';
   return (
     `Create a ${sectionCount}-section outline for a ${wordCount}-word ${typeLabel} on: "${topic}".${points}\n\n` +
-    `Return ONLY a JSON array like:\n` +
-    `[{"heading":"Introduction","summary":"Set the scene and state the thesis"},{"heading":"...","summary":"..."},{"heading":"Conclusion","summary":"..."}]`
+    `${guidance}\n\n` +
+    `REQUIREMENTS:\n` +
+    `- Return EXACTLY ${sectionCount} sections — no fewer.\n` +
+    `- The first section must be an Introduction (or equivalent opener).\n` +
+    `- The final section must be a Conclusion (or equivalent closer).\n` +
+    `- The middle ${sectionCount - 2} sections must each cover a different theme.\n` +
+    `- Return ONLY a JSON array. No prose, no markdown fences, no explanation.\n\n` +
+    `Format example:\n` +
+    `[{"heading":"Introduction","summary":"Set the scene and state the thesis"},` +
+    `{"heading":"...","summary":"..."},` +
+    `{"heading":"Conclusion","summary":"..."}]`
   );
 }
 
@@ -148,13 +183,18 @@ export async function POST(req: NextRequest) {
     });
 
     const sections = parseOutline(result);
-    if (sections.length === 0) {
+    // Earlier this only fell back when the parse returned ZERO sections,
+    // so a malformed AI response that surfaced only one section (e.g.
+    // "Conclusion" alone) flowed through as the entire outline. Guard
+    // by section count so the user always sees a complete structure.
+    if (sections.length < 3) {
       return NextResponse.json({
         outline: [
-          { heading: 'Introduction',      summary: `Introduce the topic: ${topic}.` },
-          { heading: 'Key Arguments',     summary: keyPoints || 'Present the main evidence.' },
-          { heading: 'Analysis',          summary: 'Examine the implications.' },
-          { heading: 'Conclusion',        summary: 'Synthesise the findings.' },
+          { heading: 'Introduction',  summary: `Introduce the topic: ${topic}. State the thesis or purpose of this ${TYPE_LABELS[type] ?? 'document'}.` },
+          { heading: 'Background',    summary: 'Provide relevant context, definitions, and prior work.' },
+          { heading: 'Key Arguments', summary: keyPoints || 'Present the main evidence and supporting points.' },
+          { heading: 'Analysis',      summary: 'Examine the implications and weigh the evidence.' },
+          { heading: 'Conclusion',    summary: 'Synthesise the findings and restate significance.' },
         ] satisfies OutlineSection[],
       });
     }
