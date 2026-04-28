@@ -14,7 +14,10 @@ function isEphemeralGuest(userId: string) {
 // GET /api/library
 export async function GET(req: NextRequest) {
   if (!isDatabaseConfigured) return NextResponse.json([], { status: 200 });
-  const userId = await getUserId();
+  // Same JWT-based fix the POST handler uses — the no-arg cookie path
+  // could return null for valid Google sessions and serve up "no items"
+  // even when the user had saved plenty.
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   if (isGuestModeEnabled() && isEphemeralGuest(userId)) return betaReadFallback([]);
 

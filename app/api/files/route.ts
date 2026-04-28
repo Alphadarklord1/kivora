@@ -78,7 +78,11 @@ async function parseCreateBody(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   if (!isDatabaseConfigured) return betaReadFallback([]);
-  const userId = await getUserId();
+  // JWT-based extraction (pass `req`) — the no-arg cookie path
+  // intermittently returned null for valid Google sessions, leaving
+  // both the Sharing page and the Tools tab dropdown empty even when
+  // the user clearly had files. Same fix the library route uses.
+  const userId = await getUserId(req);
   if (!userId || isEphemeralGuest(userId)) return betaReadFallback([]);
 
   const { searchParams } = new URL(req.url);
@@ -132,7 +136,7 @@ export async function POST(req: NextRequest) {
       localOnly: true,
     }, { status: 201 });
   }
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   if (isEphemeralGuest(userId)) {
     const body = await parseCreateBody(req);

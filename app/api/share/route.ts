@@ -29,9 +29,12 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json([]);
     }
-    if (isGuestModeEnabled() && isEphemeralGuest(userId)) {
-      return betaReadFallback([]);
-    }
+    // Note: previously we used betaReadFallback([]) for ephemeral guests
+    // here, which made the Sharing page LIST always-empty for guests
+    // even after they successfully created a share. The token they hold
+    // works fine; the list query just hid their own work. Guests now see
+    // their own shares (filtered by their guest userId, same as authed
+    // users) — that's not a privacy leak; the user is the owner.
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type'); // 'owned' | 'shared' | null (all)

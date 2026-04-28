@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n/useI18n';
+// Guests have files in IndexedDB / localStorage that the server can't
+// see. Merge those into the dropdown so the picker isn't empty for
+// users who haven't signed in yet.
+import { listLocalFiles } from '@/lib/files/local-files';
+import { loadOfflineItems } from '@/lib/library/offline-store';
 
 interface Share {
   id: string;
@@ -96,7 +101,10 @@ export default function SharedWithMePage() {
   const [shares, setShares]       = useState<Share[]>([]);
   const [owners, setOwners]       = useState<Record<string, Owner>>({});
   const [loading, setLoading]     = useState(true);
-  const [activeTab, setActiveTab] = useState<ShareTab>('received');
+  // Default to "sent" so users land on the list of things THEY shared.
+  // The previous default ('received') made it look like newly-created
+  // shares had vanished — they were just on the other tab.
+  const [activeTab, setActiveTab] = useState<ShareTab>('sent');
   const [search, setSearch]       = useState('');
   const [typeFilter, setTypeFilter] = useState<ShareFilter>('all');
   const [errorMsg, setErrorMsg]   = useState('');
@@ -163,26 +171,54 @@ export default function SharedWithMePage() {
       .catch(() => {});
   }, []);
 
-  // Fetch library items for the quick-share dropdown
+  // Fetch library items for the quick-share dropdown — merge remote
+  // (cloud) items with offline (IndexedDB) items so guests still see
+  // anything they've saved locally.
   useEffect(() => {
     setLibLoading(true);
     fetch('/api/library?summary=1&limit=100', { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
-      .then((data: LibraryItem[]) => setLibItems(data))
-      .catch(() => setLibItems([]))
+      .then((remote: LibraryItem[]) => {
+        const offline = loadOfflineItems().map((item) => ({
+          id: item.id,
+          mode: item.mode,
+          metadata: item.metadata as LibraryItem['metadata'],
+        })) as LibraryItem[];
+        const merged = [...offline, ...(Array.isArray(remote) ? remote : [])
+          .filter((r) => !offline.some((o) => o.id === r.id))];
+        setLibItems(merged);
+      })
+      .catch(() => {
+        // Network failed — at least surface offline items.
+        const offline = loadOfflineItems().map((item) => ({
+          id: item.id,
+          mode: item.mode,
+          metadata: item.metadata as LibraryItem['metadata'],
+        })) as LibraryItem[];
+        setLibItems(offline);
+      })
       .finally(() => setLibLoading(false));
   }, []);
 
-  // Fetch workspace files so the user can share a file directly from this
-  // page — they used to have to dig back into Workspace to do that.
-  // /api/files specifically wants ?all=true (string), not ?all=1; using
-  // the wrong value made this dropdown silently always-empty.
+  // Workspace files. Same merge: cloud + local. The /api/files route
+  // expects ?all=true (string), not ?all=1.
   useEffect(() => {
     setFileLoading(true);
     fetch('/api/files?all=true', { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
-      .then((data: Array<{ id: string; name: string; folderId: string | null }>) => setFileItems(Array.isArray(data) ? data : []))
-      .catch(() => setFileItems([]))
+      .then((remote: Array<{ id: string; name: string; folderId: string | null }>) => {
+        const local = listLocalFiles().map((f) => ({ id: f.id, name: f.name, folderId: f.folderId }));
+        const remoteList = Array.isArray(remote) ? remote : [];
+        const merged = [
+          ...local,
+          ...remoteList.filter((r) => !local.some((l) => l.id === r.id)),
+        ];
+        setFileItems(merged);
+      })
+      .catch(() => {
+        const local = listLocalFiles().map((f) => ({ id: f.id, name: f.name, folderId: f.folderId }));
+        setFileItems(local);
+      })
       .finally(() => setFileLoading(false));
   }, []);
 
