@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, isDatabaseConfigured } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { apiError } from '@/lib/api/error-response';
@@ -24,6 +24,16 @@ export async function POST(request: NextRequest) {
     return apiError(503, {
       errorCode: 'LOCAL_ACCOUNT_2FA_UNAVAILABLE',
       reason: 'Two-step verification is not available for local-only accounts yet.',
+    });
+  }
+
+  // Without a DB the user lookup below crashes with "db is null". Surface
+  // a 503 so the settings panel can show a real "DB unavailable" message
+  // instead of a generic toast.
+  if (!isDatabaseConfigured) {
+    return apiError(503, {
+      errorCode: 'DB_UNAVAILABLE',
+      reason: 'Database not configured — 2FA setup unavailable in this environment.',
     });
   }
 
