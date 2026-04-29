@@ -118,22 +118,50 @@ function buildOutlinePrompt(topic: string, type: string, wordCount: number, keyP
 }
 
 function parseOutline(raw: string): OutlineSection[] {
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) return [];
-  try {
-    const parsed = JSON.parse(jsonMatch[0]) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item): item is OutlineSection =>
-        item !== null &&
-        typeof item === 'object' &&
-        typeof (item as Record<string, unknown>).heading === 'string' &&
-        typeof (item as Record<string, unknown>).summary === 'string',
-      )
-      .slice(0, 8);
-  } catch {
-    return [];
+  // Try the bare-array path first.
+  let candidate: unknown = null;
+  const arrayMatch = raw.match(/\[[\s\S]*\]/);
+  if (arrayMatch) {
+    try { candidate = JSON.parse(arrayMatch[0]); } catch { /* fall through */ }
   }
+  // Some models wrap the array in `{"outline": [...]}` even when told not to.
+  if (!Array.isArray(candidate)) {
+    const objectMatch = raw.match(/\{[\s\S]*\}/);
+    if (objectMatch) {
+      try {
+        const obj = JSON.parse(objectMatch[0]) as Record<string, unknown>;
+        if (Array.isArray(obj.outline)) candidate = obj.outline;
+        else if (Array.isArray(obj.sections)) candidate = obj.sections;
+      } catch { /* fall through */ }
+    }
+  }
+  if (!Array.isArray(candidate)) return [];
+
+  // Be permissive: any item with a non-empty heading is kept and the
+  // summary is filled from the heading if missing. This was the path
+  // where the AI would emit `[{"heading": "Conclusion"}]` (no summary)
+  // and the strict filter dropped every row, leaving the user with
+  // nothing or — after the server-side fallback — a fully canned
+  // template that didn't match their topic at all.
+  return candidate
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const r = item as Record<string, unknown>;
+      const heading =
+        typeof r.heading === 'string' ? r.heading
+        : typeof r.title   === 'string' ? r.title
+        : typeof r.section === 'string' ? r.section
+        : '';
+      if (!heading.trim()) return null;
+      const summary =
+        typeof r.summary     === 'string' ? r.summary
+        : typeof r.description === 'string' ? r.description
+        : typeof r.purpose   === 'string' ? r.purpose
+        : heading;
+      return { heading: heading.trim(), summary: summary.trim() || heading.trim() } satisfies OutlineSection;
+    })
+    .filter((item): item is OutlineSection => item !== null)
+    .slice(0, 8);
 }
 
 export async function POST(req: NextRequest) {

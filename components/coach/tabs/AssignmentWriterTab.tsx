@@ -272,7 +272,22 @@ export function AssignmentWriterTab({
         if (d.reportType === 'essay' || d.reportType === 'report' || d.reportType === 'literature_review') setReportType(d.reportType);
         if (typeof d.reportWordCount === 'number') setReportWordCount(d.reportWordCount);
         if (typeof d.reportKeyPoints === 'string') setReportKeyPoints(d.reportKeyPoints);
-        if (Array.isArray(d.outline))               setOutline(d.outline as OutlineSection[]);
+        if (Array.isArray(d.outline)) {
+          // Drop persisted outlines that are too short to be useful — old
+          // generations from before the server's < 3 section fallback
+          // existed could have left a single "Conclusion" entry stuck in
+          // localStorage forever. Self-heals on first restore.
+          const valid = (d.outline as OutlineSection[])
+            .filter(s => s && typeof s.heading === 'string' && s.heading.trim().length > 0);
+          if (valid.length >= 3) {
+            // Backfill missing summaries with the heading so empty rows
+            // don't render as blank textareas after restore.
+            setOutline(valid.map(s => ({
+              heading: s.heading.trim(),
+              summary: typeof s.summary === 'string' && s.summary.trim() ? s.summary : s.heading,
+            })));
+          }
+        }
         if (typeof d.reportResult    === 'string') setReportResult(d.reportResult);
         if (typeof d.checkText       === 'string') setCheckText(d.checkText);
         if (d.innerTab === 'build' || d.innerTab === 'write') setInnerTab(d.innerTab);
@@ -701,13 +716,15 @@ export function AssignmentWriterTab({
           {/* Controls row */}
           <div className={styles.reportControls}>
             <div className={styles.controlGroup}>
-              <label className={styles.controlLabel}>Type</label>
+              <label className={styles.controlLabel} title="Pick the document structure — Outline + Draft will follow this format">Type</label>
               <div className={styles.segControl}>
                 {REPORT_TYPES.map(t => (
                   <button
                     key={t.id}
                     className={`${styles.segBtn} ${reportType === t.id ? styles.segBtnActive : ''}`}
                     onClick={() => setReportType(t.id)}
+                    title={t.desc}
+                    aria-pressed={reportType === t.id}
                   >
                     {t.label}
                   </button>
@@ -737,6 +754,7 @@ export function AssignmentWriterTab({
               style={{ alignSelf: 'flex-end' }}
               disabled={outlineLoading || reportLoading || !reportTopic.trim()}
               onClick={() => void handleGenerateOutline()}
+              title={!reportTopic.trim() ? 'Enter a topic first' : 'Generate a section-by-section outline for this report'}
             >
               {outlineLoading ? 'Building…' : '📋 Outline'}
             </button>
@@ -751,6 +769,26 @@ export function AssignmentWriterTab({
               </button>
             )}
           </div>
+
+          {/* Steps hint — clarifies that Type / Topic / Outline / Draft are
+              a sequential flow, not a set of independent buttons. The user
+              feedback was: "do lit review essay and report even do anything
+              in the first place" — the segment buttons only set the type,
+              they don't trigger generation, which wasn't obvious. */}
+          {!outline && !reportLoading && !outlineLoading && (
+            <div style={{
+              fontSize: 'var(--text-xs)',
+              color: 'var(--text-3)',
+              padding: '6px 0 0',
+              lineHeight: 1.5,
+            }}>
+              <strong>How it works:</strong>{' '}
+              1) Pick a <em>Type</em> (Essay / Report / Lit Review).{' '}
+              2) Type your topic and word count.{' '}
+              3) Click <strong>📋 Outline</strong> to generate a section-by-section plan.{' '}
+              4) Edit it if you like, then click <strong>✨ Write Draft</strong> for the full document.
+            </div>
+          )}
 
           <div className={styles.controlGroup}>
             <label className={styles.controlLabel}>
