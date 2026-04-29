@@ -1,10 +1,81 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { consumePodcastHandoff } from '@/lib/podcast/handoff';
 
 type Style = 'summary' | 'deep-dive' | 'qa';
 type PlayerState = 'idle' | 'playing' | 'paused';
+
+// ── Voice classification ───────────────────────────────────────────────────
+// macOS / iOS ship a long list of novelty voices ("Albert", "Trinoids",
+// "Bubbles" etc) that are useless for a study podcast. The raw voice name
+// the OS exposes is also unhelpful — "Microsoft Zira Desktop - English
+// (United States)" tells the student nothing about how it sounds. We
+// classify each voice into a clean shape: gender, region, quality tier,
+// plus a single-line label the user can read at a glance.
+
+const NOVELTY_NAMES = [
+  'Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos',
+  'Deranged', 'Good News', 'Hysterical', 'Pipe Organ', 'Trinoids',
+  'Whisper', 'Zarvox', 'Jester', 'Junior', 'Princess', 'Ralph', 'Kathy',
+  'Bruce', 'Bahh', 'Wobble', 'Organ',
+];
+
+const FEMALE_NAMES = /^(Samantha|Karen|Moira|Tessa|Allison|Ava|Susan|Zira|Aria|Jenny|Catherine|Sonia|Libby|Olivia|Veena|Fiona|Vicki|Victoria|Serena|Rishi|Susan|Kate|Helena|Monica|Anna|Eva|Yelda|Yuna|Nathalie|Alice)$/i;
+const MALE_NAMES   = /^(Daniel|Tom|Aaron|Fred|Alex|David|Mark|Guy|Ryan|Brandon|Christopher|Eric|Jacob|Roger|Albert|Jorge|Carlos|Diego|Junior|Bruce)$/i;
+
+function isEnglish(v: SpeechSynthesisVoice): boolean {
+  return v.lang.toLowerCase().startsWith('en');
+}
+
+function isNovelty(v: SpeechSynthesisVoice): boolean {
+  return NOVELTY_NAMES.some((n) => v.name.includes(n));
+}
+
+function isPremium(v: SpeechSynthesisVoice): boolean {
+  return /(premium|enhanced|neural|natural|google|wavenet|online)/i.test(v.name);
+}
+
+function detectGender(name: string): 'Female' | 'Male' | '' {
+  // Strip "Microsoft …", "(United States)", "(Premium)" decoration so the
+  // heuristic only sees the actual voice name.
+  const core = name
+    .replace(/^Microsoft\s+/i, '')
+    .replace(/\s*\(.*?\)\s*/g, '')
+    .replace(/\s*Desktop\s*$/i, '')
+    .replace(/\s*Online\s*$/i, '')
+    .replace(/\s*-\s*English.*$/i, '')
+    .trim()
+    .split(/\s+/)[0];
+  if (FEMALE_NAMES.test(core)) return 'Female';
+  if (MALE_NAMES.test(core)) return 'Male';
+  if (/female|woman/i.test(name)) return 'Female';
+  if (/male|man/i.test(name)) return 'Male';
+  return '';
+}
+
+function detectRegion(lang: string): string {
+  const code = (lang.split('-')[1] ?? '').toUpperCase();
+  return ({ US: 'US', GB: 'UK', AU: 'AU', IN: 'India', CA: 'Canada', IE: 'Ireland', NZ: 'NZ', ZA: 'SA' } as Record<string, string>)[code] ?? code ?? 'EN';
+}
+
+interface ClassifiedVoice {
+  voice:   SpeechSynthesisVoice;
+  label:   string;
+  gender:  string;
+  region:  string;
+  premium: boolean;
+  recommended: boolean;
+}
+
+function classify(v: SpeechSynthesisVoice, isRecommendation: boolean): ClassifiedVoice {
+  const gender  = detectGender(v.name);
+  const region  = detectRegion(v.lang);
+  const premium = isPremium(v);
+  const tier    = premium ? '★ Natural' : 'Standard';
+  const label   = `${gender || '—'} · ${region} · ${tier}${isRecommendation ? '   (recommended)' : ''}`;
+  return { voice: v, label, gender, region, premium, recommended: isRecommendation };
+}
 
 export default function PodcastPage() {
   useEffect(() => { document.title = 'Audio Podcast — Kivora'; }, []);
@@ -31,6 +102,8 @@ export default function PodcastPage() {
   const [progress, setProgress] = useState(0);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoice, setSelectedVoice] = useState('');
+  const [showAllVoices, setShowAllVoices] = useState(false);
+  const [previewVoice, setPreviewVoice] = useState<string | null>(null);
   const [speed, setSpeed] = useState(1);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const wordCountRef = useRef(0);
@@ -41,14 +114,63 @@ export default function PodcastPage() {
       const available = window.speechSynthesis.getVoices();
       if (available.length) {
         setVoices(available);
-        const en = available.find(v => v.lang.startsWith('en'));
-        if (en) setSelectedVoice(en.name);
       }
     };
     load();
     window.speechSynthesis.addEventListener('voiceschanged', load);
     return () => window.speechSynthesis.removeEventListener('voiceschanged', load);
   }, []);
+
+  // Build the actual list shown in the dropdown. Default behaviour:
+  //   - English only
+  //   - No novelty / decorative voices (Albert, Trinoids, Bubbles…)
+  //   - Premium / Natural / Neural ones float to the top with a ★
+  //   - Best one is auto-selected on first load
+  // The user can flip "Show all voices" to see the full OS list if they
+  // want a non-English voice or a quirky one.
+  const classifiedVoices = useMemo<ClassifiedVoice[]>(() => {
+    if (voices.length === 0) return [];
+    const filtered = voices.filter((v) => {
+      if (showAllVoices) return true;
+      return isEnglish(v) && !isNovelty(v);
+    });
+    // Pick the recommended voice — best-quality natural female-leaning
+    // English voice tends to be the friendliest default for narration.
+    const ranked = [...filtered].sort((a, b) => {
+      const score = (v: SpeechSynthesisVoice) =>
+        (isPremium(v) ? 4 : 0)
+        + (detectGender(v.name) === 'Female' ? 2 : 0)
+        + (v.lang === 'en-US' ? 1 : v.lang === 'en-GB' ? 0.5 : 0);
+      return score(b) - score(a);
+    });
+    const recommendedName = ranked[0]?.name ?? '';
+    return ranked.map((v) => classify(v, v.name === recommendedName));
+  }, [voices, showAllVoices]);
+
+  // Auto-select the recommended voice once the list lands. Don't override
+  // a manual selection the user has already made.
+  useEffect(() => {
+    if (selectedVoice) return;
+    const recommended = classifiedVoices.find((v) => v.recommended);
+    if (recommended) setSelectedVoice(recommended.voice.name);
+  }, [classifiedVoices, selectedVoice]);
+
+  function previewSelectedVoice(voiceName: string) {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    // Cancel any currently-playing preview / podcast playback.
+    window.speechSynthesis.cancel();
+    const v = voices.find((x) => x.name === voiceName);
+    if (!v) return;
+    const utter = new SpeechSynthesisUtterance(
+      'This is what your podcast will sound like with this voice.',
+    );
+    utter.voice = v;
+    utter.rate = speed;
+    setPreviewVoice(voiceName);
+    utter.onend = () => setPreviewVoice(null);
+    utter.onerror = () => setPreviewVoice(null);
+    window.speechSynthesis.speak(utter);
+  }
 
   async function generate() {
     if (notes.trim().length < 20) {
@@ -212,19 +334,57 @@ export default function PodcastPage() {
           <p className="progress-label">{progress}%</p>
 
           <div className="voice-row">
-            {voices.length > 0 && (
-              <div className="field">
-                <label className="field-label">Voice</label>
-                <select
-                  className="select-input"
-                  value={selectedVoice}
-                  onChange={e => setSelectedVoice(e.target.value)}
-                  disabled={playerState === 'playing'}
-                >
-                  {voices.map(v => (
-                    <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>
-                  ))}
-                </select>
+            {classifiedVoices.length > 0 && (
+              <div className="field" style={{ flex: 2 }}>
+                <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
+                  <span>Voice</span>
+                  <label style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 400, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={showAllVoices}
+                      onChange={(e) => setShowAllVoices(e.target.checked)}
+                      style={{ margin: 0 }}
+                    />
+                    Show all voices
+                  </label>
+                </label>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
+                  <select
+                    className="select-input"
+                    value={selectedVoice}
+                    onChange={e => setSelectedVoice(e.target.value)}
+                    disabled={playerState === 'playing'}
+                    style={{ flex: 1 }}
+                  >
+                    {classifiedVoices.map(({ voice, label, recommended }) => (
+                      <option key={voice.name} value={voice.name}>
+                        {recommended ? '★ ' : ''}{label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-secondary"
+                    onClick={() => {
+                      if (previewVoice === selectedVoice) {
+                        window.speechSynthesis.cancel();
+                        setPreviewVoice(null);
+                      } else if (selectedVoice) {
+                        previewSelectedVoice(selectedVoice);
+                      }
+                    }}
+                    disabled={!selectedVoice || playerState === 'playing'}
+                    title="Hear a one-line sample of this voice"
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    {previewVoice === selectedVoice ? '⏹ Stop' : '🔊 Preview'}
+                  </button>
+                </div>
+                {!showAllVoices && (
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+                    Filtered to natural English voices. Tick &ldquo;Show all voices&rdquo; for the full OS list.
+                  </div>
+                )}
               </div>
             )}
             <div className="field">
