@@ -425,6 +425,7 @@ interface WorkspaceSession {
   count?: number;
   editMode?: boolean;
   noteStyle?: string;
+  practiceStyle?: string;
   folderSourceMeta?: { folderName: string; fileCount: number; wordCount: number } | null;
 }
 
@@ -501,6 +502,16 @@ export function WorkspacePanel({
   const [outputsByMode, setOutputsByMode] = useState<Record<string, string>>(() => restored.outputsByMode ?? {});
   const [generating,    setGenerating]    = useState(false);
   const [count,         setCount]         = useState(() => restored.count ?? 5);
+  // Tone of generated MCQ / Quiz / Exam questions:
+  //   mixed       — current behaviour (recall + application + connection mixed)
+  //   recall      — facts and definitions explicitly stated in the source
+  //   application — scenario / "which best illustrates X" style questions
+  //   extended    — open-ended Quiz prompts with a 150–250 word target + rubric
+  // 'extended' only makes sense for Quiz (the open-ended tool); for MCQ
+  // and Exam Prep the picker hides it.
+  const [practiceStyle, setPracticeStyle] = useState<'mixed' | 'recall' | 'application' | 'extended'>(
+    () => (restored.practiceStyle as 'mixed' | 'recall' | 'application' | 'extended') ?? 'mixed',
+  );
   const [libItems,      setLibItems]      = useState<LibraryItemRecord[]>([]);
   const [libLoad,       setLibLoad]       = useState(false);
   const [srsDecks,      setSrsDecks]      = useState<SRSDeck[]>([]);
@@ -670,11 +681,12 @@ export function WorkspacePanel({
         count,
         editMode,
         noteStyle,
+        practiceStyle,
         folderSourceMeta,
       });
     }, 400);
     return () => clearTimeout(handle);
-  }, [mainTab, genMode, selFile?.id, viewFile?.id, extractedText, pasteMode, output, outputsByMode, count, editMode, noteStyle, folderSourceMeta]);
+  }, [mainTab, genMode, selFile?.id, viewFile?.id, extractedText, pasteMode, output, outputsByMode, count, editMode, noteStyle, practiceStyle, folderSourceMeta]);
 
   // Mirror non-empty output into the per-mode snapshot so switching tabs
   // doesn't lose work. Using a derived effect (rather than threading an
@@ -975,7 +987,7 @@ export function WorkspacePanel({
       const res = await fetch('/api/generate/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, text: src, fileId: selFile?.id ?? null, retrievalContext, options: { count }, ai, privacyMode }),
+        body: JSON.stringify({ mode, text: src, fileId: selFile?.id ?? null, retrievalContext, options: { count, style: practiceStyle }, ai, privacyMode }),
         signal: ctrl.signal,
       });
 
@@ -995,7 +1007,7 @@ export function WorkspacePanel({
         // Fallback to non-streaming route
         const fallback = await fetch('/api/generate', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode, text: retrievalContext, fileId: selFile?.id ?? null, options: { count }, ai, privacyMode }),
+          body: JSON.stringify({ mode, text: retrievalContext, fileId: selFile?.id ?? null, options: { count, style: practiceStyle }, ai, privacyMode }),
         });
         if (fallback.status === 429) {
           try {
@@ -1993,13 +2005,32 @@ export function WorkspacePanel({
               )}
 
               {(extractedText || pasteMode) && (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, marginLeft: 'auto' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, marginLeft: 'auto', flexWrap: 'wrap' }}>
                   {['quiz','mcq','exam'].includes(genMode) && (
                     <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
                       Count:
                       <input type="number" value={count} min={2} max={25}
                         onChange={e => setCount(Math.max(2, Math.min(25, +e.target.value)))}
                         style={{ width: 52, padding: '3px 7px', fontSize: 'var(--text-xs)' }} />
+                    </label>
+                  )}
+                  {['quiz','mcq','exam'].includes(genMode) && (
+                    // Bias the question style. Useful for humanities subjects
+                    // where students need *practice writing* or *applying*
+                    // a concept, not just recalling slide bullets.
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                      Style:
+                      <select
+                        value={practiceStyle}
+                        onChange={e => setPracticeStyle(e.target.value as typeof practiceStyle)}
+                        style={{ padding: '3px 7px', fontSize: 'var(--text-xs)', background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 6, color: 'var(--text)' }}
+                        title="Recall = facts. Application = scenarios. Extended = 200-word answers (Quiz only)."
+                      >
+                        <option value="mixed">Mixed</option>
+                        <option value="recall">Recall</option>
+                        <option value="application">Application / scenario</option>
+                        {genMode === 'quiz' && <option value="extended">Extended response (200w)</option>}
+                      </select>
                     </label>
                   )}
                   {generating ? (

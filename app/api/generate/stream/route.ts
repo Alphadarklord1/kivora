@@ -384,37 +384,74 @@ function buildPrompt(mode: AllModes, text: string, options?: Record<string, unkn
 
 function buildUserPrompt(mode: AllModes, text: string, options?: Record<string, unknown>): string {
   const count = (options?.count as number | undefined) ?? 5;
+  const rawStyle = typeof options?.style === 'string' ? options.style : 'mixed';
+  // Allowlisted to keep prompt-injection vectors closed.
+  const style: 'mixed' | 'recall' | 'application' | 'extended' =
+    rawStyle === 'recall' || rawStyle === 'application' || rawStyle === 'extended' ? rawStyle : 'mixed';
+
+  // Per-style guidance injected into the MCQ / Quiz / Exam prompts.
+  // The default "mixed" set was the original behaviour; the others bias
+  // the question type so a humanities student practising "technological
+  // determinism" can drill scenario MCQs or 200-word essay answers
+  // instead of just slide-recall fact questions.
+  const mcqStyleGuidance =
+    style === 'recall'
+      ? `Focus EVERY question on RECALL: facts, definitions, named theories, and key claims explicitly stated in the source. No scenarios, no application — purely "did the student catch this from the material".`
+      : style === 'application'
+      ? `Focus EVERY question on APPLICATION: present a short scenario, an example case, or a real-world situation that is NOT literally in the source, and ask which option BEST illustrates / applies / is explained by a concept from the source. Each question stem should read like a mini case study (1–3 sentences).`
+      : style === 'extended'
+      ? `Focus on conceptually rich questions where each stem is a short scenario or claim and the four options represent four interpretations / theoretical lenses. Stems should be 1–3 sentences. (This style is best suited to Quiz extended-response, but for MCQ it produces the strongest concept-level questions.)`
+      : `Mix all three types across the set:
+1. RECALL — facts, definitions, and steps explicitly stated in the source.
+2. APPLICATION — apply the source's concepts to a new scenario, calculation, example, or short worked problem that is not literally in the text.
+3. CONNECTION — closely related ideas a student studying this exact topic is expected to know (a prerequisite definition, a typical consequence, a standard textbook variant). Only include these when they sit unambiguously inside the topic — never drift to adjacent subjects, never invent facts, never contradict the source.`;
+
+  const quizStyleGuidance =
+    style === 'recall'
+      ? `Focus EVERY question on RECALL: facts and definitions explicitly stated in the source. Expected answers should be 1–2 sentences, specific enough to grade.`
+      : style === 'application'
+      ? `Focus EVERY question on APPLICATION: pose a short real-world scenario or example that is NOT literally in the source, and ask the student to apply / interpret / predict using a concept from the source. Expected answers should be 2–3 sentences naming the concept and explaining the link.`
+      : style === 'extended'
+      ? `EXTENDED-RESPONSE MODE — write fewer, harder questions that demand a multi-paragraph answer (~200 words each). Each question must:
+- Pose a concept-driven, theoretical, or situational prompt grounded in the source (e.g. "Using technological determinism, explain how the rise of social media has reshaped X. Refer to at least two specific claims from the source material.").
+- After the question, include a short rubric on a single line starting with "Rubric:" listing 3–4 criteria the answer should hit (key concept naming, accurate explanation, evidence from source, evaluation / counter-point).
+- Provide a model "Answer:" of about 180–220 words written like a strong undergraduate paragraph — formal register, no bullet points, integrating evidence from the source.`
+      : `Mix all three types across the set:
+1. RECALL — facts, definitions, and steps explicitly stated in the source.
+2. APPLICATION — apply the source's concepts to a new scenario, calculation, example, or short worked problem that is not literally in the text.
+3. CONNECTION — closely related ideas a student studying this exact topic is expected to know (a prerequisite definition, a typical consequence, a standard textbook variant). Only include these when they sit unambiguously inside the topic — never drift to adjacent subjects, never invent facts, never contradict the source.`;
+
+  // For extended mode we deliberately ask for fewer, deeper questions —
+  // 200-word answers x 10 questions blows past the model's context budget.
+  const quizCount = style === 'extended' ? Math.max(3, Math.min(5, Math.ceil(count / 2))) : count;
+
   const instructions: Record<AllModes, string> = {
     summarize:  `Summarize the following study material clearly and concisely:\n\n${text}`,
     explain:    `Explain the following concept or text clearly for a student, with a plain-language explanation and one practical example:\n\n${text}`,
     rephrase:   `Rephrase the following text in simpler, clearer language for a student:\n\n${text}`,
     notes:      `Extract key study notes as bullet points from:\n\n${text}`,
-    quiz:       `You are a teacher writing a short-answer quiz from the source material below. Goal: test whether the student understands the topic, not whether they can copy lines from the slides.
+    quiz:       `You are a teacher writing a quiz from the source material below. Goal: test whether the student understands the topic, not whether they can copy lines from the slides.
 
-Write ${count} questions. Mix all three types across the set:
+Write ${quizCount} questions.
 
-1. RECALL — facts, definitions, and steps explicitly stated in the source.
-2. APPLICATION — apply the source's concepts to a new scenario, calculation, example, or short worked problem that is not literally in the text.
-3. CONNECTION — closely related ideas a student studying this exact topic is expected to know (a prerequisite definition, a typical consequence, a standard textbook variant). Only include these when they sit unambiguously inside the topic — never drift to adjacent subjects, never invent facts, never contradict the source.
+${quizStyleGuidance}
 
-If you're not sure whether something is in scope, leave it out. Expected answers must be specific enough to grade — give the actual answer, not a hint.
+If you're not sure whether something is in scope, leave it out.
 
-Use this exact format for each question — the "Q" prefix and the "Answer:" line are required:
+Use this exact format for each question — the "Q" prefix and the "Answer:" line are required${style === 'extended' ? ' (and the "Rubric:" line is required when given in the guidance)' : ''}:
 
-Q1. <question text>
-Answer: <expected answer in 1-2 sentences>
+Q1. <question text>${style === 'extended' ? '\nRubric: <criterion 1> | <criterion 2> | <criterion 3>' : ''}
+Answer: <expected answer${style === 'extended' ? ' — model paragraph of ~200 words' : ' in 1-2 sentences'}>
 
 Q2. <question text>
-Answer: <expected answer>
+${style === 'extended' ? 'Rubric: ...\n' : ''}Answer: <expected answer>
 
-Repeat for ${count} questions. Material:\n\n${text}`,
+Repeat for ${quizCount} questions. Material:\n\n${text}`,
     mcq:        `You are a teacher writing a multiple-choice quiz from the source material below — exactly the way you would build a quiz from a PowerPoint deck. The goal is to test whether a student actually UNDERSTANDS the topic, not whether they can quote the slides word-for-word.
 
-Write ${count} questions. Mix all three types across the set:
+Write ${count} questions.
 
-1. RECALL — facts, definitions, and steps explicitly stated in the source.
-2. APPLICATION — apply the source's concepts to a new scenario, calculation, example, or short worked problem that is not literally in the text.
-3. CONNECTION — closely related ideas a student studying this exact topic is expected to know (a prerequisite definition, a typical consequence, a standard textbook variant). Only include these when they sit unambiguously inside the topic — never drift to adjacent subjects, never invent facts, never contradict the source.
+${mcqStyleGuidance}
 
 If you're not sure whether something is in scope, leave it out. Distractors must be plausible — common student errors, almost-right answers, swapped variables — not obvious nonsense.
 
