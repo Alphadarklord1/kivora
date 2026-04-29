@@ -1279,14 +1279,16 @@ export function WorkspacePanel({
       savedFrom: '/workspace',
     };
 
-    let savedOffline = false;
+    // Save offline first as a safety net so a guaranteed copy exists,
+    // then attempt cloud — and on cloud success, drop the offline copy
+    // so the Library page (which merges offline + cloud) doesn't show
+    // two rows. The previous version left both copies in place forever
+    // — that was the duplicate-save bug the user reported.
+    let offlineId: string | null = null;
     try {
       const { saveOfflineItem } = await import('@/lib/library/offline-store');
-      saveOfflineItem({ mode: genMode, content: output, metadata });
-      savedOffline = true;
-      // Reward the save action regardless of whether cloud or local —
-      // the user's intent was to keep the output and the local copy
-      // is just as valid for them.
+      const created = saveOfflineItem({ mode: genMode, content: output, metadata });
+      offlineId = created.id;
       addXp(XP_VALUES.savedToLibrary, 'savedToLibrary');
       incrementCounter('librarySaved');
       checkAndUnlockAchievements(getCounters());
@@ -1298,20 +1300,27 @@ export function WorkspacePanel({
         body: JSON.stringify({ mode: genMode, content: output, metadata }),
       });
       if (res.ok) {
+        // Cloud now owns the canonical copy — remove the offline duplicate.
+        if (offlineId) {
+          try {
+            const { deleteOfflineItem } = await import('@/lib/library/offline-store');
+            deleteOfflineItem(offlineId);
+          } catch { /* best-effort cleanup; non-fatal if it fails */ }
+        }
         toast('Saved to Library ✓', 'success');
         broadcastInvalidate(LIBRARY_CHANNEL);
         return;
       }
-      // Any non-2xx (401/503/500/etc.) — the offline copy already covers
-      // the user; just tell them where it landed.
-      if (savedOffline) {
+      // Any non-2xx (401/503/500/etc.) — keep the offline copy in place
+      // so the user doesn't lose their work, and tell them where it landed.
+      if (offlineId) {
         toast('Saved locally (sign in to sync to cloud)', 'success');
         broadcastInvalidate(LIBRARY_CHANNEL);
       } else {
         toast('Could not save — try again', 'warning');
       }
     } catch {
-      if (savedOffline) {
+      if (offlineId) {
         toast('Saved locally — network was unreachable', 'success');
         broadcastInvalidate(LIBRARY_CHANNEL);
       } else {

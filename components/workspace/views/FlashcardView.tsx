@@ -636,13 +636,14 @@ export function FlashcardView({
     };
     // Mirror WorkspacePanel.saveToLibrary: write offline FIRST so the
     // user's deck snapshot lands in IndexedDB no matter what the server
-    // says, then try the cloud. Guest mode returns 503; without offline
-    // first, the click silently failed.
-    let savedOffline = false;
+    // says, then try the cloud. On cloud success, drop the offline copy
+    // so the Library page (which merges offline + cloud) doesn't show
+    // the same deck twice — that was the user-reported "saved twice" bug.
+    let offlineId: string | null = null;
     try {
       const { saveOfflineItem } = await import('@/lib/library/offline-store');
-      saveOfflineItem({ mode: 'flashcards', content: serializedDeck, metadata });
-      savedOffline = true;
+      const created = saveOfflineItem({ mode: 'flashcards', content: serializedDeck, metadata });
+      offlineId = created.id;
     } catch { /* IndexedDB unavailable — try network anyway */ }
     try {
       const res = await fetch('/api/library', {
@@ -651,9 +652,15 @@ export function FlashcardView({
         body: JSON.stringify({ mode: 'flashcards', content: serializedDeck, metadata }),
       });
       if (res.ok) {
+        if (offlineId) {
+          try {
+            const { deleteOfflineItem } = await import('@/lib/library/offline-store');
+            deleteOfflineItem(offlineId);
+          } catch { /* best-effort cleanup */ }
+        }
         broadcastInvalidate(LIBRARY_CHANNEL);
         setLibrarySaveStatus('done');
-      } else if (savedOffline) {
+      } else if (offlineId) {
         broadcastInvalidate(LIBRARY_CHANNEL);
         // Stays on 'done' — the deck is saved locally and the Library
         // page merges offline + remote so the user sees it either way.
@@ -663,7 +670,7 @@ export function FlashcardView({
       }
     } catch {
       // Network fail — at least show success if offline saved.
-      if (savedOffline) {
+      if (offlineId) {
         broadcastInvalidate(LIBRARY_CHANNEL);
         setLibrarySaveStatus('done');
       } else {
