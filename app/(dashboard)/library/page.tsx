@@ -256,16 +256,57 @@ export default function LibraryPage() {
   async function bulkDelete() {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
-    const prev = items;
     setItems(p => p.filter(i => !ids.includes(i.id)));
     setSelectedIds(new Set());
-    try {
-      await Promise.all(ids.map(id => fetch(`/api/library/${id}`, { method: 'DELETE' })));
-      broadcastInvalidate(LIBRARY_CHANNEL);
-      toast(`Deleted ${ids.length} item${ids.length === 1 ? '' : 's'}`, 'info');
-    } catch {
-      setItems(prev);
-      toast('Some items could not be deleted.', 'error');
+
+    // Split offline (localStorage) ids from cloud (server) ids — they
+    // need different deletion paths. The previous version fired DELETE
+    // requests for every selected id, so offline items disappeared from
+    // the UI but stayed in localStorage and reappeared on next load.
+    const offlineIds = ids.filter(id => id.startsWith('offline-'));
+    const cloudIds   = ids.filter(id => !id.startsWith('offline-'));
+
+    let failed = 0;
+    if (offlineIds.length > 0) {
+      try {
+        const { deleteOfflineItem } = await import('@/lib/library/offline-store');
+        for (const id of offlineIds) deleteOfflineItem(id);
+      } catch { failed += offlineIds.length; }
+    }
+
+    if (cloudIds.length > 0) {
+      // allSettled so one failure doesn't roll the entire batch back —
+      // the previous Promise.all + catch reverted all 5 deletes when 1
+      // item returned a 404 / 500. Now only the actually-failed ids
+      // come back, and we restore just those.
+      const results = await Promise.allSettled(
+        cloudIds.map(id => fetch(`/api/library/${id}`, { method: 'DELETE' }).then(r => ({ id, ok: r.ok }))),
+      );
+      const failedIds: string[] = [];
+      results.forEach((r, i) => {
+        if (r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.ok)) {
+          failedIds.push(cloudIds[i]);
+        }
+      });
+      failed += failedIds.length;
+      if (failedIds.length > 0) {
+        // Bring just the failed ids back into the list.
+        setItems(prev => {
+          const have = new Set(prev.map(i => i.id));
+          const missing = items.filter(i => failedIds.includes(i.id) && !have.has(i.id));
+          return [...prev, ...missing];
+        });
+      }
+    }
+    broadcastInvalidate(LIBRARY_CHANNEL);
+
+    const ok = ids.length - failed;
+    if (failed === 0) {
+      toast(`Deleted ${ok} item${ok === 1 ? '' : 's'}`, 'info');
+    } else if (ok === 0) {
+      toast('Could not delete the selected items.', 'error');
+    } else {
+      toast(`Deleted ${ok} of ${ids.length} — ${failed} failed.`, 'warning');
     }
   }
 
