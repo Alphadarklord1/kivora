@@ -161,7 +161,7 @@ function parseOutline(raw: string): OutlineSection[] {
       return { heading: heading.trim(), summary: summary.trim() || heading.trim() } satisfies OutlineSection;
     })
     .filter((item): item is OutlineSection => item !== null)
-    .slice(0, 8);
+    .slice(0, 12);
 }
 
 export async function POST(req: NextRequest) {
@@ -181,7 +181,18 @@ export async function POST(req: NextRequest) {
   const wordCount = typeof body.wordCount === 'number' ? Math.max(300, Math.min(5000, body.wordCount)) : 1000;
   const keyPoints = typeof body.keyPoints === 'string' ? body.keyPoints.trim() : '';
   const context   = typeof body.context   === 'string' ? body.context.trim().slice(0, 4_000) : '';
-  const outline   = Array.isArray(body.outline) ? (body.outline as OutlineSection[]).slice(0, 8) : null;
+  // Strip empty / placeholder rows so a user-added section the student
+  // forgot to fill in doesn't poison the draft prompt with the literal
+  // text "New section / Describe what this section should cover."
+  const outline = Array.isArray(body.outline)
+    ? (body.outline as OutlineSection[])
+        .map((s) => ({
+          heading: typeof s?.heading === 'string' ? s.heading.trim() : '',
+          summary: typeof s?.summary === 'string' ? s.summary.trim() : '',
+        }))
+        .filter((s) => s.heading.length > 0 && s.heading.toLowerCase() !== 'new section')
+        .slice(0, 12)
+    : null;
 
   const privacyMode   = resolveAiDataMode(body);
   const safeTopic     = redactForAi(privacyMode, topic,     'report topic');

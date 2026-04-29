@@ -896,17 +896,78 @@ export function AssignmentWriterTab({
                     <input
                       className={styles.outlineHeadingInput}
                       value={section.heading}
+                      placeholder="Section heading (e.g. Counter-arguments)"
                       onChange={e => setOutline(prev => prev ? prev.map((s, j) => j === i ? { ...s, heading: e.target.value } : s) : prev)}
                     />
                     <textarea
                       className={styles.outlineSummaryInput}
                       rows={2}
                       value={section.summary}
+                      placeholder="What this section should cover (the AI uses this to write the body)"
                       onChange={e => setOutline(prev => prev ? prev.map((s, j) => j === i ? { ...s, summary: e.target.value } : s) : prev)}
                     />
                   </div>
+                  {/* Per-row controls — reorder up/down + remove. Cap the
+                      total at 12 sections so a runaway click on Add doesn't
+                      blow the AI's context budget when the draft fires. */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignSelf: 'stretch', justifyContent: 'center' }}>
+                    <button
+                      type="button"
+                      className={styles.btnSecondary}
+                      style={{ padding: '2px 6px', fontSize: 11, lineHeight: 1, minHeight: 0 }}
+                      title="Move section up"
+                      disabled={i === 0}
+                      onClick={() => setOutline(prev => {
+                        if (!prev || i === 0) return prev;
+                        const next = [...prev];
+                        [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                        return next;
+                      })}
+                    >▲</button>
+                    <button
+                      type="button"
+                      className={styles.btnSecondary}
+                      style={{ padding: '2px 6px', fontSize: 11, lineHeight: 1, minHeight: 0 }}
+                      title="Move section down"
+                      disabled={i === outline.length - 1}
+                      onClick={() => setOutline(prev => {
+                        if (!prev || i === prev.length - 1) return prev;
+                        const next = [...prev];
+                        [next[i + 1], next[i]] = [next[i], next[i + 1]];
+                        return next;
+                      })}
+                    >▼</button>
+                    <button
+                      type="button"
+                      className={styles.btnSecondary}
+                      style={{ padding: '2px 6px', fontSize: 11, lineHeight: 1, minHeight: 0, color: 'var(--danger)' }}
+                      title="Remove this section"
+                      disabled={outline.length <= 2}
+                      onClick={() => setOutline(prev => prev ? prev.filter((_, j) => j !== i) : prev)}
+                    >✕</button>
+                  </div>
                 </div>
               ))}
+
+              {/* Add a custom section. Capped at 12 to keep the eventual
+                  draft request inside the model's context window. */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', marginTop: 4 }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                  {outline.length} section{outline.length === 1 ? '' : 's'} · drag with ▲▼ to reorder, ✕ to remove
+                </span>
+                <button
+                  type="button"
+                  className={styles.btnSecondary}
+                  disabled={outline.length >= 12}
+                  onClick={() => setOutline(prev => prev ? [
+                    ...prev,
+                    { heading: 'New section', summary: 'Describe what this section should cover.' },
+                  ] : prev)}
+                  title={outline.length >= 12 ? 'Maximum 12 sections' : 'Add a custom section to the outline'}
+                >
+                  ➕ Add section
+                </button>
+              </div>
             </div>
           )}
 
