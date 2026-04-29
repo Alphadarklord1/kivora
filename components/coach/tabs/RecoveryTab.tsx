@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WeakArea } from '@/hooks/useAnalytics';
 import type { SRSDeck } from '@/lib/srs/sm2';
 import styles from '@/app/(dashboard)/coach/page.module.css';
@@ -142,18 +142,37 @@ export function RecoveryTab({
 
   // Pull the most recent 50 attempts. The route already left-joins file
   // names so we get a usable source label per attempt.
-  useEffect(() => {
-    let cancelled = false;
+  const fetchInFlightRef = useRef(false);
+  const loadAttempts = useCallback(async () => {
+    // Single-flight: a quick second tab-switch or window-focus event
+    // shouldn't fire two concurrent fetches and clobber state.
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
     setLoading(true);
-    fetch('/api/quiz-attempts?limit=50', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : { attempts: [] })
-      .then((data: { attempts?: ApiAttempt[] }) => {
-        if (!cancelled) setAttempts(Array.isArray(data.attempts) ? data.attempts : []);
-      })
-      .catch(() => { if (!cancelled) setAttempts([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    try {
+      const r = await fetch('/api/quiz-attempts?limit=50', { credentials: 'include' });
+      const data = (r.ok ? await r.json() : { attempts: [] }) as { attempts?: ApiAttempt[] };
+      setAttempts(Array.isArray(data.attempts) ? data.attempts : []);
+    } catch { setAttempts([]); }
+    finally {
+      setLoading(false);
+      fetchInFlightRef.current = false;
+    }
   }, []);
+
+  useEffect(() => {
+    void loadAttempts();
+    // Refresh when a new attempt lands (workspace fires this after
+    // recordQuizAttempt completes), and when the tab regains focus.
+    const onChange = () => { void loadAttempts(); };
+    const onFocus  = () => { void loadAttempts(); };
+    window.addEventListener('kivora:quiz-attempts-changed', onChange);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('kivora:quiz-attempts-changed', onChange);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [loadAttempts]);
 
   // Flatten attempts into individual wrong-answer records.
   const mistakes = useMemo<FlatMistake[]>(() => {
@@ -288,6 +307,26 @@ export function RecoveryTab({
             Restore {hidden.size} hidden
           </button>
         )}
+        {/* Manual refresh — auto-refresh fires on focus + on
+            kivora:quiz-attempts-changed, but a button is still useful
+            when the user just wants to confirm they're seeing latest. */}
+        <button
+          onClick={() => void loadAttempts()}
+          disabled={loading}
+          style={{
+            padding: '5px 12px',
+            borderRadius: 16,
+            fontSize: 12,
+            border: '1px solid var(--border-subtle)',
+            background: 'transparent',
+            color: 'var(--text-3)',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            marginLeft: hidden.size > 0 ? 0 : 'auto',
+          }}
+          title="Refresh the latest quiz attempts"
+        >
+          {loading ? '…' : '↻ Refresh'}
+        </button>
       </div>
 
       {/* ── Mistakes list ──────────────────────────────────────────────── */}

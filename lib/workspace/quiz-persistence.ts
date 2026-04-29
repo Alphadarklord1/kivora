@@ -62,6 +62,10 @@ export async function recordQuizAttempt(input: RecordQuizAttemptInput): Promise<
       // immediately after seeing their score.
       keepalive: true,
     });
+    // Tell any open Recovery tab / Analytics dashboard that the
+    // quiz_attempts list just changed so it can refetch without a
+    // manual refresh.
+    try { window.dispatchEvent(new CustomEvent('kivora:quiz-attempts-changed')); } catch { /* noop */ }
   } catch {
     // Swallow — analytics is nice-to-have, not critical-path.
   }
