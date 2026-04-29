@@ -128,11 +128,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       if (!detail?.achievements?.length) return;
       for (const a of detail.achievements) showAchievement(a);
     };
+    // Daily-goal sync — refresh the sidebar's "today's goal" number when
+    // the goal is changed from FlashcardView, FocusPanel, or any future
+    // surface. Without this listener the sidebar lagged behind until a
+    // full reload.
+    const handleGoalChange = () => {
+      try { setDailyGoal(getGoalPreferences().dailyGoal); } catch { /* noop */ }
+    };
     window.addEventListener('kivora:xp-changed', handleXpChange);
     window.addEventListener('kivora:achievement-unlocked', handleAchievement);
+    window.addEventListener('kivora:goal-changed', handleGoalChange);
     return () => {
       window.removeEventListener('kivora:xp-changed', handleXpChange);
       window.removeEventListener('kivora:achievement-unlocked', handleAchievement);
+      window.removeEventListener('kivora:goal-changed', handleGoalChange);
     };
   }, [showAchievement]);
 

@@ -9,7 +9,13 @@ export type StudyAiMode =
   | 'flashcards'
   | 'essay'
   | 'planner'
-  | 'rephrase';
+  | 'rephrase'
+  // Workspace-side aliases that flow through the same scope policy.
+  // Keeping ToolMode and StudyAiMode aligned avoids cascading casts in
+  // lib/ai/client.ts and downstream callers.
+  | 'outline'
+  | 'practice'
+  | 'exam';
 
 export type AiScopeErrorCode = 'OUT_OF_SCOPE' | 'INSUFFICIENT_STUDY_INPUT' | 'INVALID_MODE';
 

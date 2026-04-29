@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Modal, Button } from '@/components/ui/Modal';
 import { Input, Select } from '@/components/ui/Input';
-import { useToastHelpers } from '@/components/ui/Toast';
+import { useToast } from '@/providers/ToastProvider';
 import { useI18n } from '@/lib/i18n/useI18n';
 
 interface ShareDialogProps {
@@ -30,7 +30,18 @@ export function ShareDialog({
   resourceName,
 }: ShareDialogProps) {
   const { t } = useI18n();
-  const toast = useToastHelpers();
+  // Adapt the app's single-arg toast() to the four-method shape this
+  // component expected from the unused ui/Toast helper. Switching to the
+  // app-wide provider fixes the runtime error users hit when opening the
+  // Share dialog from the Library page (the ui/Toast provider was never
+  // mounted in the dashboard layout).
+  const t2 = useToast().toast;
+  const toast = {
+    success: (title: string, message?: string) => t2(`${title}${message ? ` — ${message}` : ''}`, 'success'),
+    error:   (title: string, message?: string) => t2(`${title}${message ? ` — ${message}` : ''}`, 'error'),
+    warning: (title: string, message?: string) => t2(`${title}${message ? ` — ${message}` : ''}`, 'warning'),
+    info:    (title: string, message?: string) => t2(`${title}${message ? ` — ${message}` : ''}`, 'info'),
+  };
   const [shareType, setShareType] = useState<ShareType>('link');
   const [permission, setPermission] = useState<Permission>('view');
   const [email, setEmail] = useState('');

@@ -2,7 +2,16 @@
 import { useState } from 'react';
 import { mdToHtml } from '@/lib/utils/md';
 
-export function PracticeView({ content }: { content: string }) {
+export function PracticeView({ content, onGenerateSimilar, generating }: {
+  content: string;
+  /** Called when the student clicks "Generate similar" after revealing the
+   *  solution. Lets the workspace re-fire runGenerate('practice') without
+   *  the student having to switch tabs and click Generate again. */
+  onGenerateSimilar?: () => void;
+  /** True while a regeneration is mid-flight so the button shows a
+   *  loading state and resists rapid double-clicks. */
+  generating?: boolean;
+}) {
   const [hintsShown,   setHintsShown]   = useState(0);
   const [showSolution, setShowSolution] = useState(false);
   const [answer,       setAnswer]       = useState('');
@@ -132,10 +141,26 @@ export function PracticeView({ content }: { content: string }) {
       )}
 
       {showSolution && (
-        <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', marginTop: 4 }}
-          onClick={() => { setHintsShown(0); setShowSolution(false); setAnswer(''); setSubmitted(false); }}>
-          ↺ Reset
-        </button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+          <button className="btn btn-ghost btn-sm"
+            onClick={() => { setHintsShown(0); setShowSolution(false); setAnswer(''); setSubmitted(false); }}>
+            ↺ Reset
+          </button>
+          {/* "Generate similar" — re-fires the practice generator so the
+              student can drill the same concept without switching tabs.
+              The workspace re-runs the same source + style settings the
+              student last picked, so the new problem is comparable. */}
+          {onGenerateSimilar && (
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={generating}
+              onClick={onGenerateSimilar}
+              title="Generate another practice problem on the same source"
+            >
+              {generating ? 'Generating…' : '🎯 Generate similar'}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

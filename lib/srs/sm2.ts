@@ -339,6 +339,14 @@ export function getGoalPreferences(): SRSGoalPreferences {
 export function saveGoalPreferences(prefs: SRSGoalPreferences): void {
   try {
     localStorage.setItem(GOAL_KEY, String(Math.max(1, prefs.dailyGoal)));
+    // Notify any other surface displaying the daily goal (sidebar in
+    // AppShell, FocusPanel "Goal today" tile, FlashcardView pacing pill,
+    // analytics goals tab) so changing the goal in one place propagates
+    // immediately. Without this the user had to refresh to see the new
+    // number anywhere else.
+    if (typeof window !== 'undefined') {
+      try { window.dispatchEvent(new CustomEvent('kivora:goal-changed', { detail: prefs })); } catch { /* noop */ }
+    }
   } catch { /* noop */ }
 }
 

@@ -2201,7 +2201,7 @@ export function WorkspacePanel({
                       )
                     : generating
                     ? <div className="tool-output" dangerouslySetInnerHTML={{ __html: mdToHtml(output) + '<span class="stream-cursor">▍</span>' }} />
-                    : genMode === 'practice'   ? <PracticeView content={output} />
+                    : genMode === 'practice'   ? <PracticeView content={output} generating={generating} onGenerateSimilar={() => void runGenerate('practice')} />
                     : genMode === 'mcq'        ? <MCQView content={output} fileId={selFile?.id ?? null} />
                     : genMode === 'quiz'       ? <QuizView content={output} fileId={selFile?.id ?? null} />
                     : genMode === 'exam'       ? <ExamView content={output} fileId={selFile?.id ?? null} />

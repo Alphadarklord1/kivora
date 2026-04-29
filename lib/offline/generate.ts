@@ -12,7 +12,10 @@ export type ToolMode =
   | 'quiz'
   | 'mcq'
   | 'flashcards'
-  | 'assignment';
+  | 'assignment'
+  | 'outline'
+  | 'practice'
+  | 'exam';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

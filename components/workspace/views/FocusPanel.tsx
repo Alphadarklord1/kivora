@@ -56,8 +56,21 @@ export function FocusPanel() {
       setSessions(cur.sessions);
       setTodayTotal(cur.totalMins);
     }
+    // Also re-pull the goal when it changes from the sidebar / Flashcards
+    // panel, so the "Goal today" tile shows a number consistent with
+    // wherever the user last touched it.
+    function refreshGoal() {
+      try {
+        const goal = getGoalPreferences();
+        setPomodoroGoal(Math.max(1, Math.round(goal.dailyGoal / 25)));
+      } catch { /* noop */ }
+    }
     window.addEventListener('kivora:pomodoro-day-changed', refreshDay);
-    return () => window.removeEventListener('kivora:pomodoro-day-changed', refreshDay);
+    window.addEventListener('kivora:goal-changed', refreshGoal);
+    return () => {
+      window.removeEventListener('kivora:pomodoro-day-changed', refreshDay);
+      window.removeEventListener('kivora:goal-changed', refreshGoal);
+    };
   }, []);
 
   // Detect timer expiry (running → secsLeft hits 0) and run the post-phase
