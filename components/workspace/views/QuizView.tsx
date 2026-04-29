@@ -1,8 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { mdToHtml } from '@/lib/utils/md';
 import { recordQuizAttempt, type QuizAnswerSummary } from '@/lib/workspace/quiz-persistence';
 import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
+import { hashContent, loadAnswers, saveAnswers, clearAnswers } from '@/lib/workspace/answer-persistence';
 
 // Open-ended quiz view. Parses "Q1. ... Answer: ..." blocks emitted by the
 // workspace generator and renders each question with a textarea so the
@@ -18,10 +19,26 @@ interface AiGradeFeedback {
 }
 
 export function QuizView({ content, fileId, deckId }: { content: string; fileId?: string | null; deckId?: string | null }) {
-  const [answers,  setAnswers]  = useState<Record<number, string>>({});
+  const contentHash = useMemo(() => hashContent(content), [content]);
+  // Restore prior answers if the user navigated away mid-typing.
+  // Different content (regenerated quiz) → no restore.
+  const restored = useMemo(() => loadAnswers('quiz', contentHash), [contentHash]);
+  const [answers,  setAnswers]  = useState<Record<number, string>>(() => restored?.answers ?? {});
   const [revealed, setRevealed] = useState<Record<number, boolean>>({});
   const [score,    setScore]    = useState<number | null>(null);
   const [aiGrades, setAiGrades] = useState<Record<number, AiGradeFeedback>>({});
+
+  // Debounced persistence of the user's typed answers — protects against
+  // accidental navigation killing the long extended-response paragraphs.
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      // Only save when there's actual content to preserve.
+      if (Object.values(answers).some(v => v.trim().length > 0)) {
+        saveAnswers('quiz', { contentHash, answers });
+      }
+    }, 500);
+    return () => clearTimeout(handle);
+  }, [answers, contentHash]);
 
   const blocks = content
     .split(/\n(?=\s*\*?\*?(?:Q?\d+)[\.\)]\s)/i)
@@ -306,7 +323,7 @@ export function QuizView({ content, fileId, deckId }: { content: string; fileId?
           </div>
         )}
         <button className="btn btn-sm btn-ghost"
-          onClick={() => { setAnswers({}); setRevealed({}); setScore(null); }}>Reset</button>
+          onClick={() => { setAnswers({}); setRevealed({}); setScore(null); setAiGrades({}); clearAnswers('quiz'); }}>Reset</button>
       </div>
     </div>
   );

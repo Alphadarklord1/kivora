@@ -1,13 +1,24 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { mdToHtml } from '@/lib/utils/md';
 import { recordQuizAttempt, type QuizAnswerSummary } from '@/lib/workspace/quiz-persistence';
 import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
+import { hashContent, loadAnswers, saveAnswers, clearAnswers } from '@/lib/workspace/answer-persistence';
 
 export function MCQView({ content, fileId, deckId }: { content: string; fileId?: string | null; deckId?: string | null }) {
-  const [selected, setSelected] = useState<Record<number, string>>({});
+  const contentHash = useMemo(() => hashContent(content), [content]);
+  const restored = useMemo(() => loadAnswers('mcq', contentHash), [contentHash]);
+  const [selected, setSelected] = useState<Record<number, string>>(() => restored?.answers ?? {});
   const [revealed, setRevealed] = useState<Record<number, boolean>>({});
   const [score,    setScore]    = useState<number | null>(null);
+
+  // Persist the user's selections so a slip-click on the sidebar doesn't
+  // wipe an in-progress MCQ set. Reset / regenerate clears it.
+  useEffect(() => {
+    if (Object.keys(selected).length > 0) {
+      saveAnswers('mcq', { contentHash, answers: selected });
+    }
+  }, [selected, contentHash]);
 
   // Accept any common question numbering the AI emits: "Q1.", "Q1)", "**Q1.**",
   // "1.", "1)", "**1.**". Block must have at least two A/B/C/D options to count.
@@ -94,8 +105,22 @@ export function MCQView({ content, fileId, deckId }: { content: string; fileId?:
                   if (isRev) { if (letter === ans) cls += ' correct'; else if (isSel) cls += ' wrong'; }
                   else if (isSel) cls += ' selected';
                   return (
+                    // Keyboard reachable: A/B/C/D and 1/2/3/4 select the
+                    // matching option. Space / Enter on the focused option
+                    // toggles it. Without this MCQs were mouse-only.
                     <div key={oi} className={cls}
-                      onClick={() => { if (!isRev) setSelected(p => ({ ...p, [qi]: letter })); }}>
+                      role="button"
+                      tabIndex={isRev ? -1 : 0}
+                      aria-pressed={isSel}
+                      aria-disabled={isRev}
+                      onClick={() => { if (!isRev) setSelected(p => ({ ...p, [qi]: letter })); }}
+                      onKeyDown={(e) => {
+                        if (isRev) return;
+                        if (e.key === ' ' || e.key === 'Enter') {
+                          e.preventDefault();
+                          setSelected(p => ({ ...p, [qi]: letter }));
+                        }
+                      }}>
                       <span className="quiz-opt-letter">{letter}</span>
                       <span>{text}</span>
                       {isRev && letter === ans && <span style={{ marginLeft: 'auto' }}>✓</span>}
@@ -143,8 +168,41 @@ export function MCQView({ content, fileId, deckId }: { content: string; fileId?:
             Score: {score} / {blocks.length}
           </div>
         )}
+        {/* Retake-wrong-only: after grading, lets the student drill just
+            the questions they missed instead of re-doing the whole set.
+            Clears the correct answers from `revealed` and zeroes the score
+            so the UI returns to the unanswered state for the misses. */}
+        {score !== null && score < blocks.length && (
+          <button
+            className="btn btn-sm btn-secondary"
+            onClick={() => {
+              const keepWrong: Record<number, string> = {};
+              const keepRevealed: Record<number, boolean> = {};
+              blocks.forEach((block, qi) => {
+                const ans = block.match(/✓\s*([A-D])\)?/)?.[1]
+                  ?? block.match(/Answer:\s*([A-D])\b/i)?.[1];
+                const userAnswer = selected[qi] ?? '';
+                if (ans && userAnswer !== ans) {
+                  // Keep the wrong selection so the user sees what they
+                  // picked, but drop the revealed state so they can retry.
+                  keepWrong[qi] = userAnswer;
+                }
+                // Correct ones get cleared entirely so they look completed.
+                if (ans && userAnswer === ans) {
+                  keepRevealed[qi] = true;
+                }
+              });
+              setSelected(keepWrong);
+              setRevealed(keepRevealed);
+              setScore(null);
+              clearAnswers('mcq');
+            }}
+          >
+            ↻ Retry wrong only
+          </button>
+        )}
         <button className="btn btn-sm btn-ghost"
-          onClick={() => { setSelected({}); setRevealed({}); setScore(null); }}>Reset</button>
+          onClick={() => { setSelected({}); setRevealed({}); setScore(null); clearAnswers('mcq'); }}>Reset</button>
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { recordQuizAttempt, type QuizAnswerSummary } from '@/lib/workspace/quiz-persistence';
 import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
+import { hashContent, loadAnswers, saveAnswers, clearAnswers } from '@/lib/workspace/answer-persistence';
 
 export function ExamView({
   content,
@@ -24,14 +25,24 @@ export function ExamView({
       ((b.match(/^\s*[A-D][\.\)]/gmi) ?? []).length >= 2 || /Answer\s*:/i.test(b)),
     );
 
-  const [phase,    setPhase]    = useState<'setup' | 'exam' | 'results'>('setup');
+  const contentHash = useMemo(() => hashContent(content), [content]);
+  // Restore exam-in-progress state if the student navigated away mid-test.
+  // The countdown is anchored to wall-clock time (startedAt + durationSec)
+  // so coming back recovers the correct seconds-left, not the value at the
+  // moment they left.
+  const restored = useMemo(() => loadAnswers('exam', contentHash), [contentHash]);
+  const [phase,    setPhase]    = useState<'setup' | 'exam' | 'results'>(() => restored?.phase === 'exam' ? 'exam' : 'setup');
   const [minutes,  setMinutes]  = useState(Math.max(5, Math.ceil(blocks.length * 1.5)));
-  const [secsLeft, setSecsLeft] = useState(0);
-  const [answers,  setAnswers]  = useState<Record<number, string>>({});
+  const [secsLeft, setSecsLeft] = useState<number>(() => {
+    if (restored?.phase === 'exam' && restored.startedAt && restored.durationSec) {
+      const elapsed = Math.floor((Date.now() - restored.startedAt) / 1000);
+      return Math.max(0, restored.durationSec - elapsed);
+    }
+    return 0;
+  });
+  const [answers,  setAnswers]  = useState<Record<number, string>>(() => restored?.answers ?? {});
   const [score,    setScore]    = useState<{ correct: number; total: number; weak: string[] } | null>(null);
-  // Track exam start so we can compute timeTaken on submit (the timer
-  // counts down, so subtracting from the configured minutes is enough).
-  const [examStartedAt, setExamStartedAt] = useState<number | null>(null);
+  const [examStartedAt, setExamStartedAt] = useState<number | null>(() => restored?.startedAt ?? null);
 
   useEffect(() => {
     if (phase !== 'exam') return;
@@ -45,12 +56,38 @@ export function ExamView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
+  // Persist exam state on every change so unmounting (e.g. user navigated
+  // to /math, /coach, etc. mid-exam) doesn't wipe the in-progress test.
+  // The actual timer is anchored to startedAt so it keeps ticking forward
+  // even while the panel is unmounted.
+  useEffect(() => {
+    if (phase === 'exam' && examStartedAt) {
+      saveAnswers('exam', {
+        contentHash,
+        answers,
+        startedAt: examStartedAt,
+        durationSec: minutes * 60,
+        phase,
+      });
+    }
+  }, [answers, phase, examStartedAt, minutes, contentHash]);
+
   function startExam() {
+    const now = Date.now();
     setSecsLeft(minutes * 60);
     setAnswers({});
     setScore(null);
-    setExamStartedAt(Date.now());
+    setExamStartedAt(now);
     setPhase('exam');
+    // Persist immediately so a refresh during the first second still
+    // recovers correctly.
+    saveAnswers('exam', {
+      contentHash,
+      answers: {},
+      startedAt: now,
+      durationSec: minutes * 60,
+      phase: 'exam',
+    });
   }
 
   function submitExam() {
@@ -109,6 +146,9 @@ export function ExamView({
     });
     setScore({ correct, total: blocks.length, weak: weak.slice(0, 5) });
     setPhase('results');
+    // Exam is done — clear the in-progress snapshot so a future visit
+    // doesn't try to "resume" a finished test.
+    clearAnswers('exam');
     onDone?.(correct, blocks.length);
     // Persist the attempt — fire-and-forget so a slow network never
     // blocks the results screen.
