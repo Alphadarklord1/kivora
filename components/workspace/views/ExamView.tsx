@@ -4,6 +4,102 @@ import { recordQuizAttempt, type QuizAnswerSummary } from '@/lib/workspace/quiz-
 import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
 import { hashContent, loadAnswers, saveAnswers, clearAnswers } from '@/lib/workspace/answer-persistence';
 
+// ── Question type detection ────────────────────────────────────────────────
+// Real finals mix: MCQ, T/F, fill-in-the-blank, multi-select, matching,
+// short-answer, and essay/worked. The AI prompt asks for an inline type
+// tag like "(T/F)" or "(Match)" so the parser can render the right UI.
+type QType = 'mcq' | 'tf' | 'fib' | 'multi' | 'match' | 'short' | 'essay';
+
+interface MatchPair { left: string; right: string }
+interface ParsedQuestion {
+  type:        QType;
+  stem:        string;
+  marks:       number | null;
+  options:     string[];           // for mcq / multi
+  correctMcq:  string;             // single letter A/B/C/D
+  correctMulti: string[];          // ['A','C','D']
+  matchLeft:   string[];           // numbered items
+  matchRight:  string[];           // lettered items
+  matchAnswer: Record<string, string>; // { '1': 'B', '2': 'C', ... }
+  expected:    string;             // for tf / fib / short / essay
+}
+
+function detectType(block: string): QType {
+  // Explicit type tag wins.
+  const tag = block.match(/\(([A-Za-z\/\s]+?)\)/)?.[1]?.toLowerCase().trim() ?? '';
+  if (/^t\/?f$/.test(tag) || /true.?false/.test(tag)) return 'tf';
+  if (/^fib$/.test(tag) || /fill.?in.?the.?blank/.test(tag)) return 'fib';
+  if (/select.?all|multi.?select/.test(tag)) return 'multi';
+  if (/^match/.test(tag)) return 'match';
+  if (/^mcq$/.test(tag) || /multiple.?choice/.test(tag)) return 'mcq';
+  if (/^short/.test(tag)) return 'short';
+  if (/^(essay|extended|worked)/.test(tag)) return 'essay';
+  // Fallbacks for AI output that drops the tag — match by shape.
+  const numbered = block.match(/^\s*\d+[\.\)]\s+/gm) ?? [];
+  const lettered = block.match(/^\s*[A-Z][\.\)]\s+/gm) ?? [];
+  if (numbered.length >= 3 && lettered.length >= 3) return 'match';
+  if (lettered.length >= 4 && /Answer\s*:\s*[A-E][,\s]+[A-E]/i.test(block)) return 'multi';
+  if (lettered.length >= 2) return 'mcq';
+  if (/Answer\s*:\s*(true|false)\b/i.test(block)) return 'tf';
+  if (/_+/.test(block)) return 'fib';
+  // No options + no blanks → assume short-answer (or essay if expected is long).
+  const ans = block.match(/Answer\s*:\s*([\s\S]+)$/i)?.[1]?.trim() ?? '';
+  return ans.length > 200 ? 'essay' : 'short';
+}
+
+function parseQuestion(block: string): ParsedQuestion {
+  const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+  const type = detectType(block);
+  // Strip the prefix (Q1., 1.) and the type tag from the stem.
+  const stemLineEnd = lines.findIndex(l => /^\*?\*?[A-E]\*?\*?[\.\)]/i.test(l) || /^\d+[\.\)]\s/.test(l) || /^Answer\s*:/i.test(l));
+  const stemRaw = (stemLineEnd > 0 ? lines.slice(0, stemLineEnd) : [lines[0]]).join(' ');
+  const marksMatch = stemRaw.match(/\[\s*(\d+)\s*marks?\s*\]/i);
+  const marks = marksMatch ? Number(marksMatch[1]) : null;
+  const stem = stemRaw
+    .replace(/^\s*\*?\*?(?:Q?\d+)[\.\)]\*?\*?\s*/i, '')
+    .replace(/\[\s*\d+\s*marks?\s*\]/i, '')
+    .replace(/\([A-Za-z\/\s]+?\)\s*/, '')
+    .trim();
+
+  const ansLine = block.match(/Answer\s*:\s*([\s\S]+?)$/im)?.[1]?.trim() ?? '';
+
+  // Lettered options (A) … D)) for MCQ / multi-select.
+  const options = lines.filter(l => /^\*?\*?[A-E]\*?\*?[\.\)]/i.test(l))
+    .map(l => l.replace(/^\*?\*?([A-E])\*?\*?[\.\)]\s*/i, ''));
+
+  // Numbered items (1., 2., …) for matching.
+  const matchLeft = lines.filter(l => /^\d+[\.\)]\s/.test(l))
+    .map(l => l.replace(/^\d+[\.\)]\s*/, ''));
+  const matchRight = lines.filter(l => /^[A-Z][\.\)]\s/.test(l))
+    .map(l => l.replace(/^[A-Z][\.\)]\s*/, ''));
+
+  const correctMcq = type === 'mcq' ? (ansLine.match(/^([A-E])\b/i)?.[1]?.toUpperCase() ?? '') : '';
+  const correctMulti = type === 'multi'
+    ? Array.from(ansLine.matchAll(/[A-E]/gi)).map(m => m[0].toUpperCase()).filter((v, i, a) => a.indexOf(v) === i)
+    : [];
+  const matchAnswer: Record<string, string> = {};
+  if (type === 'match') {
+    for (const m of ansLine.matchAll(/(\d+)\s*[=→]\s*([A-Z])/gi)) {
+      matchAnswer[m[1]] = m[2].toUpperCase();
+    }
+  }
+
+  return {
+    type, stem, marks, options, correctMcq, correctMulti,
+    matchLeft, matchRight, matchAnswer, expected: ansLine,
+  };
+}
+
+const TYPE_LABELS: Record<QType, string> = {
+  mcq:   'MCQ',
+  tf:    'True / False',
+  fib:   'Fill in the blank',
+  multi: 'Select all that apply',
+  match: 'Matching',
+  short: 'Short answer',
+  essay: 'Extended response',
+};
+
 export function ExamView({
   content,
   onDone,
@@ -96,42 +192,58 @@ export function ExamView({
     const wrongIndices: number[] = [];
     const detailedAnswers: QuizAnswerSummary[] = [];
     blocks.forEach((block, qi) => {
-      // MCQ answer letter (A/B/C/D)
-      const mcqLetter = block.match(/(?:Answer|Correct(?:\s*answer)?)\s*[:=]\s*\*?\*?([A-D])\b/i)?.[1]
-                ?? block.match(/[✓✔]\s*\*?\*?([A-D])\b/i)?.[1]
-                ?? block.match(/^\s*\*\*([A-D])[\.\)]/m)?.[1]
-                ?? block.match(/^\s*([A-D])[\.\)][^\n]*\(correct\)/im)?.[1];
-      // Short-answer expected text (everything after the Answer: line for
-      // non-MCQ blocks). Used for fuzzy grading of free-response questions.
-      const shortAnswerMatch = block.match(/Answer\s*:\s*([\s\S]+?)$/im);
-      const expectedText = shortAnswerMatch?.[1]?.trim() ?? '';
-
-      const blockLines = block.split('\n').map(l => l.trim()).filter(Boolean);
-      const optI = blockLines.findIndex(l => /^\*?\*?[A-D]\*?\*?[\.\)]/i.test(l));
-      const ansI = blockLines.findIndex(l => /^Answer\s*:/i.test(l));
-      const stemEnd = optI > 0 ? optI : (ansI > 0 ? ansI : blockLines.length);
-      const stemFull = blockLines.slice(0, stemEnd).join(' ')
-        .replace(/^\s*\*?\*?(?:Q?\d+)[\.\)]\*?\*?\s*/i, '').trim();
+      const parsed = parseQuestion(block);
       const userAnswer = answers[qi] ?? '';
+      const stemFull = parsed.stem;
 
-      // Grade: MCQ exact-letter match, short-answer fuzzy word-overlap.
+      // Type-aware grading. Each branch decides isCorrect + records the
+      // canonical "correctAnswer" string for the analytics summary.
       let isCorrect = false;
       let correctAnsRecord = '';
-      if (mcqLetter) {
-        isCorrect = userAnswer === mcqLetter;
-        correctAnsRecord = mcqLetter;
-      } else if (expectedText) {
-        // ≥50% overlap on distinctive words (>3 chars) — same threshold
-        // QuizView uses, so the bar feels consistent across tools.
+      if (parsed.type === 'mcq') {
+        isCorrect = userAnswer === parsed.correctMcq;
+        correctAnsRecord = parsed.correctMcq;
+      } else if (parsed.type === 'tf') {
+        const expected = /^t/i.test(parsed.expected) ? 'true' : 'false';
+        isCorrect = userAnswer.toLowerCase() === expected;
+        correctAnsRecord = expected;
+      } else if (parsed.type === 'fib') {
+        // Loose match: case-insensitive, punctuation-stripped equality OR
+        // the user's answer being a substring of the expected (or vice
+        // versa) — captures "Paris" vs "Paris, France" without being
+        // overly strict.
+        const norm = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        const u = norm(userAnswer);
+        const e = norm(parsed.expected);
+        isCorrect = u.length > 0 && (u === e || (e.includes(u) && u.length >= 3) || u.includes(e));
+        correctAnsRecord = parsed.expected.slice(0, 200);
+      } else if (parsed.type === 'multi') {
+        // Set equality on the chosen letters. Stored as comma-separated
+        // string in `answers` so localStorage persistence keeps working.
+        const chosen = userAnswer.split(',').map(s => s.trim().toUpperCase()).filter(Boolean).sort();
+        const expected = parsed.correctMulti.slice().sort();
+        isCorrect = chosen.length === expected.length && chosen.every((v, i) => v === expected[i]);
+        correctAnsRecord = expected.join(',');
+      } else if (parsed.type === 'match') {
+        // userAnswer is JSON like {"1":"B","2":"C"}. Score per-pair and
+        // require ALL pairs correct for the question to count.
+        let pairs: Record<string, string> = {};
+        try { pairs = userAnswer ? JSON.parse(userAnswer) as Record<string, string> : {}; } catch { /* noop */ }
+        const expected = parsed.matchAnswer;
+        const keys = Object.keys(expected);
+        isCorrect = keys.length > 0 && keys.every(k => pairs[k] === expected[k]);
+        correctAnsRecord = keys.map(k => `${k}=${expected[k]}`).join(', ');
+      } else {
+        // short / essay — same fuzzy word-overlap as QuizView.
         const norm = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter(w => w.length > 3);
         const userWords = new Set(norm(userAnswer));
-        const expectedWords = norm(expectedText);
+        const expectedWords = norm(parsed.expected);
         if (expectedWords.length > 0 && userWords.size > 0) {
           let hits = 0;
           for (const w of expectedWords) if (userWords.has(w)) hits++;
           isCorrect = hits / expectedWords.length >= 0.5;
         }
-        correctAnsRecord = expectedText.slice(0, 200);
+        correctAnsRecord = parsed.expected.slice(0, 200);
       }
       if (isCorrect) correct++;
       else { weak.push(stemFull.slice(0, 40) + '…'); wrongIndices.push(qi); }
@@ -275,42 +387,31 @@ export function ExamView({
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {blocks.map((block, qi) => {
-          const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-          const optStart = lines.findIndex(l => /^\*?\*?[A-D]\*?\*?[\.\)]/i.test(l));
-          const ansIdx = lines.findIndex(l => /^Answer\s*:/i.test(l));
-          // Build stem from everything BEFORE the first option (or the
-          // Answer: line for short-answer questions). Joining preserves
-          // multi-line questions like "[5 marks] Describe X. Show your steps."
-          const stemEnd = optStart > 0 ? optStart : (ansIdx > 0 ? ansIdx : lines.length);
-          const stemLines = lines.slice(0, stemEnd).join(' ');
-          // Extract the [N marks] tag the AI emits and display it as a
-          // separate badge instead of leaving it crammed at the start of
-          // the stem text. Strips a few common spellings.
-          const marksMatch = stemLines.match(/\[\s*(\d+)\s*marks?\s*\]/i);
-          const marks = marksMatch ? Number(marksMatch[1]) : null;
-          const stem  = stemLines
-            .replace(/^\s*\*?\*?(?:Q?\d+)[\.\)]\*?\*?\s*/i, '')
-            .replace(/\[\s*\d+\s*marks?\s*\]/i, '')
-            .trim();
-          const opts  = lines.filter(l => /^\*?\*?[A-D]\*?\*?[\.\)]/i.test(l));
-          const isMcq = opts.length >= 2;
+          // Single source of truth — the parser detects the type and
+          // returns everything we need to render the right input UI.
+          const q = parseQuestion(block);
+          const userAnswer = answers[qi] ?? '';
           return (
             <div key={qi} className="quiz-card">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <div className="quiz-q-num">Q{qi + 1}</div>
-                {marks !== null && (
+                {q.marks !== null && (
                   <span className="badge badge-accent" style={{ fontSize: 10 }}>
-                    {marks} mark{marks === 1 ? '' : 's'}
+                    {q.marks} mark{q.marks === 1 ? '' : 's'}
                   </span>
                 )}
+                <span className="badge" style={{ fontSize: 10, background: 'var(--surface-2)', color: 'var(--text-3)' }}>
+                  {TYPE_LABELS[q.type]}
+                </span>
               </div>
-              <div className="quiz-q-text">{stem}</div>
-              {isMcq ? (
+              <div className="quiz-q-text">{q.stem}</div>
+
+              {/* MCQ — single best answer */}
+              {q.type === 'mcq' && (
                 <div className="quiz-options">
-                  {opts.map((opt, oi) => {
-                    const letter = opt.match(/^\*?\*?([A-D])\*?\*?[\.\)]/i)?.[1]?.toUpperCase() ?? '';
-                    const text   = opt.replace(/^\*?\*?[A-D]\*?\*?[\.\)]\s*/i, '').replace(/\s*[✓✔]\s*$/u, '').replace(/\s*\(correct\)\s*$/i, '');
-                    const isSel  = answers[qi] === letter;
+                  {q.options.map((text, oi) => {
+                    const letter = String.fromCharCode(65 + oi);
+                    const isSel = userAnswer === letter;
                     return (
                       <div key={oi} className={`quiz-option${isSel ? ' selected' : ''}`}
                         onClick={() => setAnswers(p => ({ ...p, [qi]: letter }))}>
@@ -320,15 +421,120 @@ export function ExamView({
                     );
                   })}
                 </div>
-              ) : (
-                /* Short-answer / essay — give the student an actual place
-                   to type their answer. Without this the question shows
-                   but there's no input, leaving the user stuck. */
-                <textarea
-                  value={answers[qi] ?? ''}
+              )}
+
+              {/* True / False — two big buttons */}
+              {q.type === 'tf' && (
+                <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                  {['true', 'false'].map(val => {
+                    const isSel = userAnswer.toLowerCase() === val;
+                    return (
+                      <button key={val} type="button"
+                        onClick={() => setAnswers(p => ({ ...p, [qi]: val }))}
+                        style={{
+                          flex: 1, padding: '12px', borderRadius: 10,
+                          border: `2px solid ${isSel ? 'var(--accent)' : 'var(--border-2)'}`,
+                          background: isSel ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--surface)',
+                          color: 'var(--text)', fontSize: 'var(--text-base)', fontWeight: 600,
+                          cursor: 'pointer',
+                        }}>
+                        {val === 'true' ? '✓ True' : '✗ False'}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Fill in the blank — single short text input */}
+              {q.type === 'fib' && (
+                <input
+                  type="text"
+                  value={userAnswer}
                   onChange={(e) => setAnswers(p => ({ ...p, [qi]: e.target.value }))}
-                  placeholder="Type your answer here…"
-                  rows={4}
+                  placeholder="Fill in the blank…"
+                  style={{
+                    width: '100%', marginTop: 10, padding: '10px 14px',
+                    borderRadius: 8, border: '1px solid var(--border-2)',
+                    background: 'var(--surface)', color: 'var(--text)',
+                    fontSize: 'var(--text-base)', fontFamily: 'inherit',
+                    outline: 'none', boxSizing: 'border-box',
+                  }}
+                />
+              )}
+
+              {/* Multi-select — checkbox per option, store as comma list */}
+              {q.type === 'multi' && (
+                <div className="quiz-options">
+                  {q.options.map((text, oi) => {
+                    const letter = String.fromCharCode(65 + oi);
+                    const chosen = userAnswer.split(',').map(s => s.trim()).filter(Boolean);
+                    const isSel = chosen.includes(letter);
+                    return (
+                      <div key={oi} className={`quiz-option${isSel ? ' selected' : ''}`}
+                        onClick={() => {
+                          const next = isSel ? chosen.filter(c => c !== letter) : [...chosen, letter].sort();
+                          setAnswers(p => ({ ...p, [qi]: next.join(',') }));
+                        }}>
+                        <span className="quiz-opt-letter" style={{ borderRadius: 4 }}>
+                          {isSel ? '✓' : letter}
+                        </span>
+                        <span>{text}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Matching — left column is the prompt, right column is a
+                  dropdown per row picking the matching letter. Store the
+                  pairs as a JSON map so persistence + grading are stable. */}
+              {q.type === 'match' && (
+                <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                  {q.matchLeft.map((leftText, li) => {
+                    const num = String(li + 1);
+                    let pairs: Record<string, string> = {};
+                    try { pairs = userAnswer ? JSON.parse(userAnswer) as Record<string, string> : {}; } catch { /* noop */ }
+                    return (
+                      <div key={li} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 8 }}>
+                        <span style={{ fontWeight: 700, color: 'var(--accent)', minWidth: 20 }}>{num}.</span>
+                        <span style={{ flex: 1, fontSize: 'var(--text-sm)' }}>{leftText}</span>
+                        <span style={{ color: 'var(--text-3)' }}>→</span>
+                        <select
+                          value={pairs[num] ?? ''}
+                          onChange={(e) => {
+                            const next = { ...pairs, [num]: e.target.value };
+                            if (!e.target.value) delete next[num];
+                            setAnswers(p => ({ ...p, [qi]: JSON.stringify(next) }));
+                          }}
+                          style={{ padding: '4px 8px', borderRadius: 6, background: 'var(--surface)', border: '1px solid var(--border-2)', color: 'var(--text)' }}
+                        >
+                          <option value="">—</option>
+                          {q.matchRight.map((_, ri) => {
+                            const ltr = String.fromCharCode(65 + ri);
+                            return <option key={ltr} value={ltr}>{ltr}</option>;
+                          })}
+                        </select>
+                      </div>
+                    );
+                  })}
+                  <div style={{ marginTop: 6, padding: '10px 12px', background: 'var(--surface)', borderRadius: 8, border: '1px solid var(--border-2)' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Choices</div>
+                    {q.matchRight.map((rightText, ri) => (
+                      <div key={ri} style={{ fontSize: 'var(--text-sm)', padding: '2px 0' }}>
+                        <strong style={{ color: 'var(--accent)' }}>{String.fromCharCode(65 + ri)}.</strong> {rightText}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Short answer + essay/extended — same textarea, different rows */}
+              {(q.type === 'short' || q.type === 'essay') && (
+                <textarea
+                  value={userAnswer}
+                  onChange={(e) => setAnswers(p => ({ ...p, [qi]: e.target.value }))}
+                  placeholder={q.type === 'essay' ? 'Write a paragraph or step-by-step solution…' : 'Type your answer here…'}
+                  rows={q.type === 'essay' ? 8 : 4}
                   style={{
                     width: '100%',
                     marginTop: 10,

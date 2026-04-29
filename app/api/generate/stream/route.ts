@@ -482,23 +482,65 @@ Mark the correct option with the letter on the Answer line. Do not add commentar
     flashcards: `Create ${count} flashcard pairs formatted as "Front: <concept> | Back: <explanation>" from:\n\n${text}`,
     assignment: `Generate a structured assignment with ${count} questions based on:\n\n${text}`,
     outline:    `Create a detailed hierarchical outline with main topics and subtopics from:\n\n${text}`,
-    exam:       `Create a realistic final-exam paper with ${count} questions worth 100 marks total, structured exactly like a course final.
+    exam:       `Create a realistic final-exam paper with ${count} questions worth 100 marks total, structured exactly like a course final. Use a MIX of question types — a real exam has more than just MCQs.
 
-Required mix (do NOT ship an all-short-answer paper):
-- About 40% MCQ (single best answer, 2 marks each).
-- About 40% short-answer (3–6 marks each, 1–2 sentence expected response).
-- About 20% extended / essay / worked-problem (8–15 marks, multi-paragraph or step-by-step).
+REQUIRED MIX (vary the types across the paper, don't ship all of one kind):
+- ~25% MCQ (single best answer, 2 marks each)
+- ~10% True / False (1–2 marks each)
+- ~10% Fill in the blank (1–2 marks each)
+- ~10% Multi-select (select all that apply, 3–4 marks each)
+- ~10% Matching (4 pairs, 4 marks each)
+- ~20% Short-answer (3–6 marks each, 1–2 sentence expected response)
+- ~15% Extended / essay / worked-problem (8–15 marks, multi-paragraph or step-by-step)
 
-Use this EXACT format. Every question must have a "Q" prefix, a "[N marks]" tag, and an "Answer:" line:
+Each question must have a "Q" prefix, a "[N marks]" tag, a TYPE tag in parentheses, and an "Answer:" line. Use the EXACT formats below — the parser depends on these markers.
 
-Q1. [10 marks] <question text>
+────────── MCQ ──────────
+Q1. [2 marks] (MCQ) <question text>
 A) <option>
 B) <option>
 C) <option>
 D) <option>
-Answer: <letter for MCQ, or expected response for short-answer/essay>
+Answer: B
 
-Mix MCQ (with A/B/C/D options), short-answer, and essay questions. ${sourceDirective}`,
+────────── True / False ──────────
+Q2. [2 marks] (T/F) <statement to evaluate>
+Answer: True
+
+────────── Fill in the blank ──────────
+Q3. [2 marks] (FIB) The capital of France is _____.
+Answer: Paris
+
+────────── Multi-select ──────────
+Q4. [4 marks] (Select all) <prompt>
+A) <option>
+B) <option>
+C) <option>
+D) <option>
+E) <option>
+Answer: A, C, D
+
+────────── Matching ──────────
+Q5. [4 marks] (Match) <prompt — e.g. "Match each scientist to their discovery">
+1. <left item 1>
+2. <left item 2>
+3. <left item 3>
+4. <left item 4>
+A. <right item 1>
+B. <right item 2>
+C. <right item 3>
+D. <right item 4>
+Answer: 1=B, 2=C, 3=A, 4=D
+
+────────── Short answer ──────────
+Q6. [5 marks] (Short) <prompt>
+Answer: <expected answer in 1–2 sentences>
+
+────────── Extended / essay / worked ──────────
+Q7. [10 marks] (Essay) <prompt requiring a paragraph or step-by-step solution>
+Answer: <model answer — 80–150 words OR numbered solution steps>
+
+The total of all [N marks] tags MUST sum to 100 (or as close as the count allows). Number questions sequentially Q1, Q2, etc. ${sourceDirective}`,
     practice:   `Create a practice problem based on this content. ALL FIVE sections below are MANDATORY — do not skip any, do not stop early, the Solution section must contain a real worked solution (never empty, never "[omitted]").\n\n${
       style === 'application'
         ? 'STYLE: APPLICATION / SCENARIO — frame the Problem as a short real-world case study (1–3 sentences) the student must analyse using a concept from the source. Do NOT just ask them to recall a definition.'
