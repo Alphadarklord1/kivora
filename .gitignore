@@ -53,3 +53,4 @@ next-env.d.ts
 # Local IDE / agent state — never commit
 .claude/
 .mcp.json
+.env*.local

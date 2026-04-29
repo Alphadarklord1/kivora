@@ -1488,8 +1488,29 @@ function readNotifPref(key: string, defaultOn: boolean): boolean {
 function NotifToggleRow({
   checked, label, hint, onToggle, disabled,
 }: { checked: boolean; label: string; hint: string; onToggle: () => void; disabled?: boolean }) {
+  // Whole row is clickable now — earlier the only hit-target was the
+  // small switch widget on the right, which made users feel like they
+  // couldn't deselect individual prefs (the row text looked clickable
+  // but did nothing). Stops the click from double-firing when the
+  // inner Toggle button is the actual target.
+  const handleRowClick = (e: React.MouseEvent) => {
+    if (disabled) return;
+    if ((e.target as HTMLElement).closest('button')) return;
+    onToggle();
+  };
   return (
-    <div className={`${styles.toggleRow} ${checked ? styles.toggleRowActive : ''}`} style={{ opacity: disabled ? 0.5 : 1 }}>
+    <div
+      className={`${styles.toggleRow} ${checked ? styles.toggleRowActive : ''}`}
+      style={{ opacity: disabled ? 0.5 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
+      onClick={handleRowClick}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-pressed={checked}
+      onKeyDown={(e) => {
+        if (disabled) return;
+        if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onToggle(); }
+      }}
+    >
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>{label}</div>
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2 }}>{hint}</div>

@@ -169,9 +169,18 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error(`[Account][${requestId}] GET failed`, error);
-    if (isGuestModeEnabled()) {
+    // Only return the fake-guest fallback for genuinely UNAUTHENTICATED
+    // callers in guest mode. Returning isGuest:true for a legitimately
+    // signed-in user (e.g. transient DB error during a Google session)
+    // was the cause of the long-standing "Guest mode banner appears even
+    // when I'm signed in" bug — the client took the response at face value
+    // and stamped the real account as a guest. A real signed-in user
+    // hitting a DB error now gets a proper 500 they can retry.
+    let signedInUserId: string | null = null;
+    try { signedInUserId = await getUserId(request); } catch { /* noop */ }
+    if (isGuestModeEnabled() && (!signedInUserId || isEphemeralGuest(signedInUserId))) {
       return NextResponse.json({
-        id: 'local-demo-user',
+        id: signedInUserId ?? 'local-demo-user',
         email: 'demo@local.kivora',
         name: 'Guest Session',
         image: null,
