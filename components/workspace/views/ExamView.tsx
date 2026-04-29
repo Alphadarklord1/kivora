@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { recordQuizAttempt, type QuizAnswerSummary } from '@/lib/workspace/quiz-persistence';
 import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
 import { hashContent, loadAnswers, saveAnswers, clearAnswers } from '@/lib/workspace/answer-persistence';
@@ -112,13 +112,15 @@ export function ExamView({
   deckId?: string | null;
 }) {
   // Tolerate "Q1.", "Q1)", "**Q1.**", "1.", "1)" numbering. A block must
-  // either have ≥2 lettered options (MCQ) or an "Answer:" line (short answer).
+  // either have ≥2 lettered options (MCQ / multi-select / matching can
+  // run A–E so the regex was widened) OR an "Answer:" line (T/F, FIB,
+  // short, essay all carry one).
   const blocks = content
     .split(/\n(?=\s*\*?\*?(?:Q?\d+)[\.\)]\s)/i)
     .map(b => b.trim())
     .filter(b =>
       /^\s*\*?\*?(?:Q?\d+)[\.\)]/i.test(b) &&
-      ((b.match(/^\s*[A-D][\.\)]/gmi) ?? []).length >= 2 || /Answer\s*:/i.test(b)),
+      ((b.match(/^\s*[A-E][\.\)]/gmi) ?? []).length >= 2 || /Answer\s*:/i.test(b)),
     );
 
   const contentHash = useMemo(() => hashContent(content), [content]);
@@ -139,6 +141,11 @@ export function ExamView({
   const [answers,  setAnswers]  = useState<Record<number, string>>(() => restored?.answers ?? {});
   const [score,    setScore]    = useState<{ correct: number; total: number; weak: string[]; wrongIndices: number[] } | null>(null);
   const [examStartedAt, setExamStartedAt] = useState<number | null>(() => restored?.startedAt ?? null);
+  // Synchronous submit guard. The timer-expiry path inside the
+  // setInterval and a manual click on Submit can both reach submitExam
+  // back-to-back; without this, a fast Submit-click during the last
+  // second would record TWO quiz_attempt rows on the server.
+  const submitInFlightRef = useRef(false);
 
   useEffect(() => {
     if (phase !== 'exam') return;
@@ -170,6 +177,10 @@ export function ExamView({
 
   function startExam() {
     const now = Date.now();
+    // Release the submit guard for the new attempt — the previous
+    // submission already finished and the next one should be free to
+    // grade independently.
+    submitInFlightRef.current = false;
     setSecsLeft(minutes * 60);
     setAnswers({});
     setScore(null);
@@ -187,6 +198,8 @@ export function ExamView({
   }
 
   function submitExam() {
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
     let correct = 0;
     const weak: string[] = [];
     const wrongIndices: number[] = [];
@@ -285,6 +298,22 @@ export function ExamView({
   const ss  = String(secsLeft % 60).padStart(2, '0');
   const pct = blocks.length > 0 ? Math.round((Object.keys(answers).length / blocks.length) * 100) : 0;
 
+  // Empty state — AI returned text that couldn't be parsed into any
+  // question blocks (malformed JSON, all blocks failing the filter, etc).
+  // Without this guard, Start Exam would launch a 0-question test that
+  // submits to a 0/0 score immediately.
+  if (blocks.length === 0) {
+    return (
+      <div style={{ maxWidth: 440, margin: '0 auto', padding: 24, textAlign: 'center' }}>
+        <div style={{ fontSize: 40, marginBottom: 10 }}>⚠</div>
+        <h3 style={{ margin: '0 0 6px' }}>No questions found</h3>
+        <p style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>
+          The exam paper came back without any parseable questions. Try regenerating from the Tools tab — most rerolls land cleanly.
+        </p>
+      </div>
+    );
+  }
+
   if (phase === 'setup') {
     return (
       <div style={{ maxWidth: 440, margin: '0 auto', padding: 24, textAlign: 'center' }}>
@@ -348,6 +377,7 @@ export function ExamView({
                 // Recalculate a sensible time limit: roughly 1.5 min per
                 // remaining wrong question, with a 5-minute floor.
                 const remainingMins = Math.max(5, Math.ceil(score.wrongIndices.length * 1.5));
+                submitInFlightRef.current = false;
                 setMinutes(remainingMins);
                 setSecsLeft(remainingMins * 60);
                 setAnswers(keepCorrect);
