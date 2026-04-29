@@ -27,6 +27,10 @@ export function QuizView({ content, fileId, deckId }: { content: string; fileId?
   const [revealed, setRevealed] = useState<Record<number, boolean>>({});
   const [score,    setScore]    = useState<number | null>(null);
   const [aiGrades, setAiGrades] = useState<Record<number, AiGradeFeedback>>({});
+  // Per-question "why was the expected answer the right one?" explanations.
+  // Only fetched on demand so we don't hammer the AI for screens the user
+  // is just skimming.
+  const [explanations, setExplanations] = useState<Record<number, { loading?: boolean; text?: string; error?: string }>>({});
 
   // Debounced persistence of the user's typed answers — protects against
   // accidental navigation killing the long extended-response paragraphs.
@@ -238,6 +242,43 @@ export function QuizView({ content, fileId, deckId }: { content: string; fileId?
                       : 'Expected answer:'}
                   </div>
                 )}
+                {/* "Why?" — only on short-answer questions the loose
+                    word-overlap check flagged as wrong. Extended-response
+                    questions already have the AI-grade button which gives
+                    structured rubric feedback, so we skip Why? there. */}
+                {isRev && !isExtended && expected && userAnswer.trim() && !isCorrect && (() => {
+                  const ex = explanations[qi];
+                  return (
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      disabled={ex?.loading}
+                      onClick={async () => {
+                        setExplanations(p => ({ ...p, [qi]: { loading: true } }));
+                        try {
+                          const res = await fetch('/api/explain', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              question: stem,
+                              userAnswer: userAnswer.slice(0, 400),
+                              correctAnswer: expected.slice(0, 400),
+                            }),
+                          });
+                          const data = await res.json() as { explanation?: string | null };
+                          if (data.explanation) {
+                            setExplanations(p => ({ ...p, [qi]: { text: data.explanation as string } }));
+                          } else {
+                            setExplanations(p => ({ ...p, [qi]: { error: 'Could not explain this one right now.' } }));
+                          }
+                        } catch {
+                          setExplanations(p => ({ ...p, [qi]: { error: 'Could not explain this one right now.' } }));
+                        }
+                      }}
+                    >
+                      {ex?.loading ? 'Thinking…' : ex?.text ? '↻ Re-explain' : '🤔 Why?'}
+                    </button>
+                  );
+                })()}
               </div>
 
               {/* AI grading panel — only shows once a grade has come back. */}
@@ -310,6 +351,28 @@ export function QuizView({ content, fileId, deckId }: { content: string; fileId?
                   ⚠ This question came back without an expected answer. Regenerating the quiz usually fixes it.
                 </div>
               ) : null}
+              {/* WHY explanation panel — fills in once the explainer call
+                  resolves. Same blue accent as MCQView's WHY panel. */}
+              {explanations[qi]?.text && (
+                <div style={{
+                  marginTop: 10,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  background: 'color-mix(in srgb, #4f86f7 8%, var(--surface))',
+                  border: '1px solid color-mix(in srgb, #4f86f7 25%, transparent)',
+                  fontSize: 'var(--text-sm)',
+                  lineHeight: 1.55,
+                  color: 'var(--text)',
+                }}>
+                  <strong style={{ fontSize: 'var(--text-xs)', color: '#4f86f7' }}>WHY</strong>
+                  <div style={{ marginTop: 4 }}>{explanations[qi].text}</div>
+                </div>
+              )}
+              {explanations[qi]?.error && (
+                <div style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--danger)' }}>
+                  ⚠ {explanations[qi].error}
+                </div>
+              )}
             </div>
           );
         })}

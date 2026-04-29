@@ -41,7 +41,7 @@ export function ExamView({
     return 0;
   });
   const [answers,  setAnswers]  = useState<Record<number, string>>(() => restored?.answers ?? {});
-  const [score,    setScore]    = useState<{ correct: number; total: number; weak: string[] } | null>(null);
+  const [score,    setScore]    = useState<{ correct: number; total: number; weak: string[]; wrongIndices: number[] } | null>(null);
   const [examStartedAt, setExamStartedAt] = useState<number | null>(() => restored?.startedAt ?? null);
 
   useEffect(() => {
@@ -93,6 +93,7 @@ export function ExamView({
   function submitExam() {
     let correct = 0;
     const weak: string[] = [];
+    const wrongIndices: number[] = [];
     const detailedAnswers: QuizAnswerSummary[] = [];
     blocks.forEach((block, qi) => {
       // MCQ answer letter (A/B/C/D)
@@ -133,7 +134,7 @@ export function ExamView({
         correctAnsRecord = expectedText.slice(0, 200);
       }
       if (isCorrect) correct++;
-      else weak.push(stemFull.slice(0, 40) + '…');
+      else { weak.push(stemFull.slice(0, 40) + '…'); wrongIndices.push(qi); }
       // Per-question record for analytics — keeps the same shape the
       // /api/quiz-attempts route already validates.
       detailedAnswers.push({
@@ -144,7 +145,7 @@ export function ExamView({
         isCorrect,
       });
     });
-    setScore({ correct, total: blocks.length, weak: weak.slice(0, 5) });
+    setScore({ correct, total: blocks.length, weak: weak.slice(0, 5), wrongIndices });
     setPhase('results');
     // Exam is done — clear the in-progress snapshot so a future visit
     // doesn't try to "resume" a finished test.
@@ -214,8 +215,45 @@ export function ExamView({
             ))}
           </div>
         )}
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20 }}>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20, flexWrap: 'wrap' }}>
           <button className="btn btn-primary" onClick={startExam}>Retake Exam</button>
+          {/* Retake-wrong-only — keeps the questions you got right marked
+              done and unlocks just the misses. Re-arms the timer too so
+              the practice is actually timed. */}
+          {score.wrongIndices.length > 0 && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                const keepCorrect: Record<number, string> = {};
+                blocks.forEach((_, qi) => {
+                  if (!score.wrongIndices.includes(qi)) {
+                    // Carry forward the right answer so it's already
+                    // counted on the next submit (no need to re-pick it).
+                    keepCorrect[qi] = answers[qi] ?? '';
+                  }
+                });
+                const now = Date.now();
+                // Recalculate a sensible time limit: roughly 1.5 min per
+                // remaining wrong question, with a 5-minute floor.
+                const remainingMins = Math.max(5, Math.ceil(score.wrongIndices.length * 1.5));
+                setMinutes(remainingMins);
+                setSecsLeft(remainingMins * 60);
+                setAnswers(keepCorrect);
+                setScore(null);
+                setExamStartedAt(now);
+                setPhase('exam');
+                saveAnswers('exam', {
+                  contentHash,
+                  answers: keepCorrect,
+                  startedAt: now,
+                  durationSec: remainingMins * 60,
+                  phase: 'exam',
+                });
+              }}
+            >
+              ↻ Retake wrong ({score.wrongIndices.length})
+            </button>
+          )}
           <button className="btn btn-ghost" onClick={() => setPhase('setup')}>Change settings</button>
         </div>
       </div>
@@ -245,12 +283,27 @@ export function ExamView({
           // multi-line questions like "[5 marks] Describe X. Show your steps."
           const stemEnd = optStart > 0 ? optStart : (ansIdx > 0 ? ansIdx : lines.length);
           const stemLines = lines.slice(0, stemEnd).join(' ');
-          const stem  = stemLines.replace(/^\s*\*?\*?(?:Q?\d+)[\.\)]\*?\*?\s*/i, '').trim();
+          // Extract the [N marks] tag the AI emits and display it as a
+          // separate badge instead of leaving it crammed at the start of
+          // the stem text. Strips a few common spellings.
+          const marksMatch = stemLines.match(/\[\s*(\d+)\s*marks?\s*\]/i);
+          const marks = marksMatch ? Number(marksMatch[1]) : null;
+          const stem  = stemLines
+            .replace(/^\s*\*?\*?(?:Q?\d+)[\.\)]\*?\*?\s*/i, '')
+            .replace(/\[\s*\d+\s*marks?\s*\]/i, '')
+            .trim();
           const opts  = lines.filter(l => /^\*?\*?[A-D]\*?\*?[\.\)]/i.test(l));
           const isMcq = opts.length >= 2;
           return (
             <div key={qi} className="quiz-card">
-              <div className="quiz-q-num">Q{qi + 1}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div className="quiz-q-num">Q{qi + 1}</div>
+                {marks !== null && (
+                  <span className="badge badge-accent" style={{ fontSize: 10 }}>
+                    {marks} mark{marks === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
               <div className="quiz-q-text">{stem}</div>
               {isMcq ? (
                 <div className="quiz-options">
