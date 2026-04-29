@@ -3,157 +3,110 @@
 import { useEffect, useRef, useState } from 'react';
 import { useToast } from '@/providers/ToastProvider';
 import { getGoalPreferences } from '@/lib/srs/sm2';
+import {
+  type PomPhase,
+  POMODORO_PRESETS,
+  loadPomodoroDay,
+  recordPhaseCompletion,
+  useFocusTimer,
+  isRunning,
+  startTimer,
+  pauseTimer,
+  resetTimer,
+  switchPhase as switchPhaseStore,
+  setPresets as savePresets,
+  setCustomBlockMins as saveCustomBlock,
+  phaseColor,
+  phaseLabel,
+} from '@/lib/focus/timer';
 
-// ── Focus / Pomodoro panel ─────────────────────────────────────────────────
-
-// 'custom' is an ad-hoc deep-work block that does NOT advance the
-// work→break cycle on completion — useful for 50/90/120-minute sessions
-// without overwriting the user's normal Focus preset.
-type PomPhase = 'work' | 'short-break' | 'long-break' | 'custom';
-
-const POMODORO_PRESETS: Record<Exclude<PomPhase, 'custom'>, number> = {
-  'work': 25,
-  'short-break': 5,
-  'long-break': 15,
-};
-
-const POMODORO_KEY = 'kivora-pomodoro-day';
-const CUSTOM_MINS_KEY = 'kivora-pomodoro-custom-mins';
-
-interface PomodoroDayState { date: string; sessions: number; totalMins: number }
-
-function loadPomodoroDay(): PomodoroDayState {
-  if (typeof window === 'undefined') return { date: '', sessions: 0, totalMins: 0 };
-  const today = new Date().toISOString().split('T')[0];
-  try {
-    const raw = localStorage.getItem(POMODORO_KEY);
-    if (!raw) return { date: today, sessions: 0, totalMins: 0 };
-    const parsed = JSON.parse(raw) as PomodoroDayState;
-    if (parsed.date !== today) return { date: today, sessions: 0, totalMins: 0 };
-    return parsed;
-  } catch {
-    return { date: today, sessions: 0, totalMins: 0 };
-  }
-}
-
-function savePomodoroDay(state: PomodoroDayState): void {
-  if (typeof window === 'undefined') return;
-  try { localStorage.setItem(POMODORO_KEY, JSON.stringify(state)); } catch { /* noop */ }
-}
-
-function loadLastCustomMins(): number {
-  if (typeof window === 'undefined') return 50;
-  try {
-    const raw = localStorage.getItem(CUSTOM_MINS_KEY);
-    const v = raw ? parseInt(raw, 10) : NaN;
-    return Number.isFinite(v) && v > 0 && v <= 240 ? v : 50;
-  } catch { return 50; }
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
+// FocusPanel is now a thin UI on top of `lib/focus/timer.ts`. The
+// countdown lives in localStorage as a target timestamp + paused snapshot,
+// so navigating away from /workspace doesn't kill the timer — it keeps
+// running in the background and the global FocusTimerIndicator surfaces
+// the remaining time on every page.
 
 export function FocusPanel() {
   const { toast } = useToast();
-  const [phase,         setPhase]         = useState<PomPhase>('work');
-  const [customMins,    setCustomMins]    = useState<Record<Exclude<PomPhase, 'custom'>, number>>({ ...POMODORO_PRESETS });
-  // Custom block length lives separately so changing it doesn't disturb
-  // the user's normal Focus / break presets.
-  const [customBlockMins, setCustomBlockMins] = useState<number>(50);
-  const [secsLeft,      setSecsLeft]      = useState(POMODORO_PRESETS.work * 60);
-  const [running,       setRunning]       = useState(false);
-  const [sessions,      setSessions]      = useState(0);
-  const [todayTotal,    setTodayTotal]    = useState(0);
-  const [task,          setTask]          = useState('');
-  const [showSettings,  setShowSettings]  = useState(false);
-  const [pomodoroGoal,  setPomodoroGoal]  = useState(4);
-  // Two-tap reset: first tap arms it, second tap within 4s confirms.
-  // Without the confirm step a slip on the Reset button (right next to
-  // Pause) silently destroyed an in-progress session.
-  const [resetArmed,    setResetArmed]    = useState(false);
+  const { state, secsLeft } = useFocusTimer();
+  const [sessions, setSessions] = useState(0);
+  const [todayTotal, setTodayTotal] = useState(0);
+  const [task, setTask] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const [pomodoroGoal, setPomodoroGoal] = useState(4);
+  const [resetArmed, setResetArmed] = useState(false);
   const resetArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Tracks the last secsLeft we saw so we can detect the running→0
+  // transition (i.e. timer just expired) and fire the celebration toast
+  // / phase advance once and only once.
+  const prevSecsLeftRef = useRef<number>(secsLeft);
+  const handlingExpiryRef = useRef<boolean>(false);
 
   useEffect(() => {
     const day = loadPomodoroDay();
     setSessions(day.sessions);
     setTodayTotal(day.totalMins);
-    setCustomBlockMins(loadLastCustomMins());
     try {
       const goal = getGoalPreferences();
       const inferred = Math.max(1, Math.round(goal.dailyGoal / 25));
       setPomodoroGoal(inferred);
     } catch { /* noop */ }
+    function refreshDay() {
+      const cur = loadPomodoroDay();
+      setSessions(cur.sessions);
+      setTodayTotal(cur.totalMins);
+    }
+    window.addEventListener('kivora:pomodoro-day-changed', refreshDay);
+    return () => window.removeEventListener('kivora:pomodoro-day-changed', refreshDay);
   }, []);
 
-  const phaseSeconds = phase === 'custom' ? customBlockMins * 60 : customMins[phase] * 60;
-  const totalSecs    = phaseSeconds;
-  const progress     = totalSecs > 0
+  // Detect timer expiry (running → secsLeft hits 0) and run the post-phase
+  // logic exactly once: bank the time, toast, advance phase.
+  useEffect(() => {
+    if (handlingExpiryRef.current) {
+      prevSecsLeftRef.current = secsLeft;
+      return;
+    }
+    const wasRunning = isRunning(state) || prevSecsLeftRef.current > 0;
+    if (secsLeft === 0 && wasRunning && (state.endsAt !== null || prevSecsLeftRef.current > 0)) {
+      handlingExpiryRef.current = true;
+      handlePhaseEnd();
+      // Release the guard once React has flushed the state changes.
+      setTimeout(() => { handlingExpiryRef.current = false; }, 200);
+    }
+    prevSecsLeftRef.current = secsLeft;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secsLeft]);
+
+  const totalSecs = state.durationSec;
+  const progress = totalSecs > 0
     ? Math.max(0, Math.min(100, ((totalSecs - secsLeft) / totalSecs) * 100))
     : 0;
-  const mm           = String(Math.floor(secsLeft / 60)).padStart(2, '0');
-  const ss           = String(secsLeft % 60).padStart(2, '0');
+  const mm = String(Math.floor(secsLeft / 60)).padStart(2, '0');
+  const ss = String(secsLeft % 60).padStart(2, '0');
   const circumference = 2 * Math.PI * 54;
-
-  useEffect(() => {
-    if (running) {
-      intervalRef.current = setInterval(() => {
-        setSecsLeft(s => {
-          if (s <= 1) {
-            clearInterval(intervalRef.current!);
-            setRunning(false);
-            handlePhaseEnd();
-            return 0;
-          }
-          return s - 1;
-        });
-      }, 1000);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running]);
+  const running = isRunning(state);
 
   function handlePhaseEnd() {
-    if (phase === 'work') {
-      const newSessions = sessions + 1;
-      const newTotal = todayTotal + customMins.work;
-      setSessions(newSessions);
-      setTodayTotal(newTotal);
-      savePomodoroDay({
-        date: new Date().toISOString().split('T')[0],
-        sessions: newSessions,
-        totalMins: newTotal,
-      });
-      toast(`🎉 Pomodoro #${newSessions} complete! Take a break.`, 'success');
-      const next: PomPhase = newSessions % 4 === 0 ? 'long-break' : 'short-break';
-      switchPhase(next);
-    } else if (phase === 'custom') {
-      // Custom blocks don't enter the work→break cycle. Bank the minutes
-      // toward the today total but don't bump the pomodoro counter (which
-      // tracks the standard 25-min unit), and don't auto-switch phase.
-      const newTotal = todayTotal + customBlockMins;
-      setTodayTotal(newTotal);
-      savePomodoroDay({
-        date: new Date().toISOString().split('T')[0],
-        sessions,
-        totalMins: newTotal,
-      });
-      toast(`✓ ${customBlockMins}-min focus block complete.`, 'success');
+    if (state.phase === 'work') {
+      recordPhaseCompletion('work');
+      const day = loadPomodoroDay();
+      toast(`🎉 Pomodoro #${day.sessions} complete! Take a break.`, 'success');
+      const next: PomPhase = day.sessions % 4 === 0 ? 'long-break' : 'short-break';
+      switchPhaseStore(next);
+    } else if (state.phase === 'custom') {
+      recordPhaseCompletion('custom', state.customBlockMins);
+      toast(`✓ ${state.customBlockMins}-min focus block complete.`, 'success');
       // Re-arm the same custom block so a quick "▶ Start" repeats it.
-      setSecsLeft(customBlockMins * 60);
+      switchPhaseStore('custom');
     } else {
       toast('Break over — back to work!', 'info');
-      switchPhase('work');
+      switchPhaseStore('work');
     }
   }
 
   function switchPhase(p: PomPhase) {
-    setPhase(p);
-    setSecsLeft(p === 'custom' ? customBlockMins * 60 : customMins[p] * 60);
-    setRunning(false);
+    switchPhaseStore(p);
     cancelResetArm();
   }
 
@@ -172,8 +125,7 @@ export function FocusPanel() {
       return;
     }
     cancelResetArm();
-    setSecsLeft(phase === 'custom' ? customBlockMins * 60 : customMins[phase] * 60);
-    setRunning(false);
+    resetTimer();
   }
 
   function skip() {
@@ -181,28 +133,16 @@ export function FocusPanel() {
   }
 
   function applyCustomBlock(mins: number) {
-    const v = clamp(Math.round(mins), 5, 240);
-    setCustomBlockMins(v);
-    try { localStorage.setItem(CUSTOM_MINS_KEY, String(v)); } catch { /* noop */ }
-    setPhase('custom');
-    setSecsLeft(v * 60);
-    setRunning(false);
+    saveCustomBlock(mins);
+    switchPhaseStore('custom');
     cancelResetArm();
   }
 
-  const phaseColor: Record<PomPhase, string> = {
-    'work':         'var(--accent)',
-    'short-break':  'var(--success)',
-    'long-break':   'var(--purple)',
-    'custom':       '#a855f7', // distinct from the others so the ring is recognisable
-  };
-
-  const phaseLabel: Record<PomPhase, string> = {
-    'work':        '🍅 Focus',
-    'short-break': '☕ Short break',
-    'long-break':  '🌿 Long break',
-    'custom':      '🎯 Custom',
-  };
+  function toggleRunning() {
+    if (running) pauseTimer();
+    else startTimer();
+    cancelResetArm();
+  }
 
   const strokeDash = circumference - (progress / 100) * circumference;
 
@@ -215,16 +155,16 @@ export function FocusPanel() {
           {(['work', 'short-break', 'long-break', 'custom'] as PomPhase[]).map(p => (
             <button key={p}
               onClick={() => switchPhase(p)}
-              aria-pressed={phase === p}
+              aria-pressed={state.phase === p}
               style={{
                 flex: 1, padding: '7px 4px', borderRadius: 9, border: 'none', cursor: 'pointer',
                 fontSize: 'var(--text-xs)', fontWeight: 600,
-                background: phase === p ? 'var(--bg)' : 'transparent',
-                color: phase === p ? phaseColor[p] : 'var(--text-3)',
-                boxShadow: phase === p ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                background: state.phase === p ? 'var(--bg)' : 'transparent',
+                color: state.phase === p ? phaseColor(p) : 'var(--text-3)',
+                boxShadow: state.phase === p ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
                 transition: 'all 0.15s',
               }}>
-              {phaseLabel[p]}
+              {phaseLabel(p)}
             </button>
           ))}
         </div>
@@ -235,7 +175,7 @@ export function FocusPanel() {
             <title>Focus timer</title>
             <circle cx={70} cy={70} r={54} fill="none" stroke="var(--surface-2)" strokeWidth={8} />
             <circle cx={70} cy={70} r={54} fill="none"
-              stroke={phaseColor[phase]}
+              stroke={phaseColor(state.phase)}
               strokeWidth={8}
               strokeLinecap="round"
               strokeDasharray={circumference}
@@ -247,13 +187,13 @@ export function FocusPanel() {
             <div style={{
               fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em',
               fontVariantNumeric: 'tabular-nums',
-              color: running ? phaseColor[phase] : 'var(--text)',
+              color: running ? phaseColor(state.phase) : 'var(--text)',
               animation: running ? 'timer-pulse 2s ease-in-out infinite' : 'none',
             }}>
               {mm}:{ss}
             </div>
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 2, textTransform: 'capitalize' }}>
-              {phase === 'custom' ? `Custom · ${customBlockMins} min` : phase.replace('-', ' ')}
+              {state.phase === 'custom' ? `Custom · ${state.customBlockMins} min` : state.phase.replace('-', ' ')}
             </div>
           </div>
         </div>
@@ -277,14 +217,14 @@ export function FocusPanel() {
               borderRadius: 50,
               border: 'none',
               cursor: 'pointer',
-              background: phaseColor[phase],
+              background: phaseColor(state.phase),
               color: '#fff',
               fontSize: 'var(--text-base)',
               fontWeight: 700,
-              boxShadow: running ? `0 0 0 4px color-mix(in srgb, ${phaseColor[phase]} 25%, transparent)` : 'none',
+              boxShadow: running ? `0 0 0 4px color-mix(in srgb, ${phaseColor(state.phase)} 25%, transparent)` : 'none',
               transition: 'all 0.2s',
             }}
-            onClick={() => { setRunning(r => !r); cancelResetArm(); }}>
+            onClick={toggleRunning}>
             {running ? '⏸ Pause' : secsLeft < totalSecs ? '▶ Resume' : '▶ Start'}
           </button>
           <button className="btn btn-ghost btn-sm" onClick={skip} disabled={!running}>Skip →</button>
@@ -306,7 +246,7 @@ export function FocusPanel() {
         </div>
 
         {/* Custom block quick-launch */}
-        {phase === 'custom' && (
+        {state.phase === 'custom' && (
           <div style={{ marginBottom: 20, padding: '14px', background: 'color-mix(in srgb, #a855f7 8%, var(--surface))', border: '1px solid color-mix(in srgb, #a855f7 25%, transparent)', borderRadius: 10 }}>
             <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-2)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Custom focus block
@@ -316,7 +256,7 @@ export function FocusPanel() {
                 type="number"
                 min={5}
                 max={240}
-                value={customBlockMins}
+                value={state.customBlockMins}
                 onChange={e => applyCustomBlock(+e.target.value || 5)}
                 disabled={running}
                 aria-label="Custom focus block duration in minutes"
@@ -329,7 +269,7 @@ export function FocusPanel() {
                 <button key={m} onClick={() => applyCustomBlock(m)}
                   disabled={running}
                   className="btn btn-ghost btn-sm"
-                  style={{ fontSize: 'var(--text-xs)', padding: '4px 10px', opacity: customBlockMins === m ? 1 : 0.7, fontWeight: customBlockMins === m ? 700 : 500 }}>
+                  style={{ fontSize: 'var(--text-xs)', padding: '4px 10px', opacity: state.customBlockMins === m ? 1 : 0.7, fontWeight: state.customBlockMins === m ? 700 : 500 }}>
                   {m} min
                 </button>
               ))}
@@ -369,11 +309,10 @@ export function FocusPanel() {
               {(['work', 'short-break', 'long-break'] as Array<Exclude<PomPhase, 'custom'>>).map(p => (
                 <label key={p} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
                   {p === 'work' ? 'Focus' : p === 'short-break' ? 'Short break' : 'Long break'} (min)
-                  <input type="number" value={customMins[p]} min={1} max={90}
+                  <input type="number" value={state.presets[p]} min={1} max={90}
                     onChange={e => {
                       const v = Math.max(1, +e.target.value);
-                      setCustomMins(prev => ({ ...prev, [p]: v }));
-                      if (phase === p) { setSecsLeft(v * 60); setRunning(false); }
+                      savePresets({ ...state.presets, [p]: v });
                     }}
                     style={{ padding: '4px 8px', textAlign: 'center' }} />
                 </label>
@@ -397,3 +336,8 @@ export function FocusPanel() {
     </div>
   );
 }
+
+// Re-export for callers that previously imported from this file. The
+// constant moved into lib/focus/timer.ts so tests / other components can
+// share it without depending on a React component.
+export { POMODORO_PRESETS };

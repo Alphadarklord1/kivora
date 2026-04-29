@@ -13,6 +13,7 @@ import { getStreak, loadSessions, getGoalPreferences, loadDecks, saveGoalPrefere
 import { LevelBadge } from '@/components/gamification/LevelBadge';
 import { getGamificationState } from '@/lib/gamification/index';
 import { useAchievementToast } from '@/components/gamification/AchievementToast';
+import { FocusTimerIndicator } from '@/components/focus/FocusTimerIndicator';
 import { QuickSearchPalette, QuickSearchItem } from '@/components/layout/QuickSearchPalette';
 import { useSyncSubscription } from '@/hooks/useSyncSubscription';
 import { useNotificationScheduler } from '@/hooks/useNotificationScheduler';
@@ -670,6 +671,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {toastJsx}
       {/* Global rate-limit toast — fixed bottom-center, shows when any AI call returns 429 */}
       {rateLimitToastJsx}
+      {/* Global focus-timer indicator — appears whenever a Pomodoro is
+          running and the user is anywhere outside /workspace, so they
+          don't lose track of an active timer after navigating away. */}
+      <FocusTimerIndicator />
 
       {/* Quick search palette — rendered globally, triggered by Cmd+K or search button */}
       <QuickSearchPalette
