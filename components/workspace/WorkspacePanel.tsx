@@ -2047,6 +2047,8 @@ export function WorkspacePanel({
                 flexWrap: 'wrap',
                 background: 'var(--surface)',
               }}>
+                {/* Count is only meaningful for tools that emit a SET of
+                    questions; Practice emits a single problem. */}
                 {['quiz','mcq','exam'].includes(genMode) && (
                   <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
                     Count:
@@ -2055,7 +2057,7 @@ export function WorkspacePanel({
                       style={{ width: 52, padding: '3px 7px', fontSize: 'var(--text-xs)' }} />
                   </label>
                 )}
-                {['quiz','mcq','exam'].includes(genMode) && (
+                {['quiz','mcq','exam','practice'].includes(genMode) && (
                   <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
                     Style:
                     <select

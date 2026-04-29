@@ -5,12 +5,18 @@ import { recordQuizAttempt, type QuizAnswerSummary } from '@/lib/workspace/quiz-
 import { addXp, XP_VALUES, incrementCounter, getCounters, checkAndUnlockAchievements } from '@/lib/gamification';
 import { hashContent, loadAnswers, saveAnswers, clearAnswers } from '@/lib/workspace/answer-persistence';
 
+interface ExplainState { loading?: boolean; text?: string; error?: string }
+
 export function MCQView({ content, fileId, deckId }: { content: string; fileId?: string | null; deckId?: string | null }) {
   const contentHash = useMemo(() => hashContent(content), [content]);
   const restored = useMemo(() => loadAnswers('mcq', contentHash), [contentHash]);
   const [selected, setSelected] = useState<Record<number, string>>(() => restored?.answers ?? {});
   const [revealed, setRevealed] = useState<Record<number, boolean>>({});
   const [score,    setScore]    = useState<number | null>(null);
+  // Per-question "Why is the right answer right?" explanation state.
+  // Only fetched on demand — keeps the post-grade screen fast and the
+  // student in control of how much detail to load.
+  const [explanations, setExplanations] = useState<Record<number, ExplainState>>({});
 
   // Persist the user's selections so a slip-click on the sidebar doesn't
   // wipe an in-progress MCQ set. Reset / regenerate clears it.
@@ -141,6 +147,47 @@ export function MCQView({ content, fileId, deckId }: { content: string; fileId?:
                     {selected[qi] === ans ? '🎉 Correct!' : `✗ Correct: ${ans}`}
                   </div>
                 )}
+                {/* "Why?" explainer — only shows when the student got
+                    the question wrong AND the AI flagged a correct
+                    letter. Calls /api/explain on demand so we don't
+                    burn AI quota on a screen the user might just skim. */}
+                {isRev && ans && selected[qi] && selected[qi] !== ans && (() => {
+                  const state = explanations[qi];
+                  const userOpt = opts.find(o => o.match(/^\*?\*?([A-D])\*?\*?[\.\)]/i)?.[1]?.toUpperCase() === selected[qi]);
+                  const correctOpt = opts.find(o => o.match(/^\*?\*?([A-D])\*?\*?[\.\)]/i)?.[1]?.toUpperCase() === ans);
+                  const userText = userOpt?.replace(/^\*?\*?[A-D]\*?\*?[\.\)]\s*/i, '') ?? selected[qi];
+                  const correctText = correctOpt?.replace(/^\*?\*?[A-D]\*?\*?[\.\)]\s*/i, '') ?? ans;
+                  return (
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      disabled={state?.loading}
+                      onClick={async () => {
+                        setExplanations(p => ({ ...p, [qi]: { loading: true } }));
+                        try {
+                          const res = await fetch('/api/explain', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              question: stem,
+                              userAnswer: `${selected[qi]}. ${userText}`.trim(),
+                              correctAnswer: `${ans}. ${correctText}`.trim(),
+                            }),
+                          });
+                          const data = await res.json() as { explanation?: string | null };
+                          if (data.explanation) {
+                            setExplanations(p => ({ ...p, [qi]: { text: data.explanation as string } }));
+                          } else {
+                            setExplanations(p => ({ ...p, [qi]: { error: 'Could not explain this one right now.' } }));
+                          }
+                        } catch {
+                          setExplanations(p => ({ ...p, [qi]: { error: 'Could not explain this one right now.' } }));
+                        }
+                      }}
+                    >
+                      {state?.loading ? 'Thinking…' : state?.text ? '↻ Re-explain' : '🤔 Why?'}
+                    </button>
+                  );
+                })()}
                 {isRev && !ans && (
                   /* Reveal pressed but the AI never marked which option
                      was correct. Tell the user instead of showing nothing. */
@@ -156,6 +203,29 @@ export function MCQView({ content, fileId, deckId }: { content: string; fileId?:
                   </div>
                 )}
               </div>
+              {/* Explanation panel — appears once the explainer call
+                  comes back. Color-coded blue so it doesn't look like
+                  a graded "wrong" cell. */}
+              {explanations[qi]?.text && (
+                <div style={{
+                  marginTop: 10,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  background: 'color-mix(in srgb, #4f86f7 8%, var(--surface))',
+                  border: '1px solid color-mix(in srgb, #4f86f7 25%, transparent)',
+                  fontSize: 'var(--text-sm)',
+                  lineHeight: 1.55,
+                  color: 'var(--text)',
+                }}>
+                  <strong style={{ fontSize: 'var(--text-xs)', color: '#4f86f7' }}>WHY</strong>
+                  <div style={{ marginTop: 4 }}>{explanations[qi].text}</div>
+                </div>
+              )}
+              {explanations[qi]?.error && (
+                <div style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--danger)' }}>
+                  ⚠ {explanations[qi].error}
+                </div>
+              )}
             </div>
           );
         })}

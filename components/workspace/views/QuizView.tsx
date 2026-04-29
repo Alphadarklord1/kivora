@@ -322,6 +322,43 @@ export function QuizView({ content, fileId, deckId }: { content: string; fileId?
             Score: {score} / {blocks.length}
           </div>
         )}
+        {/* Retry-wrong-only — same affordance MCQView has. After
+            grading, re-opens just the questions the loose-overlap
+            check (or AI grade) flagged as wrong, so the student can
+            reattempt without redoing the ones they already nailed. */}
+        {score !== null && score < blocks.length && (
+          <button
+            className="btn btn-sm btn-secondary"
+            onClick={() => {
+              const keepAnswers: Record<number, string> = {};
+              const keepRevealed: Record<number, boolean> = {};
+              blocks.forEach((block, qi) => {
+                const { expected } = parseBlock(block);
+                const ua = (answers[qi] ?? '').trim();
+                const aiOk = aiGrades[qi]?.score !== undefined && (aiGrades[qi].score ?? 0) >= 75;
+                const fuzzyOk = ua.length > 0 && isCloseEnough(ua, expected);
+                if (aiOk || fuzzyOk) {
+                  // Counted as right — leave the answer + reveal in place.
+                  keepAnswers[qi] = answers[qi] ?? '';
+                  keepRevealed[qi] = true;
+                } else {
+                  // Wrong — drop the reveal so the textarea unlocks.
+                  // Keep the user's prior text so they can edit instead
+                  // of starting from blank.
+                  keepAnswers[qi] = answers[qi] ?? '';
+                  // No keepRevealed entry → not revealed.
+                }
+              });
+              setAnswers(keepAnswers);
+              setRevealed(keepRevealed);
+              setScore(null);
+              setAiGrades({});
+              clearAnswers('quiz');
+            }}
+          >
+            ↻ Retry wrong only
+          </button>
+        )}
         <button className="btn btn-sm btn-ghost"
           onClick={() => { setAnswers({}); setRevealed({}); setScore(null); setAiGrades({}); clearAnswers('quiz'); }}>Reset</button>
       </div>

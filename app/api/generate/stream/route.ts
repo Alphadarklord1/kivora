@@ -499,7 +499,15 @@ D) <option>
 Answer: <letter for MCQ, or expected response for short-answer/essay>
 
 Mix MCQ (with A/B/C/D options), short-answer, and essay questions. ${sourceDirective}`,
-    practice:   `Create a practice problem based on this content. ALL FIVE sections below are MANDATORY — do not skip any, do not stop early, the Solution section must contain a real worked solution (never empty, never "[omitted]"). Use EXACTLY this format:\n\n## Problem\n[Write a clear, challenging practice question here]\n\n## Hint 1\n[A gentle nudge in the right direction, no direct answer]\n\n## Hint 2\n[More specific guidance, pointing to the key concept]\n\n## Hint 3\n[Almost there — tell them what approach to use]\n\n## Solution\n[Complete step-by-step worked solution with explanation — required, never empty]\n\n${isTopicMode ? sourceDirective : `Content:\n\n${text}`}`,
+    practice:   `Create a practice problem based on this content. ALL FIVE sections below are MANDATORY — do not skip any, do not stop early, the Solution section must contain a real worked solution (never empty, never "[omitted]").\n\n${
+      style === 'application'
+        ? 'STYLE: APPLICATION / SCENARIO — frame the Problem as a short real-world case study (1–3 sentences) the student must analyse using a concept from the source. Do NOT just ask them to recall a definition.'
+        : style === 'recall'
+          ? 'STYLE: RECALL — base the Problem directly on a definition, fact, or named concept stated in the source. The Solution should walk through the literal answer.'
+          : style === 'extended'
+            ? 'STYLE: EXTENDED — pose a conceptually rich, multi-paragraph prompt (e.g. compare/contrast, apply a theory, evaluate a claim). The Solution should be a 200-word model paragraph rather than steps.'
+            : 'STYLE: MIXED — pick whichever framing best teaches the most exam-relevant concept in the source.'
+    }\n\nUse EXACTLY this format:\n\n## Problem\n[Write a clear, challenging practice question here]\n\n## Hint 1\n[A gentle nudge in the right direction, no direct answer]\n\n## Hint 2\n[More specific guidance, pointing to the key concept]\n\n## Hint 3\n[Almost there — tell them what approach to use]\n\n## Solution\n[Complete step-by-step worked solution with explanation — required, never empty]\n\n${isTopicMode ? sourceDirective : `Content:\n\n${text}`}`,
   };
   return instructions[mode];
 }
