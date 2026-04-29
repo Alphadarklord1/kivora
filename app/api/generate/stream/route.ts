@@ -389,6 +389,17 @@ function buildUserPrompt(mode: AllModes, text: string, options?: Record<string, 
   const style: 'mixed' | 'recall' | 'application' | 'extended' =
     rawStyle === 'recall' || rawStyle === 'application' || rawStyle === 'extended' ? rawStyle : 'mixed';
 
+  // "Topic:" mode — the user wants to drill a named concept (e.g.
+  // "Topic: technological determinism") without a source PDF. Detect
+  // the prefix and rewrite the source-block hint so the AI generates
+  // from its own knowledge rather than searching for slide facts.
+  const topicMatch = text.match(/^\s*Topic:\s*(.+?)(?:\n|$)/i);
+  const isTopicMode = !!topicMatch && text.replace(/^\s*Topic:\s*.+?(?:\n|$)/i, '').trim().length < 200;
+  const topicName = topicMatch?.[1]?.trim();
+  const sourceDirective = isTopicMode && topicName
+    ? `Generate from your general knowledge about the topic. Stay accurate, use textbook-standard definitions, and explicitly name the concept in each question. Do not invent statistics or quotations.\n\nTopic: ${topicName}`
+    : `Material:\n\n${text}`;
+
   // Per-style guidance injected into the MCQ / Quiz / Exam prompts.
   // The default "mixed" set was the original behaviour; the others bias
   // the question type so a humanities student practising "technological
@@ -446,7 +457,7 @@ Answer: <expected answer${style === 'extended' ? ' — model paragraph of ~200 w
 Q2. <question text>
 ${style === 'extended' ? 'Rubric: ...\n' : ''}Answer: <expected answer>
 
-Repeat for ${quizCount} questions. Material:\n\n${text}`,
+Repeat for ${quizCount} questions. ${sourceDirective}`,
     mcq:        `You are a teacher writing a multiple-choice quiz from the source material below — exactly the way you would build a quiz from a PowerPoint deck. The goal is to test whether a student actually UNDERSTANDS the topic, not whether they can quote the slides word-for-word.
 
 Write ${count} questions.
@@ -467,7 +478,7 @@ Answer: <single letter A/B/C/D>
 Q2. <question text>
 ...
 
-Mark the correct option with the letter on the Answer line. Do not add commentary. Material:\n\n${text}`,
+Mark the correct option with the letter on the Answer line. Do not add commentary. ${sourceDirective}`,
     flashcards: `Create ${count} flashcard pairs formatted as "Front: <concept> | Back: <explanation>" from:\n\n${text}`,
     assignment: `Generate a structured assignment with ${count} questions based on:\n\n${text}`,
     outline:    `Create a detailed hierarchical outline with main topics and subtopics from:\n\n${text}`,
@@ -487,8 +498,8 @@ C) <option>
 D) <option>
 Answer: <letter for MCQ, or expected response for short-answer/essay>
 
-Mix MCQ (with A/B/C/D options), short-answer, and essay questions. Material:\n\n${text}`,
-    practice:   `Create a practice problem based on this content. ALL FIVE sections below are MANDATORY — do not skip any, do not stop early, the Solution section must contain a real worked solution (never empty, never "[omitted]"). Use EXACTLY this format:\n\n## Problem\n[Write a clear, challenging practice question here]\n\n## Hint 1\n[A gentle nudge in the right direction, no direct answer]\n\n## Hint 2\n[More specific guidance, pointing to the key concept]\n\n## Hint 3\n[Almost there — tell them what approach to use]\n\n## Solution\n[Complete step-by-step worked solution with explanation — required, never empty]\n\nContent:\n\n${text}`,
+Mix MCQ (with A/B/C/D options), short-answer, and essay questions. ${sourceDirective}`,
+    practice:   `Create a practice problem based on this content. ALL FIVE sections below are MANDATORY — do not skip any, do not stop early, the Solution section must contain a real worked solution (never empty, never "[omitted]"). Use EXACTLY this format:\n\n## Problem\n[Write a clear, challenging practice question here]\n\n## Hint 1\n[A gentle nudge in the right direction, no direct answer]\n\n## Hint 2\n[More specific guidance, pointing to the key concept]\n\n## Hint 3\n[Almost there — tell them what approach to use]\n\n## Solution\n[Complete step-by-step worked solution with explanation — required, never empty]\n\n${isTopicMode ? sourceDirective : `Content:\n\n${text}`}`,
   };
   return instructions[mode];
 }

@@ -1924,6 +1924,31 @@ export function WorkspacePanel({
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
                 <button className={`btn btn-sm ${!pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setPasteMode(false)}>From file</button>
                 <button className={`btn btn-sm ${pasteMode ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => { setPasteMode(true); setSelFile(null); if (!pasteMode) setExtractedText(''); }}>Paste text</button>
+                {/* Topic shortcut: lets the student practise a concept by
+                    name (e.g. "technological determinism") without uploading
+                    a source PDF. We seed the paste area with a "Topic:"
+                    prefix that the AI prompt picks up as a signal to
+                    generate from general knowledge instead of looking for
+                    facts in the (mostly empty) source. */}
+                <button
+                  className="btn btn-sm btn-ghost"
+                  title="Practice a topic by name — no source upload needed"
+                  onClick={() => {
+                    setPasteMode(true);
+                    setSelFile(null);
+                    setFolderSourceMeta(null);
+                    if (!extractedText.trim().toLowerCase().startsWith('topic:')) {
+                      setExtractedText('Topic: ');
+                      // Defer focus to next tick so the textarea has rendered.
+                      setTimeout(() => {
+                        pasteRef.current?.focus();
+                        pasteRef.current?.setSelectionRange(7, 7);
+                      }, 50);
+                    }
+                  }}
+                >
+                  🎯 By topic
+                </button>
               </div>
 
               {!pasteMode && (
