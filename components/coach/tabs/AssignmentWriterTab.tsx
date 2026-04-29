@@ -19,6 +19,7 @@ import { useToast } from '@/providers/ToastProvider';
 import { loadAiRuntimePreferences } from '@/lib/ai/runtime';
 import { loadClientAiDataMode } from '@/lib/privacy/ai-data';
 import { extractTextFromBlob } from '@/lib/pdf/extract';
+import { useSingleFlight } from '@/hooks/useSingleFlight';
 import { idbStore } from '@/lib/idb';
 import type { TopicResearchResult } from '@/lib/coach/research';
 import type { ArticleSuggestion } from '@/lib/coach/articles';
@@ -387,7 +388,7 @@ export function AssignmentWriterTab({
     } catch { toast('Could not copy citations', 'warning'); }
   }
 
-  async function handleGenerateOutline() {
+  const handleGenerateOutline = useSingleFlight(async () => {
     if (!reportTopic.trim() || outlineLoading) return;
     setOutlineLoading(true); setOutline(null); setReportResult(''); setReportSavedLib(false);
     try {
@@ -407,9 +408,9 @@ export function AssignmentWriterTab({
       toast('Outline ready — review and edit it, then write the full draft', 'success');
     } catch (err) { toast(err instanceof Error ? err.message : 'Could not generate outline', 'error'); }
     finally { setOutlineLoading(false); }
-  }
+  });
 
-  async function handleWriteDraft() {
+  const handleWriteDraft = useSingleFlight(async () => {
     if (!reportTopic.trim() || reportLoading) return;
     setReportLoading(true); setReportResult(''); setReportSavedLib(false);
     try {
@@ -429,10 +430,10 @@ export function AssignmentWriterTab({
       setReportResult(data.result);
     } catch (err) { toast(err instanceof Error ? err.message : 'Report builder failed', 'error'); }
     finally { setReportLoading(false); }
-  }
+  });
 
-  async function handleSaveReport() {
-    if (!reportResult) return;
+  const handleSaveReport = useSingleFlight(async () => {
+    if (!reportResult || reportSavedLib) return;
     try {
       await fetch('/api/library', {
         method: 'POST',
@@ -446,9 +447,9 @@ export function AssignmentWriterTab({
       broadcastInvalidate(LIBRARY_CHANNEL);
       toast('Saved to Library', 'success');
     } catch { toast('Library sync failed', 'warning'); }
-  }
+  });
 
-  async function handleAssignHelper() {
+  const handleAssignHelper = useSingleFlight(async () => {
     if (!assignText.trim() || assignLoading) return;
     setAssignLoading(true); setAssignResult('');
     try {
@@ -466,7 +467,7 @@ export function AssignmentWriterTab({
       setAssignResult(result);
     } catch (err) { toast(err instanceof Error ? err.message : 'Assignment helper failed', 'error'); }
     finally { setAssignLoading(false); }
-  }
+  });
 
   async function handleExportDocx() {
     if (!reportResult || exportingDocx) return;
@@ -505,7 +506,7 @@ export function AssignmentWriterTab({
     setDismissed(new Set()); setLegacyResult(''); setWriterSavedLib(false);
   }
 
-  async function handleCheckWork() {
+  const handleCheckWork = useSingleFlight(async () => {
     if (!checkText.trim() || checkLoading) return;
     setCheckLoading(true);
     clearWriterResults();
@@ -529,7 +530,7 @@ export function AssignmentWriterTab({
       }
     } catch (err) { toast(err instanceof Error ? err.message : 'Work checker failed', 'error'); }
     finally { setCheckLoading(false); }
-  }
+  });
 
   function applySuggestion(sug: WritingSuggestion) {
     const result = applyWritingSuggestionToText(checkText, sug);
@@ -595,9 +596,9 @@ export function AssignmentWriterTab({
     }
   }
 
-  async function handleSaveWriter() {
+  const handleSaveWriter = useSingleFlight(async () => {
     const hasResult = checkScore !== null || legacyResult.length > 0;
-    if (!hasResult) return;
+    if (!hasResult || writerSavedLib) return;
     try {
       await fetch('/api/library', {
         method: 'POST',
@@ -618,7 +619,7 @@ export function AssignmentWriterTab({
       broadcastInvalidate(LIBRARY_CHANNEL);
       toast('Saved to Library', 'success');
     } catch { toast('Library sync failed', 'warning'); }
-  }
+  });
 
   // ── Derived display ───────────────────────────────────────────────────────
   const draftWordCount  = countWords(reportResult);

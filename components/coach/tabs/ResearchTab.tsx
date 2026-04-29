@@ -8,6 +8,7 @@ import { writeScholarContext } from '@/lib/coach/scholar-context';
 import type { ArticleSuggestion } from '@/lib/coach/articles';
 import type { ResearchMode, ResearchRanking, TopicResearchResult } from '@/lib/coach/research';
 import { broadcastInvalidate, LIBRARY_CHANNEL } from '@/lib/sync/broadcast';
+import { useSingleFlight } from '@/hooks/useSingleFlight';
 import styles from '@/app/(dashboard)/coach/page.module.css';
 
 interface Props {
@@ -105,7 +106,7 @@ export function ResearchTab({
     }
   }
 
-  async function handleTopicResearch() {
+  const handleTopicResearch = useSingleFlight(async () => {
     if (!researchTopic.trim() || researchLoading) return;
     setResearchLoading(true);
     try {
@@ -141,9 +142,9 @@ export function ResearchTab({
     } finally {
       setResearchLoading(false);
     }
-  }
+  });
 
-  async function handleDeepDive() {
+  const handleDeepDive = useSingleFlight(async () => {
     if (!deepDiveQuestion.trim() || deepDiveLoading) return;
     setDeepDiveLoading(true);
     setDeepDiveResult('');
@@ -166,7 +167,7 @@ export function ResearchTab({
     } finally {
       setDeepDiveLoading(false);
     }
-  }
+  });
 
   async function downloadResearchDocx() {
     if (!researchResult || docxExporting) return;
@@ -208,7 +209,7 @@ export function ResearchTab({
     }
   }
 
-  async function saveResearchToLibrary() {
+  const saveResearchToLibrary = useSingleFlight(async () => {
     if (!researchResult || savingToLibrary) return;
     setSavingToLibrary(true);
     setSavedLibraryId(null);
@@ -253,7 +254,7 @@ export function ResearchTab({
     } finally {
       setSavingToLibrary(false);
     }
-  }
+  });
 
   const SUGGESTED_TOPICS = [
     'Photosynthesis explained',

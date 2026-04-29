@@ -438,6 +438,13 @@ export function FlashcardView({
   // 50+ junk decks behind. Using a ref pinned at first render keeps the
   // id constant across the stream.
   const streamingDeckIdRef = useRef<string | null>(null);
+  // Synchronous click-guards. React state-based loading flags don't flush
+  // before the next click event fires, so impatient double-clicks were
+  // creating duplicate library items + duplicate share rows. These refs
+  // flip the instant the first call enters and reset in the finally
+  // branches below.
+  const saveLibInFlightRef = useRef(false);
+  const shareInFlightRef   = useRef(false);
   // Test
   const [testQuestions, setTestQuestions] = useState<TestQuestion[]>([]);
   const [testAnswers,   setTestAnswers]   = useState<Record<number, string>>({});
@@ -611,6 +618,12 @@ export function FlashcardView({
   // uses so the Library renders it identically.
   async function handleSaveToLibrary() {
     if (!deck || librarySaveStatus === 'loading') return;
+    // Synchronous guard against impatience-clicks. The status check above
+    // is React state and doesn't flush before the next click event fires —
+    // a fast double-click could fire two saves and create two library
+    // items. This ref flips the moment the first call enters.
+    if (saveLibInFlightRef.current) return;
+    saveLibInFlightRef.current = true;
     setLibrarySaveStatus('loading');
     const serializedDeck = deckToContent(deck);
     const metadata = {
@@ -656,6 +669,8 @@ export function FlashcardView({
       } else {
         setLibrarySaveStatus('error');
       }
+    } finally {
+      saveLibInFlightRef.current = false;
     }
     window.setTimeout(() => setLibrarySaveStatus('idle'), 2200);
   }
@@ -663,6 +678,10 @@ export function FlashcardView({
   // Share handler
   async function handleShare() {
     if (!deck || shareStatus === 'loading') return;
+    // Same synchronous guard as save — without it, double-click on Share
+    // would create TWO library rows and TWO share tokens.
+    if (shareInFlightRef.current) return;
+    shareInFlightRef.current = true;
     setShareStatus('loading');
     try {
       const serializedDeck = deckToContent(deck);
@@ -693,6 +712,7 @@ export function FlashcardView({
       try { await navigator.clipboard.writeText(url); } catch { /* URL still shown in UI */ }
       setShareStatus('done');
     } catch { setShareStatus('error'); }
+    finally { shareInFlightRef.current = false; }
   }
 
   const saveDeckState = useCallback((next: SRSDeck) => {
