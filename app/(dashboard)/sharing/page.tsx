@@ -7,7 +7,7 @@ import { useI18n } from '@/lib/i18n/useI18n';
 // see. Merge those into the dropdown so the picker isn't empty for
 // users who haven't signed in yet.
 import { listLocalFiles } from '@/lib/files/local-files';
-import { loadOfflineItems } from '@/lib/library/offline-store';
+import { loadOfflineItems, syncOfflineLibraryToCloud } from '@/lib/library/offline-store';
 
 interface Share {
   id: string;
@@ -285,9 +285,42 @@ export default function SharedWithMePage() {
   async function handleQuickShare() {
     if (!qsItemId) return;
     if (selectedIsLocalOnly) {
-      // Don't bother hitting the API — it will 400 ("file not found")
-      // because the resource only lives in this browser. Tell the user
-      // why instead of showing a generic "Failed to create share".
+      // Library items: try to promote them to the cloud right now
+      // and re-resolve the id. The user complained about hitting this
+      // dead-end after signing in with Google — auto-sync covers that
+      // case so they don't have to manually re-save every old item.
+      if (qsSource === 'library') {
+        try {
+          setQsSubmitting('loading');
+          const result = await syncOfflineLibraryToCloud();
+          if (result.synced > 0) {
+            // Refresh the dropdown so cloud-promoted items are selectable.
+            const remote = await fetch('/api/library?summary=1&limit=100', { credentials: 'include' })
+              .then(r => r.ok ? r.json() : [])
+              .catch(() => []);
+            const offline = loadOfflineItems().map((item) => ({
+              id: item.id,
+              mode: item.mode,
+              metadata: item.metadata as LibraryItem['metadata'],
+            })) as LibraryItem[];
+            const merged = [...offline, ...(Array.isArray(remote) ? remote : [])
+              .filter((r) => !offline.some((o) => o.id === r.id))];
+            setLibItems(merged);
+            // The selected item id was an offline-* id that no longer exists.
+            // Clear it so the user picks the freshly synced cloud equivalent.
+            setQsItemId('');
+            setQsSubmitting('');
+            setErrorMsg(`Synced ${result.synced} item${result.synced === 1 ? '' : 's'} to the cloud — pick the item again to share.`);
+            setTimeout(() => setErrorMsg(''), 6000);
+            return;
+          }
+          setQsSubmitting('');
+        } catch {
+          setQsSubmitting('');
+        }
+      }
+      // Files only — those still need re-upload from the workspace, not
+      // a library POST, so we leave the explanatory message in place.
       setErrorMsg(
         qsSource === 'file'
           ? 'This file only exists on this device. Sign in (or create an account) so it can be uploaded to the cloud — then share links will work for it.'

@@ -164,6 +164,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [hasSessionUser]);
 
+  // Once-per-session sweep: if the signed-in user has any library items
+  // that were saved locally (offline-mode while signed-out, or while the
+  // DB was unreachable), promote them to the cloud now. Without this
+  // pass the items keep their "offline-" ids forever and Sharing /
+  // syncing across devices doesn't work — the user's complaint about
+  // "saved locally only" on items they created while signed in.
+  const offlineSyncDoneRef = useRef(false);
+  useEffect(() => {
+    if (!hasSessionUser || offlineSyncDoneRef.current) return;
+    offlineSyncDoneRef.current = true;
+    void import('@/lib/library/offline-store').then(({ syncOfflineLibraryToCloud }) => {
+      syncOfflineLibraryToCloud().then((res) => {
+        if (res.synced > 0) {
+          // Tell other tabs / pages that the library list changed so
+          // they refetch without the user having to reload.
+          try {
+            window.dispatchEvent(new CustomEvent('kivora:library-synced', { detail: res }));
+          } catch { /* noop */ }
+        }
+      }).catch(() => { /* swallow — no UI for this */ });
+    }).catch(() => {});
+  }, [hasSessionUser]);
+
   // Cmd+K / Ctrl+K opens the quick search palette
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
