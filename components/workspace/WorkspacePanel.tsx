@@ -2029,35 +2029,49 @@ export function WorkspacePanel({
                 </div>
               )}
 
-              {(extractedText || pasteMode) && (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, marginLeft: 'auto', flexWrap: 'wrap' }}>
-                  {['quiz','mcq','exam'].includes(genMode) && (
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                      Count:
-                      <input type="number" value={count} min={2} max={25}
-                        onChange={e => setCount(Math.max(2, Math.min(25, +e.target.value)))}
-                        style={{ width: 52, padding: '3px 7px', fontSize: 'var(--text-xs)' }} />
-                    </label>
-                  )}
-                  {['quiz','mcq','exam'].includes(genMode) && (
-                    // Bias the question style. Useful for humanities subjects
-                    // where students need *practice writing* or *applying*
-                    // a concept, not just recalling slide bullets.
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-                      Style:
-                      <select
-                        value={practiceStyle}
-                        onChange={e => setPracticeStyle(e.target.value as typeof practiceStyle)}
-                        style={{ padding: '3px 7px', fontSize: 'var(--text-xs)', background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 6, color: 'var(--text)' }}
-                        title="Recall = facts. Application = scenarios. Extended = 200-word answers (Quiz only)."
-                      >
-                        <option value="mixed">Mixed</option>
-                        <option value="recall">Recall</option>
-                        <option value="application">Application / scenario</option>
-                        {genMode === 'quiz' && <option value="extended">Extended response (200w)</option>}
-                      </select>
-                    </label>
-                  )}
+            </div>
+
+            {/* Generation controls — split out of the source row so the
+                source pill (file name + words badge) doesn't fight the
+                Count / Style / Generate cluster for horizontal space. The
+                old single-row layout caused the words badge to wrap onto
+                two lines on medium-width viewports. */}
+            {(extractedText || pasteMode) && (
+              <div style={{
+                display: 'flex',
+                gap: 10,
+                alignItems: 'center',
+                padding: '8px 14px',
+                borderBottom: '1px solid var(--border)',
+                flexShrink: 0,
+                flexWrap: 'wrap',
+                background: 'var(--surface)',
+              }}>
+                {['quiz','mcq','exam'].includes(genMode) && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                    Count:
+                    <input type="number" value={count} min={2} max={25}
+                      onChange={e => setCount(Math.max(2, Math.min(25, +e.target.value)))}
+                      style={{ width: 52, padding: '3px 7px', fontSize: 'var(--text-xs)' }} />
+                  </label>
+                )}
+                {['quiz','mcq','exam'].includes(genMode) && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
+                    Style:
+                    <select
+                      value={practiceStyle}
+                      onChange={e => setPracticeStyle(e.target.value as typeof practiceStyle)}
+                      style={{ padding: '3px 7px', fontSize: 'var(--text-xs)', background: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 6, color: 'var(--text)' }}
+                      title="Recall = facts. Application = scenarios. Extended = 200-word answers (Quiz only)."
+                    >
+                      <option value="mixed">Mixed</option>
+                      <option value="recall">Recall</option>
+                      <option value="application">Application / scenario</option>
+                      {genMode === 'quiz' && <option value="extended">Extended response (200w)</option>}
+                    </select>
+                  </label>
+                )}
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
                   {generating ? (
                     <button className="btn btn-sm btn-ghost" style={{ color: 'var(--text-3)' }}
                       onClick={() => { abortRef.current?.abort(); setGenerating(false); generateInFlightRef.current = false; }}>
@@ -2073,8 +2087,8 @@ export function WorkspacePanel({
                     </button>
                   )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Paste textarea */}
             {pasteMode && !extractedText && (

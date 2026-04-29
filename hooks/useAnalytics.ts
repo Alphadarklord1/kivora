@@ -142,7 +142,12 @@ export function useAnalytics(initialPeriod: number = 30): UseAnalyticsReturn {
     setError(null);
 
     try {
-      const res = await fetch(`/api/analytics?period=${period}`, {
+      // Send the user's local-time offset (minutes west of UTC) so the
+      // server can group timestamps into local-day buckets. Without this,
+      // a user studying at 11pm PST would see today's reviews stamped
+      // on tomorrow's heatmap cell because UTC has already rolled over.
+      const tzOffset = new Date().getTimezoneOffset();
+      const res = await fetch(`/api/analytics?period=${period}&tzOffset=${tzOffset}`, {
         credentials: 'include',
       });
 

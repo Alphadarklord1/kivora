@@ -6,6 +6,20 @@ import { getUserId } from '@/lib/auth/session';
 import type { SRSDeck } from '@/lib/srs/sm2';
 import { isGuestModeEnabled } from '@/lib/runtime/mode';
 
+// Convert a Date to a YYYY-MM-DD string in the *user's* local timezone.
+// The hook sends ?tzOffset=<getTimezoneOffset()> so we know how many
+// minutes to shift before slicing. Without this, every time-bucket on
+// the analytics page used UTC date keys, which made the heatmap
+// disagree with what the user thought "today" meant — most visible
+// for users in negative-UTC timezones reviewing late at night.
+function toLocalDateKey(d: Date | string | null | undefined, tzOffsetMin: number): string {
+  if (!d) return '';
+  const date = typeof d === 'string' ? new Date(d) : d;
+  if (Number.isNaN(date.getTime())) return '';
+  const shifted = new Date(date.getTime() - tzOffsetMin * 60_000);
+  return shifted.toISOString().slice(0, 10);
+}
+
 // ── Empty analytics scaffold (returned for guests + when DB is not configured) ──
 
 function emptyAnalytics(period: number): Record<string, unknown> {
@@ -52,6 +66,10 @@ function isEphemeralGuest(userId: string | null | undefined) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const period = Math.min(Math.max(parseInt(searchParams.get('period') ?? '30', 10), 7), 365);
+  // Clamped to the JS getTimezoneOffset() valid range (-840..720 minutes).
+  // Anything outside that is either a typo or hostile; fall back to UTC.
+  const tzRaw = parseInt(searchParams.get('tzOffset') ?? '0', 10);
+  const tzOffsetMin = Number.isFinite(tzRaw) && tzRaw >= -840 && tzRaw <= 840 ? tzRaw : 0;
 
   // No DB → return empty fallback so the client-side local plan builder can enrich it
   if (!isDatabaseConfigured) {
@@ -124,7 +142,7 @@ export async function GET(req: NextRequest) {
     const avgScore = avgScoreResult[0]?.value ? Math.round(Number(avgScoreResult[0].value)) : 0;
 
     const recentScores = periodAttempts.slice(0, 20).map(a => ({
-      date: a.createdAt ? new Date(a.createdAt).toISOString().slice(0, 10) : '',
+      date: a.createdAt ? toLocalDateKey(a.createdAt, tzOffsetMin) : '',
       score: a.score ?? 0,
       mode: a.mode ?? 'unknown',
     }));
@@ -136,11 +154,11 @@ export async function GET(req: NextRequest) {
     // ── Activity / streak ─────────────────────────────────────────────────
     // Include both quiz attempt dates AND deck review dates for a true activity signal.
     const reviewDateSet = new Set(reviewRowsEarly
-      .map(r => r.reviewedAt?.toISOString?.().slice(0, 10) ?? '')
+      .map(r => r.reviewedAt ? toLocalDateKey(r.reviewedAt, tzOffsetMin) : '')
       .filter(Boolean),
     );
     const quizDateSet = new Set(periodAttempts.map(a =>
-      a.createdAt ? new Date(a.createdAt).toISOString().slice(0, 10) : '',
+      a.createdAt ? toLocalDateKey(a.createdAt, tzOffsetMin) : '',
     ).filter(Boolean));
     const dateSet = new Set([...quizDateSet, ...reviewDateSet]);
     const totalActiveDays = dateSet.size;
@@ -149,7 +167,7 @@ export async function GET(req: NextRequest) {
     let currentStreak = 0;
     for (let i = 0; i < 365; i++) {
       const d = new Date(); d.setDate(d.getDate() - i);
-      const ds = d.toISOString().slice(0, 10);
+      const ds = toLocalDateKey(d, tzOffsetMin);
       if (dateSet.has(ds)) currentStreak++;
       else if (i > 0) break;
     }
@@ -158,9 +176,9 @@ export async function GET(req: NextRequest) {
     const dailyActivity: { date: string; quizzes: number; avgScore: number }[] = [];
     for (let i = period - 1; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
-      const ds = d.toISOString().slice(0, 10);
+      const ds = toLocalDateKey(d, tzOffsetMin);
       const dayAttempts = periodAttempts.filter(a =>
-        a.createdAt && new Date(a.createdAt).toISOString().slice(0, 10) === ds,
+        a.createdAt && toLocalDateKey(a.createdAt, tzOffsetMin) === ds,
       );
       const dayAvg = dayAttempts.length > 0
         ? Math.round(dayAttempts.reduce((s, a) => s + (a.score ?? 0), 0) / dayAttempts.length)
@@ -257,7 +275,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     const dailyGoal = prefRows[0]?.dailyGoal ?? 20;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = toLocalDateKey(new Date(), tzOffsetMin);
     const periodReviewRows = reviewRows.filter((row) => row.reviewedAt && new Date(row.reviewedAt) >= since);
 
     // SRS aggregate metrics
@@ -272,7 +290,7 @@ export async function GET(req: NextRequest) {
       totalDecks: deckRows.length,
       totalCards: allCards.length,
       dailyGoal,
-      reviewedToday: periodReviewRows.filter((row) => row.reviewedAt?.toISOString?.().slice(0, 10) === todayStr).length,
+      reviewedToday: periodReviewRows.filter((row) => (row.reviewedAt ? toLocalDateKey(row.reviewedAt, tzOffsetMin) : '') === todayStr).length,
       cardsMastered,
       dueCardsTotal,
       overallRetention,
@@ -282,10 +300,10 @@ export async function GET(req: NextRequest) {
           const cards = Array.isArray(deck.cards) ? deck.cards : [];
           const deckReviews = periodReviewRows.filter((review) => review.deckId === deck.id);
           const deckQuizAttempts = periodAttempts.filter((attempt) => attempt.deckId === deck.id);
-          const reviewedToday = deckReviews.filter((review) => review.reviewedAt?.toISOString?.().slice(0, 10) === todayStr).length;
+          const reviewedToday = deckReviews.filter((review) => (review.reviewedAt ? toLocalDateKey(review.reviewedAt, tzOffsetMin) : '') === todayStr).length;
           const deckStudyDays = new Set(
             deckReviews
-              .map((review) => review.reviewedAt?.toISOString?.().slice(0, 10))
+              .map((review) => review.reviewedAt ? toLocalDateKey(review.reviewedAt, tzOffsetMin) : '')
               .filter((value): value is string => Boolean(value)),
           ).size;
           const dueCards = cards.filter((card) => card.nextReview <= todayStr).length;
@@ -344,9 +362,9 @@ export async function GET(req: NextRequest) {
     const dailyReviews: { date: string; reviews: number; correct: number }[] = [];
     for (let i = period - 1; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
-      const ds = d.toISOString().slice(0, 10);
+      const ds = toLocalDateKey(d, tzOffsetMin);
       const dayRevs = periodReviewRows.filter(r =>
-        r.reviewedAt && new Date(r.reviewedAt).toISOString().slice(0, 10) === ds,
+        r.reviewedAt && toLocalDateKey(r.reviewedAt, tzOffsetMin) === ds,
       );
       dailyReviews.push({
         date: ds,
